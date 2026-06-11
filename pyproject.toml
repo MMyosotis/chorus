@@ -1,0 +1,11 @@
+[project]
+name = "little-kitty"
+version = "0.1.0"
+description = "A simple conversational agent with memory"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+]
