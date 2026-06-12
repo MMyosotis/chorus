@@ -15,15 +15,11 @@ class ChatRequest(BaseModel):
 
 @router.post("")
 def chat_endpoint(req: ChatRequest):
-    """SSE 流式聊天"""
+    """SSE 流式聊天（含工具调用支持）。"""
+
     def event_generator():
-        try:
-            for token in chat_stream(req.message):
-                data = json.dumps({"type": "token", "content": token}, ensure_ascii=False)
-                yield f"data: {data}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+        for event in chat_stream(req.message):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),
