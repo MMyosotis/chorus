@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.chat import init_chat_store
+from backend.chat import client as openai_client, init_chat
 from backend.config import (
     CONV_MAX_BYTES,
     CONV_MAX_COUNT,
@@ -10,6 +10,8 @@ from backend.config import (
     SKILLS_DIR,
 )
 from backend.conversations.store import ConversationStore
+from backend.hooks import HookManager
+from backend.hooks.builtin import register_builtin_hooks
 from backend.routes.chat import init_routes
 from backend.routes.chat import router as chat_router
 from backend.skills import init_skill_loader
@@ -29,7 +31,12 @@ def create_app() -> FastAPI:
         max_count=CONV_MAX_COUNT,
     )
     store.load_all()
-    init_chat_store(store)
+
+    # 初始化 hook 系统并注册内置 hook
+    hooks = HookManager()
+    register_builtin_hooks(hooks, openai_client)
+
+    init_chat(store, hooks)
     init_routes(store)
 
     app.add_middleware(

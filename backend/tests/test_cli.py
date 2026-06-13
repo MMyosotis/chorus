@@ -6,7 +6,7 @@ try:
 except ImportError:
     pass
 
-import backend.app as _app  # 触发初始化（含 store + init_chat_store）
+import backend.app as _app  # 触发初始化（含 store + hooks + init_chat）
 from backend.chat import chat_stream
 from backend.routes.chat import _store as _routes_store
 
