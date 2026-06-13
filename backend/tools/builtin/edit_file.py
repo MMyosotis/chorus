@@ -1,6 +1,11 @@
 from backend.tools.base import safe_path, tool
 
 
+def _display(args: dict) -> str:
+    path = args.get("path") or "(未指定)"
+    return f"编辑文件: {path}"
+
+
 @tool(
     name="edit_file",
     description="Replace exact text in a file once. Fails if old_text is not found or appears multiple times.",
@@ -22,6 +27,7 @@ from backend.tools.base import safe_path, tool
         },
         "required": ["path", "old_text", "new_text"],
     },
+    display=_display,
 )
 def edit_file(path: str, old_text: str, new_text: str) -> str:
     try:

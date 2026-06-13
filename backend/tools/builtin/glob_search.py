@@ -3,6 +3,11 @@ import glob as glob_module
 from backend.tools.base import WORKDIR, tool
 
 
+def _display(args: dict) -> str:
+    pattern = args.get("pattern") or "(未指定)"
+    return f"查找文件: {pattern}"
+
+
 @tool(
     name="glob",
     description="Find files matching a glob pattern in the workspace.",
@@ -16,6 +21,7 @@ from backend.tools.base import WORKDIR, tool
         },
         "required": ["pattern"],
     },
+    display=_display,
 )
 def glob_search(pattern: str) -> str:
     try:

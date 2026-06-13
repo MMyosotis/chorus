@@ -1,6 +1,14 @@
 from backend.tools.base import safe_path, tool
 
 
+def _display(args: dict) -> str:
+    path = args.get("path") or "(未指定)"
+    limit = args.get("limit")
+    if limit:
+        return f"读取文件: {path} (前 {limit} 行)"
+    return f"读取文件: {path}"
+
+
 @tool(
     name="read_file",
     description="Read file contents. Returns the text content of a file.",
@@ -18,6 +26,7 @@ from backend.tools.base import safe_path, tool
         },
         "required": ["path"],
     },
+    display=_display,
 )
 def read_file(path: str, limit: int = None) -> str:
     try:

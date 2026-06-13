@@ -3,6 +3,11 @@ import subprocess
 from backend.tools.base import tool
 
 
+def _display(args: dict) -> str:
+    cmd = (args.get("command") or "").strip()
+    return f"执行命令: {cmd or '(空命令)'}"
+
+
 @tool(
     name="bash",
     description="Run a shell command and return stdout/stderr. Use for file operations, running scripts, etc.",
@@ -21,6 +26,7 @@ from backend.tools.base import tool
         },
         "required": ["command"],
     },
+    display=_display,
 )
 def bash(command: str, timeout: int = 30) -> str:
     BLOCKED = {"rm -rf /", "mkfs", "dd if=", "sudo", "shutdown", "reboot"}

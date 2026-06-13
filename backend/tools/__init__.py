@@ -1,4 +1,9 @@
-from backend.tools.base import dispatch_tool, get_all_tools, get_tool_schemas  # noqa: F401
+from backend.tools.base import (  # noqa: F401
+    dispatch_tool,
+    format_tool_display,
+    get_all_tools,
+    get_tool_schemas,
+)
 
 
 def _ensure_loaded():

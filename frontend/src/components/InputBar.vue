@@ -64,12 +64,33 @@ function adjustHeight() {
 <style scoped>
 .input-bar {
   flex-shrink: 0;
-  padding: 12px 16px 16px;
-  background: #fff;
-  border-top: 1px solid #e2e8f0;
+  padding: 40px 16px 20px;
+  background: transparent;
+  position: relative;
+  z-index: 10;
+  margin-top: -50px;
+}
+
+.input-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  background: linear-gradient(
+    to bottom,
+    rgba(248, 250, 252, 0) 0%,
+    rgba(248, 250, 252, 0.85) 50%,
+    rgba(248, 250, 252, 1) 100%
+  );
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 50%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 50%);
+  z-index: -1;
 }
 
 .input-inner {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 10px;
@@ -79,21 +100,31 @@ function adjustHeight() {
 
 .input-field {
   flex: 1;
-  padding: 10px 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 12px;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
   font-size: 15px;
   line-height: 1.5;
   resize: none;
   outline: none;
   font-family: inherit;
-  transition: border-color 0.2s;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.2s, box-shadow 0.2s;
   max-height: 120px;
   overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.input-field::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .input-field:focus {
   border-color: #3b82f6;
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.12), 0 0 0 3px rgba(59, 130, 246, 0.08);
 }
 
 .input-field:disabled {

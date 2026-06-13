@@ -1,6 +1,12 @@
 from backend.tools.base import safe_path, tool
 
 
+def _display(args: dict) -> str:
+    path = args.get("path") or "(未指定)"
+    content = args.get("content") or ""
+    return f"写入文件: {path} ({len(content)} 字符)"
+
+
 @tool(
     name="write_file",
     description="Write content to a file. Creates parent directories if needed.",
@@ -18,6 +24,7 @@ from backend.tools.base import safe_path, tool
         },
         "required": ["path", "content"],
     },
+    display=_display,
 )
 def write_file(path: str, content: str) -> str:
     try:
