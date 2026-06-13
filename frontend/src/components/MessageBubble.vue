@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
@@ -46,6 +46,14 @@ const activityExpanded = computed({
   },
 })
 
+const runningTool = computed(() => {
+  const items = props.tools.items || []
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].duration_ms == null) return items[i]
+  }
+  return null
+})
+
 const activityLabel = computed(() => {
   const tn = props.thinking.items.length
   const mn = props.tools.items.length
@@ -53,7 +61,8 @@ const activityLabel = computed(() => {
     return tn > 1 ? `思考中 · 第 ${tn} 段` : '思考中'
   }
   if (activityState.value === 'tools') {
-    return mn > 1 ? `工具调用中 · 第 ${mn} 步` : '工具调用中'
+    const verb = runningTool.value?.running_label || '工具调用中'
+    return mn > 1 ? `${verb} · 第 ${mn} 步` : verb
   }
   const parts = []
   if (tn > 0) parts.push(`思考 ${tn} 段`)
@@ -90,6 +99,7 @@ const TOOL_NAME_ZH = {
   edit_file: '编辑文件',
   glob_search: '查找文件',
   load_skill: '加载技能',
+  generate_image: '生成图像',
 }
 
 function toolDisplayName(name) {
@@ -99,6 +109,62 @@ function toolDisplayName(name) {
 
 function toggleActivity() {
   activityExpanded.value = !activityExpanded.value
+}
+
+// generate_image 工具的图片占位/渲染：图片严格归属于产生它的本气泡。
+const imageItems = computed(() =>
+  (props.tools.items || []).filter((it) => it.name === 'generate_image')
+)
+
+function extractImageUrl(content) {
+  if (typeof content !== 'string') return ''
+  const s = content.trim()
+  if (!s) return ''
+  // 纯 URL
+  const m1 = s.match(/^(https?:\/\/\S+)$/i)
+  if (m1) return m1[1]
+  // 兼容旧数据：Markdown ![alt](url)
+  const m2 = s.match(/!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)/)
+  if (m2) return m2[1]
+  return ''
+}
+
+function isImageReady(item) {
+  return item.duration_ms != null && !!extractImageUrl(item.content)
+}
+
+function isImageError(item) {
+  return (
+    item.duration_ms != null &&
+    typeof item.content === 'string' &&
+    item.content.trim() !== '' &&
+    !extractImageUrl(item.content)
+  )
+}
+
+function imageSrc(item) {
+  return extractImageUrl(item.content)
+}
+
+function imageAlt(item) {
+  const p = item.arguments?.prompt || ''
+  return p.length > 80 ? p.slice(0, 80) : p
+}
+
+// 图片预览（点击放大）
+const previewSrc = ref('')
+const previewAlt = ref('')
+
+function openPreview(item) {
+  const src = imageSrc(item)
+  if (!src) return
+  previewSrc.value = src
+  previewAlt.value = imageAlt(item)
+}
+
+function closePreview() {
+  previewSrc.value = ''
+  previewAlt.value = ''
 }
 </script>
 
@@ -161,9 +227,33 @@ function toggleActivity() {
 
       <!-- 正文 -->
       <div v-if="content" class="text" v-html="formattedContent"></div>
+
+      <!-- 生成图像：占位骨架 → 拿到 URL 后替换为图片（放在正文下方）-->
+      <div v-if="imageItems.length" class="image-list">
+        <div v-for="(item, idx) in imageItems" :key="`img-${idx}`" class="image-item">
+          <div v-if="isImageReady(item)" class="image-ready" @click="openPreview(item)">
+            <img :src="imageSrc(item)" :alt="imageAlt(item)" loading="lazy" />
+          </div>
+          <div v-else-if="isImageError(item)" class="image-error">
+            {{ item.content }}
+          </div>
+          <div v-else class="image-placeholder">
+            <div class="image-skeleton"></div>
+            <div class="image-placeholder-text">图片生成中…</div>
+          </div>
+        </div>
+      </div>
       <span v-if="showCursor && content && activityState !== 'thinking' && activityState !== 'tools'" class="cursor">|</span>
     </div>
   </div>
+
+  <!-- 图片放大预览 -->
+  <Teleport to="body">
+    <div v-if="previewSrc" class="image-preview-mask" @click.self="closePreview">
+      <img :src="previewSrc" :alt="previewAlt" class="image-preview-img" />
+      <button class="image-preview-close" @click="closePreview" aria-label="关闭预览">×</button>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -500,5 +590,137 @@ function toggleActivity() {
 @keyframes dotWave {
   0%, 60%, 100% { opacity: 0.25; }
   30%           { opacity: 1; }
+}
+
+/* ===== 生成图像：占位 / 渲染 ===== */
+.image-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 20px 0 4px;
+}
+
+.image-item {
+  max-width: 280px;
+}
+
+.image-ready {
+  cursor: zoom-in;
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.image-ready:hover {
+  transform: scale(1.01);
+}
+
+.image-ready img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.image-placeholder {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #eef2f7;
+}
+
+.image-skeleton {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(15, 23, 42, 0.04) 0%,
+    rgba(15, 23, 42, 0.10) 50%,
+    rgba(15, 23, 42, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: imgShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes imgShimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.image-placeholder-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #64748b;
+  letter-spacing: 0.4px;
+}
+
+.image-error {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 图片放大预览遮罩 */
+.image-preview-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  animation: previewFade 0.15s ease;
+}
+
+@keyframes previewFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.image-preview-img {
+  max-width: 92vw;
+  max-height: 92vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+
+.image-preview-close {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1e293b;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: background 0.15s;
+}
+
+.image-preview-close:hover {
+  background: #fff;
 }
 </style>

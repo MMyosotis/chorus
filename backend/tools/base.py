@@ -15,6 +15,7 @@ class ToolDef:
     parameters: dict  # JSON Schema（OpenAI function calling 格式）
     handler: Callable[..., str]
     display: Optional[Callable[[dict], str]] = None
+    running_label: Optional[str] = None  # 工具运行中时前端状态条上的文案；缺省由前端显示"工具调用中"
 
 
 _REGISTRY: dict[str, ToolDef] = {}
@@ -27,11 +28,14 @@ def tool(
     description: str,
     parameters: dict,
     display: Optional[Callable[[dict], str]] = None,
+    running_label: Optional[str] = None,
 ):
     """装饰器：将函数注册为工具。
 
     display: 可选回调，接收已解析的参数 dict，返回单行人类可读描述。
              未提供时，format_tool_display 会回退到工具名。
+    running_label: 可选字符串，工具执行期间前端状态条显示的文案（如"图片生成中"）。
+                   未提供时前端显示通用的"工具调用中"。
     """
 
     def decorator(fn: Callable[..., str]) -> Callable[..., str]:
@@ -41,6 +45,7 @@ def tool(
             parameters=parameters,
             handler=fn,
             display=display,
+            running_label=running_label,
         )
         return fn
 
@@ -69,6 +74,14 @@ def format_tool_display(name: str, arguments: dict) -> str:
         return text
     except Exception:
         return fallback
+
+
+def get_running_label(name: str) -> Optional[str]:
+    """返回工具运行中的状态条文案，未配置返回 None。"""
+    t = _REGISTRY.get(name)
+    if t is None:
+        return None
+    return t.running_label
 
 
 def safe_path(p: str) -> Path:

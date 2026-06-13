@@ -2,6 +2,7 @@ from backend.tools.base import (  # noqa: F401
     dispatch_tool,
     format_tool_display,
     get_all_tools,
+    get_running_label,
     get_tool_schemas,
 )
 

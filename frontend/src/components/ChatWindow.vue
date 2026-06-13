@@ -11,16 +11,23 @@ const container = ref(null)
 
 watch(
   () =>
-    props.messages.map(
-      (m) =>
+    props.messages.map((m) => {
+      const tItems = m.tools?.items || []
+      const toolsSig = tItems
+        .map((t) => `${t.content?.length ?? 0}:${t.duration_ms ?? ''}`)
+        .join(',')
+      return (
         m.content +
         '|' +
         (m.thinking?.items?.length ?? 0) +
         ':' +
         (m.thinking?.items?.[m.thinking.items.length - 1]?.text?.length ?? 0) +
         '|' +
-        (m.tools?.items?.length ?? 0)
-    ),
+        tItems.length +
+        '|' +
+        toolsSig
+      )
+    }),
   () => {
     nextTick(() => {
       if (container.value) {

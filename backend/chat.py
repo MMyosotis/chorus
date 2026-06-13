@@ -13,7 +13,7 @@ from backend.config import (
     MODEL_ID,
     SYSTEM_PROMPT,
 )
-from backend.tools import dispatch_tool, format_tool_display, get_tool_schemas
+from backend.tools import dispatch_tool, format_tool_display, get_running_label, get_tool_schemas
 
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 
@@ -174,6 +174,7 @@ def _on_tool_calls(text_parts: list[str], accumulated: dict[int, dict], message_
             tool_args = {}
 
         display = format_tool_display(tool_name, tool_args)
+        running_label = get_running_label(tool_name)
 
         yield {
             "type": "tool_call",
@@ -181,6 +182,7 @@ def _on_tool_calls(text_parts: list[str], accumulated: dict[int, dict], message_
             "name": tool_name,
             "arguments": tool_args,
             "display": display,
+            "running_label": running_label,
         }
 
         t0 = perf_counter()

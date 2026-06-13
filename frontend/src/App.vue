@@ -70,8 +70,40 @@ function mergeAssistantHistory(raw) {
   let pendingThinking = []
   let pendingTools = []
 
+  // 把 pending（无正文 assistant 累积下来的 thinking/tools）合并到 result 中最近一条 assistant。
+  // 没有可合并目标时才落成独立空壳 bubble（兜底，避免信息全丢）。
   const flushPending = () => {
     if (!pendingThinking.length && !pendingTools.length) return
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (result[i].role === 'assistant') {
+        const target = result[i]
+        let s = 0
+        for (const x of target.thinking.items) if ((x.seq || 0) > s) s = x.seq
+        for (const x of target.tools.items) if ((x.seq || 0) > s) s = x.seq
+        for (const t of pendingThinking) {
+          target.thinking.items.push({
+            text: t.text || '',
+            duration_ms: t.duration_ms ?? null,
+            seq: ++s,
+          })
+        }
+        for (const t of pendingTools) {
+          target.tools.items.push({
+            name: t.name,
+            arguments: t.arguments || {},
+            duration_ms: t.duration_ms ?? null,
+            content: t.content || '',
+            display: t.display || t.name,
+            seq: ++s,
+          })
+        }
+        if (target.thinking.items.length) target.thinking.state = 'completed'
+        if (target.tools.items.length) target.tools.state = 'completed'
+        pendingThinking = []
+        pendingTools = []
+        return
+      }
+    }
     result.push(
       normalizeAssistant({
         role: 'assistant',
@@ -225,6 +257,54 @@ async function onSend(text) {
     if (c.tools.state === 'running') c.tools.state = 'completed'
   }
 
+  // 合并尾部"只有 thinking/tools、没有正文"的 assistant 气泡到前一个 assistant 上。
+  // 用于 agent loop 末尾模型按工具约束保持沉默时，避免出现幽灵气泡。
+  function mergeTrailingEmptyBubble() {
+    if (list.length < 2) return
+    const last = list[list.length - 1]
+    if (last.role !== 'assistant') return
+    if (last.content && last.content.trim()) return
+    let prev = null
+    for (let i = list.length - 2; i >= 0; i--) {
+      if (list[i].role === 'assistant') {
+        prev = list[i]
+        break
+      }
+    }
+    if (!prev) return
+    let s = 0
+    for (const x of prev.thinking.items) if ((x.seq || 0) > s) s = x.seq
+    for (const x of prev.tools.items) if ((x.seq || 0) > s) s = x.seq
+    const merged = [
+      ...last.thinking.items.map((x) => ({ ...x, kind: 'thinking' })),
+      ...last.tools.items.map((x) => ({ ...x, kind: 'tool' })),
+    ]
+    merged.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+    for (const it of merged) {
+      if (it.kind === 'thinking') {
+        prev.thinking.items.push({
+          text: it.text,
+          duration_ms: it.duration_ms ?? null,
+          seq: ++s,
+        })
+      } else {
+        prev.tools.items.push({
+          id: it.id,
+          name: it.name,
+          arguments: it.arguments,
+          duration_ms: it.duration_ms ?? null,
+          content: it.content,
+          display: it.display,
+          seq: ++s,
+        })
+      }
+    }
+    if (prev.thinking.items.length) prev.thinking.state = 'completed'
+    if (prev.tools.items.length) prev.tools.state = 'completed'
+    list.splice(list.length - 1, 1)
+    assistantIdx = list.length - 1
+  }
+
   const onEvent = (payload) => {
     if (payload.type === 'message_start') {
       finalizeCurrent()
@@ -260,6 +340,7 @@ async function onSend(text) {
         duration_ms: null,
         content: '',
         display: payload.display || payload.name,
+        running_label: payload.running_label || null,
         seq: c._seq,
       })
     } else if (payload.type === 'tool_result') {
@@ -283,6 +364,7 @@ async function onSend(text) {
       }
     } else if (payload.type === 'done') {
       finalizeCurrent()
+      mergeTrailingEmptyBubble()
       streamingByConv[convId] = false
     } else if (payload.type === 'error') {
       ensureAssistant().content = `[错误] ${payload.content}`
@@ -293,6 +375,7 @@ async function onSend(text) {
   const { done } = streamChat(convId, text, onEvent)
   await done
   finalizeCurrent()
+  mergeTrailingEmptyBubble()
   streamingByConv[convId] = false
   bumpConversation(convId)
 }

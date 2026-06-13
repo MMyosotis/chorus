@@ -34,6 +34,12 @@ cd frontend && npm run build                # 构建生产版本
 - `CONV_TTL_DAYS` — 会话过期天数，超过自动清理（默认 `30`）
 - `CONV_MAX_BYTES` — 单个会话 JSON 最大字节数，超过删除（默认 `1048576`）
 - `CONV_MAX_COUNT` — 会话总数上限，超过删除最旧（默认 `100`）
+- `ARK_IMAGE_API_KEY` — 火山方舟图像生成 API 密钥（`generate_image` 工具使用，与对话密钥解耦）
+- `ARK_IMAGE_BASE_URL` — 火山方舟图像 API 基地址（默认 `https://ark.cn-beijing.volces.com/api/v3`）
+- `ARK_IMAGE_MODEL_SEEDREAM_4` — seedream-4 逻辑名映射的真实模型 ID（默认 `doubao-seedream-4-0-250828`）
+- `ARK_IMAGE_MODEL_SEEDREAM_5_LITE` — seedream-5-lite 逻辑名映射的真实模型 ID（默认 `doubao-seedream-5-0-litenew`）
+- `IMAGE_TEST_MODE` — 图像生成测试开关（`1/true/yes/on` 开启）。开启后 `generate_image` 工具跳过真实 API 调用，直接返回写死的 URL，用于零成本调试前端图像渲染
+- `IMAGE_TEST_FAKE_URL` — 测试模式下的固定返回 URL（默认是一张已知可用的橘猫图，可覆盖换图）
 
 ## Architecture
 
@@ -47,7 +53,7 @@ cd frontend && npm run build                # 构建生产版本
 | `routes/chat.py` | HTTP 路由：`/api/conversations`（list/create）、`/api/conversations/{id}`（delete/rename）、`/api/conversations/{id}/messages`（GET）、`/api/conversations/{id}/chat`（SSE 流式，409 防同会话并发） |
 | `app.py` | FastAPI 应用工厂，CORS + 初始化 SkillLoader + 创建 `ConversationStore` 并注入到 chat / routes + 注册路由 |
 | `tools/base.py` | 工具注册框架：`@tool` 装饰器、`ToolDef`（含可选 `display` 回调）、`_REGISTRY`、`dispatch_tool()`/`get_tool_schemas()`/`format_tool_display()`/`safe_path()` |
-| `tools/builtin/` | 内置工具：bash, read_file, write_file, edit_file, glob_search, load_skill |
+| `tools/builtin/` | 内置工具：bash, read_file, write_file, edit_file, glob_search, load_skill, generate_image |
 | `skills/loader.py` | SkillLoader：扫描 `skills_data/*.md`，解析 frontmatter，生成 skill 摘要注入 system prompt |
 | `skills/__init__.py` | SkillLoader 单例管理（`init_skill_loader` / `get_skill_loader`） |
 | `tests/test_cli.py` | 终端测试 CLI（直接调用 `chat_stream`，不经过 HTTP），启动时通过 store 创建一个会话再循环 |
