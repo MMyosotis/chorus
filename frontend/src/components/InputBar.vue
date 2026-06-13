@@ -29,7 +29,7 @@ function adjustHeight() {
   const el = textarea.value
   if (!el) return
   el.style.height = 'auto'
-  const maxH = 5 * 24 // 约 5 行
+  const maxH = 180
   el.style.height = Math.min(el.scrollHeight, maxH) + 'px'
 }
 </script>
@@ -53,8 +53,8 @@ function adjustHeight() {
         @click="send"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="22" y1="2" x2="11" y2="13"></line>
-          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
         </svg>
       </button>
     </div>
@@ -64,7 +64,7 @@ function adjustHeight() {
 <style scoped>
 .input-bar {
   flex-shrink: 0;
-  padding: 40px 16px 20px;
+  padding: 40px 22px 20px 16px;
   background: transparent;
   position: relative;
   z-index: 10;
@@ -91,18 +91,16 @@ function adjustHeight() {
 
 .input-inner {
   position: relative;
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
   max-width: 768px;
   margin: 0 auto;
 }
 
 .input-field {
-  flex: 1;
-  padding: 12px 16px;
+  display: block;
+  width: 100%;
+  padding: 12px 56px 12px 16px;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border-radius: 18px;
   font-size: 15px;
   line-height: 1.5;
   resize: none;
@@ -111,7 +109,8 @@ function adjustHeight() {
   background: #fff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: border-color 0.2s, box-shadow 0.2s;
-  max-height: 120px;
+  min-height: 92px;
+  max-height: 180px;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -133,26 +132,32 @@ function adjustHeight() {
 }
 
 .send-btn {
-  flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 10px;
+  border-radius: 50%;
   background: #2563eb;
   color: #fff;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.15s;
 }
 
 .send-btn:hover:not(:disabled) {
   background: #1d4ed8;
 }
 
+.send-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .send-btn:disabled {
-  background: #93c5fd;
+  background: #cbd5e1;
   cursor: not-allowed;
 }
 </style>

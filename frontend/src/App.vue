@@ -12,6 +12,7 @@ function makeEmptyAssistant() {
     content: '',
     thinking: { state: 'idle', items: [], expanded: false },
     tools: { state: 'idle', items: [], expanded: false },
+    _seq: 0,
   }
 }
 
@@ -19,6 +20,7 @@ function normalizeAssistant(msg) {
   // 后端历史中 thinking/tools 是数组；前端结构需要 state/expanded 包装
   const thinkingItems = Array.isArray(msg.thinking) ? msg.thinking : []
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
+  let seq = 0
   return {
     role: 'assistant',
     content: msg.content || '',
@@ -27,6 +29,7 @@ function normalizeAssistant(msg) {
       items: thinkingItems.map((it) => ({
         text: it.text || '',
         duration_ms: it.duration_ms ?? null,
+        seq: ++seq,
       })),
       expanded: false,
     },
@@ -38,6 +41,7 @@ function normalizeAssistant(msg) {
         duration_ms: it.duration_ms ?? null,
         content: it.content || '',
         display: it.display || it.name,
+        seq: ++seq,
       })),
       expanded: false,
     },
@@ -171,7 +175,8 @@ async function sendMessage(text) {
             const t = c.thinking
             if (t.state !== 'running') {
               t.state = 'running'
-              t.items.push({ text: '', duration_ms: null })
+              c._seq = (c._seq || 0) + 1
+              t.items.push({ text: '', duration_ms: null, seq: c._seq })
             }
             const last = t.items[t.items.length - 1]
             last.text += payload.content
@@ -187,6 +192,7 @@ async function sendMessage(text) {
             const c = ensureAssistant()
             const tools = c.tools
             tools.state = 'running'
+            c._seq = (c._seq || 0) + 1
             tools.items.push({
               id: payload.id,
               name: payload.name,
@@ -194,6 +200,7 @@ async function sendMessage(text) {
               duration_ms: null,
               content: '',
               display: payload.display || payload.name,
+              seq: c._seq,
             })
           } else if (payload.type === 'tool_result') {
             const c = cur()
@@ -239,10 +246,20 @@ onMounted(fetchHistory)
   <div class="app">
     <header class="header">
       <div class="header-left">
-        <svg class="logo" viewBox="0 0 512 512" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M256 224c-79.41 0-192 122.76-192 200.25 0 34.9 26.81 55.75 71.74 55.75 48.84 0 81.09-25.08 120.26-25.08 39.51 0 71.85 25.08 120.26 25.08 44.93 0 71.74-20.85 71.74-55.75C448 346.76 335.41 224 256 224zm-147.28-12.61c-10.4-34.65-42.44-57.09-71.56-50.13-29.12 6.96-44.29 40.69-33.89 75.34 10.4 34.65 42.44 57.09 71.56 50.13 29.12-6.96 44.29-40.69 33.89-75.34zm84.72-20.78c30.94-8.14 46.42-49.94 34.58-93.36s-46.52-72.01-77.46-63.87-46.42 49.94-34.58 93.36c11.84 43.42 46.52 72.01 77.46 63.87zm281.39-29.34c-29.12-6.96-61.15 15.48-71.56 50.13-10.4 34.65 4.77 68.38 33.89 75.34 29.12 6.96 61.15-15.48 71.56-50.13 10.4-34.65-4.77-68.38-33.89-75.34zm-156.27 29.34c30.94 8.14 65.62-20.45 77.46-63.87s-3.64-85.21-34.58-93.36-65.62 20.45-77.46 63.87 3.64 85.22 34.58 93.36z"/>
+        <svg class="logo" viewBox="2 2 96 96" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6" />
+          <path
+            d="M25 45 L33 18 L50 32 L67 18 L75 55 Q45 55 35 80"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="6"
+            stroke-linecap="square"
+            stroke-linejoin="miter"
+          />
+          <circle cx="42" cy="42" r="4" fill="currentColor" />
+          <circle cx="58" cy="42" r="4" fill="currentColor" />
         </svg>
-        <span class="title">Little Kitty</span>
+        <span class="title">氛围猫猫</span>
       </div>
       <button class="new-chat-btn" @click="newChat">新对话</button>
     </header>
@@ -280,15 +297,18 @@ onMounted(fetchHistory)
 }
 
 .logo {
-  width: 26px;
-  height: 26px;
+  width: 1.2em;
+  height: 1.2em;
+  font-size: 26px;
   color: #3b82f6;
+  display: block;
 }
 
 .title {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  font-family: 'ZCOOL QingKe HuangYou', cursive;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 1px;
   color: #3b82f6;
 }
 

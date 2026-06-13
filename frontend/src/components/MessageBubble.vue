@@ -31,20 +31,50 @@ const formattedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
-const thinkingLabel = computed(() => {
-  const n = props.thinking.items.length
-  if (props.thinking.state === 'running') {
-    return n > 1 ? `思考中 · 第 ${n} 段` : '思考中...'
-  }
-  return n > 1 ? `已完成 ${n} 段思考` : '思考完成'
+const activityState = computed(() => {
+  if (props.thinking.state === 'running') return 'thinking'
+  if (props.tools.state === 'running') return 'tools'
+  if (props.thinking.items.length || props.tools.items.length) return 'completed'
+  return 'idle'
 })
 
-const toolsLabel = computed(() => {
-  const n = props.tools.items.length
-  if (props.tools.state === 'running') {
-    return n > 1 ? `工具调用中 · 第 ${n} 步` : '工具调用中...'
+const activityExpanded = computed({
+  get: () => props.thinking.expanded || props.tools.expanded,
+  set: (v) => {
+    props.thinking.expanded = v
+    props.tools.expanded = v
+  },
+})
+
+const activityLabel = computed(() => {
+  const tn = props.thinking.items.length
+  const mn = props.tools.items.length
+  if (activityState.value === 'thinking') {
+    return tn > 1 ? `思考中 · 第 ${tn} 段` : '思考中'
   }
-  return n > 1 ? `已完成 ${n} 次工具调用` : '工具调用完成'
+  if (activityState.value === 'tools') {
+    return mn > 1 ? `工具调用中 · 第 ${mn} 步` : '工具调用中'
+  }
+  const parts = []
+  if (tn > 0) parts.push(`思考 ${tn} 段`)
+  if (mn > 0) parts.push(`调用 ${mn} 次工具`)
+  return parts.join(' · ')
+})
+
+const totalActivityMs = computed(() => {
+  const sum =
+    props.thinking.items.reduce((s, x) => s + (x.duration_ms || 0), 0) +
+    props.tools.items.reduce((s, x) => s + (x.duration_ms || 0), 0)
+  return sum > 0 ? sum : null
+})
+
+const mergedItems = computed(() => {
+  const arr = [
+    ...props.thinking.items.map((x) => ({ ...x, kind: 'thinking' })),
+    ...props.tools.items.map((x) => ({ ...x, kind: 'tool' })),
+  ]
+  arr.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+  return arr
 })
 
 function formatDur(ms) {
@@ -53,70 +83,85 @@ function formatDur(ms) {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-function toggleThinking() {
-  props.thinking.expanded = !props.thinking.expanded
+const TOOL_NAME_ZH = {
+  bash: '命令行',
+  read_file: '读取文件',
+  write_file: '写入文件',
+  edit_file: '编辑文件',
+  glob_search: '查找文件',
+  load_skill: '加载技能',
 }
 
-function toggleTools() {
-  props.tools.expanded = !props.tools.expanded
+function toolDisplayName(name) {
+  if (!name) return ''
+  return TOOL_NAME_ZH[name] || name
+}
+
+function toggleActivity() {
+  activityExpanded.value = !activityExpanded.value
 }
 </script>
 
 <template>
   <div :class="['bubble-row', role]">
     <div :class="['bubble', role]">
-      <!-- 思考状态条 -->
+      <!-- 合并状态条：思考 / 工具调用 -->
       <div
-        v-if="thinking.state !== 'idle'"
-        class="status-card thinking"
-        :class="thinking.state"
-        @click="toggleThinking"
+        v-if="activityState !== 'idle'"
+        class="status-card"
+        :class="activityState"
+        @click="toggleActivity"
       >
         <div class="status-header">
-          <span v-if="thinking.state === 'running'" class="spinner thinking-spinner"></span>
-          <span v-else class="check">✓</span>
-          <span class="status-text">{{ thinkingLabel }}</span>
-          <span class="caret">{{ thinking.expanded ? '▾' : '▸' }}</span>
+          <span class="status-text">{{ activityLabel }}</span>
+          <span
+            v-if="activityState === 'thinking' || activityState === 'tools'"
+            class="dots"
+            aria-hidden="true"
+          >
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </span>
+          <span v-if="activityState === 'completed' && totalActivityMs != null" class="dur header-dur">{{ formatDur(totalActivityMs) }}</span>
+          <span
+            v-if="activityState !== 'thinking' && activityState !== 'tools'"
+            class="caret"
+            :class="{ open: activityExpanded }"
+            aria-hidden="true"
+          >
+            <svg viewBox="0 0 12 12" width="10" height="10">
+              <path d="M3 4.5 L6 7.5 L9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
         </div>
-        <div v-if="thinking.expanded" class="status-body" @click.stop>
-          <div v-for="(item, i) in thinking.items" :key="i" class="step">
-            <div class="step-meta">
-              <span class="step-num">第 {{ i + 1 }} 段</span>
-              <span v-if="item.duration_ms != null" class="dur">{{ formatDur(item.duration_ms) }}</span>
+        <div class="status-body-wrap" :class="{ open: activityExpanded }">
+          <div class="status-body-inner">
+            <div class="status-body" @click.stop>
+              <div v-for="item in mergedItems" :key="`${item.kind}-${item.seq}`" class="step">
+                <template v-if="item.kind === 'thinking'">
+                  <div class="step-meta">
+                    <span class="step-num">思考</span>
+                    <span v-if="item.duration_ms != null" class="dur">{{ formatDur(item.duration_ms) }}</span>
+                  </div>
+                  <pre class="step-text">{{ item.text }}</pre>
+                </template>
+                <template v-else>
+                  <div class="step-meta">
+                    <span class="step-num">工具</span>
+                    <span v-if="item.duration_ms != null" class="dur">{{ formatDur(item.duration_ms) }}</span>
+                  </div>
+                  <div class="step-display">{{ item.display || toolDisplayName(item.name) }}</div>
+                </template>
+              </div>
             </div>
-            <pre class="step-text">{{ item.text }}</pre>
-          </div>
-        </div>
-      </div>
-
-      <!-- 工具状态条 -->
-      <div
-        v-if="tools.state !== 'idle'"
-        class="status-card tools"
-        :class="tools.state"
-        @click="toggleTools"
-      >
-        <div class="status-header">
-          <span v-if="tools.state === 'running'" class="spinner tools-spinner"></span>
-          <span v-else class="check">✓</span>
-          <span class="status-text">{{ toolsLabel }}</span>
-          <span class="caret">{{ tools.expanded ? '▾' : '▸' }}</span>
-        </div>
-        <div v-if="tools.expanded" class="status-body" @click.stop>
-          <div v-for="(item, i) in tools.items" :key="i" class="step">
-            <div class="step-meta">
-              <span class="step-num">{{ i + 1 }}.</span>
-              <code class="tool-name">{{ item.name }}</code>
-              <span v-if="item.duration_ms != null" class="dur">{{ formatDur(item.duration_ms) }}</span>
-            </div>
-            <div class="step-display">{{ item.display || item.name }}</div>
           </div>
         </div>
       </div>
 
       <!-- 正文 -->
       <div v-if="content" class="text" v-html="formattedContent"></div>
-      <span v-if="showCursor" class="cursor">|</span>
+      <span v-if="showCursor && content && activityState !== 'thinking' && activityState !== 'tools'" class="cursor">|</span>
     </div>
   </div>
 </template>
@@ -135,28 +180,32 @@ function toggleTools() {
 }
 
 .bubble {
-  max-width: 75%;
-  padding: 10px 16px;
-  border-radius: 16px;
-  line-height: 1.6;
+  line-height: 1.7;
   font-size: 15px;
   word-break: break-word;
 }
 
 .bubble.user {
+  max-width: 75%;
+  padding: 10px 16px;
+  border-radius: 16px;
+  border-bottom-right-radius: 4px;
   background: #3b82f6;
   color: #fff;
-  border-bottom-right-radius: 4px;
 }
 
 .bubble.assistant {
-  background: #f1f5f9;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  background: transparent;
   color: #1e293b;
-  border-bottom-left-radius: 4px;
+  border-radius: 0;
 }
 
 .bubble.assistant .text :deep(p) {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
+  letter-spacing: 0.2px;
 }
 .bubble.assistant .text :deep(p:last-child) {
   margin-bottom: 0;
@@ -165,20 +214,22 @@ function toggleTools() {
 .bubble.assistant .text :deep(h2),
 .bubble.assistant .text :deep(h3),
 .bubble.assistant .text :deep(h4) {
-  margin: 12px 0 6px;
+  margin: 14px 0 8px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
 }
 .bubble.assistant .text :deep(h1) { font-size: 20px; }
 .bubble.assistant .text :deep(h2) { font-size: 18px; }
 .bubble.assistant .text :deep(h3) { font-size: 16px; }
 .bubble.assistant .text :deep(ul),
 .bubble.assistant .text :deep(ol) {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   padding-left: 24px;
 }
 .bubble.assistant .text :deep(li) {
-  margin: 2px 0;
+  margin: 4px 0;
+  letter-spacing: 0.2px;
 }
 .bubble.assistant .text :deep(code) {
   background: rgba(15, 23, 42, 0.08);
@@ -215,12 +266,21 @@ function toggleTools() {
 }
 .bubble.assistant .text :deep(table) {
   border-collapse: collapse;
-  margin: 8px 0;
+  margin: 12px 0;
+  width: 100%;
+  table-layout: auto;
 }
 .bubble.assistant .text :deep(th),
 .bubble.assistant .text :deep(td) {
   border: 1px solid #cbd5e1;
-  padding: 4px 8px;
+  padding: 8px 12px;
+  line-height: 1.7;
+  word-break: break-word;
+}
+.bubble.assistant .text :deep(th) {
+  background: #f1f5f9;
+  font-weight: 600;
+  text-align: left;
 }
 .bubble.assistant .text :deep(hr) {
   border: none;
@@ -229,9 +289,10 @@ function toggleTools() {
 }
 
 .cursor {
-  display: inline;
+  display: inline-block;
+  margin-left: 1px;
   animation: blink 0.8s step-end infinite;
-  color: inherit;
+  color: #64748b;
   font-weight: 200;
 }
 
@@ -241,45 +302,90 @@ function toggleTools() {
   }
 }
 
-/* ===== 状态卡片（思考 / 工具调用）===== */
+/* ===== 极简内联状态条（思考 / 工具调用）===== */
 .status-card {
-  margin-bottom: 8px;
-  border-radius: 10px;
+  margin: 0 0 14px;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s;
   user-select: none;
+  background: transparent;
+  border-radius: 0;
+  transition: opacity 0.15s;
 }
 
 .status-card:last-child {
-  margin-bottom: 0;
+  margin-bottom: 8px;
 }
 
 .status-card + .text,
 .status-card + .cursor {
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .status-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 2px 0;
+  line-height: 1;
 }
 
 .status-text {
-  flex: 1;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 1;
 }
 
 .caret {
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  line-height: 0;
   opacity: 0.7;
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+  transition: transform 0.25s ease, opacity 0.15s;
+}
+.caret.open {
+  transform: rotate(0deg);
+}
+.caret svg {
+  display: block;
+}
+.status-card:hover .caret {
+  opacity: 1;
+}
+
+.status-body-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.status-body-wrap.open {
+  grid-template-rows: 1fr;
+}
+.status-body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.header-dur {
+  font-size: 11px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .status-body {
-  padding: 8px 12px 10px;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  margin: 10px 0 2px;
+  padding: 4px 0 2px 10px;
+  border-left: 2px solid rgba(15, 23, 42, 0.08);
   cursor: default;
+  color: #1e293b;
 }
 
 .step {
@@ -296,17 +402,19 @@ function toggleTools() {
   gap: 8px;
   font-size: 12px;
   margin-bottom: 4px;
-  opacity: 0.85;
+  color: #475569;
+  line-height: 1;
 }
 
 .step-num {
   font-weight: 600;
+  line-height: 1;
 }
 
 .tool-name {
-  background: rgba(15, 23, 42, 0.08);
-  padding: 1px 6px;
-  border-radius: 4px;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   color: #1e293b;
@@ -314,22 +422,23 @@ function toggleTools() {
 
 .dur {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #475569;
+  color: #94a3b8;
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .step-text {
   margin: 0;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.6);
-  border-radius: 6px;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-family: inherit;
   font-size: 12px;
-  line-height: 1.55;
-  color: #1e293b;
+  line-height: 1.6;
+  color: #475569;
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 320px;
@@ -337,73 +446,59 @@ function toggleTools() {
 }
 
 .step-display {
-  padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.6);
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #1e293b;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #475569;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-/* 思考：紫蓝色调 */
-.status-card.thinking.running {
-  background: rgba(139, 92, 246, 0.08);
+/* 配色：运行中保留主题色 + 完成态统一灰化 */
+.status-card.thinking {
   color: #7c3aed;
+  animation: pulseRow 1.6s ease-in-out infinite;
 }
-.status-card.thinking.running:hover {
-  background: rgba(139, 92, 246, 0.14);
-}
-.status-card.thinking.completed {
-  background: rgba(139, 92, 246, 0.06);
-  color: #6d28d9;
-}
-.status-card.thinking.completed:hover {
-  background: rgba(139, 92, 246, 0.12);
-}
-
-/* 工具：保留原蓝/绿配色 */
-.status-card.tools.running {
-  background: rgba(59, 130, 246, 0.08);
+.status-card.tools {
   color: #3b82f6;
+  animation: pulseRow 1.6s ease-in-out infinite;
 }
-.status-card.tools.running:hover {
-  background: rgba(59, 130, 246, 0.14);
-}
-.status-card.tools.completed {
-  background: rgba(34, 197, 94, 0.08);
-  color: #16a34a;
-}
-.status-card.tools.completed:hover {
-  background: rgba(34, 197, 94, 0.14);
+.status-card.completed {
+  color: #64748b;
 }
 
-.spinner {
-  display: inline-block;
-  width: 13px;
-  height: 13px;
+@keyframes pulseRow {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.65; }
+}
+
+.dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+.dots .dot {
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
-  border: 2px solid;
-  animation: spin 0.8s linear infinite;
+  background: currentColor;
+  opacity: 0.25;
+  animation: dotWave 1.2s ease-in-out infinite;
+}
+.dots .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dots .dot:nth-child(3) {
+  animation-delay: 0.4s;
 }
 
-.thinking-spinner {
-  border-color: rgba(139, 92, 246, 0.25);
-  border-top-color: #7c3aed;
-}
-
-.tools-spinner {
-  border-color: rgba(59, 130, 246, 0.25);
-  border-top-color: #3b82f6;
-}
-
-.check {
-  font-weight: 700;
-  font-size: 14px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
+@keyframes dotWave {
+  0%, 60%, 100% { opacity: 0.25; }
+  30%           { opacity: 1; }
 }
 </style>
