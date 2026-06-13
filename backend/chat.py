@@ -17,13 +17,13 @@ from backend.tools import dispatch_tool, format_tool_display, get_tool_schemas
 
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
 
-# 全局单会话历史
-_history: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+# 由 app 注入
+_store = None
 
-# 与 _history 中 assistant 消息一一对应的元数据。
-# key = message_id（每个 OpenAI 轮次 = 一条 assistant 消息 = 一个气泡）；
-# assistant 消息字典上挂 _meta_message_id 反向索引。
-_assistant_messages: dict[str, dict] = {}
+
+def init_chat_store(store) -> None:
+    global _store
+    _store = store
 
 
 def _build_system_prompt() -> str:
@@ -41,10 +41,14 @@ def _build_system_prompt() -> str:
     return prompt
 
 
-def _ensure_system_prompt():
-    """更新 _history 中的 system prompt（含最新 skill 摘要）。"""
-    if _history and _history[0]["role"] == "system":
-        _history[0]["content"] = _build_system_prompt()
+def _ensure_system_prompt(conv: dict) -> None:
+    """更新 conv["history"] 中的 system prompt（含最新 skill 摘要）。"""
+    history = conv["history"]
+    sp = _build_system_prompt()
+    if history and history[0].get("role") == "system":
+        history[0]["content"] = sp
+    else:
+        history.insert(0, {"role": "system", "content": sp})
 
 
 def _sanitize_for_openai(messages: list[dict]) -> list[dict]:
@@ -53,34 +57,6 @@ def _sanitize_for_openai(messages: list[dict]) -> list[dict]:
         {k: v for k, v in m.items() if not k.startswith("_meta_")}
         for m in messages
     ]
-
-
-def get_history() -> list[dict]:
-    """返回 user/assistant 消息（不含 system/tool）。
-    每条 assistant 消息附带自己的 thinking / tools 元数据，用于前端刷新后恢复状态。
-    """
-    result = []
-    for m in _history:
-        if m["role"] in ("system", "tool"):
-            continue
-        item = {"role": m["role"], "content": m.get("content") or ""}
-        if m["role"] == "assistant":
-            meta = _assistant_messages.get(m.get("_meta_message_id"))
-            if meta:
-                item["thinking"] = meta["thinking"]
-                item["tools"] = meta["tools"]
-            else:
-                item["thinking"] = []
-                item["tools"] = []
-        result.append(item)
-    return result
-
-
-def reset_history():
-    """重置对话历史。"""
-    global _history
-    _history = [{"role": "system", "content": _build_system_prompt()}]
-    _assistant_messages.clear()
 
 
 def _accumulate_stream(stream):
@@ -159,19 +135,18 @@ def _accumulate_stream(stream):
     return text_parts, accumulated, finish_reason, thinking_segments
 
 
-def _on_text_response(text_parts: list[str], message_id: str):
-    """模型返回纯文本（未调用工具）：写入历史，yield done。"""
+def _on_text_response(text_parts: list[str], message_id: str, conv: dict):
+    """模型返回纯文本（未调用工具）：写入历史。"""
     full_text = "".join(text_parts)
     if full_text:
-        _history.append({
+        conv["history"].append({
             "role": "assistant",
             "content": full_text,
             "_meta_message_id": message_id,
         })
-    yield {"type": "done"}
 
 
-def _on_tool_calls(text_parts: list[str], accumulated: dict[int, dict], message_id: str):
+def _on_tool_calls(text_parts: list[str], accumulated: dict[int, dict], message_id: str, conv: dict):
     """模型调用了工具：写入 assistant 消息，执行工具，yield 事件。"""
     tool_calls_list = [
         {
@@ -182,14 +157,14 @@ def _on_tool_calls(text_parts: list[str], accumulated: dict[int, dict], message_
         for _, e in sorted(accumulated.items())
     ]
 
-    _history.append({
+    conv["history"].append({
         "role": "assistant",
         "content": "".join(text_parts) or None,
         "tool_calls": tool_calls_list,
         "_meta_message_id": message_id,
     })
 
-    msg_meta = _assistant_messages.setdefault(message_id, {"thinking": [], "tools": []})
+    msg_meta = conv["assistant_messages"].setdefault(message_id, {"thinking": [], "tools": []})
 
     for tc in tool_calls_list:
         tool_name = tc["function"]["name"]
@@ -228,30 +203,70 @@ def _on_tool_calls(text_parts: list[str], accumulated: dict[int, dict], message_
             "display": display,
         })
 
-        _history.append({"role": "tool", "tool_call_id": tc["id"], "content": result})
+        conv["history"].append({"role": "tool", "tool_call_id": tc["id"], "content": result})
+
+
+def _maybe_generate_title(conv: dict) -> Optional[str]:
+    """首轮 assistant 文本回复完成后调用一次非流式模型生成短标题。"""
+    if conv.get("title_generated"):
+        return None
+    history = conv.get("history", [])
+    first_user = None
+    first_assistant = None
+    for m in history:
+        if first_user is None and m.get("role") == "user":
+            first_user = m.get("content") or ""
+        if (
+            first_assistant is None
+            and m.get("role") == "assistant"
+            and (m.get("content") or "").strip()
+        ):
+            first_assistant = m.get("content") or ""
+        if first_user and first_assistant:
+            break
+    if not first_user or not first_assistant:
+        return None
+    user_part = first_user[:200]
+    assistant_part = first_assistant[:200]
+    prompt = (
+        "请基于以下对话生成一个 5–12 字的中文标题，仅返回标题文本，不要标点和引号。\n\n"
+        f"用户：{user_part}\n助手：{assistant_part}"
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=MODEL_ID,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=32,
+            stream=False,
+        )
+        title = (resp.choices[0].message.content or "").strip()
+        title = title.strip("\"'`「」《》 \n\t")
+        if not title:
+            return None
+        if len(title) > 30:
+            title = title[:30]
+        return title
+    except Exception:
+        return None
 
 
 # noinspection PyTypeChecker
-def chat_stream(user_message: str):
-    """流式 agent loop，支持 tool calling。每次 yield 一个事件 dict。
+def chat_stream(user_message: str, conversation_id: str):
+    """流式 agent loop，支持 tool calling。每次 yield 一个事件 dict。"""
+    if _store is None:
+        yield {"type": "error", "content": "ConversationStore not initialized"}
+        return
 
-    每个 OpenAI 轮次 = 一条 assistant 历史消息 = 一个前端气泡，前端依据
-    `message_start` 事件创建新气泡，后续 `reasoning` / `token` / `tool_call` /
-    `tool_result` 事件归属到当前气泡，直至下一个 `message_start` 或 `done`。
+    try:
+        conv = _store.get(conversation_id)
+    except KeyError:
+        yield {"type": "error", "content": "conversation not found"}
+        return
 
-    SSE 事件类型：
-      message_start  — {"type": "message_start", "id": "..."}（新气泡边界）
-      reasoning      — {"type": "reasoning", "content": "..."}
-      reasoning_done — {"type": "reasoning_done", "duration_ms": int}
-      token          — {"type": "token", "content": "..."}
-      tool_call      — {"type": "tool_call", "id": "...", "name": "...", "arguments": {...}, "display": "..."}
-      tool_result    — {"type": "tool_result", "tool_call_id": "...", "name": "...", "content": "...", "duration_ms": int}
-      done           — {"type": "done", "reason": "..."}（reason 仅 max_iterations 时有值）
-      error          — {"type": "error", "content": "..."}
-    """
-    _ensure_system_prompt()
-    history_snapshot_len = len(_history)
-    _history.append({"role": "user", "content": user_message})
+    _ensure_system_prompt(conv)
+    history = conv["history"]
+    history_snapshot_len = len(history)
+    history.append({"role": "user", "content": user_message})
 
     # 本次用户输入产生的所有 assistant message_id（错误时统一回滚）
     new_message_ids: list[str] = []
@@ -262,14 +277,14 @@ def chat_stream(user_message: str):
         for _ in range(MAX_TOOL_ITERATIONS):
             message_id = uuid.uuid4().hex
             new_message_ids.append(message_id)
-            msg_meta = _assistant_messages.setdefault(
+            msg_meta = conv["assistant_messages"].setdefault(
                 message_id, {"thinking": [], "tools": []}
             )
             yield {"type": "message_start", "id": message_id}
 
             stream = client.chat.completions.create(
                 model=MODEL_ID,
-                messages=_sanitize_for_openai(_history),
+                messages=_sanitize_for_openai(history),
                 tools=tool_schemas,
                 max_tokens=MAX_TOKENS,
                 stream=True,
@@ -282,17 +297,44 @@ def chat_stream(user_message: str):
 
             # 分支：纯文本回复 → 结束
             if finish_reason != "tool_calls" or not accumulated:
-                yield from _on_text_response(text_parts, message_id)
+                _on_text_response(text_parts, message_id, conv)
+                import time as _time
+                conv["updated_at"] = _time.time()
+                _store.save(conversation_id)
+
+                # 先发 done，让前端立刻解锁；标题生成可能要再调一次模型，放到 done 后做
+                yield {"type": "done"}
+
+                title = _maybe_generate_title(conv)
+                if title:
+                    if _store.set_title_if_unset(conversation_id, title):
+                        yield {
+                            "type": "title_update",
+                            "id": conversation_id,
+                            "title": title,
+                        }
                 return
 
             # 分支：工具调用 → 执行后继续循环
-            yield from _on_tool_calls(text_parts, accumulated, message_id)
+            yield from _on_tool_calls(text_parts, accumulated, message_id, conv)
+            import time as _time
+            conv["updated_at"] = _time.time()
+            _store.save(conversation_id)
 
+        import time as _time
+        conv["updated_at"] = _time.time()
+        _store.save(conversation_id)
         yield {"type": "done", "reason": "max_iterations_reached"}
 
     except Exception as e:
         # 回滚到 user 消息追加之前的状态
-        del _history[history_snapshot_len:]
+        del history[history_snapshot_len:]
         for mid in new_message_ids:
-            _assistant_messages.pop(mid, None)
+            conv["assistant_messages"].pop(mid, None)
+        try:
+            import time as _time
+            conv["updated_at"] = _time.time()
+            _store.save(conversation_id)
+        except Exception:
+            pass
         yield {"type": "error", "content": str(e)}
