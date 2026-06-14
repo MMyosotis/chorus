@@ -1,5 +1,6 @@
 from backend.tools.builtin import (  # noqa: F401
     bash,
+    baidu_search,
     edit_file,
     generate_image,
     glob_search,

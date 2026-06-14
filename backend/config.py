@@ -40,6 +40,13 @@ ARK_IMAGE_MODELS = {
     ),
 }
 
+# 百度智能搜索生成 API（baidu_search 工具使用）
+BAIDU_SEARCH_API_KEY = os.environ.get("BAIDU_SEARCH_API_KEY", "")
+BAIDU_SEARCH_BASE_URL = os.environ.get(
+    "BAIDU_SEARCH_BASE_URL",
+    "https://qianfan.baidubce.com/v2/ai_search/chat/completions",
+)
+
 # 图像生成测试开关：开启后 generate_image 工具不调用真实 API，直接返回写死的 URL
 IMAGE_TEST_MODE = os.environ.get("IMAGE_TEST_MODE", "").strip().lower() in {
     "1",
