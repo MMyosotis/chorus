@@ -10,17 +10,17 @@ def _display(args: dict) -> str:
 
 @tool(
     name="bash",
-    description="Run a shell command and return stdout/stderr. Use for file operations, running scripts, etc.",
+    description="执行 shell 命令并返回 stdout/stderr。可用于文件操作、运行脚本等。",
     parameters={
         "type": "object",
         "properties": {
             "command": {
                 "type": "string",
-                "description": "The shell command to execute",
+                "description": "要执行的 shell 命令",
             },
             "timeout": {
                 "type": "integer",
-                "description": "Timeout in seconds (default 30)",
+                "description": "超时秒数（默认 30）",
                 "default": 30,
             },
         },

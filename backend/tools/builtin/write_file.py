@@ -9,17 +9,17 @@ def _display(args: dict) -> str:
 
 @tool(
     name="write_file",
-    description="Write content to a file. Creates parent directories if needed.",
+    description="把内容写入文件，必要时自动创建上级目录。",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to the file (relative to workspace)",
+                "description": "文件路径（相对于工作目录）",
             },
             "content": {
                 "type": "string",
-                "description": "Content to write",
+                "description": "要写入的内容",
             },
         },
         "required": ["path", "content"],

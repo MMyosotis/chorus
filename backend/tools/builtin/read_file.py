@@ -11,17 +11,17 @@ def _display(args: dict) -> str:
 
 @tool(
     name="read_file",
-    description="Read file contents. Returns the text content of a file.",
+    description="读取文件内容，返回文件的文本。",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to the file (relative to workspace)",
+                "description": "文件路径（相对于工作目录）",
             },
             "limit": {
                 "type": "integer",
-                "description": "Maximum number of lines to read (optional)",
+                "description": "最多读取的行数（可选）",
             },
         },
         "required": ["path"],

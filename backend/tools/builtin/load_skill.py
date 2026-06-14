@@ -10,18 +10,19 @@ def _display(args: dict) -> str:
 
 @tool(
     name="load_skill",
-    description="Load the full content of a skill by name. Use this when the user's request matches a skill's description.",
+    description="按名称加载技能（skill）的完整内容。当用户的请求与某个技能的描述匹配时使用。",
     parameters={
         "type": "object",
         "properties": {
             "name": {
                 "type": "string",
-                "description": "The name of the skill to load",
+                "description": "要加载的技能名称",
             },
         },
         "required": ["name"],
     },
     display=_display,
+    running_label="加载技能中",
 )
 def load_skill(name: str) -> str:
     from backend.skills import get_skill_loader

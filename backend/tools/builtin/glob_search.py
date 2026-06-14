@@ -10,13 +10,13 @@ def _display(args: dict) -> str:
 
 @tool(
     name="glob",
-    description="Find files matching a glob pattern in the workspace.",
+    description="在工作目录下按 glob 模式查找文件。",
     parameters={
         "type": "object",
         "properties": {
             "pattern": {
                 "type": "string",
-                "description": "Glob pattern to match (e.g. '**/*.py', 'src/*.ts')",
+                "description": "glob 模式，例如 '**/*.py'、'src/*.ts'",
             },
         },
         "required": ["pattern"],

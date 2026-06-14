@@ -8,21 +8,21 @@ def _display(args: dict) -> str:
 
 @tool(
     name="edit_file",
-    description="Replace exact text in a file once. Fails if old_text is not found or appears multiple times.",
+    description="在文件中精确替换一次匹配文本。若 old_text 未找到或出现多次则失败。",
     parameters={
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "Path to the file (relative to workspace)",
+                "description": "文件路径（相对于工作目录）",
             },
             "old_text": {
                 "type": "string",
-                "description": "Exact text to find and replace",
+                "description": "要查找并替换的原始文本（必须唯一）",
             },
             "new_text": {
                 "type": "string",
-                "description": "Replacement text",
+                "description": "替换后的新文本",
             },
         },
         "required": ["path", "old_text", "new_text"],

@@ -25,38 +25,31 @@ def _display(args: dict) -> str:
 @tool(
     name="generate_image",
     description=(
-        "Generate an image from a text prompt using Volcengine Ark Doubao Seedream models. "
-        "CRITICAL FRONTEND CONTRACT — the frontend renders the image automatically from this tool's result, "
-        "so the ordering of your output matters: "
-        "(1) BEFORE calling this tool, output exactly ONE short placeholder line such as "
-        "'图片生成中，请稍等…' or '正在为你生成图片，稍等片刻～'. This single line will appear above the image in the same bubble, "
-        "and it is the ONLY text you are allowed to output in this whole turn. "
-        "Do NOT output anything else — no URL, no markdown image (![...]()) , no description of the image, "
-        "no follow-up commentary, no greeting, no emoji, no further text whatsoever, neither before nor after the tool call. "
-        "The tool result alone is the final answer; the user can already see the image. "
-        "(2) Then call the tool. "
-        "Available models: 'seedream-4' (higher quality, slower), 'seedream-5-lite' (faster, cheaper)."
+        "使用火山方舟 Doubao Seedream 模型根据文本提示生成图像。"
+        "前端会自动从工具结果渲染图片，因此不要在正文里输出 URL、Markdown 图片（![...]()）"
+        "或对图片的描述——用户已经能直接看到图片。"
+        "可选模型：'seedream-4'（质量更高、速度较慢）、'seedream-5-lite'（更快、更便宜）。"
     ),
     parameters={
         "type": "object",
         "properties": {
             "prompt": {
                 "type": "string",
-                "description": "Image description in Chinese or English. Be specific about subject, style, lighting, composition.",
+                "description": "图像描述（中英文均可）。需明确说明主体、风格、光线、构图等关键要素。",
             },
             "model": {
                 "type": "string",
                 "enum": ["seedream-4", "seedream-5-lite"],
                 "description": (
-                    "Which Doubao model to use. "
-                    "'seedream-4' = doubao-seedream-4.0 (higher quality, slower). "
-                    "'seedream-5-lite' = doubao-seedream-5.0-lite-new (faster, cheaper)."
+                    "使用的 Doubao 模型。"
+                    "'seedream-4' = doubao-seedream-4.0（质量更高、速度较慢）；"
+                    "'seedream-5-lite' = doubao-seedream-5.0-lite-new（更快、更便宜）。"
                 ),
                 "default": "seedream-4",
             },
             "size": {
                 "type": "string",
-                "description": "Image size like '1024x1024', '2048x2048', '1024x1792'. Default 1024x1024.",
+                "description": "图像尺寸，如 '1024x1024'、'2048x2048'、'1024x1792'。默认 1024x1024。",
                 "default": "1024x1024",
             },
         },

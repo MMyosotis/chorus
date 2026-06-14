@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -7,7 +7,6 @@ from typing import Optional
 class Skill:
     name: str
     description: str
-    tags: list[str] = field(default_factory=list)
     full_content: str = ""
 
 
@@ -25,7 +24,7 @@ class SkillLoader:
         if not self._skills_dir.exists():
             self._loaded = True
             return
-        for path in sorted(self._skills_dir.glob("*.md")):
+        for path in sorted(self._skills_dir.glob("*/SKILL.md")):
             skill = self._parse_file(path)
             if skill:
                 self._cache[skill.name] = skill
@@ -35,9 +34,8 @@ class SkillLoader:
     def _parse_file(path: Path) -> Optional[Skill]:
         text = path.read_text(encoding="utf-8")
         if not text.startswith("---"):
-            # 无 frontmatter，用文件名做 name
             return Skill(
-                name=path.stem,
+                name=path.parent.name,
                 description="",
                 full_content=text,
             )
@@ -49,24 +47,10 @@ class SkillLoader:
         for line in frontmatter.splitlines():
             if ":" in line:
                 key, _, val = line.partition(":")
-                key = key.strip()
-                val = val.strip()
-                if val.startswith("[") and val.endswith("]"):
-                    val = [
-                        t.strip().strip("'\"")
-                        for t in val[1:-1].split(",")
-                        if t.strip()
-                    ]
-                meta[key] = val
-        name = meta.get("name", path.stem)
-        description = meta.get("description", "")
-        tags = meta.get("tags", [])
-        if isinstance(tags, str):
-            tags = [tags]
+                meta[key.strip()] = val.strip()
         return Skill(
-            name=name,
-            description=description,
-            tags=tags,
+            name=meta.get("name", path.parent.name),
+            description=meta.get("description", ""),
             full_content=text,
         )
 
@@ -83,7 +67,7 @@ class SkillLoader:
         self._load_all()
         if not self._cache:
             return ""
-        lines = ["## Available Skills (use load_skill to get full details)"]
+        lines = ["## 可用技能（使用 load_skill 工具获取完整内容）"]
         for s in self._cache.values():
             lines.append(f"- **{s.name}**: {s.description}")
         return "\n".join(lines)
