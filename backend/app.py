@@ -14,6 +14,7 @@ from backend.hooks import HookManager
 from backend.hooks.builtin import register_builtin_hooks
 from backend.routes.chat import init_routes
 from backend.routes.chat import router as chat_router
+from backend.routes.debug import router as debug_router
 from backend.skills import init_skill_loader
 
 
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(chat_router)
+    app.include_router(debug_router)
     return app
 
 

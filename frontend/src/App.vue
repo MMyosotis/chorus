@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import InputBar from './components/InputBar.vue'
 import ConversationSidebar from './components/ConversationSidebar.vue'
+import ConsolePanel from './components/ConsolePanel.vue'
 import {
   listConversations,
   createConversation,
@@ -11,6 +12,10 @@ import {
   fetchMessages,
   streamChat,
 } from './api.js'
+import { useTraceStore } from './composables/useTraceStore.js'
+
+const traceStore = useTraceStore()
+const consoleOpen = ref(false)
 
 const conversations = ref([]) // [{id, title, created_at, updated_at}]
 const messagesByConv = reactive({}) // { [id]: Message[] }
@@ -306,6 +311,23 @@ async function onSend(text) {
   }
 
   const onEvent = (payload) => {
+    // trace 事件先吃掉，不走气泡逻辑
+    if (payload.type === 'trace') {
+      traceStore.addTrace(convId, payload)
+      return
+    }
+    // tool_call / tool_result 同时也合成 trace 入 store（继续走原气泡逻辑）
+    if (payload.type === 'tool_call' || payload.type === 'tool_result') {
+      traceStore.addTrace(convId, {
+        type: 'trace',
+        phase: payload.type,
+        iteration: -1,
+        message_id: '',
+        ts: Date.now() / 1000,
+        payload: { ...payload },
+      })
+    }
+
     if (payload.type === 'message_start') {
       finalizeCurrent()
       const c = cur()
@@ -410,11 +432,20 @@ onMounted(async () => {
     <div class="main-panel">
       <header class="header">
         <span class="conv-title">{{ activeTitle }}</span>
+        <button class="header-console-btn" @click="consoleOpen = !consoleOpen"
+          :class="{ active: consoleOpen }" title="控制台">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
       </header>
       <ChatWindow :messages="messages" :streaming="streaming" />
       <InputBar :streaming="streaming" @send="onSend" />
     </div>
   </div>
+  <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
 </template>
 
 <style scoped>
@@ -434,6 +465,7 @@ onMounted(async () => {
 }
 
 .header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -452,5 +484,34 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.header-console-btn {
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.header-console-btn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.header-console-btn.active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
 }
 </style>

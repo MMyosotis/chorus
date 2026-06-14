@@ -1,5 +1,6 @@
 // 前端 API 抽离：所有 fetch 集中到这里
 const BASE = '/api/conversations'
+const DEBUG_BASE = '/api/debug'
 
 export async function listConversations() {
   const res = await fetch(BASE)
@@ -107,4 +108,29 @@ export function streamChat(id, message, onEvent) {
   })()
 
   return { abort: () => ctrl.abort(), done }
+}
+
+export async function getTestMode() {
+  const res = await fetch(`${DEBUG_BASE}/test-mode`)
+  if (!res.ok) throw new Error(`getTestMode failed: ${res.status}`)
+  const data = await res.json()
+  return !!data.enabled
+}
+
+export async function setTestMode(enabled) {
+  const res = await fetch(`${DEBUG_BASE}/test-mode`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: !!enabled }),
+  })
+  if (!res.ok) throw new Error(`setTestMode failed: ${res.status}`)
+  const data = await res.json()
+  return !!data.enabled
+}
+
+export async function getInitialTestMode() {
+  const res = await fetch(`${DEBUG_BASE}/test-mode/initial`)
+  if (!res.ok) throw new Error(`getInitialTestMode failed: ${res.status}`)
+  const data = await res.json()
+  return !!data.enabled
 }

@@ -8,6 +8,12 @@ from backend.hooks.builtin.system_prompt import on_loop_start
 from backend.hooks.builtin.text_response import on_assistant_text_response
 from backend.hooks.builtin.title import make_title_hook
 from backend.hooks.builtin.tool_calls import on_tool_calls_detected
+from backend.hooks.builtin.trace import (
+    on_trace_assistant_text_response,
+    on_trace_before_model_request,
+    on_trace_loop_end,
+    on_trace_tool_calls_detected,
+)
 from backend.hooks.manager import Event, HookManager
 
 
@@ -15,18 +21,30 @@ def register_builtin_hooks(manager: HookManager, client) -> None:
     """注册所有内置 hook。
 
     `client` 是 OpenAI 客户端，title hook 需要它来调一次非流式模型生成标题。
+
+    顺序敏感：
+    - BeforeModelRequest: sanitizer 先（写 provider_messages），trace 后（读它）
+    - AssistantTextResponse / ToolCallsDetected: trace 先（事件先到前端，便于前端按时序展示），
+      业务 hook 后（写 history、yield done 等）
     """
     manager.register(Event.LoopStart, on_loop_start)
     manager.register(Event.IterationStart, on_iteration_start)
-    manager.register(Event.BeforeModelRequest, on_before_model_request)
 
-    # AssistantTextResponse：text_response 必须先（先 yield done），title 后
+    manager.register(Event.BeforeModelRequest, on_before_model_request)
+    manager.register(Event.BeforeModelRequest, on_trace_before_model_request)
+
+    manager.register(Event.AssistantTextResponse, on_trace_assistant_text_response)
     manager.register(Event.AssistantTextResponse, on_assistant_text_response)
     manager.register(Event.AssistantTextResponse, make_title_hook(client))
 
+    manager.register(Event.ToolCallsDetected, on_trace_tool_calls_detected)
     manager.register(Event.ToolCallsDetected, on_tool_calls_detected)
+
     manager.register(Event.IterationEnd, on_iteration_end)
+
     manager.register(Event.LoopEnd, on_loop_end)
+    manager.register(Event.LoopEnd, on_trace_loop_end)
+
     manager.register(Event.LoopError, on_loop_error)
 
 

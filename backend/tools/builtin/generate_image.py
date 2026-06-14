@@ -8,8 +8,8 @@ from backend.config import (
     ARK_IMAGE_API_KEY,
     ARK_IMAGE_BASE_URL,
     ARK_IMAGE_MODELS,
-    IMAGE_TEST_FAKE_URL,
-    IMAGE_TEST_MODE,
+    get_image_test_fake_url,
+    is_image_test_mode,
 )
 from backend.tools.base import tool
 
@@ -59,8 +59,8 @@ def _display(args: dict) -> str:
     running_label="图片生成中",
 )
 def generate_image(prompt: str, model: str = "seedream-4", size: str = "1024x1024") -> str:
-    if IMAGE_TEST_MODE:
-        return IMAGE_TEST_FAKE_URL
+    if is_image_test_mode():
+        return get_image_test_fake_url()
 
     if not ARK_IMAGE_API_KEY:
         return "Error: ARK_IMAGE_API_KEY 未配置，无法调用图像生成 API"
