@@ -38,8 +38,7 @@ cd frontend && npm run build                # 构建生产版本
 - `ARK_IMAGE_BASE_URL` — 火山方舟图像 API 基地址（默认 `https://ark.cn-beijing.volces.com/api/v3`）
 - `ARK_IMAGE_MODEL_SEEDREAM_4` — seedream-4 逻辑名映射的真实模型 ID（默认 `doubao-seedream-4-0-250828`）
 - `ARK_IMAGE_MODEL_SEEDREAM_5_LITE` — seedream-5-lite 逻辑名映射的真实模型 ID（默认 `doubao-seedream-5-0-litenew`）
-- `IMAGE_TEST_MODE` — 图像生成测试开关（`1/true/yes/on` 开启）。开启后 `generate_image` 工具跳过真实 API 调用，直接返回写死的 URL，用于零成本调试前端图像渲染
-- `IMAGE_TEST_FAKE_URL` — 测试模式下的固定返回 URL（默认是一张已知可用的橘猫图，可覆盖换图）
+- `IMAGE_TEST_FAKE_URL` — 图像测试模式下的固定返回 URL（默认是一张已知可用的橘猫图，可覆盖换图）。测试开关本身只在控制台「设置」中切换，默认关闭，进程级状态、重启回到关
 
 ## Architecture
 
@@ -50,8 +49,10 @@ cd frontend && npm run build                # 构建生产版本
 | `config.py` | 从 `.env` 读取配置（API_KEY, BASE_URL, MODEL_ID, SYSTEM_PROMPT, MAX_TOKENS, MAX_TOOL_ITERATIONS, SKILLS_DIR, CONVERSATIONS_DIR, CONV_TTL_DAYS / CONV_MAX_BYTES / CONV_MAX_COUNT） |
 | `chat.py` | 对话核心：OpenAI 客户端、`chat_stream(message, conversation_id)` 同步生成器实现 agent loop；通过 `init_chat_store()` 注入 `ConversationStore` 操作具体会话的 `history`/`assistant_messages`；包含 `_maybe_generate_title` 首轮标题生成 |
 | `conversations/store.py` | `ConversationStore`：按 id 隔离的会话持久化（`backend/data/conversations/{id}.json`），原子写、双层锁（全局 + 会话级）、节流清理（TTL/单文件大小/总量）|
+| `settings/store.py` | `SettingsStore`：通用 KV 配置持久化（`backend/data/settings.db`），独立于会话数据；启动时回灌到 `config.py` 内存（如 `image_test_mode`） |
 | `routes/chat.py` | HTTP 路由：`/api/conversations`（list/create）、`/api/conversations/{id}`（delete/rename）、`/api/conversations/{id}/messages`（GET）、`/api/conversations/{id}/chat`（SSE 流式，409 防同会话并发） |
-| `app.py` | FastAPI 应用工厂，CORS + 初始化 SkillLoader + 创建 `ConversationStore` 并注入到 chat / routes + 注册路由 |
+| `routes/debug.py` | 调试 endpoint：`/api/debug/test-mode`（GET/PATCH），PATCH 同时改 config 内存与 settings 持久化 |
+| `app.py` | FastAPI 应用工厂，CORS + 初始化 SkillLoader + SettingsStore + ConversationStore 并注入到 chat / routes + 注册路由 |
 | `tools/base.py` | 工具注册框架：`@tool` 装饰器、`ToolDef`（含可选 `display` 回调）、`_REGISTRY`、`dispatch_tool()`/`get_tool_schemas()`/`format_tool_display()`/`safe_path()` |
 | `tools/builtin/` | 内置工具：bash, read_file, write_file, edit_file, glob_search, load_skill, generate_image |
 | `skills/loader.py` | SkillLoader：扫描 `skills_data/*.md`，解析 frontmatter，生成 skill 摘要注入 system prompt |
@@ -152,3 +153,15 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为需要 POS
 ## No Tests
 
 项目当前没有正式测试框架和单元测试。`backend/tests/test_cli.py` 是手动调试用的交互 CLI，不是自动化测试。
+
+## 开发约定
+
+在本项目的所有代码开发工作中，请严格遵守以下协作规则：
+
+- **全程持续审视代码**，主动识别代码坏味道、不合理设计、冗余逻辑、不规范写法、可优化点。
+- **一旦判定当前代码需要重构，立刻暂停新增功能开发，不得直接修改代码**。
+- 向我清晰输出两部分内容：
+  1. **问题说明**：指出代码具体问题、属于哪类代码坏味道、带来的隐患 / 弊端；
+  2. **重构方案**：给出具体优化思路、改动范围、重构后的效果。
+- **仅在我明确同意、确认方案后**，你再按照方案执行代码重构；若我提出修改意见，同步调整方案后再操作。
+- 若无重构必要，正常推进开发即可。

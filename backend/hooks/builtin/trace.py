@@ -1,12 +1,13 @@
-"""Trace hook：在 LLM 调用前后 yield trace SSE 事件，给前端控制台展示。
+"""Trace hook：在 LLM 调用前后 yield trace SSE 事件，给前端控制台展示，
+同时把 trace 行写入 SQLite，作为后端的权威 trace 源。
 
 事件 schema:
     {
         "type": "trace",
-        "phase": "model_request" | "model_response" | "loop_end",
+        "phase": "model_request" | "model_response" | "tool_call" | "tool_result" | "loop_end",
         "iteration": int,
         "message_id": str,
-        "ts": float,             # time.time()
+        "ts": float,
         "payload": dict,
     }
 
@@ -22,12 +23,25 @@ from backend.hooks.manager import AgentContext
 
 
 def _emit(phase: str, ctx: AgentContext, payload: dict) -> dict:
+    ts = time.time()
+    try:
+        ctx.store.add_trace(
+            ctx.conversation_id,
+            phase,
+            payload,
+            iteration=ctx.iteration_index,
+            message_id=ctx.message_id,
+            ts=ts,
+        )
+    except Exception:
+        # trace 写库失败不应影响主流程
+        pass
     return {
         "type": "trace",
         "phase": phase,
         "iteration": ctx.iteration_index,
         "message_id": ctx.message_id,
-        "ts": time.time(),
+        "ts": ts,
         "payload": payload,
     }
 

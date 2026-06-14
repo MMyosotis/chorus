@@ -80,6 +80,15 @@ def get_messages(conv_id: str):
     return {"messages": store.get_history_view(conv_id)}
 
 
+@router.get("/{conv_id}/traces")
+def get_traces(conv_id: str):
+    store = _require_store()
+    try:
+        return {"traces": store.list_traces(conv_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="conversation not found")
+
+
 @router.post("/{conv_id}/chat")
 def chat_endpoint(conv_id: str, req: ChatRequest):
     """SSE 流式聊天（含工具调用支持）。"""

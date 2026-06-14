@@ -47,6 +47,18 @@ export async function fetchMessages(id) {
   return data.messages || []
 }
 
+export async function fetchTraces(id) {
+  const res = await fetch(`${BASE}/${id}/traces`)
+  if (res.status === 404) {
+    const err = new Error('conversation not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`traces failed: ${res.status}`)
+  const data = await res.json()
+  return data.traces || []
+}
+
 /**
  * 流式聊天：内部封装 fetch + ReadableStream 解析。
  * onEvent 收到每个 SSE 事件 dict。
@@ -128,9 +140,3 @@ export async function setTestMode(enabled) {
   return !!data.enabled
 }
 
-export async function getInitialTestMode() {
-  const res = await fetch(`${DEBUG_BASE}/test-mode/initial`)
-  if (!res.ok) throw new Error(`getInitialTestMode failed: ${res.status}`)
-  const data = await res.json()
-  return !!data.enabled
-}

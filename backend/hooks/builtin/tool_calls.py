@@ -1,10 +1,38 @@
-"""ToolCallsDetected hook：写 tool_calls 消息、执行工具、yield 事件、写 metadata。"""
+"""ToolCallsDetected hook：写 tool_calls 消息、执行工具、yield 事件、写 metadata。
+
+每个 tool_call / tool_result SSE 事件之前会先 yield 一条 type=trace 事件并写库，
+作为后端权威 trace 源（前端不再合成）。
+"""
 
 import json
+import time
 from time import perf_counter
 
 from backend.hooks.manager import AgentContext
 from backend.tools import dispatch_tool, format_tool_display, get_running_label
+
+
+def _emit_trace(ctx: AgentContext, phase: str, payload: dict) -> dict:
+    ts = time.time()
+    try:
+        ctx.store.add_trace(
+            ctx.conversation_id,
+            phase,
+            payload,
+            iteration=ctx.iteration_index,
+            message_id=ctx.message_id,
+            ts=ts,
+        )
+    except Exception:
+        pass
+    return {
+        "type": "trace",
+        "phase": phase,
+        "iteration": ctx.iteration_index,
+        "message_id": ctx.message_id,
+        "ts": ts,
+        "payload": payload,
+    }
 
 
 def on_tool_calls_detected(ctx: AgentContext):
@@ -42,7 +70,7 @@ def on_tool_calls_detected(ctx: AgentContext):
         display = format_tool_display(tool_name, tool_args)
         running_label = get_running_label(tool_name)
 
-        yield {
+        tool_call_event = {
             "type": "tool_call",
             "id": tc["id"],
             "name": tool_name,
@@ -50,18 +78,22 @@ def on_tool_calls_detected(ctx: AgentContext):
             "display": display,
             "running_label": running_label,
         }
+        yield _emit_trace(ctx, "tool_call", dict(tool_call_event))
+        yield tool_call_event
 
         t0 = perf_counter()
         result = dispatch_tool(tool_name, tool_args)
         duration_ms = int((perf_counter() - t0) * 1000)
 
-        yield {
+        tool_result_event = {
             "type": "tool_result",
             "tool_call_id": tc["id"],
             "name": tool_name,
             "content": result,
             "duration_ms": duration_ms,
         }
+        yield _emit_trace(ctx, "tool_result", dict(tool_result_event))
+        yield tool_result_event
 
         msg_meta["tools"].append({
             "name": tool_name,

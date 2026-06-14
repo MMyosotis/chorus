@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getTestMode, setTestMode, getInitialTestMode } from '../api.js'
+import { getTestMode, setTestMode } from '../api.js'
 
 const props = defineProps({
   activeId: { type: String, default: null },
@@ -17,14 +17,12 @@ function close() {
 
 // 测试模式状态
 const testModeEnabled = ref(false)
-const testModeInitial = ref(false)
 const testModeLoading = ref(false)
 const testModeError = ref('')
 
 async function refreshTestMode() {
   try {
     testModeEnabled.value = await getTestMode()
-    testModeInitial.value = await getInitialTestMode()
     testModeError.value = ''
   } catch (e) {
     testModeError.value = e.message || '请求失败'
@@ -38,18 +36,6 @@ async function toggleTestMode() {
     testModeEnabled.value = await setTestMode(!testModeEnabled.value)
   } catch (e) {
     testModeError.value = e.message || '切换失败'
-  } finally {
-    testModeLoading.value = false
-  }
-}
-
-async function resetTestMode() {
-  testModeLoading.value = true
-  testModeError.value = ''
-  try {
-    testModeEnabled.value = await setTestMode(testModeInitial.value)
-  } catch (e) {
-    testModeError.value = e.message || '恢复失败'
   } finally {
     testModeLoading.value = false
   }
@@ -184,17 +170,13 @@ function renderMessageContent(m) {
         <div class="setting-row">
           <div class="setting-label">
             <strong>图像测试模式</strong>
-            <small>开启后 generate_image 返回固定 URL，不调用真实 API。仅当前进程生效，重启后回到 .env 初值。</small>
+            <small>开启后 generate_image 返回固定 URL，不调用真实 API。</small>
           </div>
           <label class="switch">
             <input type="checkbox" :checked="testModeEnabled" @change="toggleTestMode"
               :disabled="testModeLoading" />
             <span class="slider"></span>
           </label>
-        </div>
-        <div class="setting-meta">
-          <small>.env 初值：{{ testModeInitial ? '开' : '关' }}</small>
-          <button class="text-btn" @click="resetTestMode" :disabled="testModeLoading">恢复默认</button>
         </div>
         <div v-if="testModeError" class="error-hint">{{ testModeError }}</div>
       </section>
@@ -443,15 +425,6 @@ function renderMessageContent(m) {
   color: #64748b;
   font-size: 12px;
   line-height: 1.5;
-}
-
-.setting-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 8px;
-  padding: 0 4px;
-  color: #64748b;
 }
 
 .text-btn {

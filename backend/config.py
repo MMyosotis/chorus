@@ -48,20 +48,14 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
 )
 
 # 图像生成测试开关：开启后 generate_image 工具不调用真实 API，直接返回写死的 URL。
-# 运行时可通过 set_image_test_mode 切换（前端 /api/debug/test-mode 走这里），
-# _INITIAL_IMAGE_TEST_MODE 保留 .env 初值作为重启基线。
+# 默认关闭，仅可在运行时通过控制台 (PATCH /api/debug/test-mode) 切换，进程重启回到默认。
 IMAGE_TEST_FAKE_URL = os.environ.get(
     "IMAGE_TEST_FAKE_URL",
     "https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-0/02178135974958637079cdcc08b35ab782b1fd6e8da4cf02940a7_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260613%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260613T140919Z&X-Tos-Expires=86400&X-Tos-Signature=ce55d8ee11f67e665c0b465df403d734e7304a1489d0b3f4fcfea53f531e59c3&X-Tos-SignedHeaders=host",
 )
 
 
-def _parse_bool(v: str) -> bool:
-    return (v or "").strip().lower() in {"1", "true", "yes", "on"}
-
-
-_INITIAL_IMAGE_TEST_MODE: bool = _parse_bool(os.environ.get("IMAGE_TEST_MODE", ""))
-_image_test_mode: bool = _INITIAL_IMAGE_TEST_MODE
+_image_test_mode: bool = False
 
 
 def is_image_test_mode() -> bool:
@@ -71,10 +65,6 @@ def is_image_test_mode() -> bool:
 def set_image_test_mode(enabled: bool) -> None:
     global _image_test_mode
     _image_test_mode = bool(enabled)
-
-
-def get_initial_image_test_mode() -> bool:
-    return _INITIAL_IMAGE_TEST_MODE
 
 
 def get_image_test_fake_url() -> str:

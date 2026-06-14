@@ -151,10 +151,14 @@ function mergeAssistantHistory(raw) {
 }
 
 async function loadMessages(id) {
-  if (messagesByConv[id]) return
+  if (messagesByConv[id]) {
+    traceStore.loadFromServer(id)
+    return
+  }
   try {
     const raw = await fetchMessages(id)
     messagesByConv[id] = mergeAssistantHistory(raw)
+    traceStore.loadFromServer(id)
   } catch (e) {
     if (e.status === 404) {
       // 该会话已被后端清理
@@ -311,21 +315,10 @@ async function onSend(text) {
   }
 
   const onEvent = (payload) => {
-    // trace 事件先吃掉，不走气泡逻辑
+    // trace 事件先吃掉，不走气泡逻辑（后端是 trace 唯一权威源，含 tool_call/tool_result 也都以 trace 形式产出）
     if (payload.type === 'trace') {
       traceStore.addTrace(convId, payload)
       return
-    }
-    // tool_call / tool_result 同时也合成 trace 入 store（继续走原气泡逻辑）
-    if (payload.type === 'tool_call' || payload.type === 'tool_result') {
-      traceStore.addTrace(convId, {
-        type: 'trace',
-        phase: payload.type,
-        iteration: -1,
-        message_id: '',
-        ts: Date.now() / 1000,
-        payload: { ...payload },
-      })
     }
 
     if (payload.type === 'message_start') {
