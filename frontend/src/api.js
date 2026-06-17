@@ -1,15 +1,15 @@
 // 前端 API 抽离：所有 fetch 集中到这里
-const BASE = '/api/conversations'
+const BASE = '/api/sessions'
 const DEBUG_BASE = '/api/debug'
 
-export async function listConversations() {
+export async function listSessions() {
   const res = await fetch(BASE)
   if (!res.ok) throw new Error(`list failed: ${res.status}`)
   const data = await res.json()
-  return data.conversations || []
+  return data.sessions || []
 }
 
-export async function createConversation(title) {
+export async function createSession(title) {
   const res = await fetch(BASE, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -19,13 +19,13 @@ export async function createConversation(title) {
   return res.json()
 }
 
-export async function deleteConversation(id) {
+export async function deleteSession(id) {
   const res = await fetch(`${BASE}/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`delete failed: ${res.status}`)
   return res.json()
 }
 
-export async function renameConversation(id, title) {
+export async function renameSession(id, title) {
   const res = await fetch(`${BASE}/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -38,7 +38,7 @@ export async function renameConversation(id, title) {
 export async function fetchMessages(id) {
   const res = await fetch(`${BASE}/${id}/messages`)
   if (res.status === 404) {
-    const err = new Error('conversation not found')
+    const err = new Error('session not found')
     err.status = 404
     throw err
   }
@@ -50,7 +50,7 @@ export async function fetchMessages(id) {
 export async function fetchTraces(id) {
   const res = await fetch(`${BASE}/${id}/traces`)
   if (res.status === 404) {
-    const err = new Error('conversation not found')
+    const err = new Error('session not found')
     err.status = 404
     throw err
   }

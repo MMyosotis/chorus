@@ -2,13 +2,13 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import ChatWindow from './components/ChatWindow.vue'
 import InputBar from './components/InputBar.vue'
-import ConversationSidebar from './components/ConversationSidebar.vue'
+import SessionSidebar from './components/SessionSidebar.vue'
 import ConsolePanel from './components/ConsolePanel.vue'
 import {
-  listConversations,
-  createConversation,
-  deleteConversation,
-  renameConversation,
+  listSessions,
+  createSession,
+  deleteSession,
+  renameSession,
   fetchMessages,
   streamChat,
 } from './api.js'
@@ -17,15 +17,15 @@ import { useTraceStore } from './composables/useTraceStore.js'
 const traceStore = useTraceStore()
 const consoleOpen = ref(false)
 
-const conversations = ref([]) // [{id, title, created_at, updated_at}]
-const messagesByConv = reactive({}) // { [id]: Message[] }
-const streamingByConv = reactive({}) // { [id]: boolean }
+const sessions = ref([]) // [{id, title, created_at, updated_at}]
+const messagesBySession = reactive({}) // { [id]: Message[] }
+const streamingBySession = reactive({}) // { [id]: boolean }
 const activeId = ref(null)
 
-const messages = computed(() => messagesByConv[activeId.value] || [])
-const streaming = computed(() => !!streamingByConv[activeId.value])
+const messages = computed(() => messagesBySession[activeId.value] || [])
+const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeTitle = computed(() => {
-  const c = conversations.value.find((x) => x.id === activeId.value)
+  const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
 })
 
@@ -151,23 +151,23 @@ function mergeAssistantHistory(raw) {
 }
 
 async function loadMessages(id) {
-  if (messagesByConv[id]) {
+  if (messagesBySession[id]) {
     traceStore.loadFromServer(id)
     return
   }
   try {
     const raw = await fetchMessages(id)
-    messagesByConv[id] = mergeAssistantHistory(raw)
+    messagesBySession[id] = mergeAssistantHistory(raw)
     traceStore.loadFromServer(id)
   } catch (e) {
     if (e.status === 404) {
       // 该会话已被后端清理
-      conversations.value = conversations.value.filter((c) => c.id !== id)
-      delete messagesByConv[id]
-      delete streamingByConv[id]
+      sessions.value = sessions.value.filter((c) => c.id !== id)
+      delete messagesBySession[id]
+      delete streamingBySession[id]
       if (activeId.value === id) {
-        if (conversations.value.length > 0) {
-          activeId.value = conversations.value[0].id
+        if (sessions.value.length > 0) {
+          activeId.value = sessions.value[0].id
           await loadMessages(activeId.value)
         } else {
           await onCreate()
@@ -175,21 +175,21 @@ async function loadMessages(id) {
         alert('该会话已过期，已自动切换')
       }
     } else {
-      messagesByConv[id] = []
+      messagesBySession[id] = []
     }
   }
 }
 
-async function selectConversation(id) {
+async function selectSession(id) {
   activeId.value = id
   await loadMessages(id)
 }
 
 async function onCreate() {
   try {
-    const meta = await createConversation()
-    conversations.value.unshift(meta)
-    messagesByConv[meta.id] = []
+    const meta = await createSession()
+    sessions.value.unshift(meta)
+    messagesBySession[meta.id] = []
     activeId.value = meta.id
   } catch (e) {
     alert(`新建失败: ${e.message}`)
@@ -198,18 +198,18 @@ async function onCreate() {
 
 async function onDelete(id) {
   try {
-    await deleteConversation(id)
+    await deleteSession(id)
   } catch (e) {
     alert(`删除失败: ${e.message}`)
     return
   }
   const wasActive = activeId.value === id
-  conversations.value = conversations.value.filter((c) => c.id !== id)
-  delete messagesByConv[id]
-  delete streamingByConv[id]
+  sessions.value = sessions.value.filter((c) => c.id !== id)
+  delete messagesBySession[id]
+  delete streamingBySession[id]
   if (wasActive) {
-    if (conversations.value.length > 0) {
-      activeId.value = conversations.value[0].id
+    if (sessions.value.length > 0) {
+      activeId.value = sessions.value[0].id
       await loadMessages(activeId.value)
     } else {
       await onCreate()
@@ -219,34 +219,34 @@ async function onDelete(id) {
 
 async function onRename({ id, title }) {
   try {
-    const meta = await renameConversation(id, title)
-    const idx = conversations.value.findIndex((c) => c.id === id)
-    if (idx >= 0) conversations.value[idx] = { ...conversations.value[idx], ...meta }
+    const meta = await renameSession(id, title)
+    const idx = sessions.value.findIndex((c) => c.id === id)
+    if (idx >= 0) sessions.value[idx] = { ...sessions.value[idx], ...meta }
   } catch (e) {
     alert(`重命名失败: ${e.message}`)
   }
 }
 
-function bumpConversation(id) {
-  const idx = conversations.value.findIndex((c) => c.id === id)
+function bumpSession(id) {
+  const idx = sessions.value.findIndex((c) => c.id === id)
   if (idx > 0) {
-    const [it] = conversations.value.splice(idx, 1)
+    const [it] = sessions.value.splice(idx, 1)
     it.updated_at = Date.now() / 1000
-    conversations.value.unshift(it)
+    sessions.value.unshift(it)
   } else if (idx === 0) {
-    conversations.value[0].updated_at = Date.now() / 1000
+    sessions.value[0].updated_at = Date.now() / 1000
   }
 }
 
 async function onSend(text) {
-  const convId = activeId.value
-  if (!convId) return
-  if (!text.trim() || streamingByConv[convId]) return
+  const sessionId = activeId.value
+  if (!sessionId) return
+  if (!text.trim() || streamingBySession[sessionId]) return
 
-  // 闭包 capture：所有引用都是 convId / list，与 activeId 解耦
-  const list = messagesByConv[convId] || (messagesByConv[convId] = [])
+  // 闭包 capture：所有引用都是 sessionId / list，与 activeId 解耦
+  const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
   list.push({ role: 'user', content: text })
-  streamingByConv[convId] = true
+  streamingBySession[sessionId] = true
 
   let assistantIdx = -1
   const cur = () => (assistantIdx >= 0 ? list[assistantIdx] : null)
@@ -317,7 +317,7 @@ async function onSend(text) {
   const onEvent = (payload) => {
     // trace 事件先吃掉，不走气泡逻辑（后端是 trace 唯一权威源，含 tool_call/tool_result 也都以 trace 形式产出）
     if (payload.type === 'trace') {
-      traceStore.addTrace(convId, payload)
+      traceStore.addTrace(sessionId, payload)
       return
     }
 
@@ -370,42 +370,42 @@ async function onSend(text) {
         item.content = payload.content
       }
     } else if (payload.type === 'title_update') {
-      const idx = conversations.value.findIndex((c) => c.id === payload.id)
+      const idx = sessions.value.findIndex((c) => c.id === payload.id)
       if (idx >= 0) {
-        conversations.value[idx] = {
-          ...conversations.value[idx],
+        sessions.value[idx] = {
+          ...sessions.value[idx],
           title: payload.title,
         }
       }
     } else if (payload.type === 'done') {
       finalizeCurrent()
       mergeTrailingEmptyBubble()
-      streamingByConv[convId] = false
+      streamingBySession[sessionId] = false
     } else if (payload.type === 'error') {
       ensureAssistant().content = `[错误] ${payload.content}`
-      streamingByConv[convId] = false
+      streamingBySession[sessionId] = false
     }
   }
 
-  const { done } = streamChat(convId, text, onEvent)
+  const { done } = streamChat(sessionId, text, onEvent)
   await done
   finalizeCurrent()
   mergeTrailingEmptyBubble()
-  streamingByConv[convId] = false
-  bumpConversation(convId)
+  streamingBySession[sessionId] = false
+  bumpSession(sessionId)
 }
 
 onMounted(async () => {
   try {
-    const list = await listConversations()
-    conversations.value = list
+    const list = await listSessions()
+    sessions.value = list
   } catch {
-    conversations.value = []
+    sessions.value = []
   }
-  if (conversations.value.length === 0) {
+  if (sessions.value.length === 0) {
     await onCreate()
   } else {
-    activeId.value = conversations.value[0].id
+    activeId.value = sessions.value[0].id
     await loadMessages(activeId.value)
   }
 })
@@ -413,18 +413,18 @@ onMounted(async () => {
 
 <template>
   <div class="app-shell">
-    <ConversationSidebar
-      :conversations="conversations"
+    <SessionSidebar
+      :sessions="sessions"
       :active-id="activeId"
-      :streaming-map="streamingByConv"
-      @select="selectConversation"
+      :streaming-map="streamingBySession"
+      @select="selectSession"
       @create="onCreate"
       @delete="onDelete"
       @rename="onRename"
     />
     <div class="main-panel">
       <header class="header">
-        <span class="conv-title">{{ activeTitle }}</span>
+        <span class="session-title">{{ activeTitle }}</span>
         <button class="header-console-btn" @click="consoleOpen = !consoleOpen"
           :class="{ active: consoleOpen }" title="控制台">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -470,7 +470,7 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-.conv-title {
+.session-title {
   font-size: 16px;
   font-weight: 500;
   color: #1e293b;
