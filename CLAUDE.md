@@ -62,7 +62,7 @@ cd frontend && npm run build                # 构建生产版本
 | `repositories/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验）：`connection`(线程局部 sqlite)、`session`/`message`/`trace`/`settings` |
 | `services/` | 应用编排层（取数据→调 domain→存数据）：`session`、`chat`、`settings`、`skill`、`title`、`cleanup`（文件名无 `_service` 后缀，类名仍带 `Service`）。纯领域逻辑已剥离到 `domain/` |
 | `hooks/` | `base`(Hook 单方法基类)、`manager`(HookManager 8 个具名方法 `on_xxx` 按字面顺序调用该事件 hook、fail-open)、`registry`(`build_hooks` 装配 9 个 hook 打包成 `HookBundle`) + `builtin/` 9 个类化 hook |
-| `tools/` | `base`(Tool ABC + ToolRegistry + ToolContext + WorkspacePolicy)、`builtin/`(8 个工具，文件名无 `_tool` 后缀)、`clients/`(ark_image / baidu_search 外部依赖封装) |
+| `tools/` | `base`(Tool ABC + ToolRegistry + ToolContext)、`workspace`(`WorkspacePolicy.safe_path()`)、`builtin/`(8 个工具，文件名无 `_tool` 后缀)、`clients/`(ark_image / baidu_search 外部依赖封装) |
 | `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`、`chat`(SSE)、`settings`(/api/debug/test-mode) |
 | `resources/skills/` | 技能 markdown（frontmatter: name/description/tags） |
 | `tests/test_cli.py` | 手动调试 CLI（直接调 `ChatService.stream`，不经 HTTP） |
@@ -111,11 +111,13 @@ cd frontend && npm run build                # 构建生产版本
 ```
 App.vue（双栏：sidebar + main-panel；多会话状态）
 ├── SessionSidebar.vue（260px 固定，新建/列表/切换/重命名/删除 + streaming 脉冲点）
-├── api.js（fetch 抽离：listSessions/createSession/deleteSession/renameSession/fetchMessages/streamChat）
+├── api.js（fetch 抽离：listSessions/createSession/deleteSession/renameSession/fetchMessages/fetchTraces/streamChat/getTestMode/setTestMode）
 └── main-panel
     ├── ChatWindow.vue（消息列表 + 自动滚动）
     │   └── MessageBubble.vue（单条气泡，user 右对齐；assistant 含 thinking / tools 折叠面板 + 主文本）
-    └── InputBar.vue（输入框 + 发送按钮）
+    ├── InputBar.vue（输入框 + 发送按钮）
+    └── ConsolePanel.vue（trace 控制台面板，消费 useTraceStore 收集的 trace 事件）
+（composables/useTraceStore.js — trace 事件聚合；styles/global.css — 全局样式；main.js — 入口）
 ```
 
 **多会话状态模型**：
@@ -176,3 +178,12 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为需要 POS
 - 若无重构必要，正常推进开发即可。
 
 - **控制流嵌套不得超过 3 层**（if/for/while/with/try 各算一层，elif 同级不加深）。
+
+### 领域层与编排层分离
+
+后端严格区分**领域层**（`domain/`）与**编排层**（`services/` + `routes/` + `hooks/` + `startup.py`），新增代码按下述原则归位：
+
+- **领域层（`domain/`）只放纯领域逻辑，零基础设施依赖**：`domain/models/` 是带只读行为的 Pydantic 模型（如 `Message.to_provider_dict()`、`SkillContent.from_markdown()`），`domain/services/` 是跨对象的纯领域函数（如 `build_provider_messages`、`select_cleanup`、`clean_generated_title`）。**domain 不得 import** `threading` / `sqlite` / `openai` / `kitty.repositories` / `kitty.tools` / `kitty.services`——任何基础设施依赖。领域函数输入领域模型、输出领域模型或纯数据结构，可脱离 DB / HTTP 独立单测。
+- **编排层负责"取数据 → 调领域 → 存数据"**：`services/`（application 编排）、`routes/`（HTTP 适配）、`hooks/`（agent loop 横切编排）、`startup.py`（启动副作用）都不承载领域规则，只做协调——从 repo/外部取数据，喂给领域函数/模型，再把结果存回或返回。`AppContainer` 只装配（new + 注入），不含启动副作用。
+- **判别准则**：一段逻辑若"给定领域数据，产出确定结果、与 DB/HTTP/文件系统/锁无关"，它是领域逻辑，归 `domain/`；若它"需要查 DB、调 OpenAI、扫文件、持锁、管 cache、控制流程顺序"，它是编排/基础设施，归编排层。拿不准时问一句"这段能脱离 repo 独立单测吗"——能则领域，不能则编排。
+- **扩展时保持边界**：当编排层需要新的运行时多方信息（如 system prompt 要拼接对话摘要、用户画像），**收集信息是编排**（在 hook/service 里凑齐），**拼装规则是领域**（领域函数接收已收集好的数据）。用值对象（如 `PromptContext`）承载多方信息，避免领域函数参数爆炸、签名频繁变动。
