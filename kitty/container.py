@@ -2,7 +2,7 @@
 
 替代 create_app 内联装配：构造一次，挂到 app.state.container；
 routes 经 Depends（routes/providers.py）从这里取 service。所有依赖在 __init__ 显式注入，
-无模块级单例。startup() 跑一次性的 load / cleanup。
+无模块级单例。装配后的启动副作用（load 数据 / 清理）见 kitty.startup.run_startup。
 """
 
 from __future__ import annotations
@@ -42,7 +42,6 @@ from kitty.services.cleanup import CleanupService
 from kitty.services.session import SessionService
 from kitty.services.settings import SettingsService
 from kitty.services.skill import SkillService
-from kitty.services.system_prompt_builder import SystemPromptBuilder
 from kitty.services.title import TitleGenerationService
 from kitty.tools.base import ToolContext, ToolCtxFactory, ToolRegistry
 from kitty.tools.builtin import (
@@ -83,7 +82,6 @@ class AppContainer:
         self.session_service = SessionService(
             self.session_repo, self.msg_repo, self.trace_repo, self.cleanup_service
         )
-        self.system_prompt_builder = SystemPromptBuilder(SYSTEM_PROMPT, self.skill_service)
         self.openai_client = OpenAI(api_key=API_KEY, base_url=BASE_URL)
         self.title_service = TitleGenerationService(self.openai_client, MODEL_ID)
 
@@ -107,18 +105,13 @@ class AppContainer:
 
         # Hook + ChatService
         self.hooks = HookManager(build_hooks(
-            self.session_service, self.system_prompt_builder, self.title_service,
+            self.session_service, SYSTEM_PROMPT, self.skill_service, self.title_service,
             MODEL_ID, MAX_TOKENS, self.tool_registry, self.tool_ctx_factory,
         ))
         self.chat_service = ChatService(
             self.session_service, self.hooks, self.openai_client,
             MODEL_ID, MAX_TOKENS, MAX_TOOL_ITERATIONS, self.tool_registry.schemas_openai(),
         )
-
-    def startup(self) -> None:
-        self.skill_service.load()
-        self.settings_service.load_all()
-        self.session_service.load()
 
     def _tool_ctx_factory(self, session_id: str | None) -> ToolContext:
         return ToolContext(

@@ -1,8 +1,8 @@
 """LoopStart hook：把本轮用户消息追加入库。
 
-system 消息不持久化（每次由 SystemPromptBuilder 现拼，build_provider_messages 注入），
-故本 hook 只负责 append user message。history_snapshot_len 由 ChatService 在入口前
-（append 之前）算好填入 ctx，作为回滚锚点。
+system 消息不持久化（每次由 SanitizerHook 调 build_system_prompt 现拼，
+build_provider_messages 注入），故本 hook 只负责 append user message。
+history_snapshot_len 由 ChatService 在入口前（append 之前）算好填入 ctx，作为回滚锚点。
 """
 
 from __future__ import annotations

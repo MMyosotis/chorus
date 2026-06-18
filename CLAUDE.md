@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Little Kitty — 带上下文记忆的 AI 对话助手，支持 tool calling 和动态 skill 加载。前后端分离架构：后端 FastAPI + OpenAI SDK 提供 SSE 流式对话（含 agent loop），前端 Vue 3 + Vite 提供聊天界面。
 
-后端按 Java OOP 风格分层：`domain/models`（Pydantic 数据模型）→ `repositories`（各表唯一 SQL 入口）→ `services`（业务编排）→ `routes`（HTTP）。依赖单向 `routes → services → repositories → db`，构造器注入 + `AppContainer` 单点装配，无模块级全局单例。
+后端按 Java OOP 风格分层：`domain`（领域模型 + 纯领域逻辑，零基础设施依赖）→ `repositories`（各表唯一 SQL 入口）→ `services`（应用编排：取数据→调领域→存数据）→ `routes`（HTTP）。依赖单向 `routes → services → repositories → db`，且 `domain` 不依赖任何基础设施层（repo/tools/openai/threading 都不进 domain）。构造器注入 + `AppContainer` 单点装配，无模块级全局单例。
 
 ## Commands
 
@@ -56,10 +56,11 @@ cd frontend && npm run build                # 构建生产版本
 |------|------|
 | `config.py` | 从 `.env` 读取配置常量（含 `DATA_DIR`、`SKILLS_DIR`），纯静态值 |
 | `app.py` | FastAPI 应用工厂 `create_app()`：构造 `AppContainer`、挂 `app.state.container`、CORS、注册路由 |
-| `container.py` | `AppContainer`：单点装配所有 Repository / Service / Tool / Hook / ChatService，构造器注入，`startup()` 跑 load/cleanup |
-| `domain/models/` | Pydantic v2 frozen 数据模型：`session`/`message`(sealed 联合)/`trace`/`tool`/`skill`/`events`(SSE sealed 联合)/`agent`(`AgentContext` 等 dataclass) |
+| `container.py` | `AppContainer`：单点装配所有 Repository / Service / Tool / Hook / ChatService，构造器注入，无模块级全局单例（只装配，不含启动副作用） |
+| `startup.py` | `run_startup(container)`：装配后的启动副作用——技能扫描、设置回灌、会话元数据加载 + 首次清理 |
+| `domain/` | 领域层（零基础设施依赖）。`models/` Pydantic v2 frozen 数据模型 + 只读行为方法：`session`/`message`(sealed 联合，`to_provider_dict()`)/`trace`/`tool`/`skill`(`from_markdown()`)/`events`(SSE sealed 联合)/`agent`(`AgentContext` 等 dataclass)。`services/` 跨对象纯领域函数：`messaging`(`build_provider_messages`/`build_history_view`)、`prompt`(`PromptContext`/`build_system_prompt`/`format_skill_hints`，多方信息收集在 application 层、拼装规则在此)、`title`(`clean_generated_title`/`normalize_title`/`STORED_TITLE_MAX_LEN`)、`cleanup`(`select_cleanup`/`CleanupDecision`) |
 | `repositories/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验）：`connection`(线程局部 sqlite)、`session`/`message`/`trace`/`settings` |
-| `services/` | 业务编排：`session`、`chat`、`settings`、`skill`、`title`、`cleanup`、`system_prompt_builder`（文件名无 `_service` 后缀，类名仍带 `Service`） |
+| `services/` | 应用编排层（取数据→调 domain→存数据）：`session`、`chat`、`settings`、`skill`、`title`、`cleanup`（文件名无 `_service` 后缀，类名仍带 `Service`）。纯领域逻辑已剥离到 `domain/` |
 | `hooks/` | `base`(Hook 单方法基类)、`manager`(HookManager 8 个具名方法 `on_xxx` 按字面顺序调用该事件 hook、fail-open)、`registry`(`build_hooks` 装配 9 个 hook 打包成 `HookBundle`) + `builtin/` 9 个类化 hook |
 | `tools/` | `base`(Tool ABC + ToolRegistry + ToolContext + WorkspacePolicy)、`builtin/`(8 个工具，文件名无 `_tool` 后缀)、`clients/`(ark_image / baidu_search 外部依赖封装) |
 | `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`、`chat`(SSE)、`settings`(/api/debug/test-mode) |

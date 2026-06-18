@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from kitty.domain.models.skill import SkillContent, SkillSummary
+from kitty.domain.services.prompt import format_skill_hints
 
 
 class SkillService:
@@ -38,14 +39,8 @@ class SkillService:
             return self._cache.get(name)
 
     def format_hints(self) -> str:
-        """生成简短摘要，用于注入 system prompt。"""
-        summaries = self.list_summaries()
-        if not summaries:
-            return ""
-        lines = ["## 可用技能（使用 load_skill 工具获取完整内容）"]
-        for s in summaries:
-            lines.append(f"- **{s.name}**: {s.description}")
-        return "\n".join(lines)
+        """生成简短摘要，用于注入 system prompt。领域拼装在 format_skill_hints。"""
+        return format_skill_hints(self.list_summaries())
 
     # ------------------------------------------------------------------
     def _ensure_loaded(self) -> None:
@@ -58,33 +53,8 @@ class SkillService:
         self._cache.clear()
         if self._dir.exists():
             for path in sorted(self._dir.glob("*/SKILL.md")):
-                skill = self._parse_file(path)
-                if skill is not None:
-                    self._cache[skill.name] = skill
+                skill = SkillContent.from_markdown(
+                    path.read_text(encoding="utf-8"), path.parent.name
+                )
+                self._cache[skill.name] = skill
         self._loaded = True
-
-    @staticmethod
-    def _parse_file(path: Path) -> Optional[SkillContent]:
-        text = path.read_text(encoding="utf-8")
-        name = path.parent.name
-        description = ""
-        if text.startswith("---"):
-            parts = text.split("---", 2)
-            if len(parts) >= 3:
-                name, description = SkillService._parse_frontmatter(parts[1], name)
-        return SkillContent(name=name, description=description, full_content=text)
-
-    @staticmethod
-    def _parse_frontmatter(frontmatter: str, fallback_name: str) -> tuple[str, str]:
-        name = fallback_name
-        description = ""
-        for line in frontmatter.strip().splitlines():
-            if ":" not in line:
-                continue
-            key, _, val = line.partition(":")
-            key, val = key.strip(), val.strip()
-            if key == "name":
-                name = val
-            elif key == "description":
-                description = val
-        return name, description

@@ -1,7 +1,8 @@
 """TitleGenerationService：非流式一次调用生成 5-12 字会话标题。
 
-被 TitleHook 注入，首轮 assistant 文本回复后调用。仅负责"生成标题文本"，
-落库（set_title_if_unset）由 hook 经 SessionService 完成。
+被 TitleHook 注入，首轮 assistant 文本回复后调用。仅负责"生成标题文本"
+（调 OpenAI + 清洗），落库（set_title_if_unset）由 hook 经 SessionService 完成。
+标题清洗规则在 domain.services.title.clean_generated_title。
 """
 
 from __future__ import annotations
@@ -10,6 +11,8 @@ import logging
 from typing import Optional
 
 from openai import OpenAI
+
+from kitty.domain.services.title import clean_generated_title
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +36,8 @@ class TitleGenerationService:
                 max_tokens=32,
                 stream=False,
             )
-            title = (resp.choices[0].message.content or "").strip()
+            raw = (resp.choices[0].message.content or "").strip()
         except Exception as e:
             logger.warning("title generation failed: %s", e)
             return None
-        return self._clean(title)
-
-    @staticmethod
-    def _clean(title: str) -> Optional[str]:
-        title = title.strip("\"'`「」《》 \n\t")
-        if not title:
-            return None
-        if len(title) > 30:
-            title = title[:30]
-        return title
+        return clean_generated_title(raw)

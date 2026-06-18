@@ -19,7 +19,7 @@ from kitty.hooks.builtin.title import TitleHook
 from kitty.hooks.builtin.tool_call import ToolCallHook
 from kitty.hooks.builtin.trace import TraceHook
 from kitty.services.session import SessionService
-from kitty.services.system_prompt_builder import SystemPromptBuilder
+from kitty.services.skill import SkillService
 from kitty.services.title import TitleGenerationService
 from kitty.tools.base import ToolCtxFactory, ToolRegistry
 
@@ -39,7 +39,8 @@ class HookBundle:
 
 def build_hooks(
     session_service: SessionService,
-    system_prompt_builder: SystemPromptBuilder,
+    system_prompt: str,
+    skill_service: SkillService,
     title_service: TitleGenerationService,
     model_id: str,
     max_tokens: int,
@@ -49,7 +50,7 @@ def build_hooks(
     return HookBundle(
         sys_prompt=SystemPromptHook(session_service),
         iteration_start=IterationStartHook(),
-        sanitizer=SanitizerHook(session_service, system_prompt_builder),
+        sanitizer=SanitizerHook(session_service, system_prompt, skill_service),
         trace=TraceHook(session_service, model_id, max_tokens),
         text_response=TextResponseHook(session_service),
         tool_call=ToolCallHook(session_service, tool_registry, tool_ctx_factory),

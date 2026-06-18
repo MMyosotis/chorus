@@ -26,6 +26,8 @@ from kitty.domain.models.message import (
     UserMessage,
 )
 from kitty.domain.models.trace import TraceEntry
+from kitty.domain.services.messaging import build_history_view, build_provider_messages
+from kitty.domain.services.title import STORED_TITLE_MAX_LEN, normalize_title
 from kitty.repositories.session import SessionRepository
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.trace import TraceRepository
@@ -104,11 +106,13 @@ class SessionService:
         self._session_repo.delete(session_id)  # CASCADE 带走 messages / traces
 
     def rename(self, session_id: str, title: str) -> Session:
+        # 用户手改标题：严格校验（空/超长都拒绝，提示用户而非静默截断）。
+        # 只 strip 不截断——超长要报错，故不用会截断的 normalize_title。
         title = (title or "").strip()
         if not title:
             raise ValueError("title 不能为空")
-        if len(title) > 60:
-            raise ValueError("title 长度不能超过 60")
+        if len(title) > STORED_TITLE_MAX_LEN:
+            raise ValueError(f"title 长度不能超过 {STORED_TITLE_MAX_LEN}")
         session = self.get(session_id)
         now = self._clock()
         with self.get_lock(session_id):
@@ -122,11 +126,10 @@ class SessionService:
         return updated
 
     def set_title_if_unset(self, session_id: str, title: str) -> bool:
-        title = (title or "").strip()
+        # 自动标题：宽容归一化（空→跳过，超长→截断，不打扰用户）。
+        title = normalize_title(title)
         if not title:
             return False
-        if len(title) > 60:
-            title = title[:60]
         session = self.get(session_id)
         with self.get_lock(session_id):
             if session.title_generated:
@@ -201,37 +204,26 @@ class SessionService:
             self._trace_repo.delete_by_message(mid)
 
     def history_view(self, session_id: str) -> list[MessageView]:
-        """前端视图：过滤 tool/system，assistant 挂回 thinking/tools（从 trace 聚合）。"""
-        result: list[MessageView] = []
-        for msg in self._msg_repo.list_by_session(session_id):
-            if isinstance(msg, UserMessage):
-                result.append(MessageView(id=msg.id, role="user", content=msg.content))
-            elif isinstance(msg, AssistantMessage):
-                trace = self._trace_repo.aggregate_message_trace(msg.id)
-                result.append(
-                    MessageView(
-                        id=msg.id,
-                        role="assistant",
-                        content=msg.content or "",
-                        thinking=trace.thinking,
-                        tools=trace.tools,
-                    )
-                )
-        return result
+        """前端视图：过滤 tool/system，assistant 挂回 thinking/tools（从 trace 聚合）。
+
+        领域组装规则在 domain.services.messaging.build_history_view，本方法只取数据喂它。
+        """
+        return build_history_view(
+            self._msg_repo.list_by_session(session_id),
+            self._trace_repo.aggregate_message_trace,
+        )
 
     # ------------------------------------------------------------------
     # ★ 唯一的 provider_messages 构建函数（plan 检验1 支点）
     # ------------------------------------------------------------------
     def build_provider_messages(self, session_id: str, system_prompt: str) -> list[dict]:
-        """构建发给 LLM 的消息序列：[system] + 该会话全部历史消息（按 seq，剥内部字段）。
+        """构建发给 LLM 的消息序列：[system] + 该会话全部历史消息（按 seq，各角色自行映射）。
 
         因采用逐条入库，调用时历史已全部落 messages 表，本轮 user 消息也已 append，
-        故此处读到的就是"截至本轮的完整历史"，无需在内存拼凑。
+        故此处读到的就是"截至本轮的完整历史"。领域组装规则在
+        domain.services.messaging.build_provider_messages，本方法只取数据喂它。
         """
-        result: list[dict] = [{"role": "system", "content": system_prompt}]
-        for msg in self._msg_repo.list_by_session(session_id):
-            result.append(self._message_to_provider_dict(msg))
-        return result
+        return build_provider_messages(system_prompt, self._msg_repo.list_by_session(session_id))
 
     # ------------------------------------------------------------------
     # Trace
@@ -302,23 +294,3 @@ class SessionService:
     def _replace_cache(self, session: Session) -> None:
         with self._global_lock:
             self._meta_cache[session.id] = session
-
-    @staticmethod
-    def _message_to_provider_dict(msg: Message) -> dict:
-        if isinstance(msg, UserMessage):
-            return {"role": "user", "content": msg.content}
-        if isinstance(msg, AssistantMessage):
-            entry: dict = {"role": "assistant", "content": msg.content}
-            if msg.tool_calls:
-                entry["tool_calls"] = [
-                    {
-                        "id": tc.id,
-                        "type": "function",
-                        "function": {"name": tc.name, "arguments": tc.arguments_json},
-                    }
-                    for tc in msg.tool_calls
-                ]
-            return entry
-        if isinstance(msg, ToolMessage):
-            return {"role": "tool", "tool_call_id": msg.tool_call_id, "content": msg.content}
-        raise TypeError(f"unsupported message type: {type(msg)}")

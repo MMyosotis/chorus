@@ -3,7 +3,7 @@
 设计要点：
 - 历史 session dict 里的 `_meta_message_id` 升级为正式 `id` 字段；user / tool 的 id 也由后端生成。
 - 不同 role 的合法字段不同，用 discriminator='role' 的联合精确建模。
-- System message 不存库（每次由 SystemPromptBuilder 现拼），故不在联合内。
+- System message 不存库（每次由 domain.services.prompt.build_system_prompt 现拼），故不在联合内。
 - frozen + extra=forbid：消息不可变，"改历史"只能 append 新行。
 """
 
@@ -31,6 +31,9 @@ class UserMessage(_MessageBase):
     role: Literal["user"] = "user"
     content: str
 
+    def to_provider_dict(self) -> dict:
+        return {"role": "user", "content": self.content}
+
 
 class ToolCallSpec(BaseModel):
     """assistant 决定要调用的工具，保留 LLM 流式拼回的原始字符串形态。"""
@@ -47,12 +50,28 @@ class AssistantMessage(_MessageBase):
     content: Optional[str] = None  # 纯 tool_calls 时为 None
     tool_calls: list[ToolCallSpec] = Field(default_factory=list)
 
+    def to_provider_dict(self) -> dict:
+        entry: dict = {"role": "assistant", "content": self.content}
+        if self.tool_calls:
+            entry["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": tc.arguments_json},
+                }
+                for tc in self.tool_calls
+            ]
+        return entry
+
 
 class ToolMessage(_MessageBase):
     role: Literal["tool"] = "tool"
     tool_call_id: str
     name: str
     content: str
+
+    def to_provider_dict(self) -> dict:
+        return {"role": "tool", "tool_call_id": self.tool_call_id, "content": self.content}
 
 
 Message = Annotated[

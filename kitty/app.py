@@ -9,13 +9,14 @@ from kitty.container import AppContainer
 from kitty.routes.chat import router as chat_router
 from kitty.routes.sessions import router as sessions_router
 from kitty.routes.settings import router as settings_router
+from kitty.startup import run_startup
 
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Little Kitty", version="0.2.0")
 
     container = AppContainer()
-    container.startup()
+    run_startup(container)
     app.state.container = container
 
     app.add_middleware(
