@@ -80,9 +80,9 @@ function adjustHeight() {
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   background: linear-gradient(
     to bottom,
-    rgba(248, 250, 252, 0) 0%,
-    rgba(248, 250, 252, 0.85) 50%,
-    rgba(248, 250, 252, 1) 100%
+    rgba(246, 248, 253, 0) 0%,
+    rgba(246, 248, 253, 0.85) 50%,
+    rgba(246, 248, 253, 1) 100%
   );
   mask-image: linear-gradient(to bottom, transparent 0%, #000 50%);
   -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 50%);
@@ -99,16 +99,19 @@ function adjustHeight() {
   display: block;
   width: 100%;
   padding: 12px 56px 12px 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 18px;
   font-size: 15px;
   line-height: 1.5;
   resize: none;
   outline: none;
   font-family: inherit;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 28px rgba(99, 102, 241, 0.10), 0 2px 6px rgba(99, 102, 241, 0.06),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   min-height: 92px;
   max-height: 180px;
   overflow-y: auto;
@@ -122,12 +125,15 @@ function adjustHeight() {
 }
 
 .input-field:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.12), 0 0 0 3px rgba(59, 130, 246, 0.08);
+  border-color: rgba(129, 140, 248, 0.7);
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.22),
+    0 0 0 4px rgba(129, 140, 248, 0.14),
+    0 1px 0 rgba(255, 255, 255, 0.7) inset;
 }
 
 .input-field:disabled {
-  background: #f8fafc;
+  background: rgba(248, 250, 252, 0.8);
   cursor: not-allowed;
 }
 
@@ -142,14 +148,16 @@ function adjustHeight() {
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: #2563eb;
+  background: linear-gradient(135deg, #6366f1, #818cf8);
   color: #fff;
   cursor: pointer;
-  transition: background 0.2s, transform 0.15s;
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.32), 0 1px 2px rgba(99, 102, 241, 0.2);
+  transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: #1d4ed8;
+  filter: brightness(1.06);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4), 0 1px 2px rgba(99, 102, 241, 0.24);
 }
 
 .send-btn:active:not(:disabled) {
@@ -159,5 +167,6 @@ function adjustHeight() {
 .send-btn:disabled {
   background: #cbd5e1;
   cursor: not-allowed;
+  box-shadow: none;
 }
 </style>

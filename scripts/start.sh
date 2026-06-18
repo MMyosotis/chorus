@@ -29,7 +29,7 @@ echo "启动后端服务... http://localhost:8000"
 BACKEND_PID=$!
 
 # --- 前端 ---
-cd "$PROJECT_ROOT/frontend" || exit 1
+cd "$PROJECT_ROOT/web" || exit 1
 
 if [ ! -d "node_modules" ]; then
     echo "前端：首次运行，正在安装依赖..."

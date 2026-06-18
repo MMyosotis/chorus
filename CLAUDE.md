@@ -22,8 +22,8 @@ uv sync                                              # 安装依赖
 
 ### 前端
 ```bash
-cd frontend && npm install && npm run dev   # 安装依赖并启动开发服务器
-cd frontend && npm run build                # 构建生产版本
+cd web && npm install && npm run dev   # 安装依赖并启动开发服务器
+cd web && npm run build                # 构建生产版本
 ```
 
 ### 环境变量
@@ -106,7 +106,7 @@ cd frontend && npm run build                # 构建生产版本
 - `WorkspacePolicy.safe_path()` 确保文件操作路径不逃逸工作目录（`WorkspacePolicy(root=Path.cwd())`，构造器注入）。
 - `GenerateImageTool` 依赖 `SettingsService.get_image_test_mode`（测试模式返回写死 URL）与 `ArkImageClient`；`BaiduSearchTool` 依赖 `BaiduSearchClient`。
 
-### 前端 (frontend/src/)
+### 前端 (web/src/)
 
 ```
 App.vue（双栏：sidebar + main-panel；多会话状态）

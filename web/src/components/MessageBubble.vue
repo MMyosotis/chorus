@@ -280,8 +280,9 @@ function closePreview() {
   padding: 10px 16px;
   border-radius: 16px;
   border-bottom-right-radius: 4px;
-  background: #3b82f6;
+  background: linear-gradient(135deg, #6366f1, #818cf8);
   color: #fff;
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.28), 0 1px 2px rgba(99, 102, 241, 0.18);
 }
 
 .bubble.assistant {
@@ -351,7 +352,7 @@ function closePreview() {
   color: #475569;
 }
 .bubble.assistant .text :deep(a) {
-  color: #2563eb;
+  color: #6366f1;
   text-decoration: underline;
 }
 .bubble.assistant .text :deep(table) {
@@ -368,7 +369,7 @@ function closePreview() {
   word-break: break-word;
 }
 .bubble.assistant .text :deep(th) {
-  background: #f1f5f9;
+  background: rgba(99, 102, 241, 0.06);
   font-weight: 600;
   text-align: left;
 }
@@ -549,11 +550,11 @@ function closePreview() {
 
 /* 配色：运行中保留主题色 + 完成态统一灰化 */
 .status-card.thinking {
-  color: #7c3aed;
+  color: #6366f1;
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.tools {
-  color: #3b82f6;
+  color: #6366f1;
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.completed {
@@ -619,7 +620,7 @@ function closePreview() {
   width: 100%;
   height: auto;
   border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 10px 28px rgba(30, 41, 59, 0.14), 0 2px 6px rgba(30, 41, 59, 0.06);
 }
 
 .image-placeholder {

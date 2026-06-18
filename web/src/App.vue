@@ -447,6 +447,12 @@ onMounted(async () => {
   height: 100vh;
   width: 100%;
   overflow: hidden;
+  /* 柔和氛围光：基色 + 三个低透明度径向光斑，营造光感而非纯色块 */
+  background:
+    radial-gradient(820px 620px at 8% -6%, rgba(129, 140, 248, 0.13), transparent 60%),
+    radial-gradient(720px 560px at 102% 0%, rgba(56, 189, 248, 0.10), transparent 58%),
+    radial-gradient(900px 700px at 50% 112%, rgba(236, 72, 153, 0.05), transparent 62%),
+    #f6f8fd;
 }
 
 .main-panel {
@@ -464,9 +470,13 @@ onMounted(async () => {
   justify-content: center;
   padding: 0 24px;
   height: 56px;
-  background: #ffffff;
+  /* 半透明白 + 背景模糊，让底部的氛围光透上来 */
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
   color: #1e293b;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.55);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
   flex-shrink: 0;
 }
 
@@ -484,27 +494,29 @@ onMounted(async () => {
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border: 1px solid transparent;
   background: transparent;
-  color: #64748b;
-  border-radius: 6px;
+  color: #5b6b85;
+  border-radius: 9px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.18s, color 0.18s, border-color 0.18s, box-shadow 0.18s;
 }
 
 .header-console-btn:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: rgba(99, 102, 241, 0.07);
+  color: #6366f1;
+  border-color: rgba(129, 140, 248, 0.25);
 }
 
 .header-console-btn.active {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #2563eb;
+  background: rgba(99, 102, 241, 0.10);
+  border-color: rgba(129, 140, 248, 0.4);
+  color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), 0 8px 24px rgba(99, 102, 241, 0.20);
 }
 </style>

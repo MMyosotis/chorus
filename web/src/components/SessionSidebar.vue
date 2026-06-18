@@ -76,18 +76,26 @@ watch(
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <svg class="logo" viewBox="2 2 96 96" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="6" />
-        <path
-          d="M25 45 L33 18 L50 32 L67 18 L75 55 Q45 55 35 80"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="6"
-          stroke-linecap="square"
-          stroke-linejoin="miter"
-        />
-        <circle cx="42" cy="42" r="4" fill="currentColor" />
-        <circle cx="58" cy="42" r="4" fill="currentColor" />
+      <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <!-- 极浅纵向渐变：上方略亮、底部略深，制造柔和光泽而非立体感 -->
+          <linearGradient id="lk-logo-bg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#7c83f3" />
+            <stop offset="100%" stop-color="#5860e0" />
+          </linearGradient>
+        </defs>
+
+        <!-- 耳朵 -->
+        <path d="M26 30 L33 10 L48 26 Z" fill="url(#lk-logo-bg)" />
+        <path d="M74 30 L67 10 L52 26 Z" fill="url(#lk-logo-bg)" />
+
+        <!-- 圆角方框主体 -->
+        <rect x="14" y="20" width="72" height="70" rx="22" fill="url(#lk-logo-bg)" />
+
+        <!-- 猫脸：两眼 + 鼻 -->
+        <ellipse cx="38" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
+        <ellipse cx="62" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
+        <path d="M47 66 L53 66 L50 71 Z" fill="#ffffff" fill-opacity="0.92" />
       </svg>
       <span class="brand-title">氛围猫猫</span>
     </div>
@@ -150,8 +158,11 @@ watch(
 .sidebar {
   width: 260px;
   flex-shrink: 0;
-  background: #fff;
-  border-right: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.66);
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border-right: 1px solid rgba(226, 232, 240, 0.6);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.5) inset;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -166,11 +177,12 @@ watch(
 }
 
 .logo {
-  width: 1.2em;
-  height: 1.2em;
-  font-size: 26px;
-  color: #3b82f6;
+  width: 30px;
+  height: 30px;
   display: block;
+  border-radius: 9px;
+  filter: drop-shadow(0 1px 2px rgba(30, 41, 59, 0.10))
+          drop-shadow(0 3px 8px rgba(99, 102, 241, 0.28));
 }
 
 .brand-title {
@@ -178,7 +190,10 @@ watch(
   font-size: 26px;
   font-weight: 400;
   letter-spacing: 1px;
-  color: #3b82f6;
+  background: linear-gradient(120deg, #6366f1, #7c83f3);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .sidebar-header {
@@ -190,16 +205,21 @@ watch(
   width: 100%;
   padding: 9px 12px;
   border: none;
-  border-radius: 8px;
-  background: #3b82f6;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #818cf8);
   color: #fff;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.18s;
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.30), 0 1px 2px rgba(99, 102, 241, 0.20);
+  transition: box-shadow 0.2s, filter 0.2s;
 }
 .new-btn:hover {
-  background: #2563eb;
+  filter: brightness(1.05);
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.38), 0 1px 2px rgba(99, 102, 241, 0.24);
+}
+.new-btn:active {
+  filter: brightness(0.97);
 }
 
 .session-list {
@@ -215,20 +235,24 @@ watch(
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
-  border-radius: 8px;
+  min-height: 42px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
   color: #1e293b;
-  transition: background 0.15s;
+  transition: background 0.16s, box-shadow 0.16s;
   margin-bottom: 2px;
+  box-sizing: border-box;
 }
 
 .session-item:hover {
-  background: #f1f5f9;
+  background: rgba(99, 102, 241, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.12);
 }
 
 .session-item.active {
-  background: #eff6ff;
+  background: rgba(99, 102, 241, 0.10);
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.35), 0 4px 14px rgba(99, 102, 241, 0.12);
 }
 
 .session-title {
@@ -243,7 +267,7 @@ watch(
   flex: 1;
   min-width: 0;
   padding: 2px 6px;
-  border: 1px solid #3b82f6;
+  border: 1px solid #6366f1;
   border-radius: 4px;
   font-size: 14px;
   outline: none;
@@ -256,14 +280,16 @@ watch(
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: #818cf8;
   flex-shrink: 0;
+  box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.5);
   animation: pulseDot 1.2s ease-in-out infinite;
 }
 
 @keyframes pulseDot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: 0.4; transform: scale(0.8); }
+  0%   { opacity: 1; transform: scale(1); box-shadow: 0 0 6px 1px rgba(129, 140, 248, 0.55); }
+  50%  { opacity: 0.5; transform: scale(0.85); box-shadow: 0 0 2px 0 rgba(129, 140, 248, 0.2); }
+  100% { opacity: 1; transform: scale(1); box-shadow: 0 0 6px 1px rgba(129, 140, 248, 0.55); }
 }
 
 .session-actions {
@@ -292,8 +318,8 @@ watch(
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: #e2e8f0;
-  color: #1e293b;
+  background: rgba(99, 102, 241, 0.09);
+  color: #6366f1;
 }
 
 .icon-btn:disabled {

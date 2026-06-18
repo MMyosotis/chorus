@@ -63,7 +63,7 @@ watch(
   flex: 1;
   overflow-y: auto;
   padding: 20px 16px;
-  background: #f8fafc;
+  background: transparent;
   scrollbar-gutter: stable;
 }
 
@@ -84,5 +84,6 @@ watch(
   height: 240px;
   color: #94a3b8;
   font-size: 16px;
+  letter-spacing: 0.5px;
 }
 </style>
