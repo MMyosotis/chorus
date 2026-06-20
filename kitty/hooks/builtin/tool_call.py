@@ -34,7 +34,7 @@ class ToolCallHook(Hook):
     def handle(self, ctx: AgentContext) -> Iterable[SseEvent] | None:
         tool_calls_list = self._materialize(ctx)
         self._append_assistant(ctx, tool_calls_list)
-        tool_ctx = self._tool_ctx_factory(ctx.session_id)
+        tool_ctx = self._tool_ctx_factory(ctx.session_id, ctx.image_model)
         for tc in tool_calls_list:
             yield from self._run_one(ctx, tc, tool_ctx)
 

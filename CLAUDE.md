@@ -28,18 +28,16 @@ cd web && npm run build                # 构建生产版本
 
 ### 环境变量
 在 `.env` 中配置：
-- `OPENAI_API_KEY` — API 密钥（必须）
-- `OPENAI_BASE_URL` — API 基地址（默认 `https://api.openai.com/v1`）
-- `MODEL_ID` — 模型名称（默认 `gpt-4o`）
 - `MAX_TOOL_ITERATIONS` — agent loop 最大迭代次数（默认 `10`）
 - `CONV_TTL_DAYS` — 会话过期天数，超过自动清理（默认 `30`）
 - `CONV_MAX_BYTES` — 单个会话消息总字节数上限，超过删除（默认 `1048576`）
 - `CONV_MAX_COUNT` — 会话总数上限，超过删除最旧（默认 `100`）
-- `ARK_IMAGE_API_KEY` — 火山方舟图像生成 API 密钥（`generate_image` 工具使用，与对话密钥解耦）
-- `ARK_IMAGE_BASE_URL` — 火山方舟图像 API 基地址（默认 `https://ark.cn-beijing.volces.com/api/v3`）
-- `ARK_IMAGE_MODEL_SEEDREAM_4` — seedream-4 逻辑名映射的真实模型 ID（默认 `doubao-seedream-4-0-250828`）
-- `ARK_IMAGE_MODEL_SEEDREAM_5_LITE` — seedream-5-lite 逻辑名映射的真实模型 ID（默认 `doubao-seedream-5-0-litenew`）
+- `DEFAULT_CHAT_MODEL_ID` — 启动默认对话模型 + 标题生成固定模型（须是 `CHAT_MODELS` 中某条的 id，默认 `DeepSeek V4 Flash`）
+- 对话模型密钥：`CHAT_MODELS` 每条用 `api_key_env` 指明取哪个环境变量（如 `DEEPSEEK_API_KEY` / `MINIMAX_API_KEY`），key 值写 `.env`，配置表只存变量名
+- `ARK_IMAGE_API_KEY` — 火山方舟图像生成 API 密钥（`IMAGE_MODELS` 各条默认用此变量，与对话密钥解耦；某条生图模型也可指向独立变量）
 - `IMAGE_TEST_FAKE_URL` — 图像测试模式下的固定返回 URL（默认是一张已知可用的橘猫图，可覆盖换图）。测试开关本身只在控制台「设置」中切换，默认关闭，进程级状态、重启回到关
+
+> 对话模型表 `CHAT_MODELS` 与生图模型表 `IMAGE_MODELS` 均在 `kitty/config.py`，结构同构：每条含 `id`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）。新增/删除/换 provider 改这两张表即可。
 
 ## 数据存放位置
 

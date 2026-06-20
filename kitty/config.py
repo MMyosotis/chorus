@@ -5,9 +5,28 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-API_KEY = os.environ.get("OPENAI_API_KEY", "")
-BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
-MODEL_ID = os.environ.get("MODEL_ID", "gpt-4o")
+# 对话模型配置表：每个模型一条，含完整连接信息。
+#   id          —— 展示名 + 存储键 + 注册表键（settings.db 存这个；改它已存设置会回退默认）
+#   base_url    —— 该 provider 的 OpenAI 兼容 endpoint
+#   api_key_env —— 从哪个环境变量取 API key（key 值写在 .env，不进配置明文）
+#   model_id    —— 传给 OpenAI API 的真实 model 名（常与 id 不同）
+# 新增/删除模型改这里即可；api_key 在 .env 配对应变量。
+CHAT_MODELS = [
+    {
+        "id": "DeepSeek V4 Flash",
+        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "model_id": "deepseek-v4-flash",
+        "api_key_env": "DEEPSEEK_API_KEY",
+    },
+    {
+        "id": "MiniMax M3",
+        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "model_id": "minimax-m3",
+        "api_key_env": "MINIMAX_API_KEY",
+    },
+]
+# 启动默认对话模型 + 标题生成固定使用的模型（须是 CHAT_MODELS 中某条的 id）
+DEFAULT_CHAT_MODEL_ID = os.environ.get("DEFAULT_CHAT_MODEL_ID", "DeepSeek V4 Flash")
 
 MAX_TOKENS = 2048
 
@@ -22,22 +41,28 @@ CONV_TTL_DAYS = int(os.environ.get("CONV_TTL_DAYS", "30"))
 CONV_MAX_BYTES = int(os.environ.get("CONV_MAX_BYTES", str(1024 * 1024)))
 CONV_MAX_COUNT = int(os.environ.get("CONV_MAX_COUNT", "100"))
 
-# 火山方舟图像生成（与对话客户端解耦，便于后续接入更多模型）
-ARK_IMAGE_API_KEY = os.environ.get("ARK_IMAGE_API_KEY", "")
-ARK_IMAGE_BASE_URL = os.environ.get(
-    "ARK_IMAGE_BASE_URL",
-    "https://ark.cn-beijing.volces.com/api/v3",
-)
-
-# 逻辑名 -> 真实模型 ID 映射，方便用户在 .env 升级版本号
-ARK_IMAGE_MODELS = {
-    "seedream-4": os.environ.get(
-        "ARK_IMAGE_MODEL_SEEDREAM_4", "doubao-seedream-4-0-250828"
-    ),
-    "seedream-5-lite": os.environ.get(
-        "ARK_IMAGE_MODEL_SEEDREAM_5_LITE", "doubao-seedream-5-0-litenew"
-    ),
-}
+# 生图模型配置表：与 CHAT_MODELS 同构，每个模型一条独立连接信息。
+#   id          —— 展示名 + 存储键 + 注册表键（settings.db 存这个；改它已存设置会回退默认）
+#   base_url    —— 该 provider 的图像生成 endpoint
+#   api_key_env —— 从哪个环境变量取 API key（key 值写在 .env，不进配置明文）
+#   model_id    —— 传给图像 API 的真实 model 名
+# 新增/删除模型改这里即可；不同模型可指向不同 provider / key。
+IMAGE_MODELS = [
+    {
+        "id": "Seedream 4",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "api_key_env": "ARK_IMAGE_API_KEY",
+        "model_id": "doubao-seedream-4-0-250828",
+    },
+    {
+        "id": "Seedream 5 Lite",
+        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "api_key_env": "ARK_IMAGE_API_KEY",
+        "model_id": "doubao-seedream-5-0-litenew",
+    },
+]
+# 启动默认生图模型（须是 IMAGE_MODELS 中某条的 id）
+DEFAULT_IMAGE_MODEL_ID = os.environ.get("DEFAULT_IMAGE_MODEL_ID", "Seedream 4")
 
 # 百度智能搜索生成 API（baidu_search 工具使用）
 BAIDU_SEARCH_API_KEY = os.environ.get("BAIDU_SEARCH_API_KEY", "")

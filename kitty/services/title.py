@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 class TitleGenerationService:
-    def __init__(self, openai_client: OpenAI, model_id: str):
-        self._client = openai_client
+    def __init__(self, client: OpenAI, model_id: str):
+        self._client = client
         self._model = model_id
 
     def generate(self, first_user: str, first_assistant: str) -> Optional[str]:

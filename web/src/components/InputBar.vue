@@ -1,5 +1,6 @@
 <script setup>
 import { ref, nextTick } from 'vue'
+import ModelOptionsBar from './ModelOptionsBar.vue'
 
 const props = defineProps({
   streaming: { type: Boolean, default: false },
@@ -47,16 +48,19 @@ function adjustHeight() {
         @keydown="handleKeydown"
         @input="adjustHeight"
       ></textarea>
-      <button
-        class="send-btn"
-        :disabled="streaming || !inputText.trim()"
-        @click="send"
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="12" y1="19" x2="12" y2="5"></line>
-          <polyline points="5 12 12 5 19 12"></polyline>
-        </svg>
-      </button>
+      <div class="input-footer">
+        <ModelOptionsBar />
+        <button
+          class="send-btn"
+          :disabled="streaming || !inputText.trim()"
+          @click="send"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"></line>
+            <polyline points="5 12 12 5 19 12"></polyline>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -93,38 +97,21 @@ function adjustHeight() {
   position: relative;
   max-width: 768px;
   margin: 0 auto;
-}
-
-.input-field {
-  display: block;
-  width: 100%;
-  padding: 12px 56px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 10px 14px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 18px;
-  font-size: 15px;
-  line-height: 1.5;
-  resize: none;
-  outline: none;
-  font-family: inherit;
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 8px 28px rgba(99, 102, 241, 0.10), 0 2px 6px rgba(99, 102, 241, 0.06),
     0 1px 0 rgba(255, 255, 255, 0.7) inset;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  min-height: 92px;
-  max-height: 180px;
-  overflow-y: auto;
-  scrollbar-width: none;
 }
 
-.input-field::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
-}
-
-.input-field:focus {
+.input-inner:focus-within {
   border-color: rgba(129, 140, 248, 0.7);
   background: #ffffff;
   box-shadow: 0 10px 30px rgba(99, 102, 241, 0.22),
@@ -132,15 +119,36 @@ function adjustHeight() {
     0 1px 0 rgba(255, 255, 255, 0.7) inset;
 }
 
+.input-field {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+  font-family: inherit;
+  min-height: 44px;
+  max-height: 180px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 2px 2px;
+}
+
 .input-field:disabled {
-  background: rgba(248, 250, 252, 0.8);
   cursor: not-allowed;
 }
 
+.input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .send-btn {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
+  flex-shrink: 0;
   width: 36px;
   height: 36px;
   display: flex;

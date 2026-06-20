@@ -18,14 +18,13 @@ from kitty.services.session import SessionService
 
 
 class TraceHook(Hook):
-    def __init__(self, session_service: SessionService, model_id: str, max_tokens: int):
+    def __init__(self, session_service: SessionService, max_tokens: int):
         self._session = session_service
-        self._model = model_id
         self._max_tokens = max_tokens
 
     def before_model_request(self, ctx: AgentContext) -> Iterable[SseEvent] | None:
         return [self._emit(ctx, TracePhase.MODEL_REQUEST, {
-            "model": self._model,
+            "model": ctx.chat_model,
             "messages": ctx.turn.provider_messages or [],
             "tools": ctx.tool_schemas,
             "max_tokens": self._max_tokens,

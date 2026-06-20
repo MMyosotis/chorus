@@ -26,6 +26,7 @@ class ToolContext:
     workspace: WorkspacePolicy
     skill_service: SkillService
     session_id: Optional[str] = None
+    image_model: Optional[str] = None  # 用户选定的生图模型逻辑名（generate_image 用）
 
 
 class Tool(ABC):
@@ -98,4 +99,4 @@ class ToolRegistry:
         )
 
 
-ToolCtxFactory = Callable[[Optional[str]], ToolContext]
+ToolCtxFactory = Callable[[Optional[str], Optional[str]], ToolContext]

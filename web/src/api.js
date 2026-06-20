@@ -1,6 +1,7 @@
 // 前端 API 抽离：所有 fetch 集中到这里
 const BASE = '/api/sessions'
 const DEBUG_BASE = '/api/debug'
+const SETTINGS_BASE = '/api/settings'
 
 export async function listSessions() {
   const res = await fetch(BASE)
@@ -138,5 +139,28 @@ export async function setTestMode(enabled) {
   if (!res.ok) throw new Error(`setTestMode failed: ${res.status}`)
   const data = await res.json()
   return !!data.enabled
+}
+
+// —— 输入框下方模型选项栏 ——
+export async function getModelLists() {
+  const res = await fetch(`${SETTINGS_BASE}/models`)
+  if (!res.ok) throw new Error(`getModelLists failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getOptions() {
+  const res = await fetch(`${SETTINGS_BASE}/options`)
+  if (!res.ok) throw new Error(`getOptions failed: ${res.status}`)
+  return res.json()
+}
+
+export async function setOptions(patch) {
+  const res = await fetch(`${SETTINGS_BASE}/options`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(`setOptions failed: ${res.status}`)
+  return res.json()
 }
 

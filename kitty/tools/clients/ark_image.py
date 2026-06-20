@@ -12,20 +12,16 @@ from urllib import request as urlrequest
 
 
 class ArkImageClient:
-    def __init__(self, api_key: str, base_url: str, models: dict[str, str]):
+    def __init__(self, api_key: str, base_url: str):
         self._api_key = api_key
         self._base_url = base_url
-        self._models = models
 
-    def generate(self, prompt: str, model: str, size: str) -> str:
+    def generate(self, prompt: str, model_id: str, size: str) -> str:
         if not self._api_key:
-            return "Error: ARK_IMAGE_API_KEY 未配置，无法调用图像生成 API"
-        real_model = self._models.get(model)
-        if not real_model:
-            return f"Error: unknown model '{model}'. Available: {list(self._models.keys())}"
+            return "Error: 图像生成 API key 未配置，无法调用图像生成 API"
 
         payload = {
-            "model": real_model,
+            "model": model_id,
             "prompt": prompt,
             "size": size,
             "response_format": "url",

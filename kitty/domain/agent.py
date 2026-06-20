@@ -64,6 +64,8 @@ class AgentContext:
     user_message: str
     tool_schemas: list[dict]
     history_snapshot_len: int  # 入口前该会话的 message 数量，回滚锚点
+    image_model: Optional[str] = None  # 用户选定的生图模型逻辑名，注入 ToolContext
+    chat_model: Optional[str] = None  # 本回合实际调用的真实 model 名（trace 用）
 
     turn: TurnState = field(default_factory=TurnState)
     rollback: RollbackLedger = field(default_factory=RollbackLedger)

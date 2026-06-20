@@ -7,8 +7,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from time import perf_counter
-from typing import Iterable, Iterator, Optional
+from typing import Iterator, Optional
 
 from openai import OpenAI
 
@@ -20,9 +21,18 @@ from kitty.domain.events import (
     SseEvent,
     TokenEvent,
 )
+from kitty.domain.tool import select_tool_schemas
 from kitty.domain.trace import ThinkingSegment
 from kitty.hooks.manager import HookManager
 from kitty.services.session import SessionService
+
+
+@dataclass(frozen=True)
+class ChatModelEntry:
+    """运行时模型条目：OpenAI 兼容客户端 + 传给 API 的真实 model 名。"""
+
+    client: OpenAI
+    model_id: str
 
 
 class ChatService:
@@ -30,32 +40,49 @@ class ChatService:
         self,
         session_service: SessionService,
         hook_manager: HookManager,
-        openai_client: OpenAI,
-        model_id: str,
+        models: dict[str, ChatModelEntry],
+        default_model_id: str,
         max_tokens: int,
         max_iterations: int,
         tool_schemas: list[dict],
     ):
         self._session = session_service
         self._hooks = hook_manager
-        self._client = openai_client
-        self._model = model_id
+        self._models = models
+        self._default_model_id = default_model_id
         self._max_tokens = max_tokens
         self._max_iterations = max_iterations
         self._tool_schemas = tool_schemas
 
-    def stream(self, session_id: str, user_message: str) -> Iterator[SseEvent]:
+    def stream(
+        self,
+        session_id: str,
+        user_message: str,
+        *,
+        model: Optional[str] = None,
+        image_model: Optional[str] = None,
+        web_search: Optional[bool] = None,
+    ) -> Iterator[SseEvent]:
         if not self._session.exists(session_id):
             yield ErrorEvent(content="session not found")
             return
 
+        # model 来自 SettingsService.get_chat_model（已校验必在注册表中）或 None（CLI，取默认）
+        entry = self._models[model or self._default_model_id]
+
         # 入口前 messages 数量 = 回滚锚点（SystemPromptHook append user 之前的快照）
         snapshot_len = len(self._session.list_messages(session_id))
+        # 联网搜索开关：None 视为默认开（保持原有行为），领域函数只接确定 bool
+        schemas = select_tool_schemas(
+            self._tool_schemas, web_search=web_search is not False
+        )
         ctx = AgentContext(
             session_id=session_id,
             user_message=user_message,
             history_snapshot_len=snapshot_len,
-            tool_schemas=self._tool_schemas,
+            tool_schemas=schemas,
+            image_model=image_model,
+            chat_model=entry.model_id,
         )
 
         # LoopStart: SystemPromptHook 把本轮 user 消息 append 入库（messages 表 +1）
@@ -70,8 +97,8 @@ class ChatService:
                 #                      Trace 写 model_request trace 行
                 yield from self._hooks.on_before_model_request(ctx)
 
-                stream = self._client.chat.completions.create(
-                    model=self._model,
+                stream = entry.client.chat.completions.create(
+                    model=entry.model_id,
                     messages=ctx.turn.provider_messages,
                     tools=ctx.tool_schemas,
                     max_tokens=self._max_tokens,
