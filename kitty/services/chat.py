@@ -12,15 +12,15 @@ from typing import Iterable, Iterator, Optional
 
 from openai import OpenAI
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import (
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import (
     ErrorEvent,
     ReasoningDoneEvent,
     ReasoningEvent,
     SseEvent,
     TokenEvent,
 )
-from kitty.domain.models.trace import ThinkingSegment
+from kitty.domain.trace import ThinkingSegment
 from kitty.hooks.manager import HookManager
 from kitty.services.session import SessionService
 

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import DoneEvent, SseEvent
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import DoneEvent, SseEvent
 from kitty.hooks.base import Hook
 
 

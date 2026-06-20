@@ -1,4 +1,4 @@
-"""内置工具（类化版本，由 AppContainer 装配进 ToolRegistry）。
+"""内置工具（类化版本，由 create_app() 装配进 ToolRegistry）。
 
 旧的函数式工具文件（bash.py / read_file.py / ...）已废弃，阶段 5 删除。
 """

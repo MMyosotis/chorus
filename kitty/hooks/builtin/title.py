@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import SseEvent, TitleUpdateEvent
-from kitty.domain.models.message import AssistantMessage, UserMessage
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import SseEvent, TitleUpdateEvent
+from kitty.domain.message import AssistantMessage, UserMessage
 from kitty.hooks.base import Hook
 from kitty.services.session import SessionService
 from kitty.services.title import TitleGenerationService

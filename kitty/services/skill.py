@@ -10,8 +10,7 @@ import threading
 from pathlib import Path
 from typing import Optional
 
-from kitty.domain.models.skill import SkillContent, SkillSummary
-from kitty.domain.services.prompt import format_skill_hints
+from kitty.domain.skill import SkillContent, SkillSummary, format_skill_hints
 
 
 class SkillService:

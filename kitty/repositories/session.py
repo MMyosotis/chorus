@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from kitty.domain.models.session import Session
+from kitty.domain.session import Session
 from kitty.repositories.connection import ConnectionFactory
 
 _DDL = """

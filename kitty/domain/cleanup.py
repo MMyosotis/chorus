@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from kitty.domain.models.session import Session
+from kitty.domain.session import Session
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,6 @@
 """WorkspacePolicy：工作目录边界策略（替代旧 WORKDIR=Path.cwd() 隐式全局）。
 
-把 safe_path 提为实例方法，由 AppContainer 注入明确的工作根目录，
+把 safe_path 提为实例方法，由 create_app() 注入明确的工作根目录，
 避免工具依赖进程 cwd。
 """
 

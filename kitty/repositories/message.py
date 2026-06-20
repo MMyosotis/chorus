@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from kitty.domain.models.message import (
+from kitty.domain.message import (
     AssistantMessage,
     Message,
     ToolCallSpec,

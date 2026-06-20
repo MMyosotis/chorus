@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
-from kitty.domain.models.trace import ThinkingSegment
+from kitty.domain.trace import ThinkingSegment
 
 
 @dataclass

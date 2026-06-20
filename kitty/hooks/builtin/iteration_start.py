@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import uuid
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import MessageStartEvent, SseEvent
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import MessageStartEvent, SseEvent
 from kitty.hooks.base import Hook
 
 

@@ -6,9 +6,10 @@ try:
 except ImportError:
     pass
 
-import kitty.app as _app  # 触发 AppContainer 装配
+import kitty.app as _app  # 触发 create_app 装配
 
-_container = _app.app.state.container
+_session_service = _app.app.state.session_service
+_chat_service = _app.app.state.chat_service
 
 
 COLORS = {
@@ -22,8 +23,8 @@ RESET = "\033[0m"
 
 
 def main():
-    svc = _container.session_service
-    chat = _container.chat_service
+    svc = _session_service
+    chat = _chat_service
     session = svc.create("CLI 调试")
     session_id = session.id
     print(f"Little Kitty 测试 CLI（输入 q 退出，输入 /new 新建会话）")

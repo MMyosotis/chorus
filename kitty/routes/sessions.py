@@ -7,8 +7,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from kitty.domain.models.message import MessageView
-from kitty.domain.models.trace import TraceEntry
+from kitty.domain.message import MessageView
+from kitty.domain.trace import TraceEntry
 from kitty.routes.providers import provide_session_service
 from kitty.services.session import SessionService
 

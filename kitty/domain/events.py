@@ -10,7 +10,7 @@ from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from kitty.domain.models.trace import TracePhase
+from kitty.domain.trace import TracePhase
 
 
 class _EventBase(BaseModel):

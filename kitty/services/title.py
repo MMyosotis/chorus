@@ -2,7 +2,7 @@
 
 被 TitleHook 注入，首轮 assistant 文本回复后调用。仅负责"生成标题文本"
 （调 OpenAI + 清洗），落库（set_title_if_unset）由 hook 经 SessionService 完成。
-标题清洗规则在 domain.services.title.clean_generated_title。
+标题清洗规则在 domain.title.clean_generated_title。
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from kitty.domain.services.title import clean_generated_title
+from kitty.domain.title import clean_generated_title
 
 logger = logging.getLogger(__name__)
 

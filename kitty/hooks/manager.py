@@ -11,8 +11,8 @@ from __future__ import annotations
 import logging
 from typing import Callable, Iterable, Iterator, Optional
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import SseEvent
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import SseEvent
 from kitty.hooks.base import Hook
 from kitty.hooks.builtin.trace import TraceHook
 from kitty.hooks.registry import HookBundle

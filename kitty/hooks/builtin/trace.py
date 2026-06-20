@@ -10,9 +10,9 @@ from __future__ import annotations
 import time
 from typing import Iterable
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import SseEvent, TraceEvent
-from kitty.domain.models.trace import TraceEntry, TracePhase
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import SseEvent, TraceEvent
+from kitty.domain.trace import TraceEntry, TracePhase
 from kitty.hooks.base import Hook
 from kitty.services.session import SessionService
 

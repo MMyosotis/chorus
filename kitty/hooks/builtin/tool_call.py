@@ -10,11 +10,11 @@ import json
 import time
 from typing import Iterable
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import SseEvent, ToolCallEvent, ToolResultEvent, TraceEvent
-from kitty.domain.models.message import ToolCallSpec
-from kitty.domain.models.tool import ToolCall
-from kitty.domain.models.trace import TraceEntry, TracePhase
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import SseEvent, ToolCallEvent, ToolResultEvent, TraceEvent
+from kitty.domain.message import ToolCallSpec
+from kitty.domain.tool import ToolCall
+from kitty.domain.trace import TraceEntry, TracePhase
 from kitty.hooks.base import Hook
 from kitty.services.session import SessionService
 from kitty.tools.base import ToolContext, ToolCtxFactory, ToolRegistry

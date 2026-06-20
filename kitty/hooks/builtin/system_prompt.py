@@ -7,8 +7,8 @@ history_snapshot_len 由 ChatService 在入口前（append 之前）算好填入
 
 from __future__ import annotations
 
-from kitty.domain.models.agent import AgentContext
-from kitty.domain.models.events import SseEvent
+from kitty.domain.agent import AgentContext
+from kitty.domain.events import SseEvent
 from kitty.hooks.base import Hook
 from kitty.services.session import SessionService
 

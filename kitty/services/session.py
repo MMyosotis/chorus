@@ -16,8 +16,8 @@ import time
 import uuid
 from typing import Callable, Optional
 
-from kitty.domain.models.session import Session, SessionSummary
-from kitty.domain.models.message import (
+from kitty.domain.session import Session, SessionSummary
+from kitty.domain.message import (
     AssistantMessage,
     Message,
     MessageView,
@@ -25,9 +25,9 @@ from kitty.domain.models.message import (
     ToolMessage,
     UserMessage,
 )
-from kitty.domain.models.trace import TraceEntry
-from kitty.domain.services.messaging import build_history_view, build_provider_messages
-from kitty.domain.services.title import STORED_TITLE_MAX_LEN, normalize_title
+from kitty.domain.trace import TraceEntry
+from kitty.domain.message import build_history_view, build_provider_messages
+from kitty.domain.title import STORED_TITLE_MAX_LEN, normalize_title
 from kitty.repositories.session import SessionRepository
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.trace import TraceRepository
@@ -206,7 +206,7 @@ class SessionService:
     def history_view(self, session_id: str) -> list[MessageView]:
         """前端视图：过滤 tool/system，assistant 挂回 thinking/tools（从 trace 聚合）。
 
-        领域组装规则在 domain.services.messaging.build_history_view，本方法只取数据喂它。
+        领域组装规则在 domain.message.build_history_view，本方法只取数据喂它。
         """
         return build_history_view(
             self._msg_repo.list_by_session(session_id),
@@ -221,7 +221,7 @@ class SessionService:
 
         因采用逐条入库，调用时历史已全部落 messages 表，本轮 user 消息也已 append，
         故此处读到的就是"截至本轮的完整历史"。领域组装规则在
-        domain.services.messaging.build_provider_messages，本方法只取数据喂它。
+        domain.message.build_provider_messages，本方法只取数据喂它。
         """
         return build_provider_messages(system_prompt, self._msg_repo.list_by_session(session_id))
 

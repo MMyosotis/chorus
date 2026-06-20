@@ -1,6 +1,6 @@
 """Tool 框架：Tool 抽象基类、ToolContext、ToolRegistry。
 
-替代旧模块级 _REGISTRY / @tool 装饰器：工具是类，由 AppContainer 装配进 ToolRegistry，
+替代旧模块级 _REGISTRY / @tool 装饰器：工具是类，由 create_app() 装配进 ToolRegistry，
 ToolCallHook 经 registry.dispatch 执行。Registry 是工具的唯一查找 / 执行入口。
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Callable, Optional
 
-from kitty.domain.models.tool import ToolCall, ToolResult, ToolSchema
+from kitty.domain.tool import ToolCall, ToolResult, ToolSchema
 from kitty.services.skill import SkillService
 from kitty.tools.workspace import WorkspacePolicy
 

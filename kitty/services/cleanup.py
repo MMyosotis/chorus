@@ -1,6 +1,6 @@
 """CleanupService：会话清理的应用编排（节流 + 取数据 + 调领域策略）。
 
-纯清理策略在 domain.services.cleanup.select_cleanup；本类只负责节流判断、
+纯清理策略在 domain.cleanup.select_cleanup；本类只负责节流判断、
 从 repo 取数据喂给策略、返回 CleanupDecision。实际删除（带会话锁）由
 SessionService 执行，避免循环依赖。
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Callable
 
-from kitty.domain.services.cleanup import CleanupDecision, select_cleanup
+from kitty.domain.cleanup import CleanupDecision, select_cleanup
 from kitty.repositories.session import SessionRepository
 from kitty.repositories.message import MessageRepository
 

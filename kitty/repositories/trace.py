@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from typing import Optional
 
-from kitty.domain.models.trace import (
+from kitty.domain.trace import (
     MessageTrace,
     ThinkingSegment,
     ToolInvocation,

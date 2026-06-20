@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Little Kitty — 带上下文记忆的 AI 对话助手，支持 tool calling 和动态 skill 加载。前后端分离架构：后端 FastAPI + OpenAI SDK 提供 SSE 流式对话（含 agent loop），前端 Vue 3 + Vite 提供聊天界面。
 
-后端按 Java OOP 风格分层：`domain`（领域模型 + 纯领域逻辑，零基础设施依赖）→ `repositories`（各表唯一 SQL 入口）→ `services`（应用编排：取数据→调领域→存数据）→ `routes`（HTTP）。依赖单向 `routes → services → repositories → db`，且 `domain` 不依赖任何基础设施层（repo/tools/openai/threading 都不进 domain）。构造器注入 + `AppContainer` 单点装配，无模块级全局单例。
+后端按 Java OOP 风格分层：`domain`（领域模型 + 纯领域逻辑，零基础设施依赖）→ `repositories`（各表唯一 SQL 入口）→ `services`（应用编排：取数据→调领域→存数据）→ `routes`（HTTP）。依赖单向 `routes → services → repositories → db`，且 `domain` 不依赖任何基础设施层（repo/tools/openai/threading 都不进 domain）。构造器注入，`create_app()` 内联装配（service 挂 `app.state`，中间对象为局部变量），无模块级全局单例。
 
 ## Commands
 
@@ -55,10 +55,9 @@ cd web && npm run build                # 构建生产版本
 | 包 / 模块 | 职责 |
 |------|------|
 | `config.py` | 从 `.env` 读取配置常量（含 `DATA_DIR`、`SKILLS_DIR`），纯静态值 |
-| `app.py` | FastAPI 应用工厂 `create_app()`：构造 `AppContainer`、挂 `app.state.container`、CORS、注册路由 |
-| `container.py` | `AppContainer`：单点装配所有 Repository / Service / Tool / Hook / ChatService，构造器注入，无模块级全局单例（只装配，不含启动副作用） |
-| `startup.py` | `run_startup(container)`：装配后的启动副作用——技能扫描、设置回灌、会话元数据加载 + 首次清理 |
-| `domain/` | 领域层（零基础设施依赖）。`models/` Pydantic v2 frozen 数据模型 + 只读行为方法：`session`/`message`(sealed 联合，`to_provider_dict()`)/`trace`/`tool`/`skill`(`from_markdown()`)/`events`(SSE sealed 联合)/`agent`(`AgentContext` 等 dataclass)。`services/` 跨对象纯领域函数：`messaging`(`build_provider_messages`/`build_history_view`)、`prompt`(`PromptContext`/`build_system_prompt`/`format_skill_hints`，多方信息收集在 application 层、拼装规则在此)、`title`(`clean_generated_title`/`normalize_title`/`STORED_TITLE_MAX_LEN`)、`cleanup`(`select_cleanup`/`CleanupDecision`) |
+| `app.py` | FastAPI 应用工厂 `create_app()`：内联装配所有 Repository / Service / Tool / Hook / ChatService（构造器注入，中间对象为局部变量），3 个 HTTP 需要的 service 挂 `app.state`；CORS、注册路由 |
+| `startup.py` | `run_startup(skill_service, settings_service, session_service)`：装配后的启动副作用——技能扫描、设置回灌、会话元数据加载 + 首次清理 |
+| `domain/` | 领域层（零基础设施依赖），**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作：`session`/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`)/`trace`/`tool`/`skill`(`from_markdown()`/`format_skill_hints`)/`events`(SSE sealed 联合)/`agent`(`AgentContext` 等 dataclass)/`prompt`(`SYSTEM_PROMPT` 默认文案 + `PromptContext`/`build_system_prompt`，多方信息收集在 application 层、拼装规则在此)/`title`(`clean_generated_title`/`normalize_title`/`STORED_TITLE_MAX_LEN`)/`cleanup`(`select_cleanup`/`CleanupDecision`) |
 | `repositories/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验）：`connection`(线程局部 sqlite)、`session`/`message`/`trace`/`settings` |
 | `services/` | 应用编排层（取数据→调 domain→存数据）：`session`、`chat`、`settings`、`skill`、`title`、`cleanup`（文件名无 `_service` 后缀，类名仍带 `Service`）。纯领域逻辑已剥离到 `domain/` |
 | `hooks/` | `base`(Hook 单方法基类)、`manager`(HookManager 8 个具名方法 `on_xxx` 按字面顺序调用该事件 hook、fail-open)、`registry`(`build_hooks` 装配 9 个 hook 打包成 `HookBundle`) + `builtin/` 9 个类化 hook |
@@ -98,7 +97,7 @@ cd web && npm run build                # 构建生产版本
 - `kitty/resources/skills/` 下放 markdown 文件，支持 frontmatter（name, description, tags）
 - `SkillService` 启动时扫描缓存，`format_hints()` 生成摘要追加到 system prompt
 - 模型通过 `load_skill` 工具按需加载完整 skill 内容
-- `SystemPromptBuilder` 构造 system prompt（SYSTEM_PROMPT + skill hints），每次对话经 SanitizerHook 调 `build_provider_messages` 时刷新
+- `domain.prompt.build_system_prompt` 构造 system prompt（`SYSTEM_PROMPT` 默认文案 + skill hints），每次对话经 SanitizerHook 调 `build_provider_messages` 时刷新
 
 ### Tool 框架
 
@@ -183,7 +182,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为需要 POS
 
 后端严格区分**领域层**（`domain/`）与**编排层**（`services/` + `routes/` + `hooks/` + `startup.py`），新增代码按下述原则归位：
 
-- **领域层（`domain/`）只放纯领域逻辑，零基础设施依赖**：`domain/models/` 是带只读行为的 Pydantic 模型（如 `Message.to_provider_dict()`、`SkillContent.from_markdown()`），`domain/services/` 是跨对象的纯领域函数（如 `build_provider_messages`、`select_cleanup`、`clean_generated_title`）。**domain 不得 import** `threading` / `sqlite` / `openai` / `kitty.repositories` / `kitty.tools` / `kitty.services`——任何基础设施依赖。领域函数输入领域模型、输出领域模型或纯数据结构，可脱离 DB / HTTP 独立单测。
-- **编排层负责"取数据 → 调领域 → 存数据"**：`services/`（application 编排）、`routes/`（HTTP 适配）、`hooks/`（agent loop 横切编排）、`startup.py`（启动副作用）都不承载领域规则，只做协调——从 repo/外部取数据，喂给领域函数/模型，再把结果存回或返回。`AppContainer` 只装配（new + 注入），不含启动副作用。
+- **领域层（`domain/`）只放纯领域逻辑，零基础设施依赖**：`domain/` 按业务概念扁平组织，每个模块同放该概念的 Pydantic 模型（带只读行为，如 `Message.to_provider_dict()`、`SkillContent.from_markdown()`）与跨对象的纯领域函数（如 `build_provider_messages`、`select_cleanup`、`clean_generated_title`）。**domain 不得 import** `threading` / `sqlite` / `openai` / `kitty.repositories` / `kitty.tools` / `kitty.services`——任何基础设施依赖。领域函数输入领域模型、输出领域模型或纯数据结构，可脱离 DB / HTTP 独立单测。
+- **编排层负责"取数据 → 调领域 → 存数据"**：`services/`（application 编排）、`routes/`（HTTP 适配）、`hooks/`（agent loop 横切编排）、`startup.py`（启动副作用）都不承载领域规则，只做协调——从 repo/外部取数据，喂给领域函数/模型，再把结果存回或返回。`create_app()` 只装配（new + 注入），不含启动副作用。
 - **判别准则**：一段逻辑若"给定领域数据，产出确定结果、与 DB/HTTP/文件系统/锁无关"，它是领域逻辑，归 `domain/`；若它"需要查 DB、调 OpenAI、扫文件、持锁、管 cache、控制流程顺序"，它是编排/基础设施，归编排层。拿不准时问一句"这段能脱离 repo 独立单测吗"——能则领域，不能则编排。
 - **扩展时保持边界**：当编排层需要新的运行时多方信息（如 system prompt 要拼接对话摘要、用户画像），**收集信息是编排**（在 hook/service 里凑齐），**拼装规则是领域**（领域函数接收已收集好的数据）。用值对象（如 `PromptContext`）承载多方信息，避免领域函数参数爆炸、签名频繁变动。
