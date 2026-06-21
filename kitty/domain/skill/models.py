@@ -1,8 +1,7 @@
-"""Skill：模型 + 摘要格式化纯操作。
+"""Skill 领域模型。
 
-- SkillSummary：注入 system prompt 的摘要。
-- SkillContent：load_skill 工具返回的完整内容，from_markdown 解析 frontmatter。
-- format_skill_hints：把 SkillSummary 列表拼成 system prompt 的技能摘要段（无技能返回空串）。
+SkillSummary：注入 system prompt 的摘要。
+SkillContent：load_skill 工具返回的完整内容，from_markdown 解析 frontmatter。
 """
 
 from __future__ import annotations
@@ -53,13 +52,3 @@ class SkillContent(BaseModel):
             elif key == "description":
                 description = val
         return name, description
-
-
-def format_skill_hints(summaries: list[SkillSummary]) -> str:
-    """生成 skill 摘要文本（作为 PromptContext.skill_hints 的来源），无技能时返回空串。"""
-    if not summaries:
-        return ""
-    lines = ["## 可用技能（使用 load_skill 工具获取完整内容）"]
-    for s in summaries:
-        lines.append(f"- **{s.name}**: {s.description}")
-    return "\n".join(lines)

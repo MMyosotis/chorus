@@ -1,7 +1,4 @@
-"""BaiduSearchClient：千帆 ai_search 检索客户端（纯搜索模式）。
-
-把原 baidu_search 工具里的 urllib 调用 + references 格式化抽出为独立对象。
-"""
+"""千帆 ai_search 检索客户端（纯搜索模式）。"""
 
 from __future__ import annotations
 

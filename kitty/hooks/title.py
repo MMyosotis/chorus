@@ -1,6 +1,7 @@
-"""AssistantTextResponse hook（done 之后）：首轮生成短标题 + yield title_update。
+"""收尾 hook：首轮 assistant 文本回复后生成短标题 + yield title_update。
 
-注册顺序在 TextResponseHook 之后：前端收到 done 已解锁，title_update 是补丁式后续事件。
+原 TitleHook 逻辑去掉 Hook ABC。失败 fail-open（经 trigger）：标题生成/落库失败
+只记日志，不影响主流程 done。读历史消息走 MessageService，落标题走 SessionService。
 """
 
 from __future__ import annotations
@@ -10,21 +11,23 @@ from typing import Iterable
 from kitty.domain.agent import AgentContext
 from kitty.domain.events import SseEvent, TitleUpdateEvent
 from kitty.domain.message import AssistantMessage, UserMessage
-from kitty.hooks.base import Hook
+from kitty.domain.title import TitleGenerationService
+from kitty.services.message import MessageService
 from kitty.services.session import SessionService
-from kitty.services.title import TitleGenerationService
 
 
-class TitleHook(Hook):
+class TitlePostProcessor:
     def __init__(
         self,
         session_service: SessionService,
+        message_service: MessageService,
         title_service: TitleGenerationService,
     ):
         self._session = session_service
+        self._message = message_service
         self._title = title_service
 
-    def handle(self, ctx: AgentContext) -> Iterable[SseEvent] | None:
+    def on_stop(self, ctx: AgentContext) -> Iterable[SseEvent]:
         first_user, first_assistant = self._first_pair(ctx.session_id)
         title = self._title.generate(first_user, first_assistant)
         if not title:
@@ -36,7 +39,7 @@ class TitleHook(Hook):
     def _first_pair(self, session_id: str) -> tuple[str, str]:
         first_user = ""
         first_assistant = ""
-        for m in self._session.list_messages(session_id):
+        for m in self._message.list_messages(session_id):
             if isinstance(m, UserMessage) and not first_user:
                 first_user = m.content
             elif isinstance(m, AssistantMessage) and (m.content or "").strip() and not first_assistant:

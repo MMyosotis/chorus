@@ -1,3 +1,25 @@
-from kitty.tools.base import Tool, ToolContext, ToolRegistry
+"""工具领域：模型 + 框架 + 内置工具 + 外部 client，围绕 tool 单一概念内聚。"""
 
-__all__ = ["Tool", "ToolContext", "ToolRegistry"]
+from __future__ import annotations
+
+from kitty.tools.framework import (
+    Tool,
+    ToolContext,
+    ToolCtxFactory,
+    ToolRegistry,
+    WEB_SEARCH_TOOL_NAME,
+    select_tool_schemas,
+)
+from kitty.tools.models import ToolCall, ToolResult, ToolSchema
+
+__all__ = [
+    "ToolSchema",
+    "ToolCall",
+    "ToolResult",
+    "WEB_SEARCH_TOOL_NAME",
+    "select_tool_schemas",
+    "Tool",
+    "ToolContext",
+    "ToolRegistry",
+    "ToolCtxFactory",
+]

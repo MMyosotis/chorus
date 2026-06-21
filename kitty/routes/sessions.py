@@ -1,4 +1,4 @@
-"""会话 CRUD + 消息/trace 视图路由（Depends 注入 SessionService）。"""
+"""会话 CRUD + 消息/trace 视图路由（Depends 注入 SessionService + MessageService）。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from kitty.domain.message import MessageView
 from kitty.domain.trace import TraceEntry
-from kitty.routes.providers import provide_session_service
+from kitty.routes.providers import provide_message_service, provide_session_service
+from kitty.services.message import MessageService
 from kitty.services.session import SessionService
 
 router = APIRouter(prefix="/api/sessions")
@@ -58,17 +59,25 @@ def rename_session(session_id: str, req: RenameRequest, session: SessionService 
 
 
 @router.get("/{session_id}/messages")
-def get_messages(session_id: str, session: SessionService = Depends(provide_session_service)):
+def get_messages(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    message: MessageService = Depends(provide_message_service),
+):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"messages": [_view_to_dict(v) for v in session.history_view(session_id)]}
+    return {"messages": [_view_to_dict(v) for v in message.history_view(session_id)]}
 
 
 @router.get("/{session_id}/traces")
-def get_traces(session_id: str, session: SessionService = Depends(provide_session_service)):
+def get_traces(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    message: MessageService = Depends(provide_message_service),
+):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"traces": [_trace_to_dict(t) for t in session.list_traces(session_id)]}
+    return {"traces": [_trace_to_dict(t) for t in message.list_traces(session_id)]}
 
 
 def _view_to_dict(v: MessageView) -> dict:

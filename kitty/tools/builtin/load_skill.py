@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from kitty.tools.base import Tool, ToolContext
+from kitty.tools.framework import Tool, ToolContext
 
 
 class LoadSkillTool(Tool):
@@ -24,8 +24,8 @@ class LoadSkillTool(Tool):
 
     def run(self, arguments: dict, ctx: ToolContext) -> str:
         name = arguments.get("name", "")
-        skill = ctx.skill_service.get(name)
+        skill = ctx.skill_loader.get(name)
         if skill is None:
-            available = [s.name for s in ctx.skill_service.list_summaries()]
+            available = [s.name for s in ctx.skill_loader.list_summaries()]
             return f"Error: skill '{name}' not found. Available skills: {json.dumps(available)}"
         return skill.full_content

@@ -8,12 +8,17 @@ from __future__ import annotations
 from fastapi import Request
 
 from kitty.services.chat import ChatService
+from kitty.services.message import MessageService
 from kitty.services.session import SessionService
 from kitty.services.settings import SettingsService
 
 
 def provide_session_service(request: Request) -> SessionService:
     return request.app.state.session_service
+
+
+def provide_message_service(request: Request) -> MessageService:
+    return request.app.state.message_service
 
 
 def provide_chat_service(request: Request) -> ChatService:

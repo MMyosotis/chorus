@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from kitty.config import DEFAULT_IMAGE_MODEL_ID
-from kitty.tools.base import Tool, ToolContext
+from kitty.tools.framework import Tool, ToolContext
 from kitty.tools.clients.ark_image import ArkImageClient
 
 
@@ -51,10 +50,12 @@ class GenerateImageTool(Tool):
         image_test_mode_fn: Callable[[], bool],
         fake_url: str,
         models: dict[str, ImageModelEntry],
+        default_image_model_id: str,
     ):
         self._is_test = image_test_mode_fn
         self._fake_url = fake_url
         self._models = models
+        self._default_image_model_id = default_image_model_id
 
     def display(self, arguments: dict) -> str:
         prompt = (arguments.get("prompt") or "").strip().replace("\n", " ")
@@ -66,7 +67,7 @@ class GenerateImageTool(Tool):
         if self._is_test():
             return self._fake_url
         # ctx.image_model 来自 SettingsService.get_image_model（已校验必在注册表中）或 None（取默认）
-        entry = self._models[ctx.image_model or DEFAULT_IMAGE_MODEL_ID]
+        entry = self._models[ctx.image_model or self._default_image_model_id]
         return entry.client.generate(
             arguments.get("prompt", ""),
             entry.model_id,

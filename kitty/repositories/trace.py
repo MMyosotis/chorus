@@ -1,20 +1,13 @@
-"""traces 表的唯一 SQL 入口（最终形态）。
+"""traces 表的唯一 SQL 入口。
 
-表结构（见 plan 检验4）：
-    traces(id, session_id, message_id, iteration, phase, ts, payload_json)
-    索引: idx_traces_session_ts(session_id, ts) / idx_traces_message(message_id)
-trace 与 message 物理解耦，仅靠 message_id 关联。
+表结构：traces(id, session_id, message_id, iteration, phase, ts, payload_json)，
+索引 idx_traces_session_ts / idx_traces_message。trace 与 message 物理解耦，仅靠 message_id 关联。
 
-payload 各 phase 的 schema（由写入方约定，聚合方依赖）：
+payload 各 phase 的 schema（写入方约定，聚合方依赖）：
     model_request : {model, messages, tools, max_tokens}
     model_response: {content, finish_reason, tool_calls[], thinking_segments[]}
-                    —— thinking_segments: [{text, duration_ms}]
     tool_call     : {id, name, arguments, display, running_label}
     tool_result   : {tool_call_id, name, content, duration_ms}
-    loop_end      : {reason}
-
-本类是 traces 表的唯一 SQL 入口；其它类写 trace 必须经
-SessionService.add_trace → TraceRepository.add。
 """
 
 from __future__ import annotations
@@ -106,7 +99,6 @@ class TraceRepository:
     def delete_by_message(self, message_id: str) -> None:
         self._conn.get().execute("DELETE FROM traces WHERE message_id=?", (message_id,))
 
-    # ------------------------------------------------------------------
     @staticmethod
     def _row_to_entry(row) -> TraceEntry:
         eid, session_id, message_id, iteration, phase, ts, payload_json = row

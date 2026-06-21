@@ -1,7 +1,6 @@
 """SQLite 连接工厂：线程局部连接，统一 PRAGMA 配置。
 
-从原 SessionStore._connect / SettingsStore._connect 抽出，作为所有 Repository
-的唯一连接来源。每个线程一条连接（threading.local），WAL + NORMAL 同步 + 外键约束开启。
+每个线程一条连接（threading.local），WAL + NORMAL 同步 + 外键约束开启。
 """
 
 from __future__ import annotations

@@ -45,7 +45,7 @@ async function toggleTestMode() {
 const traces = computed(() => props.traceStore.getTraces(props.activeId))
 
 // 把 iteration === -1 的 tool 事件按 ts 归并到最近的 model_request 所在 iteration。
-// 后端 trace（model_request / model_response / loop_end）带 iteration，
+// 后端 trace（model_request / model_response）带 iteration，
 // 前端补的 tool_call / tool_result 没法知道 iteration，按时间顺序贴到上一个 model_request。
 //
 // 给每个 item 注入 step_ms（到下一条 trace 的耗时，跨 group 也连续）；
@@ -283,13 +283,6 @@ function renderMessageContent(m) {
                 <span v-if="it.payload?.duration_ms != null" class="dur">{{ it.payload.duration_ms }}ms</span>
               </div>
               <pre class="text-block">{{ previewText(it.payload?.content || '', 4000) }}</pre>
-            </template>
-
-            <template v-else-if="it.phase === 'loop_end'">
-              <div class="kv">
-                <span class="k">reason</span>
-                <span class="v badge badge-error">{{ it.payload?.reason }}</span>
-              </div>
             </template>
           </div>
         </details>
@@ -606,10 +599,6 @@ input:disabled + .slider {
   border-left-color: #4f46e5;
 }
 
-.trace-item.phase-loop_end {
-  border-left-color: #ef4444;
-}
-
 .trace-head {
   display: flex;
   align-items: center;
@@ -629,7 +618,6 @@ input:disabled + .slider {
 .phase-model_response .phase-tag { color: #059669; }
 .phase-tool_call .phase-tag,
 .phase-tool_result .phase-tag { color: #4f46e5; }
-.phase-loop_end .phase-tag { color: #dc2626; }
 
 .ts {
   font-size: 11px;

@@ -1,6 +1,5 @@
-"""ArkImageClient：火山方舟 doubao-seedream 图像生成 HTTP 客户端。
+"""火山方舟 doubao-seedream 图像生成 HTTP 客户端。
 
-把原 generate_image 工具里的 urllib 调用抽出为独立对象，由 create_app() 注入。
 test 模式的短路返回在 Tool 层判断，本类只负责真实 API 调用。
 """
 

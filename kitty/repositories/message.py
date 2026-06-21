@@ -1,8 +1,7 @@
 """messages 表的唯一 SQL 入口。
 
 按消息粒度逐行存储（user / assistant / tool）。assistant 的 thinking/tools 展示
-元数据不在此表 —— 它们存在 traces 表，靠 message_id 关联，由 TraceRepository 聚合
-（见 plan M6 / 检验4）。本类只承消息行本身的 SQL。
+元数据存在 traces 表，靠 message_id 关联，由 TraceRepository 聚合。
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ class MessageRepository:
         self._conn.ensure_schema(_DDL)
 
     def append(self, message: Message) -> None:
-        """单条消息入库（逐条 append，plan M2）。"""
+        """单条消息入库。"""
         self._conn.get().execute(
             "INSERT INTO messages("
             "id, session_id, seq, role, content, tool_calls_json, "
@@ -70,14 +69,6 @@ class MessageRepository:
         ).fetchone()
         return self._row_to_message(row) if row else None
 
-    def delete_after_seq(self, session_id: str, seq_inclusive: int) -> int:
-        """删除 seq >= seq_inclusive 的消息（rollback 用）。"""
-        cur = self._conn.get().execute(
-            "DELETE FROM messages WHERE session_id=? AND seq>=?",
-            (session_id, seq_inclusive),
-        )
-        return cur.rowcount
-
     def next_seq(self, session_id: str) -> int:
         row = self._conn.get().execute(
             "SELECT COALESCE(MAX(seq), -1) + 1 FROM messages WHERE session_id=?",
@@ -85,29 +76,7 @@ class MessageRepository:
         ).fetchone()
         return int(row[0]) if row else 0
 
-    def session_bytes(self, session_id: str) -> int:
-        row = self._conn.get().execute(
-            "SELECT COALESCE(SUM("
-            "  COALESCE(LENGTH(content),0) + COALESCE(LENGTH(tool_calls_json),0) "
-            "  + COALESCE(LENGTH(tool_call_id),0) + COALESCE(LENGTH(tool_name),0)"
-            "), 0) FROM messages WHERE session_id=?",
-            (session_id,),
-        ).fetchone()
-        return int(row[0]) if row else 0
-
-    def list_oversize(self, max_bytes: int) -> list[str]:
-        """返回字节数超 max_bytes 的 session_id 列表。"""
-        rows = self._conn.get().execute(
-            "SELECT session_id, COALESCE(SUM("
-            "  COALESCE(LENGTH(content),0) + COALESCE(LENGTH(tool_calls_json),0)"
-            "), 0) AS sz FROM messages GROUP BY session_id HAVING sz > ?",
-            (max_bytes,),
-        ).fetchall()
-        return [r[0] for r in rows]
-
-    # ------------------------------------------------------------------
     # 行 ↔ 模型映射
-    # ------------------------------------------------------------------
     @staticmethod
     def _message_to_row(message: Message) -> tuple:
         mid, cid, seq, created = message.id, message.session_id, message.seq, message.created_at

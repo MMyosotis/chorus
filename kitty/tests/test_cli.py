@@ -6,7 +6,13 @@ try:
 except ImportError:
     pass
 
-import kitty.app as _app  # 触发 create_app 装配
+import kitty.app as _app  # 触发 create_app 装配（lifespan 不在 import 阶段跑）
+from kitty.startup import run_startup
+
+# CLI 不经 server，lifespan 不会触发，显式跑一次启动副作用。
+_skill_loader = _app.app.state.chat_service._skill
+_settings_service = _app.app.state.settings_service
+run_startup(_skill_loader, _settings_service, _app.app.state.session_service)
 
 _session_service = _app.app.state.session_service
 _chat_service = _app.app.state.chat_service
@@ -62,10 +68,7 @@ def main():
             elif etype == "title_update":
                 print(f"\n\033[35m[title_update] {ev.title}{RESET}")
             elif etype == "done":
-                if ev.reason:
-                    print(f"\n{color}[done] {ev.reason}{RESET}")
-                else:
-                    print()  # 最终回复换行
+                print()  # 最终回复换行
             elif etype == "error":
                 print(f"\n{color}[error] {ev.content}{RESET}")
 

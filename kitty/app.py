@@ -1,10 +1,14 @@
-"""FastAPI 应用工厂：create_app 内联装配所有 Service / Tool / Hook，
-3 个 HTTP 需要的 service 挂 app.state，路由经 Depends 取用。"""
+"""FastAPI 应用工厂：create_app 内联装配所有 Service / Tool / Hook。
+
+create_app 只装配（new + 注入），不含启动副作用——副作用经 lifespan 在服务启动时
+跑一次（import kitty.app 不触发扫盘/读库）。HTTP 需要的 4 个 service 挂 app.state，
+路由经 Depends 取用。
+"""
 
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,20 +18,16 @@ from kitty.config import (
     BAIDU_SEARCH_API_KEY,
     BAIDU_SEARCH_BASE_URL,
     CHAT_MODELS,
-    CONV_MAX_BYTES,
-    CONV_MAX_COUNT,
-    CONV_TTL_DAYS,
     DATA_DIR,
     DEFAULT_CHAT_MODEL_ID,
     DEFAULT_IMAGE_MODEL_ID,
     IMAGE_MODELS,
     IMAGE_TEST_FAKE_URL,
     MAX_TOKENS,
-    MAX_TOOL_ITERATIONS,
-    SKILLS_DIR,
 )
-from kitty.hooks.manager import HookManager
-from kitty.hooks.registry import build_hooks
+from kitty.domain.skill import SkillLoader
+from kitty.domain.title import TitleGenerationService
+from kitty.hooks import HookRegistry, RollbackHandler, TitlePostProcessor, TraceEmitter
 from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.session import SessionRepository
@@ -38,34 +38,24 @@ from kitty.routes.sessions import router as sessions_router
 from kitty.routes.settings import router as settings_router
 from kitty.routes.settings import settings_router as model_options_router
 from kitty.services.chat import ChatModelEntry, ChatService
-from kitty.services.cleanup import CleanupService
+from kitty.services.message import MessageService
 from kitty.services.session import SessionService
 from kitty.services.settings import SettingsService
-from kitty.services.skill import SkillService
-from kitty.services.title import TitleGenerationService
 from kitty.startup import run_startup
-from kitty.tools.base import ToolContext, ToolCtxFactory, ToolRegistry
+from kitty.tools import ToolContext, ToolCtxFactory, ToolRegistry
 from kitty.tools.builtin import (
     BaiduSearchTool,
-    BashTool,
-    EditFileTool,
-    GlobSearchTool,
     LoadSkillTool,
     OutputPlanTool,
-    ReadFileTool,
-    WriteFileTool,
 )
 from kitty.tools.builtin.generate_image import GenerateImageTool, ImageModelEntry
 from kitty.tools.clients.ark_image import ArkImageClient
 from kitty.tools.clients.baidu_search import BaiduSearchClient
-from kitty.tools.workspace import WorkspacePolicy
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Little Kitty", version="0.2.0")
-
     # —— 装配：中间对象是局部变量，装配完即弃 ——
-    skill_service = SkillService(SKILLS_DIR)
+    skill_loader = SkillLoader()
 
     settings_service = SettingsService(
         SettingsRepository(ConnectionFactory(DATA_DIR / "settings.db"))
@@ -75,17 +65,15 @@ def create_app() -> FastAPI:
     session_repo = SessionRepository(conn)
     msg_repo = MessageRepository(conn)
     trace_repo = TraceRepository(conn)
-    cleanup_service = CleanupService(
-        session_repo, msg_repo, CONV_TTL_DAYS, CONV_MAX_BYTES, CONV_MAX_COUNT
-    )
-    session_service = SessionService(session_repo, msg_repo, trace_repo, cleanup_service)
+    session_service = SessionService(session_repo)
+    message_service = MessageService(msg_repo, trace_repo)
 
     # 对话模型注册表：按 CHAT_MODELS 逐条构建 OpenAI 兼容客户端（key 从 .env 取）。
     chat_models: dict[str, ChatModelEntry] = {}
     for m in CHAT_MODELS:
         api_key = os.environ.get(m["api_key_env"], "")
         chat_models[m["id"]] = ChatModelEntry(
-            client=OpenAI(api_key=api_key, base_url=m["base_url"]),
+            client=OpenAI(api_key=api_key, base_url=m["base_url"], max_retries=3),
             model_id=m["model_id"],
         )
     default_entry = chat_models.get(DEFAULT_CHAT_MODEL_ID)
@@ -94,8 +82,6 @@ def create_app() -> FastAPI:
             f"DEFAULT_CHAT_MODEL_ID={DEFAULT_CHAT_MODEL_ID!r} 不在 CHAT_MODELS 中"
         )
     title_service = TitleGenerationService(default_entry.client, default_entry.model_id)
-
-    workspace_policy = WorkspacePolicy(Path.cwd())
 
     # 生图模型注册表：按 IMAGE_MODELS 逐条构建独立 HTTP 客户端（key 从 .env 取）。
     image_models: dict[str, ImageModelEntry] = {}
@@ -112,41 +98,48 @@ def create_app() -> FastAPI:
 
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     tool_registry = ToolRegistry([
-        BashTool(),
-        ReadFileTool(),
-        WriteFileTool(),
-        EditFileTool(),
-        GlobSearchTool(),
         LoadSkillTool(),
         OutputPlanTool(),
         GenerateImageTool(
-            settings_service.get_image_test_mode, IMAGE_TEST_FAKE_URL, image_models
+            settings_service.get_image_test_mode,
+            IMAGE_TEST_FAKE_URL,
+            image_models,
+            DEFAULT_IMAGE_MODEL_ID,
         ),
         BaiduSearchTool(baidu_client),
     ])
 
     def tool_ctx_factory(session_id: str | None, image_model: str | None = None) -> ToolContext:
         return ToolContext(
-            workspace=workspace_policy,
-            skill_service=skill_service,
+            skill_loader=skill_loader,
             session_id=session_id,
             image_model=image_model,
         )
 
-    hooks = HookManager(build_hooks(
-        session_service, skill_service, title_service,
-        MAX_TOKENS, tool_registry, tool_ctx_factory,
-    ))
+    # CC 式扁平 hook 注册表：扩展挂外面，loop 只调 trigger（观测-only，fail-open）。
+    hooks = HookRegistry()
+    trace = TraceEmitter(message_service, MAX_TOKENS)
+    hooks.register("BeforeModelRequest", trace.before_model_request)
+    hooks.register("AfterModelResponse", trace.after_model_response)
+    hooks.register("PreToolUse", trace.on_tool_call)
+    hooks.register("PostToolUse", trace.on_tool_result)
+    hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop)
+    hooks.register("Error", RollbackHandler(message_service).on_error)
+
     chat_service = ChatService(
-        session_service, hooks, chat_models,
-        DEFAULT_CHAT_MODEL_ID, MAX_TOKENS, MAX_TOOL_ITERATIONS, tool_registry.schemas_openai(),
+        session_service, message_service, skill_loader, hooks,
+        tool_registry, tool_ctx_factory, chat_models,
+        DEFAULT_CHAT_MODEL_ID, MAX_TOKENS, tool_registry.schemas_openai(),
     )
 
-    # —— 启动副作用 ——
-    run_startup(skill_service, settings_service, session_service)
-
-    # —— HTTP 需要的 3 个 service 挂 app.state ——
+    # —— HTTP 需要的 4 个 service 挂 app.state ——
+    app = FastAPI(
+        title="Little Kitty",
+        version="0.2.0",
+        lifespan=_build_lifespan(skill_loader, settings_service, session_service),
+    )
     app.state.session_service = session_service
+    app.state.message_service = message_service
     app.state.chat_service = chat_service
     app.state.settings_service = settings_service
 
@@ -161,6 +154,15 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(model_options_router)
     return app
+
+
+def _build_lifespan(skill_loader, settings_service, session_service):
+    """启动副作用经 lifespan 跑一次（服务启动时），create_app 装配阶段不触发。"""
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        run_startup(skill_loader, settings_service, session_service)
+        yield
+    return _lifespan
 
 
 app = create_app()

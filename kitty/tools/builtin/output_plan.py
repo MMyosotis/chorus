@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
-from kitty.domain.plan import format_plan_steps
-from kitty.tools.base import Tool, ToolContext
+from kitty.tools.framework import Tool, ToolContext
+
+
+def format_plan_steps(steps: list[str]) -> str:
+    """把有序步骤列表格式化为展示文本：『1. …\n2. …』。"""
+    lines = []
+    for i, step in enumerate(steps, start=1):
+        text = (step or "").strip()
+        if text:
+            lines.append(f"{i}. {text}")
+    return "\n".join(lines)
 
 
 class OutputPlanTool(Tool):

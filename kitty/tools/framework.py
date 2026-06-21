@@ -1,30 +1,40 @@
-"""Tool 框架：Tool 抽象基类、ToolContext、ToolRegistry。
+"""工具框架：schema 选择规则 + Tool ABC + 运行时上下文 + 注册表。
 
-替代旧模块级 _REGISTRY / @tool 装饰器：工具是类，由 create_app() 装配进 ToolRegistry，
-ToolCallHook 经 registry.dispatch 执行。Registry 是工具的唯一查找 / 执行入口。
+零件：select_tool_schemas（按联网搜索开关过滤）、Tool（抽象基类）、
+ToolContext（运行时上下文）、ToolRegistry（查找 / 执行入口，dispatch 统一计时包错）。
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 from time import perf_counter
 from typing import Callable, Optional
 
-from kitty.domain.tool import ToolCall, ToolResult, ToolSchema
-from kitty.services.skill import SkillService
-from kitty.tools.workspace import WorkspacePolicy
+from kitty.domain.skill import SkillLoader
+from kitty.tools.models import ToolCall, ToolResult, ToolSchema
 
 _DISPLAY_MAX_LEN = 200
+
+# 联网搜索能力对应的工具名（baidu_search 工具的 name）
+WEB_SEARCH_TOOL_NAME = "baidu_search"
+
+
+def select_tool_schemas(schemas: list[dict], *, web_search: bool) -> list[dict]:
+    """按联网搜索开关过滤 OpenAI 工具 schema：关闭时移除 baidu_search。"""
+    if web_search:
+        return schemas
+    return [
+        s for s in schemas
+        if s.get("function", {}).get("name") != WEB_SEARCH_TOOL_NAME
+    ]
 
 
 @dataclass
 class ToolContext:
     """传给 Tool.run 的运行时上下文。"""
 
-    workspace: WorkspacePolicy
-    skill_service: SkillService
+    skill_loader: SkillLoader
     session_id: Optional[str] = None
     image_model: Optional[str] = None  # 用户选定的生图模型逻辑名（generate_image 用）
 

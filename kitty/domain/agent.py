@@ -1,19 +1,19 @@
 """AgentContext：贯穿一次对话回合的迭代期可变状态。
 
-设计要点（plan M3）：
-- 用 @dataclass 而非 Pydantic：高频 mutation、无需校验/序列化。
-- **不持 session dict / store 引用** —— hook 经构造器注入的 SessionService 访问数据，
-  数据流向变为单向 hook → service → repo → db。
-- 按生命周期细分：回合级固定输入留在顶层；同生同灭的单轮状态收进 TurnState，
-  异常回滚账本收进 RollbackLedger，退出结果收进 LoopOutcome。
+用 @dataclass 而非 Pydantic：高频 mutation、无需校验/序列化。按生命周期细分：
+回合级固定输入留顶层；单轮状态收进 TurnState，退出结果收进 LoopOutcome。
+hook 经注入的 SessionService 访问数据，不持 session/store 引用。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from kitty.domain.trace import ThinkingSegment
+
+if TYPE_CHECKING:
+    from kitty.domain.stream import StreamResult
 
 
 @dataclass
@@ -38,15 +38,12 @@ class TurnState:
         self.thinking_segments.clear()
         self.provider_messages = None
 
-
-@dataclass
-class RollbackLedger:
-    """本回合新增 assistant message id 账本，异常回滚时用于删对应 trace。"""
-
-    new_message_ids: list[str] = field(default_factory=list)
-
-    def record(self, message_id: str) -> None:
-        self.new_message_ids.append(message_id)
+    def apply_stream(self, result: "StreamResult") -> None:
+        """把 consume_stream 的累积结果写入回合状态（集中字段写入，避免散落 unpack）。"""
+        self.text_parts = result.text_parts
+        self.accumulated_tool_calls = result.tool_calls
+        self.finish_reason = result.finish_reason
+        self.thinking_segments = result.thinking_segments
 
 
 @dataclass
@@ -54,7 +51,6 @@ class LoopOutcome:
     """回合退出状态。"""
 
     exception: Optional[BaseException] = None
-    done_reason: Optional[str] = None
 
 
 @dataclass
@@ -63,10 +59,8 @@ class AgentContext:
     session_id: str
     user_message: str
     tool_schemas: list[dict]
-    history_snapshot_len: int  # 入口前该会话的 message 数量，回滚锚点
     image_model: Optional[str] = None  # 用户选定的生图模型逻辑名，注入 ToolContext
     chat_model: Optional[str] = None  # 本回合实际调用的真实 model 名（trace 用）
 
     turn: TurnState = field(default_factory=TurnState)
-    rollback: RollbackLedger = field(default_factory=RollbackLedger)
     outcome: LoopOutcome = field(default_factory=LoopOutcome)

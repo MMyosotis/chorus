@@ -19,33 +19,25 @@ CHAT_MODELS = [
         "api_key_env": "DEEPSEEK_API_KEY",
     },
     {
-        "id": "MiniMax M3",
-        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
-        "model_id": "minimax-m3",
-        "api_key_env": "MINIMAX_API_KEY",
-    },
-    {
         "id": "DeepSeek V4 Pro",
         "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
         "model_id": "deepseek-v4-pro",
         "api_key_env": "DEEPSEEK_API_KEY",
     },
+    {
+        "id": "MiniMax M3",
+        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "model_id": "minimax-m3",
+        "api_key_env": "MINIMAX_API_KEY",
+    }
 ]
 # 启动默认对话模型 + 标题生成固定使用的模型（须是 CHAT_MODELS 中某条的 id）
 DEFAULT_CHAT_MODEL_ID = os.environ.get("DEFAULT_CHAT_MODEL_ID", "DeepSeek V4 Flash")
 
 MAX_TOKENS = 2048
 
-SKILLS_DIR = Path(__file__).parent / "resources" / "skills"
-MAX_TOOL_ITERATIONS = int(os.environ.get("MAX_TOOL_ITERATIONS", "10"))
-
 # 运行时数据根目录（项目根 / data）：db 文件落点，启动自动创建
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-
-# 会话清理策略
-CONV_TTL_DAYS = int(os.environ.get("CONV_TTL_DAYS", "30"))
-CONV_MAX_BYTES = int(os.environ.get("CONV_MAX_BYTES", str(1024 * 1024)))
-CONV_MAX_COUNT = int(os.environ.get("CONV_MAX_COUNT", "100"))
 
 # 生图模型配置表：与 CHAT_MODELS 同构，每个模型一条独立连接信息。
 #   id          —— 展示名 + 存储键 + 注册表键（settings.db 存这个；改它已存设置会回退默认）

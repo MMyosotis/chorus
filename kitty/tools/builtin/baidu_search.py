@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kitty.tools.base import Tool, ToolContext
+from kitty.tools.framework import Tool, ToolContext
 from kitty.tools.clients.baidu_search import BaiduSearchClient
 
 

@@ -1,9 +1,8 @@
 """Trace 模型：隶属于某条 message 的执行轨迹，独立于 message 存储。
 
-设计要点（见 plan 检验4）：
-- traces 表只靠 message_id 关联 message，物理解耦；
-- 一条 trace = 一个 phase 的快照（model_request / model_response / tool_call / tool_result / loop_end）；
-- thinking 段与 tool 调用摘要通过对某 message_id 的若干 trace 行聚合得到（MessageTrace）。
+traces 表只靠 message_id 关联 message，物理解耦；一条 trace = 一个 phase 的快照
+（model_request / model_response / tool_call / tool_result）；
+thinking 段与 tool 调用摘要通过对某 message_id 的若干 trace 行聚合得到。
 """
 
 from __future__ import annotations
@@ -21,7 +20,6 @@ class TracePhase(str, Enum):
     MODEL_RESPONSE = "model_response"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    LOOP_END = "loop_end"
 
 
 class ThinkingSegment(BaseModel):

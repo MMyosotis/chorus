@@ -1,7 +1,6 @@
 """SettingsService：进程级动态配置（如 image_test_mode）。
 
-替代旧 config._image_test_mode 全局 + SettingsStore。内存 cache + 持久化双写，
-启动时 load_all 回灌。generate_image 工具与 /api/debug/test-mode 均经此读写。
+内存 cache + 持久化双写，启动时 load_all 回灌。
 """
 
 from __future__ import annotations

@@ -1,7 +1,6 @@
 """SSE 事件模型：sealed 联合（discriminator='type'）。
 
-后端内部以 Pydantic 实例流转，路由层调 model_dump_json() 序列化，
-前端协议与原裸 dict 完全一致。
+后端内部以 Pydantic 实例流转，路由层调 model_dump_json() 序列化给前端。
 """
 
 from __future__ import annotations
@@ -71,7 +70,6 @@ class TitleUpdateEvent(_EventBase):
 
 class DoneEvent(_EventBase):
     type: Literal["done"] = "done"
-    reason: Optional[str] = None
 
 
 class ErrorEvent(_EventBase):

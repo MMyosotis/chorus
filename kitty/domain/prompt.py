@@ -1,11 +1,7 @@
 """system prompt 装配：base 文案 + 拼装规则同住一处。
 
-SYSTEM_PROMPT 是默认人设文案（PromptContext.base 的默认值）；build_system_prompt
-按规则把 base + 非空各段拼成最终 system prompt 字符串。本模块纯领域，零基础设施依赖。
-
-PromptContext 是扩展点：未来要加入运行时多方信息（对话摘要、用户画像、工具清单等），
-只需加字段 + 在 build_system_prompt 里加一段拼接，签名稳定。base 可在构造时覆盖，
-便于测试。
+SYSTEM_PROMPT 是默认人设文案；build_system_prompt 把 base + 非空各段拼成最终字符串。
+PromptContext 是扩展点：新增运行时多方信息只需加字段 + 加一段拼接，签名稳定。
 """
 
 from __future__ import annotations
@@ -15,7 +11,7 @@ from dataclasses import dataclass
 # 默认人设文案；PromptContext.base 未显式提供时取它。
 SYSTEM_PROMPT = (
     "你是一个友好、健谈的 AI 助手。记住对话中提到过的信息，保持上下文连贯。\n"
-    "你需要先调用output_plan输出你的执行计划，然后可以调用工具完成任务"
+    "你需要先调用output_plan输出你的执行计划，然后再调用工具完成任务"
 )
 
 
