@@ -24,6 +24,12 @@ CHAT_MODELS = [
         "model_id": "minimax-m3",
         "api_key_env": "MINIMAX_API_KEY",
     },
+    {
+        "id": "DeepSeek V4 Pro",
+        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "model_id": "deepseek-v4-pro",
+        "api_key_env": "DEEPSEEK_API_KEY",
+    },
 ]
 # 启动默认对话模型 + 标题生成固定使用的模型（须是 CHAT_MODELS 中某条的 id）
 DEFAULT_CHAT_MODEL_ID = os.environ.get("DEFAULT_CHAT_MODEL_ID", "DeepSeek V4 Flash")

@@ -100,6 +100,7 @@ const TOOL_NAME_ZH = {
   glob_search: '查找文件',
   load_skill: '加载技能',
   generate_image: '生成图像',
+  output_plan: '制定计划',
 }
 
 function toolDisplayName(name) {
@@ -114,6 +115,13 @@ function toggleActivity() {
 // generate_image 工具的图片占位/渲染：图片严格归属于产生它的本气泡。
 const imageItems = computed(() =>
   (props.tools.items || []).filter((it) => it.name === 'generate_image')
+)
+
+// output_plan 工具的计划卡片：tool_result 回来（duration_ms 有值）后才渲染，避免流式空态。
+const planItems = computed(() =>
+  (props.tools.items || []).filter(
+    (it) => it.name === 'output_plan' && it.duration_ms != null
+  )
 )
 
 function extractImageUrl(content) {
@@ -222,6 +230,16 @@ function closePreview() {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 执行计划卡片：output_plan 工具产出，置于正文之前 -->
+      <div v-if="planItems.length" class="plan-list">
+        <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
+          <div class="plan-header">执行计划</div>
+          <ol class="plan-steps">
+            <li v-for="(step, i) in (item.arguments?.steps || [])" :key="i">{{ step }}</li>
+          </ol>
         </div>
       </div>
 
@@ -591,6 +609,44 @@ function closePreview() {
 @keyframes dotWave {
   0%, 60%, 100% { opacity: 0.25; }
   30%           { opacity: 1; }
+}
+
+/* ===== 执行计划卡片 ===== */
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 4px 0 14px;
+}
+
+.plan-card {
+  border-left: 3px solid #6366f1;
+  background: #f8fafc;
+  border-radius: 0 10px 10px 0;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.plan-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6366f1;
+  letter-spacing: 0.3px;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.plan-steps {
+  margin: 0;
+  padding-left: 22px;
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.plan-steps li {
+  margin: 4px 0;
+  letter-spacing: 0.2px;
 }
 
 /* ===== 生成图像：占位 / 渲染 ===== */

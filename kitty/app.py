@@ -51,6 +51,7 @@ from kitty.tools.builtin import (
     EditFileTool,
     GlobSearchTool,
     LoadSkillTool,
+    OutputPlanTool,
     ReadFileTool,
     WriteFileTool,
 )
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
         EditFileTool(),
         GlobSearchTool(),
         LoadSkillTool(),
+        OutputPlanTool(),
         GenerateImageTool(
             settings_service.get_image_test_mode, IMAGE_TEST_FAKE_URL, image_models
         ),

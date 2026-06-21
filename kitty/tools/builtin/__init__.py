@@ -9,6 +9,7 @@ from kitty.tools.builtin.edit_file import EditFileTool
 from kitty.tools.builtin.generate_image import GenerateImageTool
 from kitty.tools.builtin.glob_search import GlobSearchTool
 from kitty.tools.builtin.load_skill import LoadSkillTool
+from kitty.tools.builtin.output_plan import OutputPlanTool
 from kitty.tools.builtin.read_file import ReadFileTool
 from kitty.tools.builtin.write_file import WriteFileTool
 
@@ -19,6 +20,7 @@ __all__ = [
     "EditFileTool",
     "GlobSearchTool",
     "LoadSkillTool",
+    "OutputPlanTool",
     "GenerateImageTool",
     "BaiduSearchTool",
 ]

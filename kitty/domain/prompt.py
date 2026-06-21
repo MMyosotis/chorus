@@ -13,7 +13,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 # 默认人设文案；PromptContext.base 未显式提供时取它。
-SYSTEM_PROMPT = "你是一个友好、健谈的 AI 助手。记住对话中提到过的信息，保持上下文连贯。"
+SYSTEM_PROMPT = (
+    "你是一个友好、健谈的 AI 助手。记住对话中提到过的信息，保持上下文连贯。\n"
+    "你需要先调用output_plan输出你的执行计划，然后可以调用工具完成任务"
+)
 
 
 @dataclass(frozen=True)
