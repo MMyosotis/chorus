@@ -113,6 +113,16 @@ def test_cancel_pipeline():
     assert repo.get("e").status == "pending"
 
 
+def test_touch_updated_at():
+    repo, _ = _repo()
+    repo.insert(_mk("a", status="running", updated_at=10.0))
+    repo.touch_updated_at("a")
+    got = repo.get("a")
+    assert got.updated_at > 10.0  # 已更新为当前时间
+    # 不存在的 task 静默无操作（不抛）
+    repo.touch_updated_at("nope")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

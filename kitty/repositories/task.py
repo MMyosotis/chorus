@@ -88,6 +88,12 @@ class TaskRepository:
         )
         return cur.rowcount > 0
 
+    def touch_updated_at(self, task_id: str) -> None:
+        """心跳：直接更新 updated_at（不走 CAS、不校验状态）。供 subagent 每轮防 zombie 误杀。"""
+        self._conn.get().execute(
+            "UPDATE tasks SET updated_at=? WHERE id=?", (time.time(), task_id)
+        )
+
     def cancel_pipeline(self, pipeline_id: str) -> int:
         """事务内批量 CAS 非终态 task→cancelled。返受影响行数。"""
         statuses = ("pending", "running", "awaiting_confirm")
