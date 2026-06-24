@@ -153,9 +153,14 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为需要 POS
 3. 工具调用时：yield tool_call → 执行工具 → yield tool_result → 继续下一轮 OpenAI 调用
 4. 每条消息产生即逐条 append 入库到 `data/little-kitty.db` 的 `messages` 表
 
-## No Tests
+## 测试
 
-项目当前没有正式测试框架和单元测试。`kitty/tests/test_cli.py` 是手动调试用的交互 CLI，不是自动化测试。
+项目以 pytest 为 dev 依赖（`uv add --dev pytest`），但**不追求全覆盖**——只对纯领域函数 / 状态机 / repo smoke 用表驱动断言锚定（spec 第 8 节：「状态机/纯函数不测是最大浪费」）。测试文件在 `kitty/tests/`，用 `python -m kitty.tests.test_<name>` 跑（每个文件带 `main()` 入口聚合所有 `test_` 函数，可裸跑也可 pytest 跑）：
+
+- `test_cli.py` — 手动调试交互 CLI（直接调 `ChatService.stream`，不经 HTTP），非自动化测试
+- `test_chat_pipeline.py` — supervisor only_reply 顺序契约 smoke test（FakeOpenAIStream 脚本化 chunk）
+- `test_task_state.py` — 任务图纯函数表驱动断言（状态机 / pipeline / PostCard）
+- `test_task_repo.py` / `test_task_artifacts_steps.py` / `test_connection.py` / `test_trace_repo.py` / `test_message_repo.py` — 各 repo 的 smoke test
 
 ## 开发约定
 
