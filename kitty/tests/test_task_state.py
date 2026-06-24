@@ -33,3 +33,92 @@ def test_postcard_rejects_unknown_kind():
     from pydantic import ValidationError as PydValidationError
     with pytest.raises(PydValidationError):
         PostSection(kind="table", text="x")  # type: ignore[arg-type]
+
+
+import pytest
+
+from kitty.domain.task import (
+    ACTIVE_STATUSES,
+    CANCELLABLE_STATUSES,
+    LEGAL_TRANSITIONS,
+    TERMINAL_STATUSES,
+    Task,
+    TaskStatus,
+    can_schedule,
+    is_legal_transition,
+    is_zombie,
+    select_display_pipeline,
+)
+
+
+def _mk(status, deps=None, **kw):
+    base = dict(
+        id="t", session_id="s", pipeline_id="p", agent_type="idea", seq=1,
+        status=status, invoke_message="x", dependencies=deps or [],
+        created_at=0.0, updated_at=0.0,
+    )
+    base.update(kw)
+    return Task(**base)
+
+
+def test_legal_transitions_table():
+    # 严格闸门：无 finished→*
+    assert not any(f == TaskStatus.FINISHED.value for f, _ in LEGAL_TRANSITIONS)
+    # 关键转移都在
+    assert is_legal_transition("pending", "running")
+    assert is_legal_transition("running", "awaiting_confirm")
+    assert is_legal_transition("awaiting_confirm", "finished")
+    assert is_legal_transition("awaiting_confirm", "pending")  # retry
+    assert is_legal_transition("failed", "pending")  # retry 复活
+    # 非法
+    assert not is_legal_transition("finished", "running")
+    assert not is_legal_transition("finished", "pending")
+    assert not is_legal_transition("cancelled", "running")
+
+
+def test_can_schedule():
+    dep_finished = _mk("finished", id="d1")
+    dep_failed = _mk("failed", id="d2")
+    assert can_schedule(_mk("pending"), [dep_finished]) is True
+    # 上游 failed 不满足（砍级联：后继阻塞）
+    assert can_schedule(_mk("pending"), [dep_failed]) is False
+    # 非 pending 不可调度
+    assert can_schedule(_mk("running"), [dep_finished]) is False
+    assert can_schedule(_mk("awaiting_confirm"), [dep_finished]) is False
+    # 无 deps 的 pending 可调度
+    assert can_schedule(_mk("pending"), []) is True
+
+
+def test_is_zombie():
+    t = _mk("running", updated_at=100.0)
+    assert is_zombie(t, now=200.0, timeout_s=60) is True
+    assert is_zombie(t, now=150.0, timeout_s=60) is False
+    assert is_zombie(_mk("pending"), now=9999.0, timeout_s=1) is False
+
+
+def test_status_sets():
+    assert ACTIVE_STATUSES == frozenset({"pending", "running", "awaiting_confirm"})
+    assert TERMINAL_STATUSES == frozenset({"finished", "failed", "cancelled"})
+    assert CANCELLABLE_STATUSES == ACTIVE_STATUSES  # cancel 可翻转全部非终态
+    assert ACTIVE_STATUSES.isdisjoint(TERMINAL_STATUSES)
+
+
+def test_select_display_pipeline():
+    active = [_mk("running", id="a")]
+    finished = [_mk("finished", id="f1"), _mk("cancelled", id="c1")]
+    assert select_display_pipeline(active, finished) == active  # active 优先
+    # 无 active，返 finished（不含 cancelled）
+    assert select_display_pipeline([], finished) == [_mk("finished", id="f1")]
+    assert select_display_pipeline([], []) == []
+
+
+def main():
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"[{name}] 通过")
+    print("\n全部用例通过")
+
+
+if __name__ == "__main__":
+    main()

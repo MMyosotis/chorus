@@ -17,6 +17,16 @@ from kitty.domain.task.models import (
     TaskStatus,
 )
 from kitty.domain.task.post import PostCard, PostImage, PostSection
+from kitty.domain.task.state_machine import (
+    ACTIVE_STATUSES,
+    CANCELLABLE_STATUSES,
+    LEGAL_TRANSITIONS,
+    TERMINAL_STATUSES,
+    can_schedule,
+    is_legal_transition,
+    is_zombie,
+    select_display_pipeline,
+)
 
 __all__ = [
     "ValidationError",
@@ -30,4 +40,12 @@ __all__ = [
     "PostCard",
     "PostImage",
     "PostSection",
+    "ACTIVE_STATUSES",
+    "CANCELLABLE_STATUSES",
+    "LEGAL_TRANSITIONS",
+    "TERMINAL_STATUSES",
+    "can_schedule",
+    "is_legal_transition",
+    "is_zombie",
+    "select_display_pipeline",
 ]
