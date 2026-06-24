@@ -251,6 +251,24 @@ def test_agent_context_multiagent_fields():
     assert ctx.source == "subagent"
 
 
+from kitty.domain.prompt import PromptContext, build_subagent_system_prompt, build_system_prompt
+
+
+def test_subagent_prompts():
+    for at in ("idea", "script", "image", "finalize"):
+        p = build_subagent_system_prompt(at)
+        assert "<<<ARTIFACTS:json>>>" in p
+        assert "<<<NARRATIVE:json>>>" in p
+        assert "禁用任何 emoji" in p
+
+
+def test_supervisor_prompt_has_profiles():
+    p = build_system_prompt(PromptContext())
+    assert "create_plan" in p
+    assert "finalize" in p
+    assert "选题官" in p  # profiles 注入
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -18,6 +18,13 @@ from kitty.domain.task.models import (
 )
 from kitty.domain.task.post import PostCard, PostImage, PostSection
 from kitty.domain.task.profiles import AGENT_PROFILES, AgentProfile
+from kitty.domain.task.pipeline import (
+    expand_pipeline,
+    parse_output,
+    parse_sections,
+    render_invoke_message,
+    validate_steps,
+)
 from kitty.domain.task.state_machine import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
@@ -51,4 +58,9 @@ __all__ = [
     "is_legal_transition",
     "is_zombie",
     "select_display_pipeline",
+    "expand_pipeline",
+    "parse_output",
+    "parse_sections",
+    "render_invoke_message",
+    "validate_steps",
 ]
