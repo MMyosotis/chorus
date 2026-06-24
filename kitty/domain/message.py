@@ -22,6 +22,7 @@ class _MessageBase(BaseModel):
     session_id: str
     seq: int  # 在 session 内的递增序号，落库主键的一部分
     created_at: float
+    subtype: Optional[str] = None  # None 普通 / "progress" 进度气泡
 
 
 class UserMessage(_MessageBase):
@@ -48,14 +49,17 @@ class AssistantMessage(_MessageBase):
     tool_calls: list[ToolCallSpec] = Field(default_factory=list)
 
     def to_provider_dict(self) -> dict:
-        entry: dict = {"role": "assistant", "content": self.content}
+        content = self.content
+        if self.subtype == "progress" and content:
+            # 进度气泡压成单行摘要，避免完整话术污染 supervisor 上下文
+            first_line = content.strip().split("\n", 1)[0]
+            content = first_line[:40] if len(first_line) > 40 else first_line
+            content = f"[进度] {content}"
+        entry: dict = {"role": "assistant", "content": content}
         if self.tool_calls:
             entry["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.name, "arguments": tc.arguments_json},
-                }
+                {"id": tc.id, "type": "function",
+                 "function": {"name": tc.name, "arguments": tc.arguments_json}}
                 for tc in self.tool_calls
             ]
         return entry

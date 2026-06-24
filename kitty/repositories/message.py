@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS messages (
     tool_calls_json TEXT,
     tool_call_id    TEXT,
     tool_name       TEXT,
+    subtype         TEXT,
     created_at      REAL NOT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
     UNIQUE (session_id, seq)
@@ -40,14 +41,20 @@ class MessageRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
+        self._ensure_subtype_column()
+
+    def _ensure_subtype_column(self) -> None:
+        cols = {r[1] for r in self._conn.get().execute("PRAGMA table_info(messages)").fetchall()}
+        if "subtype" not in cols:
+            self._conn.get().execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
 
     def append(self, message: Message) -> None:
         """单条消息入库。"""
         self._conn.get().execute(
             "INSERT INTO messages("
             "id, session_id, seq, role, content, tool_calls_json, "
-            "tool_call_id, tool_name, created_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "tool_call_id, tool_name, subtype, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             self._message_to_row(message),
         )
 
@@ -55,7 +62,7 @@ class MessageRepository:
         """按 seq 升序返回该会话全部消息。"""
         rows = self._conn.get().execute(
             "SELECT id, session_id, seq, role, content, tool_calls_json, "
-            "tool_call_id, tool_name, created_at "
+            "tool_call_id, tool_name, subtype, created_at "
             "FROM messages WHERE session_id=? ORDER BY seq",
             (session_id,),
         ).fetchall()
@@ -64,12 +71,14 @@ class MessageRepository:
     def get(self, message_id: str) -> Optional[Message]:
         row = self._conn.get().execute(
             "SELECT id, session_id, seq, role, content, tool_calls_json, "
-            "tool_call_id, tool_name, created_at FROM messages WHERE id=?",
+            "tool_call_id, tool_name, subtype, created_at FROM messages WHERE id=?",
             (message_id,),
         ).fetchone()
         return self._row_to_message(row) if row else None
 
     def next_seq(self, session_id: str) -> int:
+        """返回下一个 seq。多 subagent 线程并发 append 可能撞 UNIQUE(session_id, seq)，
+        调用方 append 捕获 IntegrityError 重试（见 MessageService）。"""
         row = self._conn.get().execute(
             "SELECT COALESCE(MAX(seq), -1) + 1 FROM messages WHERE session_id=?",
             (session_id,),
@@ -80,24 +89,27 @@ class MessageRepository:
     @staticmethod
     def _message_to_row(message: Message) -> tuple:
         mid, cid, seq, created = message.id, message.session_id, message.seq, message.created_at
+        sub = message.subtype
         if isinstance(message, UserMessage):
-            return (mid, cid, seq, "user", message.content, None, None, None, created)
+            return (mid, cid, seq, "user", message.content, None, None, None, sub, created)
         if isinstance(message, AssistantMessage):
             tool_calls_json = (
                 json.dumps([tc.model_dump() for tc in message.tool_calls], ensure_ascii=False)
                 if message.tool_calls
                 else None
             )
-            return (mid, cid, seq, "assistant", message.content, tool_calls_json, None, None, created)
+            return (mid, cid, seq, "assistant", message.content, tool_calls_json, None, None, sub, created)
         if isinstance(message, ToolMessage):
-            return (mid, cid, seq, "tool", message.content, None, message.tool_call_id, message.name, created)
+            return (mid, cid, seq, "tool", message.content, None,
+                    message.tool_call_id, message.name, sub, created)
         raise TypeError(f"unsupported message type: {type(message)}")
 
     @staticmethod
     def _row_to_message(row) -> Message:
-        mid, cid, seq, role, content, tool_calls_json, tool_call_id, tool_name, created = row
+        mid, cid, seq, role, content, tool_calls_json, tool_call_id, tool_name, subtype, created = row
         if role == "user":
-            return UserMessage(id=mid, session_id=cid, seq=seq, created_at=created, content=content or "")
+            return UserMessage(id=mid, session_id=cid, seq=seq, created_at=created,
+                               content=content or "", subtype=subtype)
         if role == "assistant":
             tool_calls: list[ToolCallSpec] = []
             if tool_calls_json:
@@ -105,13 +117,12 @@ class MessageRepository:
                     tool_calls = [ToolCallSpec(**tc) for tc in json.loads(tool_calls_json)]
                 except (json.JSONDecodeError, TypeError):
                     tool_calls = []
-            return AssistantMessage(
-                id=mid, session_id=cid, seq=seq, created_at=created,
-                content=content, tool_calls=tool_calls,
-            )
+            return AssistantMessage(id=mid, session_id=cid, seq=seq, created_at=created,
+                                     content=content, tool_calls=tool_calls, subtype=subtype)
         if role == "tool":
             return ToolMessage(
                 id=mid, session_id=cid, seq=seq, created_at=created,
-                tool_call_id=tool_call_id or "", name=tool_name or "", content=content or "",
+                tool_call_id=tool_call_id or "", name=tool_name or "",
+                content=content or "", subtype=subtype,
             )
         raise ValueError(f"unknown role: {role}")
