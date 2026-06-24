@@ -81,6 +81,56 @@ def consume_stream(stream) -> Iterator[SseEvent]:
     )
 
 
+def drain_stream(stream) -> StreamResult:
+    """消费流式响应但丢弃 SSE 事件，仅返回累积 StreamResult（subagent 用，不连 SSE）。
+
+    与 consume_stream 同逻辑（累积 text/tool_calls/thinking/finish_reason），但不 yield
+    任何事件——subagent 后台线程不需要把 reasoning/token 推前端，只取最终结果。
+    """
+    accumulated: dict[int, dict] = {}
+    text_parts: list[str] = []
+    finish_reason: Optional[str] = None
+    thinking_segments: list[ThinkingSegment] = []
+
+    cur_parts: list[str] = []
+    started_at: Optional[float] = None
+    in_progress = False
+
+    for chunk in stream:
+        choice = chunk.choices[0]
+        delta = choice.delta
+        if choice.finish_reason is not None:
+            finish_reason = choice.finish_reason
+
+        reasoning = getattr(delta, "reasoning_content", None)
+        if reasoning:
+            if not in_progress:
+                started_at = perf_counter()
+                in_progress = True
+            cur_parts.append(reasoning)
+
+        if in_progress and (delta.content or delta.tool_calls):
+            _close_thinking(cur_parts, started_at, thinking_segments)
+            in_progress = False
+
+        if delta.content:
+            text_parts.append(delta.content)
+
+        if delta.tool_calls:
+            for tc in delta.tool_calls:
+                _merge_tool_call(accumulated, tc)
+
+    if in_progress:
+        _close_thinking(cur_parts, started_at, thinking_segments)
+
+    return StreamResult(
+        text_parts=text_parts,
+        tool_calls=accumulated,
+        finish_reason=finish_reason,
+        thinking_segments=thinking_segments,
+    )
+
+
 def _close_thinking(
     parts: list[str], started_at: Optional[float], segments: list[ThinkingSegment]
 ) -> int:
