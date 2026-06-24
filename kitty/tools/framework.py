@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from kitty.domain.skill import SkillLoader
 from kitty.tools.models import ToolCall, ToolResult, ToolSchema
@@ -27,6 +27,18 @@ def select_tool_schemas(schemas: list[dict], *, web_search: bool) -> list[dict]:
     return [
         s for s in schemas
         if s.get("function", {}).get("name") != WEB_SEARCH_TOOL_NAME
+    ]
+
+
+def select_schemas_by_names(all_schemas: list[dict], names: Iterable[str]) -> list[dict]:
+    """按工具名白名单筛 OpenAI 工具 schema（subagent 按 agent_type 工具白名单筛）。
+
+    保留 names 顺序对应的 schema；names 中不存在于 all_schemas 的名字静默跳过。
+    """
+    wanted = set(names)
+    return [
+        s for s in all_schemas
+        if s.get("function", {}).get("name") in wanted
     ]
 
 

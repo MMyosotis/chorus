@@ -76,4 +76,18 @@ IMAGE_TEST_FAKE_URL = os.environ.get(
     "https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-0/02178135974958637079cdcc08b35ab782b1fd6e8da4cf02940a7_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260613%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260613T140919Z&X-Tos-Expires=86400&X-Tos-Signature=ce55d8ee11f67e665c0b465df403d734e7304a1489d0b3f4fcfea53f531e59c3&X-Tos-SignedHeaders=host",
 )
 
+# 子 Agent 按角色独立配置对话模型：agent_type -> CHAT_MODELS 中某条的 id（复用对话模型配置）
+SUBAGENT_MODELS = {
+    "idea": "DeepSeek V4 Flash",   # 选题：便宜快
+    "script": "DeepSeek V4 Pro",   # 文案：强
+    "image": "DeepSeek V4 Flash",  # 配图提示词生成
+    "finalize": "DeepSeek V4 Pro",  # 汇总：强
+}
+
+# 后台调度器参数
+SCHEDULER_INTERVAL = 1.0   # 调度器轮询周期（秒）
+ZOMBIE_TIMEOUT = 120       # running task 心跳超时阈值（秒），> 单次最长 ReAct 迭代
+POOL_SIZE = 4              # subagent 线程池大小
+
+
 
