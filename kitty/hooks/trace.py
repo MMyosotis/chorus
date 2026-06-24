@@ -10,7 +10,7 @@ from __future__ import annotations
 import time
 from typing import Any, Iterable
 
-from kitty.domain.agent import AgentContext
+from kitty.agents.runtime import AgentContext
 from kitty.domain.events import SseEvent, TraceEvent
 from kitty.domain.trace import TraceEntry, TracePhase
 from kitty.services.message import MessageService
@@ -51,6 +51,8 @@ class TraceEmitter:
         self._message.add_trace(TraceEntry(
             session_id=ctx.session_id,
             message_id=ctx.turn.message_id or None,
+            source=ctx.source,
+            task_id=ctx.task_id,
             iteration=ctx.turn.iteration_index,
             phase=phase, ts=ts, payload=payload,
         ))

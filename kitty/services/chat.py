@@ -15,7 +15,7 @@ from typing import Iterator, Optional
 
 from openai import OpenAI
 
-from kitty.domain.agent import AgentContext
+from kitty.agents.runtime import AgentContext
 from kitty.domain.events import (
     DoneEvent,
     ErrorEvent,
@@ -25,7 +25,7 @@ from kitty.domain.events import (
     ToolResultEvent,
 )
 from kitty.domain.message import ToolCallSpec
-from kitty.domain.prompt_legacy import PromptContext, build_system_prompt
+from kitty.domain.prompt import PromptContext, build_system_prompt
 from kitty.domain.skill import SkillLoader, format_skill_hints
 from kitty.domain.stream import consume_stream
 from kitty.hooks import HookRegistry
