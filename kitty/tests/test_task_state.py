@@ -112,6 +112,22 @@ def test_select_display_pipeline():
     assert select_display_pipeline([], []) == []
 
 
+from kitty.domain.task import AGENT_PROFILES, AgentProfile
+
+
+def test_agent_profiles_registry():
+    assert set(AGENT_PROFILES.keys()) == {"idea", "script", "image", "finalize"}
+    img = AGENT_PROFILES["image"]
+    assert "generate_image" in img.tools  # 唯一带生图的角色
+    # 前三步不含 generate_image
+    for at in ("idea", "script", "finalize"):
+        assert "generate_image" not in AGENT_PROFILES[at].tools
+    # enter_line 纯文本无 emoji（粗校：仅 ASCII / 中文标点，无典型 emoji 区段）
+    for p in AGENT_PROFILES.values():
+        assert p.enter_line and p.display_name
+        assert p.expected_sections == ("artifacts", "narrative")
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
