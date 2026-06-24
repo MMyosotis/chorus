@@ -20,6 +20,7 @@ class TracePhase(str, Enum):
     MODEL_RESPONSE = "model_response"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
+    SCHEDULE = "schedule"  # 新增：scheduler 派发/CAS/zombie 事件
 
 
 class ThinkingSegment(BaseModel):
@@ -52,6 +53,8 @@ class TraceEntry(BaseModel):
     id: Optional[int] = None
     session_id: str
     message_id: Optional[str] = None
+    task_id: Optional[str] = None      # 新增：subagent/scheduler trace 填此
+    source: str = "supervisor"         # 新增：'supervisor'|'subagent'|'scheduler'
     iteration: Optional[int] = None
     phase: TracePhase
     ts: float

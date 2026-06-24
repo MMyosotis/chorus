@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS traces (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT NOT NULL,
     message_id      TEXT,
+    task_id         TEXT,
+    source          TEXT NOT NULL DEFAULT 'supervisor',
     iteration       INTEGER,
     phase           TEXT NOT NULL,
     ts              REAL NOT NULL,
@@ -37,6 +39,7 @@ CREATE TABLE IF NOT EXISTS traces (
 );
 CREATE INDEX IF NOT EXISTS idx_traces_session_ts ON traces(session_id, ts);
 CREATE INDEX IF NOT EXISTS idx_traces_message ON traces(message_id);
+CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, ts);
 """
 
 
@@ -44,14 +47,27 @@ class TraceRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """旧库平滑加列（开发库重建策略的兜底，避免必须删库）。"""
+        cols = {r[1] for r in self._conn.get().execute("PRAGMA table_info(traces)").fetchall()}
+        if "task_id" not in cols:
+            self._conn.get().execute("ALTER TABLE traces ADD COLUMN task_id TEXT")
+        if "source" not in cols:
+            self._conn.get().execute(
+                "ALTER TABLE traces ADD COLUMN source TEXT NOT NULL DEFAULT 'supervisor'"
+            )
 
     def add(self, entry: TraceEntry) -> int:
         cur = self._conn.get().execute(
-            "INSERT INTO traces(session_id, message_id, iteration, phase, ts, payload_json) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO traces(session_id, message_id, task_id, source, iteration, phase, ts, payload_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 entry.session_id,
                 entry.message_id,
+                entry.task_id,
+                entry.source,
                 entry.iteration,
                 entry.phase.value,
                 entry.ts,
@@ -62,7 +78,7 @@ class TraceRepository:
 
     def list_by_session(self, session_id: str) -> list[TraceEntry]:
         rows = self._conn.get().execute(
-            "SELECT id, session_id, message_id, iteration, phase, ts, payload_json "
+            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
             "FROM traces WHERE session_id=? ORDER BY ts ASC, id ASC",
             (session_id,),
         ).fetchall()
@@ -70,9 +86,18 @@ class TraceRepository:
 
     def list_by_message(self, message_id: str) -> list[TraceEntry]:
         rows = self._conn.get().execute(
-            "SELECT id, session_id, message_id, iteration, phase, ts, payload_json "
+            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
             "FROM traces WHERE message_id=? ORDER BY ts ASC, id ASC",
             (message_id,),
+        ).fetchall()
+        return [self._row_to_entry(r) for r in rows]
+
+    def list_by_task(self, task_id: str) -> list[TraceEntry]:
+        """按 task 取该 subagent/scheduler 的全部 trace（调试单 task 用）。"""
+        rows = self._conn.get().execute(
+            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
+            "FROM traces WHERE task_id=? ORDER BY ts ASC, id ASC",
+            (task_id,),
         ).fetchall()
         return [self._row_to_entry(r) for r in rows]
 
@@ -101,7 +126,7 @@ class TraceRepository:
 
     @staticmethod
     def _row_to_entry(row) -> TraceEntry:
-        eid, session_id, message_id, iteration, phase, ts, payload_json = row
+        eid, session_id, message_id, task_id, source, iteration, phase, ts, payload_json = row
         try:
             payload = json.loads(payload_json) if payload_json else {}
         except json.JSONDecodeError:
@@ -110,6 +135,8 @@ class TraceRepository:
             id=eid,
             session_id=session_id,
             message_id=message_id,
+            task_id=task_id,
+            source=source or "supervisor",
             iteration=iteration,
             phase=TracePhase(phase),
             ts=ts,
