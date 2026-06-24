@@ -1,12 +1,14 @@
 """SQLite 连接工厂：线程局部连接，统一 PRAGMA 配置。
 
-每个线程一条连接（threading.local），WAL + NORMAL 同步 + 外键约束开启。
+每个线程一条连接（threading.local），WAL + NORMAL 同步 + 外键约束 + busy_timeout。
+transaction() 上下文管理器供 service/agents 开事务（repo 永不开）。
 """
 
 from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -24,6 +26,7 @@ class ConnectionFactory:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute("PRAGMA busy_timeout=5000")
             self._tls.conn = conn
         return conn
 
@@ -31,8 +34,24 @@ class ConnectionFactory:
         """执行一段建表 DDL（幂等 CREATE TABLE IF NOT EXISTS）。"""
         self.get().executescript(ddl)
 
+    @contextmanager
+    def transaction(self):
+        """显式事务：BEGIN; yield; COMMIT; except ROLLBACK。不可嵌套（sqlite 不支持裸 BEGIN 嵌套）。"""
+        conn = self.get()
+        if getattr(self._tls, "in_txn", False):
+            raise RuntimeError("transaction 不可嵌套")
+        conn.execute("BEGIN")
+        self._tls.in_txn = True
+        try:
+            yield
+            conn.execute("COMMIT")
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            self._tls.in_txn = False
+
     def close_all(self) -> None:
-        """关闭当前线程的连接（主要用于测试）。"""
         conn = getattr(self._tls, "conn", None)
         if conn is not None:
             conn.close()
