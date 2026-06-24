@@ -92,9 +92,15 @@ class TaskScheduler:
             return
         self._trace_schedule(task.id, "dispatch", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, "")
         # submit 到独立线程跑 subagent，完成时 release semaphore
-        threading.Thread(
-            target=self._run_worker, args=(task.id,), name=f"subagent-{task.id}", daemon=True,
-        ).start()
+        try:
+            threading.Thread(
+                target=self._run_worker, args=(task.id,), name=f"subagent-{task.id}", daemon=True,
+            ).start()
+        except Exception:
+            # start 失败（OS 线程耗尽等）：回滚 CAS + 释放槽位，下轮重试，保 acquire/release 平衡
+            self._semaphore.release()
+            self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+            logger.exception("scheduler failed to spawn worker for %s", task.id)
 
     def _run_worker(self, task_id: str) -> None:
         try:
