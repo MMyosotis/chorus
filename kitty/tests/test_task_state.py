@@ -234,6 +234,23 @@ def test_parse_output_missing_section():
         parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>", "idea")  # 缺 NARRATIVE
 
 
+from kitty.agents import AgentContext
+
+
+def test_agent_context_multiagent_fields():
+    ctx = AgentContext(session_id="s", source="subagent", task_id="t1")
+    assert ctx.source == "subagent"
+    assert ctx.task_id == "t1"
+    # 默认 supervisor
+    ctx2 = AgentContext(session_id="s")
+    assert ctx2.source == "supervisor"
+    assert ctx2.task_id is None
+    # reset 不清 source（回合级固定）
+    ctx.turn.reset(3)
+    assert ctx.turn.iteration_index == 3
+    assert ctx.source == "subagent"
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
