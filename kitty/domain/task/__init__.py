@@ -16,6 +16,7 @@ from kitty.domain.task.models import (
     TaskStep,
     TaskStatus,
 )
+from kitty.domain.task.post import PostCard, PostImage, PostSection
 
 __all__ = [
     "ValidationError",
@@ -26,4 +27,7 @@ __all__ = [
     "TaskArtifacts",
     "TaskStep",
     "TaskStatus",
+    "PostCard",
+    "PostImage",
+    "PostSection",
 ]
