@@ -1,9 +1,9 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import ChatWindow from './components/ChatWindow.vue'
-import InputBar from './components/InputBar.vue'
-import SessionSidebar from './components/SessionSidebar.vue'
-import ConsolePanel from './components/ConsolePanel.vue'
+import ChatWindow from './main-panel/ChatWindow.vue'
+import InputBar from './main-panel/InputBar.vue'
+import SessionSidebar from './SessionSidebar.vue'
+import ConsolePanel from './main-panel/ConsolePanel.vue'
 import {
   listSessions,
   createSession,

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick } from 'vue'
-import ModelOptionsBar from './ModelOptionsBar.vue'
+import ModelOptionsBar from '../components/ModelOptionsBar.vue'
 
 const props = defineProps({
   streaming: { type: Boolean, default: false },
