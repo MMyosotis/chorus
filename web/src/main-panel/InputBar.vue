@@ -1,6 +1,5 @@
 <script setup>
 import { ref, nextTick } from 'vue'
-import ModelOptionsBar from '../components/ModelOptionsBar.vue'
 
 const props = defineProps({
   streaming: { type: Boolean, default: false },
@@ -49,7 +48,7 @@ function adjustHeight() {
         @input="adjustHeight"
       ></textarea>
       <div class="input-footer">
-        <ModelOptionsBar />
+        <span class="input-spacer"></span>
         <button
           class="send-btn"
           :disabled="streaming || !inputText.trim()"

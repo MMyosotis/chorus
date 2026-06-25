@@ -7,7 +7,7 @@ const props = defineProps({
   streamingMap: { type: Object, default: () => ({}) },
 })
 
-const emit = defineEmits(['select', 'create', 'delete', 'rename'])
+const emit = defineEmits(['select', 'create', 'delete', 'rename', 'open-settings'])
 
 const editingId = ref(null)
 const editingText = ref('')
@@ -151,6 +151,9 @@ watch(
       </div>
       <div v-if="sessions.length === 0" class="empty">暂无会话</div>
     </div>
+    <div class="sidebar-footer">
+      <button class="settings-btn" @click="emit('open-settings')">设置</button>
+    </div>
   </aside>
 </template>
 
@@ -227,6 +230,28 @@ watch(
   overflow-y: auto;
   padding: 4px 14px 12px;
   scrollbar-width: thin;
+}
+
+.sidebar-footer {
+  padding: 8px 14px 12px;
+  border-top: 1px solid rgba(226, 232, 240, 0.6);
+}
+
+.settings-btn {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.settings-btn:hover {
+  background: #f8fafc;
+  border-color: rgba(129, 140, 248, 0.4);
+  color: #6366f1;
 }
 
 .session-item {
