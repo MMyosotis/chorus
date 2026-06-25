@@ -31,6 +31,8 @@ const activeId = ref(null)
 const messages = computed(() => messagesBySession[activeId.value] || [])
 const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
+// 会话有活跃创作任务（get_graph 的 active 字段，由后端 TaskService.get_graph 决定）
+const hasActiveTask = computed(() => !!activeGraph.value?.active)
 const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
@@ -305,7 +307,7 @@ function bumpSession(id) {
 async function onSend(text) {
   const sessionId = activeId.value
   if (!sessionId) return
-  if (!text.trim() || streamingBySession[sessionId]) return
+  if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value) return
 
   // 闭包 capture：所有引用都是 sessionId / list，与 activeId 解耦
   const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
@@ -441,15 +443,16 @@ async function onSend(text) {
           title: payload.title,
         }
       }
-    } else if (payload.type === 'task_plan_created') {
-      // supervisor 建图落库后 yield 图骨架 → 启动该会话轮询
-      taskPolling.start(sessionId)
     } else if (payload.type === 'done') {
       finalizeCurrent()
       mergeTrailingEmptyBubble()
       streamingBySession[sessionId] = false
       // friendly_reply 非流式落库, done 后重拉取回气泡 + 启动/续轮询
       forceReloadMessages(sessionId).finally(() => taskPolling.start(sessionId))
+    } else if (payload.type === 'busy') {
+      // 会话有活跃创作任务，后端拒绝（创作准入）。不解锁输入框——靠 activeGraph 维持禁用。
+      streamingBySession[sessionId] = false
+      // 不注入气泡，busy 是瞬时拒绝信号；activeGraph 已反映进行中
     } else if (payload.type === 'error') {
       ensureAssistant().content = `[错误] ${payload.content}`
       streamingBySession[sessionId] = false
@@ -513,7 +516,7 @@ onMounted(async () => {
         @hil-cancelled="onHilCancelled"
       />
       <ProgressBanner :graph="activeGraph" />
-      <InputBar :streaming="streaming" @send="onSend" />
+      <InputBar :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
     </div>
     <TeamPanel :graph="activeGraph" />
   </div>

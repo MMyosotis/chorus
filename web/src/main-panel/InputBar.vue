@@ -1,14 +1,20 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, computed } from 'vue'
 
 const props = defineProps({
   streaming: { type: Boolean, default: false },
+  hasActiveTask: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['send'])
 
 const inputText = ref('')
 const textarea = ref(null)
+
+const disabled = computed(() => props.streaming || props.hasActiveTask)
+const placeholder = computed(() =>
+  props.hasActiveTask ? '正在创作中，请稍候…' : '输入消息...'
+)
 
 function handleKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -19,7 +25,7 @@ function handleKeydown(e) {
 
 function send() {
   const text = inputText.value.trim()
-  if (!text || props.streaming) return
+  if (!text || disabled.value) return
   emit('send', text)
   inputText.value = ''
   nextTick(() => adjustHeight())
@@ -41,9 +47,9 @@ function adjustHeight() {
         ref="textarea"
         v-model="inputText"
         class="input-field"
-        placeholder="输入消息..."
+        :placeholder="placeholder"
         rows="1"
-        :disabled="streaming"
+        :disabled="disabled"
         @keydown="handleKeydown"
         @input="adjustHeight"
       ></textarea>
@@ -51,7 +57,7 @@ function adjustHeight() {
         <span class="input-spacer"></span>
         <button
           class="send-btn"
-          :disabled="streaming || !inputText.trim()"
+          :disabled="disabled || !inputText.trim()"
           @click="send"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -137,6 +143,18 @@ function adjustHeight() {
 
 .input-field:disabled {
   cursor: not-allowed;
+}
+
+/* 创作中 placeholder：灰阶 + 省略号呼吸流动 */
+.input-field:disabled::placeholder {
+  color: #94a3b8;
+  animation: busyDots 1.4s steps(4, end) infinite;
+}
+
+@keyframes busyDots {
+  0% { opacity: 0.5; }
+  50% { opacity: 1; }
+  100% { opacity: 0.5; }
 }
 
 .input-footer {
