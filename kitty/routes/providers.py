@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from kitty.services.chat import ChatService
 from kitty.services.message import MessageService
 from kitty.services.session import SessionService
 from kitty.services.settings import SettingsService
@@ -19,10 +18,6 @@ def provide_session_service(request: Request) -> SessionService:
 
 def provide_message_service(request: Request) -> MessageService:
     return request.app.state.message_service
-
-
-def provide_chat_service(request: Request) -> ChatService:
-    return request.app.state.chat_service
 
 
 def provide_settings_service(request: Request) -> SettingsService:

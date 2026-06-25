@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Little Kitty 后端测试 CLI — 直接调用 ChatService.stream，不走 HTTP。"""
+"""Little Kitty 后端测试 CLI — 直接调用 SupervisorService.stream，不走 HTTP。"""
 
 try:
     import readline  # noqa: F401
@@ -10,12 +10,15 @@ import kitty.app as _app  # 触发 create_app 装配（lifespan 不在 import �
 from kitty.startup import run_startup
 
 # CLI 不经 server，lifespan 不会触发，显式跑一次启动副作用。
-_skill_loader = _app.app.state.chat_service._skill
+_supervisor_service = _app.app.state.supervisor_service
 _settings_service = _app.app.state.settings_service
-run_startup(_skill_loader, _settings_service, _app.app.state.session_service)
+run_startup(
+    _supervisor_service._skill, _settings_service,
+    _app.app.state.session_service, _app.app.state.scheduler,
+)
 
 _session_service = _app.app.state.session_service
-_chat_service = _app.app.state.chat_service
+_chat_service = _supervisor_service  # 保留旧变量名，最小化下方改动
 
 
 COLORS = {
