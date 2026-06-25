@@ -32,7 +32,7 @@ from kitty.config import (
 )
 from kitty.domain.skill import SkillLoader
 from kitty.domain.title import TitleGenerationService
-from kitty.hooks import HookRegistry, RollbackHandler, TitlePostProcessor, TraceEmitter
+from kitty.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter
 from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.session import SessionRepository
@@ -114,7 +114,7 @@ def create_app() -> FastAPI:
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop)
-    hooks.register("Error", RollbackHandler(message_service).on_error)
+    hooks.register("Error", ErrorFinalizer(message_service).on_error)
 
     all_tool_schemas = tool_registry.schemas_openai()
 

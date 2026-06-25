@@ -60,6 +60,7 @@ def consume_stream(stream) -> Iterator[SseEvent]:
         if in_progress and (delta.content or delta.tool_calls):
             duration = _close_thinking(cur_parts, started_at, thinking_segments)
             yield ReasoningDoneEvent(duration_ms=duration)
+            in_progress = False
 
         if delta.content:
             text_parts.append(delta.content)

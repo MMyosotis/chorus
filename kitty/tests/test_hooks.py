@@ -1,19 +1,14 @@
 # kitty/tests/test_hooks.py
-"""hooks 子系统 smoke test：RollbackHandler 异常恢复 + TraceEmitter 多来源传播 + TitlePostProcessor 收尾。
+"""hooks 子系统 smoke test：ErrorFinalizer 异常收尾 + TraceEmitter 多来源传播 + TitlePostProcessor 收尾。
 
 覆盖 ``kitty/hooks/``（此前无直接测试）：
-- RollbackHandler.on_error：本轮已分配 message_id 时 append 一条 [Error] assistant 消息
+- ErrorFinalizer.on_error：本轮已分配 message_id 时 append 一条 [Error] assistant 消息
   关闭本轮（不删数据——失败轮 assistant 本就未入库，库内天然干净）；未分配则跳过。
 - TraceEmitter：before_model_request / on_tool_result 写 TraceEntry 并 yield TraceEvent；
   PF-B 验证 source/task_id 从 ctx 传播到持久化 TraceEntry（subagent 'subagent'+'t1'，
   默认 'supervisor'+None）。注：TraceEvent 本身不载 source/task_id，传播落点在 TraceEntry。
 - TitlePostProcessor.on_stop：首轮 user/assistant 对生成标题，set_title_if_unset 未设则
   yield TitleUpdateEvent；已设 / generate 返 None 则 return None。
-
-RollbackHandler 注：当前实现是「append [Error] 关闭本轮」而非「truncate 截断」——CLAUDE.md
-提及的 RollbackLedger/truncate_after_snapshot 在多智能体分支已不存在（grep 全仓零命中），
-失败轮 assistant 落库在轮末核心侧，异常时库内本就干净，故 hook 只补一条关闭消息避免连续两条
-user 消息被 provider 拒。本文件据实测 append 行为，非 truncate。
 
 运行：.venv/bin/python -m kitty.tests.test_hooks
 """
@@ -24,7 +19,7 @@ import types
 from kitty.agents import AgentContext
 from kitty.domain.events import TitleUpdateEvent
 from kitty.domain.trace import TracePhase
-from kitty.hooks import RollbackHandler, TitlePostProcessor, TraceEmitter
+from kitty.hooks import ErrorFinalizer, TitlePostProcessor, TraceEmitter
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.session import SessionRepository
 from kitty.repositories.trace import TraceRepository
@@ -35,22 +30,22 @@ from kitty.tests._helpers import fresh_conn, seed_session
 
 def _setup():
     conn = fresh_conn()
-    seed_session(conn)                                # "s1" 供 rollback/trace（FK 父行）
+    seed_session(conn)                                # "s1" 供异常收尾/trace（FK 父行）
     msg_svc = MessageService(MessageRepository(conn), TraceRepository(conn))
     session_svc = SessionService(SessionRepository(conn))
     return msg_svc, session_svc
 
 
-# ---- RollbackHandler ----
+# ---- ErrorFinalizer ----
 
-def test_rollback_appends_error_message_when_message_id_allocated():
+def test_error_finalizer_appends_error_message_when_message_id_allocated():
     msg_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")
 
-    result = RollbackHandler(msg_svc).on_error(ctx)
+    result = ErrorFinalizer(msg_svc).on_error(ctx)
 
     assert result is None                             # on_error 不 yield 事件
     msgs = msg_svc.list_messages("s1")
@@ -62,14 +57,14 @@ def test_rollback_appends_error_message_when_message_id_allocated():
     assert err.tool_calls == []
 
 
-def test_rollback_skips_when_message_id_not_allocated():
+def test_error_finalizer_skips_when_message_id_not_allocated():
     msg_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = ""                          # 异常发生在分配 message_id 之前
     ctx.outcome.exception = RuntimeError("early")
 
-    result = RollbackHandler(msg_svc).on_error(ctx)
+    result = ErrorFinalizer(msg_svc).on_error(ctx)
 
     assert result is None
     assert len(msg_svc.list_messages("s1")) == 1      # 未追加任何消息

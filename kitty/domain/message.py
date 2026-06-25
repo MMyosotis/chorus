@@ -94,7 +94,11 @@ class MessageView(BaseModel):
 
 
 def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> list[dict]:
-    """构建发给 LLM 的消息序列：[system] + 历史消息（按 seq，各角色自行 to_provider_dict）。"""
+    """构建发给 LLM 的消息序列：[system] + 历史消息（各角色自行 to_provider_dict）。
+
+    不自行排序——按传入顺序透传；调用方须保证 messages 已按 seq 升序（由
+    MessageRepository.list_by_session 的 ORDER BY seq 保证）。
+    """
     result: list[dict] = [{"role": "system", "content": system_prompt}]
     result.extend(m.to_provider_dict() for m in messages)
     return result

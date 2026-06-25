@@ -76,6 +76,23 @@ def test_reasoning_only_closes_at_stream_end():
     assert result.text_parts == []
 
 
+def test_reasoning_segment_reopens_after_mid_stream_close():
+    # 中途 content 触发关闭后，再来一段 reasoning 应独立计时、独立收尾
+    # （回归锚定：close 后须 reset in_progress，否则第二段不重新计时且重复收尾）
+    stream = [
+        _chunk({"reasoning_content": "想一"}, None),
+        _chunk({"content": "答一"}, None),
+        _chunk({"reasoning_content": "想二"}, None),
+        _chunk({"content": "答二"}, "stop"),
+    ]
+    events, result = _run(stream)
+    done_count = sum(1 for e in events if isinstance(e, ReasoningDoneEvent))
+    assert done_count == 2  # 两段各自收尾
+    seg_texts = [seg.text for seg in result.thinking_segments]
+    assert seg_texts == ["想一", "想二"]
+    assert "".join(result.text_parts) == "答一答二"
+
+
 def test_tool_call_deltas_merged_by_index_no_event():
     tc1 = _Delta(index=0, id="c1", function=_Delta(name="gen", arguments='{"a":'))
     tc2 = _Delta(index=0, function=_Delta(arguments='1}'))

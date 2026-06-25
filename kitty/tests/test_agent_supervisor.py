@@ -12,7 +12,7 @@ from pathlib import Path
 from kitty.agents.supervisor import ChatModelEntry, SupervisorService
 from kitty.domain.skill import SkillLoader
 from kitty.domain.task import ACTIVE_STATUSES, Task
-from kitty.hooks import HookRegistry, RollbackHandler, TraceEmitter
+from kitty.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
 from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.session import SessionRepository
@@ -67,7 +67,7 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    hooks.register("Error", RollbackHandler(msg_svc).on_error)
+    hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
     entry = ChatModelEntry(client=fake_client, model_id="fake")
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, {"fake": entry},

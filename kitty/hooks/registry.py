@@ -25,7 +25,7 @@ EVENTS = (
     "PreToolUse",          # 单个工具执行前
     "PostToolUse",         # 单个工具执行后
     "Stop",                # 文本回复落库后、yield done 前（标题生成）
-    "Error",               # 异常上抛后、yield error 前（rollback 恢复）
+    "Error",               # 异常上抛后、yield error 前（异常收尾）
 )
 
 

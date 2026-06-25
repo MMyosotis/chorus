@@ -35,7 +35,7 @@ from kitty.agents.subagent import SubAgentService
 from kitty.agents.supervisor import ChatModelEntry, SupervisorService
 from kitty.domain.skill import SkillLoader
 from kitty.domain.task import ACTIVE_STATUSES, TaskStatus, can_schedule
-from kitty.hooks import HookRegistry, RollbackHandler, TraceEmitter
+from kitty.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
 from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.message import MessageRepository
 from kitty.repositories.session import SessionRepository
@@ -140,7 +140,7 @@ def _build_assembly():
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    hooks.register("Error", RollbackHandler(msg_svc).on_error)
+    hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     skill_loader.load()

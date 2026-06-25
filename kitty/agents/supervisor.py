@@ -4,7 +4,7 @@
 主流程单文件可读全（spec 5.1）：only_reply 走原生 content 流式；new_plan 解析
 create_plan 工具参数 → validate_steps → expand_pipeline → 事务批量落库 →
 yield TaskPlanCreatedEvent。create_plan tool_call 不落库（瞬时路由信号），
-friendly_reply 作为普通 assistant 气泡 append。横切（trace/title/rollback）挂扁平
+friendly_reply 作为普通 assistant 气泡 append。横切（trace/title/异常收尾）挂扁平
 hook 注册表，ctx 带 source=supervisor。
 """
 from __future__ import annotations

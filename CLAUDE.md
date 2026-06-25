@@ -72,11 +72,11 @@ cd web && npm run build                # 构建生产版本
 3. 调 OpenAI 流式 API（消费 `ctx.turn.provider_messages`），模块函数 `consume_stream()` yield reasoning/token 事件、累积 text_parts / tool_calls / thinking
 4. 纯文本回复（`finish_reason != "tool_calls"`）→ `on_assistant_text_response`（Trace 写 model_response；TextResponse append assistant 消息；Title 首轮生成标题）→ yield done，结束
 5. 工具调用 → `on_tool_calls_detected`（Trace 写 model_response；ToolCall append assistant(tool_calls)、逐个执行工具、append tool 消息、yield tool_call/tool_result）→ 继续下一轮
-6. 异常 → `on_loop_error`（Rollback 删除本轮新增 messages + traces，yield error）
+6. 异常 → `except` 记 `ctx.outcome.exception` → `trigger("Error")`（`ErrorFinalizer` append 一条 `[Error]` assistant 消息关闭本轮——失败轮 assistant 本就未入库，库内天然干净，故不删数据只补关闭消息）→ yield `ErrorEvent`
 
 关键设计：
-- **`AgentContext` 按生命周期细分**：回合级固定输入（session_id 等）留顶层；单轮累积状态收进 `TurnState`（每轮 `reset()`）；异常回滚账本 `RollbackLedger`；退出结果 `LoopOutcome`。hook 经注入的 `SessionService` 访问数据，不持 session/store 引用。
-- 路由用同步 `def`，FastAPI 线程池执行；消息逐条 append 入库（产生即入库，非全量重写 save）；异常时 `truncate_after_snapshot` 回滚本轮新增。
+- **`AgentContext` 按生命周期细分**：回合级固定输入（session_id 等）留顶层；单轮累积状态收进 `TurnState`（每轮 `reset()`）；退出结果 `LoopOutcome`（载异常）。hook 经注入的 `SessionService` 访问数据，不持 session/store 引用。
+- 路由用同步 `def`，FastAPI 线程池执行；消息逐条 append 入库（产生即入库，非全量重写 save）；异常时失败轮 assistant 本就未入库，`ErrorFinalizer` 仅 append 一条 `[Error]` 消息关闭本轮（避免下次连续两条 user 被 provider 拒），不截断历史。
 - **会话级锁**：`SessionService.get_lock(session_id)` 返回 per-session `threading.Lock`，`/api/sessions/{id}/chat` 用 `lock.acquire(blocking=False)` 探测，被占用返回 409；锁在响应生成器 `finally` 释放。不同会话锁独立。
 - **每个 OpenAI 轮次 = 一条 assistant 历史消息 = 一个前端气泡**。每轮 `message_start` 事件通知前端建气泡；该轮 thinking/tools 元数据由 `TraceRepository.aggregate_message_trace(message_id)` 重建。
 - `SessionService.build_provider_messages()` 是传给 LLM 的消息序列**唯一**构建点：`[system] + 按 seq 的 user/assistant/tool 历史消息`。
@@ -202,9 +202,9 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为需要 POS
 ### Agent Loop 编排边界
 
 - **主流程单文件可读全**：agent loop 的主流程（append user → build messages → call model → persist response → execute tools → finalize）**必须在 `ChatService.stream()` 一个文件内顺序可读**，核心业务提交（落库、构建 prompt、执行工具、SSE 核心事件 yield）在 loop 内，不进 hook。
-- **hook 是挂在稳定 loop 上的扩展点，不是主业务承载点**（遵循「挂在循环上，不写进循环里」）：loop 自己做主流程真身，hook 只做"前后织入 + 策略判断"。hook 收缩为扩展能力——观测（trace/日志/埋点）、收尾（title/summary）、异常恢复（rollback）；策略（权限拦截/上下文补充）、增强（输入注入/输出检查）为文档化的未来扩展点，**现不承载**。
+- **hook 是挂在稳定 loop 上的扩展点，不是主业务承载点**（遵循「挂在循环上，不写进循环里」）：loop 自己做主流程真身，hook 只做"前后织入 + 策略判断"。hook 收缩为扩展能力——观测（trace/日志/埋点）、收尾（title/summary）、异常收尾（`ErrorFinalizer`）；策略（权限拦截/上下文补充）、增强（输入注入/输出检查）为文档化的未来扩展点，**现不承载**。
 - **机制是 CC 式扁平注册表**：`event → list[callable]` 字典 + `trigger(event, ctx, *args) -> Iterator[SseEvent]`，loop 只调 `trigger`。**不引入** `Hook` ABC + `HookBundle` 命名字段 + `HookManager` 转发方法这类 1:1 退化的三层胶水。当前 `trigger` 观测-only（只 yield 事件，fail-open 吞异常记日志）；引入策略/拦截类 hook 时，`trigger` 加 verdict 返回 + loop 在对应事件加 `if blocked` 分支（演进路径，现不写死代码分支）。
-- **异常分级**：**核心步骤 fail-closed**（append user / 构建 prompt / 执行工具 / 落 assistant 消息——失败即上抛到外层 except，yield ErrorEvent 回滚本轮，绝不静默继续，否则产生"消息没落库但循环继续"的静默数据不一致）；**扩展 hook fail-open**（经 `trigger`，失败只记日志，不阻断主流程）。分级由"是否经 trigger"自然落地，无需显式配置。
+- **异常分级**：**核心步骤 fail-closed**（append user / 构建 prompt / 执行工具 / 落 assistant 消息——失败即上抛到外层 except，绝不静默继续，否则产生"消息没落库但循环继续"的静默数据不一致）；**扩展 hook fail-open**（经 `trigger`，失败只记日志，不阻断主流程）。分级由"是否经 trigger"自然落地，无需显式配置。异常时 `ErrorFinalizer` 经 `trigger("Error")` append 一条 `[Error]` 消息关闭本轮（失败轮 assistant 本就未入库，库内干净，不截断历史），loop 再 yield `ErrorEvent`。
 - **顺序契约可测**：agent loop 重度依赖调用顺序与 `ctx.turn` 字段的读写时机，这类隐式契约**必须有用例锚定**（断言"给定输入 → 事件序列 + 入库消息序列"），改动主流程前先有安全网。
 
 ### Domain 内聚判据（红线）
