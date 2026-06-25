@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { getTestMode, setTestMode } from '../api.js'
 
 const props = defineProps({
@@ -10,6 +10,7 @@ const props = defineProps({
 const emit = defineEmits(['update:open'])
 
 const tab = ref('trace') // 'settings' | 'trace'
+const traceView = ref('source') // 'source' | 'iteration'
 
 function close() {
   emit('update:open', false)
@@ -85,6 +86,58 @@ function fmtMs(ms) {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}s`
 }
+
+// 按来源分组树：supervisor / 各 task(task_id) / scheduler（spec 6.8）
+const tracesBySource = computed(() => {
+  const all = traces.value
+  const groups = new Map()
+  for (const t of all) {
+    let key, label
+    if (t.source === 'supervisor') {
+      key = 'supervisor'
+      label = 'supervisor'
+    } else if (t.source === 'scheduler') {
+      key = 'scheduler'
+      label = 'scheduler'
+    } else {
+      key = 'task:' + (t.task_id || '?')
+      label = (t.source || 'subagent') + ' · ' + (t.task_id || '?')
+    }
+    if (!groups.has(key)) groups.set(key, { key, label, items: [] })
+    groups.get(key).items.push(t)
+  }
+  return [...groups.values()]
+})
+
+// 打开时轮询拉 subagent/scheduler trace（不连 SSE，靠轮询补）；关闭即停
+const CONSOLE_POLL = 1500
+let consoleTimer = null
+
+function startConsolePoll() {
+  if (consoleTimer || !props.activeId) return
+  props.traceStore.pollFromServer(props.activeId)
+  consoleTimer = setInterval(() => {
+    if (props.activeId) props.traceStore.pollFromServer(props.activeId)
+  }, CONSOLE_POLL)
+}
+
+function stopConsolePoll() {
+  if (consoleTimer) {
+    clearInterval(consoleTimer)
+    consoleTimer = null
+  }
+}
+
+watch(() => props.open, (o) => {
+  if (o) startConsolePoll()
+  else stopConsolePoll()
+})
+watch(() => props.activeId, (sid) => {
+  if (!props.open || !sid) return
+  props.traceStore.clearTrace(sid)
+  props.traceStore.loadFromServer(sid)
+})
+onBeforeUnmount(stopConsolePoll)
 
 function clearCurrentTrace() {
   if (!props.activeId) return
@@ -183,12 +236,31 @@ function renderMessageContent(m) {
 
       <section v-else class="console-body trace-body">
         <div class="trace-toolbar">
-          <span class="hint">按时间顺序展示当前会话的 LLM 请求/响应、工具调用</span>
+          <span class="hint">当前会话的 LLM 请求/响应、工具调用 trace</span>
+          <div class="view-toggle">
+            <button :class="{ active: traceView === 'source' }" @click="traceView = 'source'">按来源</button>
+            <button :class="{ active: traceView === 'iteration' }" @click="traceView = 'iteration'">按轮次</button>
+          </div>
           <button class="text-btn" @click="clearCurrentTrace" :disabled="!traces.length">清空</button>
         </div>
         <div v-if="!traces.length" class="empty-hint">暂无 trace。发条消息试试。</div>
 
-        <details v-for="[iter, items, totalMs] in tracesByIteration" :key="iter" class="iter-group" open>
+        <!-- 按来源分组树（supervisor / 各 task / scheduler） -->
+        <details v-if="traceView === 'source'" v-for="g in tracesBySource" :key="g.key" class="iter-group src-group" open>
+          <summary>
+            <span class="iter-title">{{ g.label }}</span>
+            <span class="iter-meta"><span class="iter-count">{{ g.items.length }} 事件</span></span>
+          </summary>
+          <div v-for="(it, idx) in g.items" :key="idx" class="trace-item" :class="`phase-${it.phase}`">
+            <div class="trace-head">
+              <span class="phase-tag">{{ it.phase }}</span>
+              <span class="ts">{{ fmtTs(it.ts) }}</span>
+            </div>
+            <pre v-if="it.payload" class="text-block">{{ shortJson(it.payload) }}</pre>
+          </div>
+        </details>
+
+        <details v-if="traceView === 'iteration'" v-for="[iter, items, totalMs] in tracesByIteration" :key="iter" class="iter-group" open>
           <summary>
             <span class="iter-title">Iteration #{{ iter }}</span>
             <span class="iter-meta">
@@ -511,6 +583,31 @@ input:disabled + .slider {
 .hint {
   color: #94a3b8;
   font-size: 12px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+.view-toggle button {
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.view-toggle button.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+.src-group > .trace-item .text-block {
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .empty-hint {

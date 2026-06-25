@@ -45,5 +45,25 @@ export function useTraceStore() {
         tracesBySession[sessionId] = tracesBySession[sessionId] || []
       }
     },
+
+    // ConsolePanel 打开时轮询：重复拉取，按 (ts+phase+message_id+task_id) 去重合并
+    async pollFromServer(sessionId) {
+      if (!sessionId) return
+      try {
+        const list = await fetchTraces(sessionId)
+        const cur = tracesBySession[sessionId] || (tracesBySession[sessionId] = [])
+        const seen = new Set(cur.map((t) => `${t.ts}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`))
+        for (const t of list) {
+          const key = `${t.ts}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`
+          if (!seen.has(key)) {
+            cur.push(t)
+            seen.add(key)
+          }
+        }
+        loadedSessions.add(sessionId)
+      } catch {
+        // 忽略，下轮重试
+      }
+    },
   }
 }
