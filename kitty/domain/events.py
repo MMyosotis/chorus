@@ -77,10 +77,9 @@ class ErrorEvent(_EventBase):
     content: str
 
 
-class TaskPlanCreatedEvent(_EventBase):
-    type: Literal["task_plan_created"] = "task_plan_created"
-    pipeline_id: str
-    tasks: list[dict]  # [{id, agent_type, seq, status}]
+class BusyEvent(_EventBase):
+    type: Literal["busy"] = "busy"
+    content: str
 
 
 SseEvent = Annotated[
@@ -93,8 +92,8 @@ SseEvent = Annotated[
         ToolResultEvent,
         TraceEvent,
         TitleUpdateEvent,
-        TaskPlanCreatedEvent,
         DoneEvent,
+        BusyEvent,
         ErrorEvent,
     ],
     Field(discriminator="type"),

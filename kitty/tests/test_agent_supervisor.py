@@ -20,6 +20,8 @@ from kitty.repositories.task import TaskRepository
 from kitty.repositories.trace import TraceRepository
 from kitty.services.message import MessageService
 from kitty.services.session import SessionService
+from kitty.tools import ToolContext, ToolRegistry
+from kitty.tools.builtin import CreatePlanTool, LoadSkillTool
 
 
 class _Delta(types.SimpleNamespace):
@@ -68,10 +70,15 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
+    tool_registry = ToolRegistry([CreatePlanTool(), LoadSkillTool()])
+
+    def tool_ctx_factory(session_id, image_model=None):
+        return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
+
     entry = ChatModelEntry(client=fake_client, model_id="fake")
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, {"fake": entry},
-        "fake", 1024, task_repo, conn,
+        "fake", 1024, task_repo, conn, tool_registry, tool_ctx_factory,
     )
 
 
@@ -105,7 +112,7 @@ def test_only_reply():
 
 
 def test_new_plan():
-    """create_plan tool_call → 校验通过 → 落库 + TaskPlanCreatedEvent + friendly_reply 气泡。"""
+    """create_plan tool_call → dispatch Terminal → 建图落库 + done；assistant(tool_calls)+tool 成对落库。"""
     conn, session_svc, msg_svc, task_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
@@ -116,25 +123,62 @@ def test_new_plan():
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我写一篇夏日博文"))
     types_seq = [e.type for e in events]
-    assert "task_plan_created" in types_seq
+    assert "task_plan_created" not in types_seq   # 已删
     assert types_seq[-1] == "done"
     # tasks 落库
     assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 2
-    # create_plan tool_call 不落库（只有 user + friendly_reply assistant 气泡）
+    # 历史如实：user + assistant(friendly_reply, tool_calls=[create_plan]) + tool(result)
     msgs = msg_svc.list_messages(s.id)
-    assert [m.role for m in msgs] == ["user", "assistant"]
+    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
     assert msgs[1].content == "好的，我来帮你创作"
+    assert len(msgs[1].tool_calls) == 1
+    assert msgs[1].tool_calls[0].name == "create_plan"
+    assert msgs[2].tool_call_id == "c1"
+    assert msgs[2].name == "create_plan"
 
 
-def test_new_plan_blocked_by_active():
-    """已有 active task → new_plan 被拒 → 降级 only_reply。"""
+def test_reply_outcome_pairs_and_continues():
+    """Reply 型 tool_call 成对落库 + loop 继续到第二轮文本回复 + done。
+
+    锚定 OpenAI tool_calls/tool 配对约束：Reply 分支须先 append assistant(tool_calls=[call])
+    再 append tool(result)，否则下一轮 build_provider_messages 回放孤儿 tool 消息。
+    用真实 LoadSkillTool 加载不存在的技能名 → Reply("Error: skill '...' not found...")，
+    下一轮模型回文本。终态历史须为 [user, assistant(tool_calls), tool, assistant(文本)]。
+    """
+    conn, session_svc, msg_svc, task_repo = _setup()
+    # 第一轮：load_skill("ghost") → Reply(未命中技能错误串)
+    tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
+        index=0, id="c1", function=types.SimpleNamespace(
+            name="load_skill", arguments=json.dumps({"name": "ghost"})))]}, "tool_calls")])
+    # 第二轮：纯文本回复（loop 继续）
+    text_stream = FakeStream([({"content": "已为你查到"}, "stop")])
+    client = FakeClient([tool_stream, text_stream])
+    sup = _build_supervisor(conn, session_svc, msg_svc, task_repo, client)
+    s = session_svc.create("test")
+    events = list(sup.stream(s.id, "帮我加载 ghost 技能"))
+    types_seq = [e.type for e in events]
+    assert types_seq[-1] == "done"
+    # 历史如实：user + assistant(tool_calls=[load_skill]) + tool(result) + assistant(文本)
+    msgs = msg_svc.list_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
+    assert len(msgs[1].tool_calls) == 1
+    assert msgs[1].tool_calls[0].name == "load_skill"
+    assert msgs[2].role == "tool"
+    assert msgs[2].tool_call_id == "c1"
+    assert msgs[2].name == "load_skill"
+    assert msgs[3].role == "assistant"
+    assert (msgs[3].tool_calls or []) == []
+    assert msgs[3].content == "已为你查到"
+
+
+def test_new_plan_blocked_by_active_task():
+    """会话有 active task → stream 入口 yield BusyEvent，user 消息不入库。"""
     conn, session_svc, msg_svc, task_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
-    text_stream = FakeStream([({"content": "你已有进行中的任务"}, "stop")])
-    client = FakeClient([tool_stream, text_stream])  # 先 tool_call(被拒) 再降级文本
+    client = FakeClient([tool_stream])
     sup = _build_supervisor(conn, session_svc, msg_svc, task_repo, client)
     s = session_svc.create("test")
     task_repo.insert(Task(id="active1", session_id=s.id, pipeline_id="p1", agent_type="idea",
@@ -142,8 +186,11 @@ def test_new_plan_blocked_by_active():
                           created_at=0.0, updated_at=0.0))
     events = list(sup.stream(s.id, "再帮我写一篇"))
     types_seq = [e.type for e in events]
-    assert "task_plan_created" not in types_seq  # 被拒
-    assert types_seq[-1] == "done"
+    assert types_seq == ["busy"]              # 只 yield BusyEvent
+    assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 1  # 未新增
+    # user 消息不入库
+    msgs = msg_svc.list_messages(s.id)
+    assert msgs == []
 
 
 def main():

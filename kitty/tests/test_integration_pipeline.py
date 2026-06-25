@@ -15,7 +15,7 @@ task-9 脚本 3 处 bug（本文件已修正）：
    ``find_by_session_statuses`` / ``find_pending_with_deps``（已对照 repositories/task.py 核实）。
 
 4 条链路（任一断裂即测试失败）：
-1. ``supervisor.stream`` 产出 ``task_plan_created`` + 落库 2 个 active task（idea + finalize）。
+1. ``supervisor.stream`` 产出 ``done``（create_plan 经 dispatch Terminal 建图）+ 落库 2 个 active task（idea + finalize）。
 2. CAS idea pending→running 后 ``subagent.run`` → idea awaiting_confirm + 写 artifacts。
 3. ``TaskService.confirm(idea, selected=0)`` → idea finished。
 4. ``scheduler._tick`` 派发 finalize（idea 已 finished 解除 dep 阻塞）→ finalize finished（产出 PostCard）。
@@ -47,6 +47,7 @@ from kitty.services.message import MessageService
 from kitty.services.session import SessionService
 from kitty.services.task import TaskService
 from kitty.tools import ToolContext, ToolRegistry
+from kitty.tools.builtin import CreatePlanTool
 
 
 # —— FakeClient / FakeStream（与 test_agent_supervisor / test_agent_subagent 同模式）——
@@ -144,10 +145,10 @@ def _build_assembly():
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     skill_loader.load()
-    tool_registry = ToolRegistry([])
+    tool_registry = ToolRegistry([CreatePlanTool()])
 
     def tool_ctx_factory(session_id, image_model=None):
-        return ToolContext(skill_loader=None, session_id=session_id, image_model=image_model)
+        return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
 
     # supervisor：一次 create_plan tool_call 流
     sup_client = FakeClient([FakeStream([
@@ -159,7 +160,7 @@ def _build_assembly():
     sup_entry = ChatModelEntry(client=sup_client, model_id="fake")
     supervisor = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, {"fake": sup_entry},
-        "fake", 1024, task_repo, conn,
+        "fake", 1024, task_repo, conn, tool_registry, tool_ctx_factory,
     )
 
     # subagent：idea + finalize 两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
@@ -193,8 +194,9 @@ def test_end_to_end_pipeline():
 
     # —— 链路 1：supervisor 建图 ——
     events = list(sup.stream(sid, "帮我写一篇夏日博文"))
-    assert any(e.type == "task_plan_created" for e in events), \
-        f"缺 task_plan_created，事件序列: {[e.type for e in events]}"
+    assert any(e.type == "done" for e in events), \
+        f"缺 done，事件序列: {[e.type for e in events]}"
+    assert "task_plan_created" not in [e.type for e in events]
     assert task_repo.count_by_session_statuses(sid, ACTIVE_STATUSES) == 2
 
     # 修正 bug 3：用真实存在的 find_by_session_statuses（非 list_by_session）

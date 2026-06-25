@@ -1,9 +1,9 @@
 # kitty/tests/test_domain_events.py
-"""SSE 事件 sealed 联合断言：type 判别 / 序列化往返 / 必填校验 / TaskPlanCreated 契约。
+"""SSE 事件 sealed 联合断言：type 判别 / 序列化往返 / 必填校验 / BusyEvent 契约。
 
 覆盖 ``kitty/domain/events.py``：11 种 SSE 事件各持有唯一 type 字面量、frozen + extra=forbid、
 model_dump_json 经 SseEvent discriminated union 往返、缺必填抛 ValidationError。
-TaskPlanCreatedEvent 携带 pipeline_id + tasks（[{id, agent_type, seq, status}]）。
+BusyEvent 携带 content（业务忙非错误，supervisor 创作准入拒绝时回传）。
 
 运行：``.venv/bin/python -m kitty.tests.test_domain_events``
 """
@@ -13,13 +13,13 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from kitty.domain.events import (
+    BusyEvent,
     DoneEvent,
     ErrorEvent,
     MessageStartEvent,
     ReasoningDoneEvent,
     ReasoningEvent,
     SseEvent,
-    TaskPlanCreatedEvent,
     TitleUpdateEvent,
     TokenEvent,
     ToolCallEvent,
@@ -41,7 +41,7 @@ _FIXTURES = [
     (TitleUpdateEvent, {"id": "s1", "title": "夏日晚风"}, "title_update"),
     (DoneEvent, {}, "done"),
     (ErrorEvent, {"content": "炸了"}, "error"),
-    (TaskPlanCreatedEvent, {"pipeline_id": "p1", "tasks": [{"id": "t1", "agent_type": "idea"}]}, "task_plan_created"),
+    (BusyEvent, {"content": "创作中"}, "busy"),
 ]
 
 
@@ -82,13 +82,10 @@ def test_frozen_and_extra_forbidden():
         TokenEvent(content="hi", rogue="no")  # extra forbidden
 
 
-def test_task_plan_created_carries_pipeline_and_tasks():
-    tasks = [{"id": "t1", "agent_type": "idea", "seq": 1, "status": "pending"}]
-    ev = TaskPlanCreatedEvent(pipeline_id="p1", tasks=tasks)
-    assert ev.type == "task_plan_created"
-    assert ev.pipeline_id == "p1"
-    assert ev.tasks == tasks
-    assert ev.tasks[0]["agent_type"] == "idea"
+def test_busy_event_carries_content():
+    ev = BusyEvent(content="该会话有创作任务进行中")
+    assert ev.type == "busy"
+    assert ev.content == "该会话有创作任务进行中"
 
 
 def test_trace_event_phase_serializes_as_enum_value():

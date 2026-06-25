@@ -122,6 +122,7 @@ def create_app() -> FastAPI:
     supervisor_service = SupervisorService(
         session_service, message_service, skill_loader, hooks,
         chat_models, DEFAULT_CHAT_MODEL_ID, MAX_TOKENS, task_repo, conn,
+        tool_registry, tool_ctx_factory,
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo, task_steps_repo,
