@@ -1,0 +1,132 @@
+# kitty/services/task.py
+"""TaskService：HIL（confirm/retry/cancel）编排 + get_graph 任务图视图。
+
+编排层：取数据→调 domain→存数据。CAS 合法性由 domain LEGAL_TRANSITIONS 保证（service
+结构性只做一条合法翻转）；repo cas_update 仅原子原语。confirm/retry 先查存在性再 CAS，
+rowcount=0 抛 ConflictError（route 转 409）。get_graph 选 active pipeline，无 active
+选最近 finished（cancelled 不算）。
+"""
+from __future__ import annotations
+
+from typing import Any, Optional
+
+from kitty.domain.task import (
+    ACTIVE_STATUSES,
+    TERMINAL_STATUSES,
+    TaskStatus,
+    select_display_pipeline,
+)
+from kitty.repositories.task import TaskRepository
+from kitty.repositories.task_artifacts import TaskArtifactsRepository
+from kitty.repositories.task_steps import TaskStepsRepository
+from kitty.services.session import SessionService
+
+
+class ConflictError(Exception):
+    """CAS 冲突（状态已漂移）或前置条件不满足（如 idea 缺 selected）。"""
+
+
+class TaskService:
+    def __init__(
+        self,
+        task_repo: TaskRepository,
+        task_artifacts_repo: TaskArtifactsRepository,
+        task_steps_repo: TaskStepsRepository,
+        session_service: SessionService,
+    ):
+        self._task_repo = task_repo
+        self._artifacts_repo = task_artifacts_repo
+        self._steps_repo = task_steps_repo
+        self._session = session_service
+
+    def confirm(self, task_id: str, selected: Optional[int]) -> dict:
+        """确认推进：CAS awaiting_confirm→finished。idea 校验 selected 并写 artifacts.selected。"""
+        task = self._task_repo.get(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        if task.status != TaskStatus.AWAITING_CONFIRM.value:
+            raise ConflictError(f"task 状态 {task.status} 不可确认")
+        if task.agent_type == "idea":
+            if selected is None:
+                raise ConflictError("idea 步骤需提供 selected 候选索引")
+            self._set_selected(task_id, selected)
+        ok = self._task_repo.cas_update(
+            task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value,
+        )
+        if not ok:
+            raise ConflictError("CAS 失败（状态已漂移）")
+        return {"id": task_id, "status": TaskStatus.FINISHED.value}
+
+    def retry(self, task_id: str, feedback: dict) -> dict:
+        """带反馈重跑本步：写 feedback + CAS awaiting_confirm→pending（或 failed→pending）。"""
+        task = self._task_repo.get(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        from_status = task.status
+        if from_status not in (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FAILED.value):
+            raise ConflictError(f"task 状态 {from_status} 不可重跑")
+        ok = self._task_repo.cas_update(
+            task_id, from_status, TaskStatus.PENDING.value, feedback=feedback,
+        )
+        if not ok:
+            raise ConflictError("CAS 失败（状态已漂移）")
+        return {"id": task_id, "status": TaskStatus.PENDING.value}
+
+    def cancel_pipeline(self, session_id: str) -> dict:
+        """放弃整条 pipeline：找该 session active pipeline_id，事务批量 CAS 非终态→cancelled。"""
+        pipeline_id = self._active_pipeline_id(session_id)
+        if pipeline_id is None:
+            raise ConflictError("该会话无进行中的创作任务")
+        n = self._task_repo.cancel_pipeline(pipeline_id)
+        return {"pipeline_id": pipeline_id, "cancelled": n}
+
+    def get_graph(self, session_id: str) -> dict:
+        """任务图视图：active pipeline 优先，无 active 选最近 finished。"""
+        active_tasks = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
+        if active_tasks:
+            return self._graph_dict(active_tasks[0].pipeline_id, active_tasks, True)
+        # 无 active：找该 session 所有终态 task，按 pipeline 分组取最近 finished
+        terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
+        if not terminal:
+            return {"pipeline_id": None, "active": False, "tasks": []}
+        # 选最近 updated 的 pipeline
+        latest = max(terminal, key=lambda t: t.updated_at)
+        same_pipeline = [t for t in terminal if t.pipeline_id == latest.pipeline_id]
+        display = select_display_pipeline([], same_pipeline)  # active 空，返 finished 子集
+        return self._graph_dict(latest.pipeline_id, display, False)
+
+    def get_steps(self, task_id: str) -> list[dict]:
+        """该 task 的 ReAct 过程（按 iteration 升序），供角色详情页。"""
+        if self._task_repo.get(task_id) is None:
+            raise KeyError(task_id)
+        return [s.model_dump() for s in self._steps_repo.list_by_task(task_id)]
+
+    def _active_pipeline_id(self, session_id: str) -> Optional[str]:
+        active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
+        return active[0].pipeline_id if active else None
+
+    def _set_selected(self, task_id: str, selected: int) -> None:
+        art = self._artifacts_repo.load(task_id)
+        artifacts = art.artifacts if art else {}
+        artifacts = dict(artifacts)
+        artifacts["selected"] = selected
+        self._artifacts_repo.upsert(
+            task_id, step_output=artifacts, artifacts=artifacts,
+            narrative=art.narrative if art else None,
+        )
+
+    def _graph_dict(self, pipeline_id: str, tasks: list, active: bool) -> dict:
+        arts = self._artifacts_repo.load_many([t.id for t in tasks])
+        return {
+            "pipeline_id": pipeline_id,
+            "active": active,
+            "tasks": [
+                {
+                    "id": t.id, "agent_type": t.agent_type, "seq": t.seq, "status": t.status,
+                    "artifacts": (arts[t.id].artifacts if t.id in arts else None),
+                    "narrative": (arts[t.id].narrative if t.id in arts else None),
+                    "error": t.error,
+                }
+                for t in tasks
+            ],
+        }
