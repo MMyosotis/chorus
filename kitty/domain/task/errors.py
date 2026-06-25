@@ -1,7 +1,7 @@
 # kitty/domain/task/errors.py
 """任务图领域异常：steps 校验失败 / 产物解析失败共用。
 
-带 correction 字段，供 supervisor 据此喂回模型重试 1 次。
+带 correction 字段，喂回 ReAct loop 供模型自纠（撞步数上限才判死）。
 """
 from __future__ import annotations
 

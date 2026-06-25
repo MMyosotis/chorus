@@ -22,6 +22,7 @@ from kitty.domain.stream import StreamResult, drain_stream
 from kitty.domain.task import (
     AGENT_PROFILES,
     TaskStatus,
+    ValidationError,
     parse_output,
     render_invoke_message,
 )
@@ -117,8 +118,16 @@ class SubAgentService:
                 tool_results or None, result.finish_reason,
             )
             if not result.tool_calls:
-                self._finalize(task, result, profile)
-                return
+                try:
+                    self._finalize(task, result, profile)
+                    return
+                except ValidationError as e:
+                    # 把纠错提示喂回模型，继续 ReAct 自纠；撞 _MAX_STEPS 才 FAILED
+                    history.append({"role": "assistant",
+                                    "content": "".join(result.text_parts) or None})
+                    history.append({"role": "user", "content": e.correction})
+                    iteration += 1
+                    continue
             history.append(_assistant_view(result))
             history.extend(_tool_msg_views(tool_results))
             iteration += 1
@@ -179,8 +188,8 @@ class SubAgentService:
 
         CAS 先于产物落库（闭 I-2）：事务内先 CAS，持有（status 未漂移）才 upsert 产物；
         漂移（被 cancel_pipeline/zombie 回收）则不 upsert、不 append done 气泡，避免孤儿
-        产物/气泡。parse_output 在 CAS 前——解析失败上抛 run() except 走 running→failed，
-        不消耗 CAS。done 气泡事务外尽力写（失败不回滚已落 task/产物）。
+        产物/气泡。parse_output 抛 ValidationError 不在此处理——上抛到 _run_loop 由其喂回
+        correction 供模型自纠。done 气泡事务外尽力写（失败不回滚已落 task/产物）。
         """
         content = "".join(result.text_parts)
         artifacts, narrative = parse_output(content, task.agent_type)

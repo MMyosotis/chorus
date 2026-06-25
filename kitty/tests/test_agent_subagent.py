@@ -188,15 +188,49 @@ def test_subagent_react_with_tool():
     assert steps[1].finish_reason == "stop"
 
 
-def test_subagent_failed_on_bad_output():
-    """产物解析失败（缺段）→ CAS running→failed。"""
+def test_subagent_failed_on_persistent_bad_output():
+    """连续产物解析失败撞 _MAX_STEPS → CAS running→failed（不再首次即死）。
+
+    每轮坏产出 → correction 喂回 → 模型仍坏 → 撞步数上限才判死。
+    """
+    from kitty.agents.subagent import _MAX_STEPS
     conn, msg_svc, task_repo, art_repo, steps_repo = _setup()
     _mk_task(task_repo, "idea", "running")
-    client = FakeClient([FakeStream([({"content": "乱七八糟没有段"}, "stop")])])
+    bad = "乱七八糟没有段"
+    # 每轮都坏：_MAX_STEPS 轮后仍未产出 → failed
+    streams = [FakeStream([({"content": bad}, "stop")]) for _ in range(_MAX_STEPS + 1)]
+    client = FakeClient(streams)
     sub = _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED.value
-    assert task_repo.get("t1").error  # 有错误信息
+    assert task_repo.get("t1").error
+    # 撞 _MAX_STEPS 才判死：每轮（含自纠轮）都留 step，共 _MAX_STEPS 步——
+    # 旧代码首次即死只会留下 1 步，此断言锚定"运行到耗尽"而非"首轮即死"。
+    assert len(steps_repo.list_by_task("t1")) == _MAX_STEPS
+
+
+def test_subagent_self_corrects_on_bad_output():
+    """首次解析错 → correction 喂回 → 模型重出正确产物 → awaiting_confirm。"""
+    conn, msg_svc, task_repo, art_repo, steps_repo = _setup()
+    _mk_task(task_repo, "idea", "running")
+    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
+    narrative = {"busy_lines": ["x"], "awaiting_line": "y", "done_line": "定了"}
+    good = (
+        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
+        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
+    )
+    # 第 1 轮坏产出，第 2 轮正确产出
+    client = FakeClient([
+        FakeStream([({"content": "乱七八糟没有段"}, "stop")]),
+        FakeStream([({"content": good}, "stop")]),
+    ])
+    sub = _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
+    art = art_repo.load("t1")
+    assert art.artifacts["candidates"][0]["title"] == "t"
+    # 两轮 step（第 1 轮自纠 + 第 2 轮成功）
+    assert len(steps_repo.list_by_task("t1")) == 2
 
 
 def _idea_content(done_line="DONE_MARKER"):
