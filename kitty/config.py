@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # 对话模型配置表：每个模型一条，含完整连接信息。
-#   id          —— 展示名 + 存储键 + 注册表键（settings.db 存这个；改它已存设置会回退默认）
+#   id          —— 展示名 + 存储键 + 注册表键（settings 表存这个；改它已存设置会回退默认）
 #   base_url    —— 该 provider 的 OpenAI 兼容 endpoint
 #   api_key_env —— 从哪个环境变量取 API key（key 值写在 .env，不进配置明文）
 #   model_id    —— 传给 OpenAI API 的真实 model 名（常与 id 不同）
@@ -40,7 +40,7 @@ MAX_TOKENS = 2048
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # 生图模型配置表：与 CHAT_MODELS 同构，每个模型一条独立连接信息。
-#   id          —— 展示名 + 存储键 + 注册表键（settings.db 存这个；改它已存设置会回退默认）
+#   id          —— 展示名 + 存储键 + 注册表键（settings 表存这个；改它已存设置会回退默认）
 #   base_url    —— 该 provider 的图像生成 endpoint
 #   api_key_env —— 从哪个环境变量取 API key（key 值写在 .env，不进配置明文）
 #   model_id    —— 传给图像 API 的真实 model 名

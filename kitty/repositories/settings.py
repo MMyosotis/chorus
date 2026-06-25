@@ -1,4 +1,4 @@
-"""settings 表的唯一 SQL 入口（独立 db 文件，与会话数据解耦）。
+"""settings 表的唯一 SQL 入口（与 sessions/messages/traces/tasks 同库）。
 
 存储进程级 KV 配置（如 image_test_mode）。value 以 JSON 编码。
 """

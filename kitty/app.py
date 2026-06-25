@@ -61,11 +61,8 @@ from kitty.tools.clients.baidu_search import BaiduSearchClient
 def create_app() -> FastAPI:
     skill_loader = SkillLoader()
 
-    settings_service = SettingsService(
-        SettingsRepository(ConnectionFactory(DATA_DIR / "settings.db"))
-    )
-
     conn = ConnectionFactory(DATA_DIR / "little-kitty.db")
+    settings_service = SettingsService(SettingsRepository(conn))
     session_repo = SessionRepository(conn)
     msg_repo = MessageRepository(conn)
     trace_repo = TraceRepository(conn)

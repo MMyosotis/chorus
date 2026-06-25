@@ -38,8 +38,7 @@ cd web && npm run build                # 构建生产版本
 ## 数据存放位置
 
 - 运行时数据根目录 `DATA_DIR = 项目根 / data/`（在 `kitty/config.py` 定义，gitignored，启动自动创建）
-- `data/little-kitty.db` — `sessions` + `messages` + `traces` 三张表（会话库）
-- `data/settings.db` — `settings` 表（进程级 KV 配置，独立库，与会话库解耦）
+- `data/little-kitty.db` — 单一 SQLite 库，含 `sessions` + `messages` + `traces` + `tasks` + `task_artifacts` + `task_steps` + `settings` 全部表（会话库 + 进程级 KV 配置同库，项目规模不大不分库）
 - `kitty/resources/skills/` — 技能 markdown（随源码版本管理，非运行时数据）
 
 ## Architecture
