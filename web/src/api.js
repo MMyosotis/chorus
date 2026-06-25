@@ -164,3 +164,67 @@ export async function setOptions(patch) {
   return res.json()
 }
 
+// —— 任务图 / HIL（多智能体创作）——
+const TASKS_BASE = '/api/tasks'
+
+export async function getTaskGraph(sessionId) {
+  const res = await fetch(`${TASKS_BASE}?session_id=${encodeURIComponent(sessionId)}`)
+  if (!res.ok) throw new Error(`getTaskGraph failed: ${res.status}`)
+  return res.json()
+}
+
+export async function getTaskSteps(taskId) {
+  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/steps`)
+  if (res.status === 404) {
+    const err = new Error('task not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`getTaskSteps failed: ${res.status}`)
+  const data = await res.json()
+  return data.steps || []
+}
+
+export async function confirmTask(taskId, selected) {
+  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(selected == null ? {} : { selected }),
+  })
+  if (!res.ok) {
+    const err = new Error(`confirm failed: ${res.status}`)
+    err.status = res.status
+    try { err.detail = (await res.json()).detail } catch { err.detail = '' }
+    throw err
+  }
+  return res.json()
+}
+
+export async function retryTask(taskId, feedback) {
+  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/retry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ feedback: feedback || {} }),
+  })
+  if (!res.ok) {
+    const err = new Error(`retry failed: ${res.status}`)
+    err.status = res.status
+    try { err.detail = (await res.json()).detail } catch { err.detail = '' }
+    throw err
+  }
+  return res.json()
+}
+
+export async function cancelPipeline(sessionId) {
+  const res = await fetch(`${BASE}/${encodeURIComponent(sessionId)}/pipeline:cancel`, {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    const err = new Error(`cancel failed: ${res.status}`)
+    err.status = res.status
+    try { err.detail = (await res.json()).detail } catch { err.detail = '' }
+    throw err
+  }
+  return res.json()
+}
+
