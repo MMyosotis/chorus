@@ -1,5 +1,7 @@
 #!/bin/bash
 # 同时启动后端和前端开发服务器
+# 后端：uvicorn (含 supervisor SSE + subagent 后台线程 + scheduler 守护线程)
+# 前端：vite dev (三栏布局，代理 /api → :8000)
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BACKEND_PID=""
@@ -16,9 +18,19 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-# --- 后端 ---
 cd "$PROJECT_ROOT" || exit 1
 
+# --- 环境变量检查（多智能体需对话/生图/搜索多组 key）---
+if [ ! -f ".env" ]; then
+    echo "警告：未找到 .env，将以下变量填入 .env 后再启动（缺 key 会在对话/生图时报错）："
+    echo "  DEFAULT_CHAT_MODEL_ID / DEFAULT_IMAGE_MODEL_ID"
+    echo "  DEEPSEEK_API_KEY / MINIMAX_API_KEY（对话模型，按 CHAT_MODELS 用到哪个配哪个）"
+    echo "  ARK_IMAGE_API_KEY（生图）"
+    echo "  BAIDU_SEARCH_API_KEY / BAIDU_SEARCH_BASE_URL（联网搜索，可选）"
+    echo ""
+fi
+
+# --- 后端 ---
 if [ ! -d ".venv" ]; then
     echo "后端：首次运行，正在安装依赖..."
     uv sync || { echo "uv sync 失败"; exit 1; }
@@ -42,8 +54,8 @@ FRONTEND_PID=$!
 
 echo ""
 echo "===== Little Kitty 已启动 ====="
-echo "后端: http://localhost:8000"
-echo "前端: http://localhost:5173"
+echo "后端: http://localhost:8000  (API + SSE + scheduler)"
+echo "前端: http://localhost:5173  (三栏：会话 / 对话+创作 / 角色栏)"
 echo "按 Ctrl+C 同时停止两个服务"
 echo "================================"
 echo ""

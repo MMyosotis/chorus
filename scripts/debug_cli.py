@@ -1,42 +1,82 @@
 #!/usr/bin/env python3
-"""Little Kitty 后端测试 CLI — 直接调用 SupervisorService.stream，不走 HTTP。"""
+"""Little Kitty 后端调试 CLI — 直接调 SupervisorService.stream，不走 HTTP。
+
+贴近 HTTP 路由行为：从 SettingsService 读对话/生图模型与联网搜索开关传入 stream，
+使 CLI 与浏览器表现一致。只消费 supervisor 的 SSE 流；subagent/scheduler 在后台
+线程写库不连 SSE，其流水线进展 CLI 观察不到（前端靠轮询 get_graph，此处不模拟）。
+"""
 
 try:
     import readline  # noqa: F401
 except ImportError:
     pass
 
+# 自举项目根入 sys.path：脚本运行时 sys.path[0] 是 scripts/，非项目根；
+# kitty 未装成 editable 包，故显式加入项目根使 import kitty.* 可用。
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import kitty.app as _app  # 触发 create_app 装配（lifespan 不在 import 阶段跑）
 from kitty.startup import run_startup
 
 # CLI 不经 server，lifespan 不会触发，显式跑一次启动副作用。
-_supervisor_service = _app.app.state.supervisor_service
-_settings_service = _app.app.state.settings_service
-run_startup(
-    _supervisor_service._skill, _settings_service,
-    _app.app.state.session_service, _app.app.state.scheduler,
-)
-
-_session_service = _app.app.state.session_service
-_chat_service = _supervisor_service  # 保留旧变量名，最小化下方改动
+# skill_loader 是 create_app 的装配局部变量、未挂 app.state，此处经 supervisor 私有
+# 属性取用（务实取法；改架构应把 skill_loader 也挂 app.state，暂不为此动 app.py）。
+_supervisor = _app.app.state.supervisor_service
+_settings = _app.app.state.settings_service
+_session = _app.app.state.session_service
+run_startup(_supervisor._skill, _settings, _session, _app.app.state.scheduler)
 
 
 COLORS = {
-    "token": "\033[0m",         # 默认
-    "tool_call": "\033[33m",    # 黄
-    "tool_result": "\033[36m",  # 青
-    "done": "\033[32m",         # 绿
-    "error": "\033[31m",        # 红
+    "reasoning": "\033[90m",        # 灰（思考流）
+    "token": "\033[0m",             # 默认
+    "tool_call": "\033[33m",        # 黄
+    "tool_result": "\033[36m",      # 青
+    "task_plan_created": "\033[35m",  # 紫（建图）
+    "done": "\033[32m",             # 绿
+    "error": "\033[31m",            # 红
 }
 RESET = "\033[0m"
 
 
-def main():
-    svc = _session_service
-    chat = _chat_service
-    session = svc.create("CLI 调试")
+def _truncate(text: str, limit: int = 500) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"... ({len(text)} chars total)"
+
+
+def _handle_event(ev) -> None:
+    etype = ev.type
+    color = COLORS.get(etype, "")
+
+    if etype == "reasoning":
+        print(f"{color}{ev.content}{RESET}", end="", flush=True)
+    elif etype == "reasoning_done":
+        print()  # 思考段结束换行，与正文分隔
+    elif etype == "token":
+        print(ev.content, end="", flush=True)
+    elif etype == "tool_call":
+        print(f"\n{color}[tool_call] {ev.name}({ev.arguments}){RESET}")
+    elif etype == "tool_result":
+        print(f"{color}[tool_result] {ev.name}: {_truncate(ev.content)}{RESET}")
+    elif etype == "task_plan_created":
+        tasks = ", ".join(f"{t['agent_type']}#{t['seq']}={t['status']}" for t in ev.tasks)
+        print(f"\n{color}[task_plan_created] pipeline={ev.pipeline_id} tasks=[{tasks}]{RESET}")
+    elif etype == "title_update":
+        print(f"\n\033[35m[title_update] {ev.title}{RESET}")
+    elif etype == "done":
+        print()  # 最终回复换行
+    elif etype == "error":
+        print(f"\n{color}[error] {ev.content}{RESET}")
+
+
+def main() -> None:
+    session = _session.create("CLI 调试")
     session_id = session.id
-    print(f"Little Kitty 测试 CLI（输入 q 退出，输入 /new 新建会话）")
+    print("Little Kitty 调试 CLI（输入 q 退出，/new 新建会话）")
     print(f"当前会话: {session_id}\n")
 
     while True:
@@ -45,35 +85,24 @@ def main():
         except (EOFError, KeyboardInterrupt):
             break
 
-        if query.strip().lower() in ("q", "exit"):
+        stripped = query.strip()
+        if stripped.lower() in ("q", "exit"):
             break
-        if query.strip() == "/new":
-            session = svc.create("CLI 调试")
+        if stripped == "/new":
+            session = _session.create("CLI 调试")
             session_id = session.id
             print(f"\033[32m已新建会话 {session_id}\033[0m\n")
             continue
-        if not query.strip():
+        if not stripped:
             continue
 
-        for ev in chat.stream(session_id, query):
-            etype = ev.type
-            color = COLORS.get(etype, "")
-
-            if etype == "token":
-                print(ev.content, end="", flush=True)
-            elif etype == "tool_call":
-                print(f"\n{color}[tool_call] {ev.name}({ev.arguments}){RESET}")
-            elif etype == "tool_result":
-                content = ev.content
-                if len(content) > 500:
-                    content = content[:500] + f"... ({len(ev.content)} chars total)"
-                print(f"{color}[tool_result] {ev.name}: {content}{RESET}")
-            elif etype == "title_update":
-                print(f"\n\033[35m[title_update] {ev.title}{RESET}")
-            elif etype == "done":
-                print()  # 最终回复换行
-            elif etype == "error":
-                print(f"\n{color}[error] {ev.content}{RESET}")
+        for ev in _supervisor.stream(
+            session_id, query,
+            model=_settings.get_chat_model(),
+            image_model=_settings.get_image_model(),
+            web_search=_settings.get_web_search(),
+        ):
+            _handle_event(ev)
 
     print("\n再见！")
 
