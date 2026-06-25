@@ -171,6 +171,48 @@ def test_reply_outcome_pairs_and_continues():
     assert msgs[3].content == "已为你查到"
 
 
+def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
+    """一轮内 ≥2 个 Reply tool_call → 收集后落一条 assistant(tool_calls=[全部])+N tool，
+    消除多 Reply 复用 message_id 撞 messages PK 的回归（并行 baidu_search 等场景）。
+
+    锚定 OpenAI 多 tool_call 配对结构：一条 assistant 携带全部 tool_calls → N 条 tool
+    结果。2× load_skill(不存在技能名) 均 Reply，下一轮模型回文本。终态历史须为
+    [user, assistant(2 tool_calls), tool, tool, assistant(文本)]。
+    """
+    conn, session_svc, msg_svc, task_repo = _setup()
+    # 第一轮：2 个 load_skill tool_call（index 0/1），均 Reply(未命中技能错误串)
+    tool_stream = FakeStream([({
+        "tool_calls": [
+            types.SimpleNamespace(
+                index=0, id="c1",
+                function=types.SimpleNamespace(
+                    name="load_skill", arguments=json.dumps({"name": "ghost"})),
+            ),
+            types.SimpleNamespace(
+                index=1, id="c2",
+                function=types.SimpleNamespace(
+                    name="load_skill", arguments=json.dumps({"name": "phantom"})),
+            ),
+        ],
+    }, "tool_calls")])
+    # 第二轮：纯文本回复（loop 继续）
+    text_stream = FakeStream([({"content": "两个技能都没找到"}, "stop")])
+    client = FakeClient([tool_stream, text_stream])
+    sup = _build_supervisor(conn, session_svc, msg_svc, task_repo, client)
+    s = session_svc.create("test")
+    events = list(sup.stream(s.id, "帮我加载 ghost 和 phantom 技能"))
+    types_seq = [e.type for e in events]
+    # 无 PK 冲突 → 无 error；正常结束 done
+    assert "error" not in types_seq
+    assert types_seq[-1] == "done"
+    # 历史如实：user + assistant(2 tool_calls) + tool + tool + assistant(文本)
+    msgs = msg_svc.list_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant", "tool", "tool", "assistant"]
+    assert len(msgs[1].tool_calls) == 2          # 一条 assistant 携带两个 tool_call
+    assert msgs[2].tool_call_id == "c1"          # 顺序保留
+    assert msgs[3].tool_call_id == "c2"
+
+
 def test_new_plan_blocked_by_active_task():
     """会话有 active task → stream 入口 yield BusyEvent，user 消息不入库。"""
     conn, session_svc, msg_svc, task_repo = _setup()

@@ -29,7 +29,7 @@ from kitty.domain.events import (
 from kitty.domain.prompt import PromptContext, build_system_prompt
 from kitty.domain.skill import SkillLoader, format_skill_hints
 from kitty.domain.stream import consume_stream
-from kitty.domain.task import ACTIVE_STATUSES
+from kitty.domain.task import ACTIVE_STATUSES, PlanRequest, expand_pipeline
 from kitty.hooks import HookRegistry
 from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.task import TaskRepository
@@ -152,13 +152,17 @@ class SupervisorService:
     def _dispatch_tools(
         self, session_id: str, ctx: AgentContext, schemas: list[dict],
     ) -> Iterator[SseEvent]:
-        """逐个 dispatch tool_call，按 outcome 分流。
+        """一轮内 dispatch 所有 tool_call，收集后成对落库（一条 assistant + N tool），
+        再按是否命中 Terminal 决定结束本轮或继续。
 
         generator：yield SSE 事件，return bool（是否命中 Terminal 结束本轮）。
-        Reply 型回传继续 loop。OpenAI 单轮通常只一个 tool_call，但仍按多调用顺序处理；
-        首个 Terminal 即结束。
+        收集全部 (call, dispatch_result) 后落**一条** assistant(tool_calls=[全部]) + N 条
+        tool(result)——OpenAI 多 tool_call 配对的真实结构，根除多 Reply tool_call 复用
+        message_id 撞 messages PK 的回归。首个 Terminal 即结束本轮。
         """
         tool_ctx = self._tool_ctx_factory(session_id, ctx.image_model)
+        pairs = []          # [(call, dispatch_result)] 按索引顺序
+        terminal = None     # 首个 Terminal 的 (call, d)
         for _, tc in sorted(ctx.turn.accumulated_tool_calls.items()):
             call = ToolCall(id=tc["id"], name=tc["name"], arguments=_parse_args(tc["arguments"]))
             call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
@@ -169,33 +173,39 @@ class SupervisorService:
             ))
             d = self._tools.dispatch(call, tool_ctx)
             list(self._hooks.trigger("PostToolUse", ctx, call_view, d.tool_result))
-            if isinstance(d.outcome, Reply):
-                # 成对落库：先 assistant(tool_calls) 再 tool(result)，满足 OpenAI 配对约束，
-                # 下一轮 build_provider_messages 回放历史如实。content 取本轮模型文本（无则 None）。
-                self._message.append_assistant_message(
-                    session_id, message_id=ctx.turn.message_id,
-                    content="".join(ctx.turn.text_parts) if ctx.turn.text_parts else None,
-                    tool_calls=[_to_tool_call_spec(call)],
-                )
-                self._message.append_tool_message(
-                    session_id, tool_call_id=call.id, name=call.name,
-                    content=d.tool_result.content,
-                )
-                self._session.touch(session_id)
-                continue
-            if isinstance(d.outcome, Terminal):
-                yield from self._handle_terminal(session_id, ctx, call, d)
-                return True
+            pairs.append((call, d))
+            if isinstance(d.outcome, Terminal) and terminal is None:
+                terminal = (call, d)
+        # 一条 assistant(tool_calls=[全部]) + N tool(result) 成对落库——OpenAI 配对真实结构
+        self._message.append_assistant_message(
+            session_id, message_id=ctx.turn.message_id,
+            content=self._turn_content(ctx, terminal),
+            tool_calls=[_to_tool_call_spec(c) for c, _ in pairs],
+        )
+        for call, d in pairs:
+            self._message.append_tool_message(
+                session_id, tool_call_id=call.id, name=call.name,
+                content=d.tool_result.content,
+            )
+        self._session.touch(session_id)
+        if terminal is not None:
+            yield from self._handle_terminal(session_id, ctx, terminal[0], terminal[1])
+            return True
         return False
 
+    def _turn_content(self, ctx: AgentContext, terminal) -> Optional[str]:
+        """assistant 内容：Terminal 轮用 friendly_reply（流程节拍气泡）；全 Reply 轮用模型文本。"""
+        if terminal is not None:
+            call, _ = terminal
+            return call.arguments.get("friendly_reply") or "好的，开始为你创作"
+        return "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
+
     def _handle_terminal(self, session_id: str, ctx: AgentContext, call: ToolCall, d) -> Iterator[SseEvent]:
-        """Terminal 分支：建图副作用 + 成对落库 + done（generator）。
+        """Terminal 分支：建图副作用 + done（generator）。成对落库已在 _dispatch_tools 完成。
 
         按载荷类型扩展（现阶段只 PlanRequest）。建图副作用（expand + 事务 insert）归此处。
-        assistant(friendly_reply, tool_calls=[call]) + tool(result) 成对落库，满足 OpenAI
-        配对约束，下一轮回放历史如实。建图成功只 yield done，建图状态靠前端轮询。
+        建图成功只 yield done，建图状态靠前端轮询。
         """
-        from kitty.domain.task import PlanRequest, expand_pipeline
         payload = d.outcome.payload
         if isinstance(payload, PlanRequest):
             tasks = expand_pipeline(payload.intent, payload.steps)
@@ -205,20 +215,12 @@ class SupervisorService:
                     self._task_repo.insert(t.model_copy(update={
                         "session_id": session_id, "created_at": now, "updated_at": now,
                     }))
-            friendly_reply = call.arguments.get("friendly_reply") or "好的，开始为你创作"
-            self._message.append_assistant_message(
-                session_id, message_id=ctx.turn.message_id, content=friendly_reply,
-                tool_calls=[_to_tool_call_spec(call)],
-            )
-            self._message.append_tool_message(
-                session_id, tool_call_id=call.id, name=call.name,
-                content=d.tool_result.content,
-            )
             self._session.touch(session_id)
             yield DoneEvent()
             yield from self._hooks.trigger("Stop", ctx)
             return
         # 未知 payload：回退 done（防御性，不应发生）
+        logger.warning("未知 Terminal payload 类型: %r", type(payload))
         yield DoneEvent()
 
 

@@ -43,7 +43,6 @@ def test_supervisor_schemas_filtered_by_whitelist():
 def test_loop_does_not_reference_tool_name_literals():
     """loop 分流只依赖 isinstance(outcome)，源码不出现 'create_plan' 字面量做路由判断。"""
     import inspect
-    src = inspect.getsource(SupervisorService)
     # SUPERVISOR_TOOLS 常量声明里有 'create_plan'，但 _dispatch_tools/_handle_terminal 分流段不应硬判名
     dispatch_src = inspect.getsource(SupervisorService._dispatch_tools)
     handle_src = inspect.getsource(SupervisorService._handle_terminal)
