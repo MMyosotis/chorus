@@ -52,7 +52,7 @@ from kitty.services.settings import SettingsService
 from kitty.services.task import TaskService
 from kitty.startup import run_startup
 from kitty.tools import ToolContext, ToolCtxFactory, ToolRegistry
-from kitty.tools.builtin import BaiduSearchTool, LoadSkillTool, OutputPlanTool
+from kitty.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, OutputPlanTool
 from kitty.tools.builtin.generate_image import GenerateImageTool, ImageModelEntry
 from kitty.tools.clients.ark_image import ArkImageClient
 from kitty.tools.clients.baidu_search import BaiduSearchClient
@@ -102,6 +102,7 @@ def create_app() -> FastAPI:
             image_models, DEFAULT_IMAGE_MODEL_ID,
         ),
         BaiduSearchTool(baidu_client),
+        CreatePlanTool(),
     ])
 
     def tool_ctx_factory(session_id, image_model=None):

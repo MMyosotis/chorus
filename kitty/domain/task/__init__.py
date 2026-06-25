@@ -16,6 +16,7 @@ from kitty.domain.task.models import (
     TaskStep,
     TaskStatus,
 )
+from kitty.domain.task.request import PlanRequest
 from kitty.domain.task.post import PostCard, PostImage, PostSection
 from kitty.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from kitty.domain.task.pipeline import (
@@ -45,6 +46,7 @@ __all__ = [
     "TaskArtifacts",
     "TaskStep",
     "TaskStatus",
+    "PlanRequest",
     "PostCard",
     "PostImage",
     "PostSection",
