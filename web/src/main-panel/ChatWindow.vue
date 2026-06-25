@@ -1,11 +1,16 @@
 <script setup>
 import { ref, watch, nextTick } from 'vue'
 import MessageBubble from './MessageBubble.vue'
+import HilCard from './HilCard.vue'
+import PostCard from './PostCard.vue'
 
 const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
+  sessionId: { type: String, default: '' },
 })
+
+defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled'])
 
 const container = ref(null)
 
@@ -42,15 +47,25 @@ watch(
 <template>
   <div ref="container" class="chat-window">
     <div class="chat-inner">
-      <MessageBubble
-        v-for="(msg, idx) in messages"
-        :key="idx"
-        :role="msg.role"
-        :content="msg.content"
-        :thinking="msg.thinking"
-        :tools="msg.tools"
-        :show-cursor="streaming && idx === messages.length - 1 && msg.role === 'assistant'"
-      />
+      <template v-for="(msg, idx) in messages" :key="msg.id || idx">
+        <HilCard
+          v-if="msg.kind === 'hil'"
+          :task="msg.task"
+          :session-id="sessionId"
+          @confirmed="$emit('hil-confirmed', $event)"
+          @retried="$emit('hil-retried', $event)"
+          @cancelled="$emit('hil-cancelled', $event)"
+        />
+        <PostCard v-else-if="msg.kind === 'postcard'" :task="msg.task" />
+        <MessageBubble
+          v-else
+          :role="msg.role"
+          :content="msg.content"
+          :thinking="msg.thinking"
+          :tools="msg.tools"
+          :show-cursor="streaming && idx === messages.length - 1 && msg.role === 'assistant'"
+        />
+      </template>
       <div v-if="messages.length === 0" class="empty-hint">
         <p>发送消息开始对话</p>
       </div>
