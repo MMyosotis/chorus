@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Little Kitty 后端调试 CLI — 直接调 SupervisorService.stream，不走 HTTP。
+"""Chorus 后端调试 CLI — 直接调 SupervisorService.stream，不走 HTTP。
 
 贴近 HTTP 路由行为：从 SettingsService 读对话/生图模型与联网搜索开关传入 stream，
 使 CLI 与浏览器表现一致。只消费 supervisor 的 SSE 流；subagent/scheduler 在后台
@@ -12,14 +12,14 @@ except ImportError:
     pass
 
 # 自举项目根入 sys.path：脚本运行时 sys.path[0] 是 scripts/，非项目根；
-# kitty 未装成 editable 包，故显式加入项目根使 import kitty.* 可用。
+# chorus 未装成 editable 包，故显式加入项目根使 import chorus.* 可用。
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import kitty.app as _app  # 触发 create_app 装配（lifespan 不在 import 阶段跑）
-from kitty.startup import run_startup
+import chorus.app as _app  # 触发 create_app 装配（lifespan 不在 import 阶段跑）
+from chorus.startup import run_startup
 
 # CLI 不经 server，lifespan 不会触发，显式跑一次启动副作用。
 # skill_loader 是 create_app 的装配局部变量、未挂 app.state，此处经 supervisor 私有
@@ -76,7 +76,7 @@ def _handle_event(ev) -> None:
 def main() -> None:
     session = _session.create("CLI 调试")
     session_id = session.id
-    print("Little Kitty 调试 CLI（输入 q 退出，/new 新建会话）")
+    print("Chorus 调试 CLI（输入 q 退出，/new 新建会话）")
     print(f"当前会话: {session_id}\n")
 
     while True:

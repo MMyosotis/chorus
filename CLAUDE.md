@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Little Kitty — **多智能体爆款图文博文创作助手**：用户一句话主题 → supervisor 建任务图 → 子 agent 流水线创作（选题/文案/配图/汇总）→ HIL 人工确认 → PostCard 成品。前后端分离：后端 FastAPI + OpenAI SDK，三 loop 架构（supervisor SSE 流式 / subagent 后台线程 ReAct / scheduler 守护线程派发）；前端 Vue 3 + Vite 三栏布局（左会话侧栏 / 主对话+创作面板 / 右角色栏）。
+Chorus — **多智能体爆款图文博文创作助手**：用户一句话主题 → supervisor 建任务图 → 子 agent 流水线创作（选题/文案/配图/汇总）→ HIL 人工确认 → PostCard 成品。前后端分离：后端 FastAPI + OpenAI SDK，三 loop 架构（supervisor SSE 流式 / subagent 后台线程 ReAct / scheduler 守护线程派发）；前端 Vue 3 + Vite 三栏布局（左会话侧栏 / 主对话+创作面板 / 右角色栏）。
 
 **DB 是三 loop 间通信媒介与单一事实源**：supervisor 建图写 `tasks` 表，scheduler 轮询 `tasks` 派发，subagent 写 `task_artifacts`/`task_steps`/`messages`，前端轮询 `get_graph` 渲染角色栏/HIL 卡片/成品。CAS 状态转换（pending/running/awaiting_confirm/finished/failed/cancelled）是协调核心。
 
@@ -15,14 +15,14 @@ Little Kitty — **多智能体爆款图文博文创作助手**：用户一句�
 ### 后端
 ```bash
 uv sync                                              # 安装依赖
-.venv/bin/uvicorn kitty.app:app --reload --port 8000 # 启动开发服务器
+.venv/bin/uvicorn chorus.app:app --reload --port 8000 # 启动开发服务器
 ./scripts/start.sh                                   # 同时启动前后端
 
 # 不走 HTTP 的本地调试 CLI（直接调用 SupervisorService.stream，方便观察 SSE 事件）
 .venv/bin/python scripts/debug_cli.py
 
-# 一键跑全部自动化测试（逐模块裸跑；也可 `.venv/bin/python -m pytest kitty/tests/`）
-.venv/bin/python -m kitty.tests
+# 一键跑全部自动化测试（逐模块裸跑；也可 `.venv/bin/python -m pytest chorus/tests/`）
+.venv/bin/python -m chorus.tests
 ```
 
 ### 前端
@@ -40,17 +40,17 @@ cd web && npm run build                # 构建生产版本
 - `BAIDU_SEARCH_API_KEY` / `BAIDU_SEARCH_BASE_URL` — 百度智能搜索生成 API（`baidu_search` 工具用，base_url 默认千帆 endpoint）
 - `IMAGE_TEST_FAKE_URL` — 图像测试模式下的固定返回 URL（默认是一张已知可用的橘猫图，可覆盖换图）。测试开关本身只在控制台「设置」中切换，默认关闭，进程级状态、重启回到关
 
-> 对话模型表 `CHAT_MODELS`、生图模型表 `IMAGE_MODELS` 与子 agent 角色模型表 `SUBAGENT_MODELS`（`agent_type → CHAT_MODELS id`，按角色选模型：idea/image 用便宜快、script/finalize 用强模型）均在 `kitty/config.py`。`CHAT_MODELS`/`IMAGE_MODELS` 结构同构：每条含 `id`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）。新增/删除/换 provider 改这两张表即可。调度参数 `SCHEDULER_INTERVAL`/`ZOMBIE_TIMEOUT`/`POOL_SIZE` 亦在 config.py。
+> 对话模型表 `CHAT_MODELS`、生图模型表 `IMAGE_MODELS` 与子 agent 角色模型表 `SUBAGENT_MODELS`（`agent_type → CHAT_MODELS id`，按角色选模型：idea/image 用便宜快、script/finalize 用强模型）均在 `chorus/config.py`。`CHAT_MODELS`/`IMAGE_MODELS` 结构同构：每条含 `id`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）。新增/删除/换 provider 改这两张表即可。调度参数 `SCHEDULER_INTERVAL`/`ZOMBIE_TIMEOUT`/`POOL_SIZE` 亦在 config.py。
 
 ## 数据存放位置
 
-- 运行时数据根目录 `DATA_DIR = 项目根 / data/`（在 `kitty/config.py` 定义，gitignored，启动自动创建）
-- `data/little-kitty.db` — 单一 SQLite 库，含 `sessions` + `messages` + `traces` + `tasks` + `task_artifacts` + `task_steps` + `settings` 全部表（会话库 + 进程级 KV 配置同库，项目规模不大不分库）
-- `kitty/resources/skills/` — 技能 markdown（随源码版本管理，非运行时数据）
+- 运行时数据根目录 `DATA_DIR = 项目根 / data/`（在 `chorus/config.py` 定义，gitignored，启动自动创建）
+- `data/chorus.db` — 单一 SQLite 库，含 `sessions` + `messages` + `traces` + `tasks` + `task_artifacts` + `task_steps` + `settings` 全部表（会话库 + 进程级 KV 配置同库，项目规模不大不分库）
+- `chorus/resources/skills/` — 技能 markdown（随源码版本管理，非运行时数据）
 
 ## Architecture
 
-### 后端包结构 (`kitty/`)
+### 后端包结构 (`chorus/`)
 
 | 包 / 模块 | 职责 |
 |------|------|
@@ -112,7 +112,7 @@ scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load 
 
 ### Skill 系统
 
-- `kitty/resources/skills/` 下放 markdown 文件，支持 frontmatter（name, description, tags）
+- `chorus/resources/skills/` 下放 markdown 文件，支持 frontmatter（name, description, tags）
 - `SkillLoader` 启动时扫描缓存，`format_hints()` 生成摘要追加到 system prompt
 - 模型通过 `load_skill` 工具按需加载完整 skill 内容
 - `domain.prompt.build_system_prompt` 构造 system prompt（`SYSTEM_PROMPT` 默认文案 + skill hints），每次对话经 MessageHook 调 `build_provider_messages` 时刷新
@@ -196,14 +196,14 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 3. **创作请求**：supervisor 解析 create_plan → 建图落库 → yield `task_plan_created` + done；前端启动 `useTaskPolling`
 4. **后台流水线**：scheduler 轮询 `tasks` → CAS pending→running → submit `SubAgentService.run`（后台线程 ReAct，写 task_steps/task_artifacts）→ CAS running→awaiting_confirm|finished|failed；subagent/scheduler 不连 SSE，前端靠轮询 `get_graph` + 重拉 messages 驱动角色栏/HIL 卡片/成品
 5. **HIL**：前端 `confirm`/`retry`/`cancel` → `TaskService` CAS 翻转 → scheduler 下轮派发； awaiting_confirm/finalize-finished task 经 `injectTaskCards` 注入消息流
-6. 每条 supervisor 消息产生即逐条 append 入库到 `data/little-kitty.db` 的 `messages` 表
+6. 每条 supervisor 消息产生即逐条 append 入库到 `data/chorus.db` 的 `messages` 表
 
 ## 测试
 
-项目以 pytest 为 dev 依赖（`uv add --dev pytest`），但**不追求全覆盖**——只对纯领域函数 / 状态机 / repo smoke / 关键编排路径用表驱动断言锚定（spec 第 8 节：「状态机/纯函数不测是最大浪费」）。测试文件在 `kitty/tests/`，**按层前缀分组**（`test_domain_*` / `test_repo_*` / `test_service_*` / `test_agent_*` / `test_tools_*` / `test_route_*` / `test_integration_*`），每个文件带 `main()` 入口聚合所有 `test_` 函数。运行方式：
+项目以 pytest 为 dev 依赖（`uv add --dev pytest`），但**不追求全覆盖**——只对纯领域函数 / 状态机 / repo smoke / 关键编排路径用表驱动断言锚定（spec 第 8 节：「状态机/纯函数不测是最大浪费」）。测试文件在 `chorus/tests/`，**按层前缀分组**（`test_domain_*` / `test_repo_*` / `test_service_*` / `test_agent_*` / `test_tools_*` / `test_route_*` / `test_integration_*`），每个文件带 `main()` 入口聚合所有 `test_` 函数。运行方式：
 
-- 单文件：`python -m kitty.tests.test_<name>`（裸跑）
-- 一键全跑：`python -m kitty.tests`（逐模块裸跑 + 汇总）或 `python -m pytest kitty/tests/`（pytest 收集）
+- 单文件：`python -m chorus.tests.test_<name>`（裸跑）
+- 一键全跑：`python -m chorus.tests`（逐模块裸跑 + 汇总）或 `python -m pytest chorus/tests/`（pytest 收集）
 
 文件清单（每个文件首行 docstring 注明用途与覆盖范围）：
 
@@ -236,7 +236,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 
 后端区分**领域层**（`domain/`）与**编排层**（`services/` + `routes/` + `hooks/` + `startup.py`），新增代码按下述原则归位：
 
-- **领域层（`domain/`）按业务概念扁平组织**，每个模块同放该概念的 Pydantic 模型（带只读行为，如 `Message.to_provider_dict()`、`SkillContent.from_markdown()`）、跨对象的纯领域函数（如 `build_provider_messages`、`clean_generated_title`），以及**围绕该单一概念的基础设施型 service / loader**（如 `SkillLoader` 扫盘缓存 skill、`TitleGenerationService` 调 OpenAI 生成标题）。`domain` **不得 import** `kitty.repositories` / `kitty.services` / `kitty.hooks`，但允许直接持有围绕自身概念的外部依赖（文件系统 / `openai` / `threading`）——只要它服务于本概念、而非跨概念编排。
+- **领域层（`domain/`）按业务概念扁平组织**，每个模块同放该概念的 Pydantic 模型（带只读行为，如 `Message.to_provider_dict()`、`SkillContent.from_markdown()`）、跨对象的纯领域函数（如 `build_provider_messages`、`clean_generated_title`），以及**围绕该单一概念的基础设施型 service / loader**（如 `SkillLoader` 扫盘缓存 skill、`TitleGenerationService` 调 OpenAI 生成标题）。`domain` **不得 import** `chorus.repositories` / `chorus.services` / `chorus.hooks`，但允许直接持有围绕自身概念的外部依赖（文件系统 / `openai` / `threading`）——只要它服务于本概念、而非跨概念编排。
 - **编排层负责"取数据 → 调领域 → 存数据"与 agent loop 流程控制**：`agents/`（三 loop 编排：supervisor/subagent/scheduler）、`services/`（应用 / HIL 编排，如 `SessionService` 跨 repo + 锁、`TaskService` HIL + get_graph）、`routes/`（HTTP 适配）、`hooks/`（agent loop 横切扩展点）、`startup.py`（启动副作用）都不承载领域规则，只做协调——从 repo/外部取数据，喂给领域函数/模型/service，再把结果存回或返回。`create_app()` 只装配（new + 注入），不含启动副作用。
 - **判别准则**：一段逻辑若围绕**单一领域概念**（如 skill、title），即使它要扫文件 / 调 OpenAI / 持锁，也归 `domain/`，与该概念的模型和纯函数同模块；若它**跨多个概念编排**（驱动 agent loop 多轮循环、跨多 repo 事务、协调多个 service），归编排层。一句话："它服务于一个概念，还是粘合多个概念？"——前者领域，后者编排。
 - **扩展时保持边界**：当编排层需要新的运行时多方信息（如 system prompt 要拼接对话摘要、用户画像），**收集信息是编排**（在 hook/service 里凑齐），**拼装规则是领域**（领域函数接收已收集好的数据）。用值对象（如 `PromptContext`）承载多方信息，避免领域函数参数爆炸、签名频繁变动。

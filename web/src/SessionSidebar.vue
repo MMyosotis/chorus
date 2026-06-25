@@ -97,7 +97,7 @@ watch(
         <ellipse cx="62" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
         <path d="M47 66 L53 66 L50 71 Z" fill="#ffffff" fill-opacity="0.92" />
       </svg>
-      <span class="brand-title">氛围猫猫</span>
+      <span class="brand-title">稿搭</span>
     </div>
     <div class="sidebar-header">
       <button class="new-btn" @click="emit('create')">+ 新对话</button>

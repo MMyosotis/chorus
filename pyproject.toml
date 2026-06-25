@@ -1,7 +1,7 @@
 [project]
-name = "little-kitty"
+name = "chorus"
 version = "0.1.0"
-description = "A simple conversational agent with memory"
+description = "多智能体爆款图文博文创作助手"
 requires-python = ">=3.9"
 dependencies = [
     "openai>=1.0.0",

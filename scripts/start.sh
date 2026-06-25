@@ -37,7 +37,7 @@ if [ ! -d ".venv" ]; then
 fi
 
 echo "启动后端服务... http://localhost:8000"
-.venv/bin/uvicorn kitty.app:app --host 127.0.0.1 --port 8000 --reload &
+.venv/bin/uvicorn chorus.app:app --host 127.0.0.1 --port 8000 --reload &
 BACKEND_PID=$!
 
 # --- 前端 ---
@@ -53,7 +53,7 @@ npm run dev &
 FRONTEND_PID=$!
 
 echo ""
-echo "===== Little Kitty 已启动 ====="
+echo "===== Chorus 已启动 ====="
 echo "后端: http://localhost:8000  (API + SSE + scheduler)"
 echo "前端: http://localhost:5173  (三栏：会话 / 对话+创作 / 角色栏)"
 echo "按 Ctrl+C 同时停止两个服务"
