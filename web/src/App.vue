@@ -13,8 +13,12 @@ import {
   streamChat,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
+import { useTaskPolling } from './composables/useTaskPolling.js'
+import ProgressBanner from './main-panel/ProgressBanner.vue'
+import TeamPanel from './team-panel/TeamPanel.vue'
 
 const traceStore = useTraceStore()
+const taskPolling = useTaskPolling()
 const consoleOpen = ref(false)
 
 const sessions = ref([]) // [{id, title, created_at, updated_at}]
@@ -24,6 +28,7 @@ const activeId = ref(null)
 
 const messages = computed(() => messagesBySession[activeId.value] || [])
 const streaming = computed(() => !!streamingBySession[activeId.value])
+const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
@@ -435,8 +440,10 @@ onMounted(async () => {
         </button>
       </header>
       <ChatWindow :messages="messages" :streaming="streaming" />
+      <ProgressBanner :graph="activeGraph" />
       <InputBar :streaming="streaming" @send="onSend" />
     </div>
+    <TeamPanel :graph="activeGraph" />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
 </template>
