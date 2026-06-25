@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kitty.tools.framework import Tool, ToolContext
+from kitty.tools.framework import Reply, Tool, ToolContext
 from kitty.tools.clients.baidu_search import BaiduSearchClient
 
 
@@ -44,9 +44,9 @@ class BaiduSearchTool(Tool):
         suffix = f" ({recency})" if recency in {"week", "month", "semiyear", "year"} else ""
         return f"百度搜索: {q or '(空查询)'}{suffix}"
 
-    def run(self, arguments: dict, ctx: ToolContext) -> str:
-        return self._client.search(
+    def run(self, arguments: dict, ctx: ToolContext) -> Reply:
+        return Reply(self._client.search(
             arguments.get("query", ""),
             arguments.get("recency"),
             arguments.get("top_k", 8),
-        )
+        ))

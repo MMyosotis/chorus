@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from kitty.tools.framework import Tool, ToolContext
+from kitty.tools.framework import Reply, Tool, ToolContext
 
 
 def format_plan_steps(steps: list[str]) -> str:
@@ -36,8 +36,8 @@ class OutputPlanTool(Tool):
         n = len(steps) if isinstance(steps, list) else 0
         return f"规划 {n} 个步骤"
 
-    def run(self, arguments: dict, ctx: ToolContext) -> str:
+    def run(self, arguments: dict, ctx: ToolContext) -> Reply:
         steps = arguments.get("steps") or []
         if not isinstance(steps, list):
             steps = []
-        return format_plan_steps(steps)
+        return Reply(format_plan_steps(steps))

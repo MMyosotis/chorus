@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from kitty.domain.skill import SkillLoader
 from kitty.tools.models import ToolCall, ToolResult, ToolSchema
@@ -18,6 +18,34 @@ _DISPLAY_MAX_LEN = 200
 
 # 联网搜索能力对应的工具名（baidu_search 工具的 name）
 WEB_SEARCH_TOOL_NAME = "baidu_search"
+
+
+class ToolOutcome:
+    """tool 执行后的走向信号。loop 据 outcome 类型分流，不按工具名。"""
+
+
+@dataclass(frozen=True)
+class Reply(ToolOutcome):
+    """回传型：content 作为 tool_result 回传模型，loop 继续。"""
+    content: str
+
+
+@dataclass(frozen=True)
+class Terminal(ToolOutcome):
+    """分流型：携带载荷，loop 不回传模型，交编排层按载荷执行重副作用后结束本轮。
+
+    summary 是 tool_result.content 的语义摘要（落库 + trace 共用），由 Tool 提供；
+    不给则 dispatch 用通用占位。
+    """
+    payload: Any
+    summary: str = "已执行"
+
+
+@dataclass(frozen=True)
+class DispatchResult:
+    """dispatch 返回：tool_result（落库+trace 共用 content）+ outcome（走向）。"""
+    tool_result: ToolResult
+    outcome: ToolOutcome
 
 
 def select_tool_schemas(schemas: list[dict], *, web_search: bool) -> list[dict]:
@@ -64,7 +92,7 @@ class Tool(ABC):
         return self.name
 
     @abstractmethod
-    def run(self, arguments: dict, ctx: ToolContext) -> str:
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolOutcome:
         ...
 
 
@@ -97,28 +125,46 @@ class ToolRegistry:
         tool = self._by_name.get(name)
         return tool.running_label if tool else None
 
-    def dispatch(self, call: ToolCall, ctx: ToolContext) -> ToolResult:
-        """统一执行入口：找工具、try/except 包错、计时、返回 ToolResult。"""
+    def dispatch(self, call: ToolCall, ctx: ToolContext) -> DispatchResult:
+        """统一执行入口：找工具、try/except 包错、计时，返回 DispatchResult。
+
+        - Reply：tool_result.content = Reply.content（落库 + trace 单一来源）。
+        - Terminal：tool_result.content = outcome.summary（Tool 自定义摘要，不给则通用占位）。
+        - 意外异常：强制 Reply(错误文本) + is_error=True，框架 fail-open 兜底，不掺业务走向。
+        """
         display = self.format_display(call.name, call.arguments)
         tool = self._by_name.get(call.name)
         if tool is None:
-            return ToolResult(
+            tr = ToolResult(
                 tool_call_id=call.id, name=call.name,
                 content=f"Error: unknown tool '{call.name}'",
                 duration_ms=0, display=display, is_error=True,
             )
+            return DispatchResult(tool_result=tr, outcome=Reply(tr.content))
         t0 = perf_counter()
         try:
-            content = tool.run(call.arguments, ctx)
-            is_error = False
-        except Exception as e:
+            outcome = tool.run(call.arguments, ctx)
+        except Exception as e:  # noqa: BLE001 — 框架兜底意外异常
             content = f"Error executing tool '{call.name}': {e}"
-            is_error = True
+            tr = ToolResult(
+                tool_call_id=call.id, name=call.name, content=content,
+                duration_ms=int((perf_counter() - t0) * 1000),
+                display=display, is_error=True,
+            )
+            return DispatchResult(tool_result=tr, outcome=Reply(content))
         duration_ms = int((perf_counter() - t0) * 1000)
-        return ToolResult(
-            tool_call_id=call.id, name=call.name, content=content,
-            duration_ms=duration_ms, display=display, is_error=is_error,
+        if isinstance(outcome, Terminal):
+            tr = ToolResult(
+                tool_call_id=call.id, name=call.name, content=outcome.summary,
+                duration_ms=duration_ms, display=display, is_error=False,
+            )
+            return DispatchResult(tool_result=tr, outcome=outcome)
+        # Reply
+        tr = ToolResult(
+            tool_call_id=call.id, name=call.name, content=outcome.content,
+            duration_ms=duration_ms, display=display, is_error=False,
         )
+        return DispatchResult(tool_result=tr, outcome=outcome)
 
 
 ToolCtxFactory = Callable[[Optional[str], Optional[str]], ToolContext]

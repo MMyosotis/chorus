@@ -166,11 +166,11 @@ class SubAgentService:
                 self._tools.format_display(call.name, call.arguments),
                 self._tools.running_label(call.name),
             ))
-            res = self._tools.dispatch(call, tool_ctx)
-            list(self._hooks.trigger("PostToolUse", ctx, call_view, res))
+            d = self._tools.dispatch(call, tool_ctx)
+            list(self._hooks.trigger("PostToolUse", ctx, call_view, d.tool_result))
             views.append({
                 "tool_call_id": call.id, "name": call.name,
-                "content": res.content, "duration_ms": res.duration_ms,
+                "content": d.tool_result.content, "duration_ms": d.tool_result.duration_ms,
             })
         return views
 

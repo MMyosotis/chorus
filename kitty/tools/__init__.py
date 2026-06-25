@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from kitty.tools.framework import (
+    DispatchResult,
+    Reply,
+    Terminal,
     Tool,
     ToolContext,
     ToolCtxFactory,
+    ToolOutcome,
     ToolRegistry,
     WEB_SEARCH_TOOL_NAME,
     select_schemas_by_names,
@@ -24,4 +28,8 @@ __all__ = [
     "ToolContext",
     "ToolRegistry",
     "ToolCtxFactory",
+    "ToolOutcome",
+    "Reply",
+    "Terminal",
+    "DispatchResult",
 ]

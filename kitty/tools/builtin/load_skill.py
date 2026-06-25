@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from kitty.tools.framework import Tool, ToolContext
+from kitty.tools.framework import Reply, Tool, ToolContext
 
 
 class LoadSkillTool(Tool):
@@ -22,10 +22,10 @@ class LoadSkillTool(Tool):
     def display(self, arguments: dict) -> str:
         return f"加载技能: {arguments.get('name') or '(未指定)'}"
 
-    def run(self, arguments: dict, ctx: ToolContext) -> str:
+    def run(self, arguments: dict, ctx: ToolContext) -> Reply:
         name = arguments.get("name", "")
         skill = ctx.skill_loader.get(name)
         if skill is None:
             available = [s.name for s in ctx.skill_loader.list_summaries()]
-            return f"Error: skill '{name}' not found. Available skills: {json.dumps(available)}"
-        return skill.full_content
+            return Reply(f"Error: skill '{name}' not found. Available skills: {json.dumps(available)}")
+        return Reply(skill.full_content)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
-from kitty.tools.framework import Tool, ToolContext
+from kitty.tools.framework import Reply, Tool, ToolContext
 from kitty.tools.clients.ark_image import ArkImageClient
 
 
@@ -63,13 +63,13 @@ class GenerateImageTool(Tool):
             prompt = prompt[:60] + "…"
         return f"生成图像: {prompt or '(空提示词)'}"
 
-    def run(self, arguments: dict, ctx: ToolContext) -> str:
+    def run(self, arguments: dict, ctx: ToolContext) -> Reply:
         if self._is_test():
-            return self._fake_url
+            return Reply(self._fake_url)
         # ctx.image_model 来自 SettingsService.get_image_model（已校验必在注册表中）或 None（取默认）
         entry = self._models[ctx.image_model or self._default_image_model_id]
-        return entry.client.generate(
+        return Reply(entry.client.generate(
             arguments.get("prompt", ""),
             entry.model_id,
             arguments.get("size", "1024x1024"),
-        )
+        ))

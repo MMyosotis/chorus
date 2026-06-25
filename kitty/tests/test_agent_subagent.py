@@ -74,7 +74,8 @@ class FakeTool(Tool):
     parameters = {"type": "object", "properties": {}}
 
     def run(self, arguments, ctx):
-        return "search-result"
+        from kitty.tools.framework import Reply
+        return Reply("search-result")
 
 
 def _setup():
