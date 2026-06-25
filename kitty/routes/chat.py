@@ -1,5 +1,4 @@
-"""SSE 流式聊天路由（Depends 注入 ChatService + SessionService）。"""
-
+"""SSE 流式聊天路由（Depends 注入 SupervisorService + SessionService）。"""
 from __future__ import annotations
 
 import json
@@ -8,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from kitty.agents.supervisor import SupervisorService
 from kitty.routes.providers import (
-    provide_chat_service,
     provide_session_service,
     provide_settings_service,
+    provide_supervisor_service,
 )
-from kitty.services.chat import ChatService
 from kitty.services.session import SessionService
 from kitty.services.settings import SettingsService
 
@@ -28,7 +27,7 @@ class ChatRequest(BaseModel):
 def chat_endpoint(
     session_id: str,
     req: ChatRequest,
-    chat: ChatService = Depends(provide_chat_service),
+    supervisor: SupervisorService = Depends(provide_supervisor_service),
     session: SessionService = Depends(provide_session_service),
     settings: SettingsService = Depends(provide_settings_service),
 ):
@@ -39,7 +38,6 @@ def chat_endpoint(
     if not lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="session is busy")
 
-    # 进程级模型选项：每次请求按当前设置应用（对话模型 / 生图模型 / 联网搜索）
     chat_model = settings.get_chat_model()
     image_model = settings.get_image_model()
     web_search = settings.get_web_search()
@@ -54,12 +52,11 @@ def chat_endpoint(
                 lock.release()
 
         try:
-            for event in chat.stream(
+            for event in supervisor.stream(
                 session_id, req.message,
                 model=chat_model, image_model=image_model, web_search=web_search,
             ):
                 yield f"data: {json.dumps(event.model_dump(mode='json'), ensure_ascii=False)}\n\n"
-                # done / error 之后的事件（如 title_update）不再持有会话锁
                 if event.type in ("done", "error"):
                     _release()
         finally:
@@ -68,9 +65,5 @@ def chat_endpoint(
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )

@@ -27,3 +27,20 @@ def provide_chat_service(request: Request) -> ChatService:
 
 def provide_settings_service(request: Request) -> SettingsService:
     return request.app.state.settings_service
+
+
+from kitty.agents.scheduler import TaskScheduler
+from kitty.agents.supervisor import SupervisorService
+from kitty.services.task import TaskService
+
+
+def provide_supervisor_service(request: Request) -> SupervisorService:
+    return request.app.state.supervisor_service
+
+
+def provide_task_service(request: Request) -> TaskService:
+    return request.app.state.task_service
+
+
+def provide_scheduler(request: Request) -> TaskScheduler:
+    return request.app.state.scheduler
