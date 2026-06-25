@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 from kitty.domain.task import (
     ACTIVE_STATUSES,
+    CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
     TaskStatus,
     select_display_pipeline,
@@ -77,7 +78,7 @@ class TaskService:
         pipeline_id = self._active_pipeline_id(session_id)
         if pipeline_id is None:
             raise ConflictError("该会话无进行中的创作任务")
-        n = self._task_repo.cancel_pipeline(pipeline_id)
+        n = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES)
         return {"pipeline_id": pipeline_id, "cancelled": n}
 
     def get_graph(self, session_id: str) -> dict:

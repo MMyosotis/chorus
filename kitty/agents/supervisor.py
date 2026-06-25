@@ -242,12 +242,14 @@ class SupervisorService:
         )
         result = yield from consume_stream(stream)
         ctx.turn.apply_stream(result)
+        yield from self._hooks.trigger("AfterModelResponse", ctx)
         content = "".join(result.text_parts) if result.text_parts else None
         self._message.append_assistant_message(
             session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
         )
         self._session.touch(session_id)
         yield DoneEvent()
+        yield from self._hooks.trigger("Stop", ctx)
 
 
 def _parse_args(raw: str) -> dict:

@@ -94,9 +94,14 @@ class TaskRepository:
             "UPDATE tasks SET updated_at=? WHERE id=?", (time.time(), task_id)
         )
 
-    def cancel_pipeline(self, pipeline_id: str) -> int:
-        """事务内批量 CAS 非终态 task→cancelled。返受影响行数。"""
-        statuses = ("pending", "running", "awaiting_confirm")
+    def cancel_pipeline(self, pipeline_id: str, statuses: Iterable[str]) -> int:
+        """事务内批量 CAS 非终态 task→cancelled。返受影响行数。
+
+        状态集合由 service 从 domain CANCELLABLE_STATUSES 传入（repo 不硬编码业务规则）。
+        """
+        statuses = list(statuses)
+        if not statuses:
+            return 0
         placeholders = ",".join("?" * len(statuses))
         with self._conn.transaction():
             cur = self._conn.get().execute(

@@ -70,6 +70,10 @@ def test_legal_transitions_table():
     assert is_legal_transition("awaiting_confirm", "finished")
     assert is_legal_transition("awaiting_confirm", "pending")  # retry
     assert is_legal_transition("failed", "pending")  # retry 复活
+    # cancel_pipeline 实际执行 running→cancelled（批量翻转非终态），须在规则表
+    assert is_legal_transition("running", "cancelled")
+    assert is_legal_transition("pending", "cancelled")
+    assert is_legal_transition("awaiting_confirm", "cancelled")
     # 非法
     assert not is_legal_transition("finished", "running")
     assert not is_legal_transition("finished", "pending")

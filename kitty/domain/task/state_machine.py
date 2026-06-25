@@ -37,6 +37,7 @@ LEGAL_TRANSITIONS: set[tuple[str, str]] = {
     (TaskStatus.RUNNING.value, TaskStatus.AWAITING_CONFIRM.value),   # worker（需复核步）
     (TaskStatus.RUNNING.value, TaskStatus.FINISHED.value),           # worker（finalize 无需复核）
     (TaskStatus.RUNNING.value, TaskStatus.FAILED.value),             # worker except
+    (TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value),          # cancel_pipeline 批量翻转
     (TaskStatus.RUNNING.value, TaskStatus.PENDING.value),            # scheduler zombie 回收
     (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value),  # confirm API CAS
     (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.PENDING.value),   # retry API CAS（带 feedback）

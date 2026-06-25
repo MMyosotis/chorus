@@ -50,6 +50,25 @@ class FakeClient:
         return self._scripts.pop(0)
 
 
+class SideEffectClient:
+    """FakeClient 变体：每次 create 先跑 side_effect(可空) 再返对应 stream。
+
+    供协作式取消/漂移用例——在 _call_model 内 CAS 任务态，模拟 cancel_pipeline
+    在 ReAct 中途触发。
+    """
+
+    def __init__(self, pairs):
+        # pairs: list[(side_effect_fn | None, stream)]
+        self._pairs = list(pairs)
+        self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs):
+        side, stream = self._pairs.pop(0)
+        if side is not None:
+            side()
+        return stream
+
+
 class FakeTool(Tool):
     name = "baidu_search"
     description = "x"
@@ -178,6 +197,67 @@ def test_subagent_failed_on_bad_output():
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED.value
     assert task_repo.get("t1").error  # 有错误信息
+
+
+def _idea_content(done_line="DONE_MARKER"):
+    """构造合法 idea 产出文本（artifacts + narrative 两段）。"""
+    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
+    narrative = {"busy_lines": ["x"], "awaiting_line": "y", "done_line": done_line}
+    return (
+        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
+        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
+    )
+
+
+def _cancel_to(task_repo, tid, to_status="cancelled"):
+    def _side():
+        task_repo.cas_update(tid, TaskStatus.RUNNING.value, to_status)
+    return _side
+
+
+def test_subagent_cooperative_cancel_between_iterations():
+    """I-1：第 1 轮(工具调用)中途被 cancel_pipeline，第 2 轮迭代顶部复查到 cancelled
+    即退出——不 _finalize、不 append done 气泡、不落 artifacts。"""
+    conn, msg_svc, task_repo, art_repo, steps_repo = _setup()
+    _mk_task(task_repo, "idea", "running")
+    tool_call_delta = {"tool_calls": [types.SimpleNamespace(
+        index=0, id="c1", function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}
+    # 第 1 轮：副作用取消任务 + 工具调用流；第 2 轮：合法产出流（不应被消费）
+    client = SideEffectClient([
+        (_cancel_to(task_repo, "t1"), FakeStream([(tool_call_delta, "tool_calls")])),
+        (None, FakeStream([({"content": _idea_content("DONE_MARKER_I1")}, "stop")])),
+    ])
+    sub = _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, client)
+    sub.run("t1")
+    # 任务仍 cancelled（_finalize 未成功 CAS 到 awaiting_confirm）
+    assert task_repo.get("t1").status == TaskStatus.CANCELLED.value
+    # 不落产物
+    assert art_repo.load("t1") is None
+    # 第 2 个脚本未消费——证明第 2 轮迭代在 _call_model 前就退出
+    assert len(client._pairs) == 1
+    # 无 done 气泡
+    msgs = msg_svc.list_messages("s1")
+    assert not any(getattr(m, "content", "") == "DONE_MARKER_I1" for m in msgs)
+
+
+def test_subagent_finalize_drift_no_orphan():
+    """I-2：最终产出轮的 _call_model 中途任务被取消，_finalize 的 owning CAS
+    (running→awaiting_confirm) 漂移失败——不 upsert 产物、不 append done 气泡。"""
+    conn, msg_svc, task_repo, art_repo, steps_repo = _setup()
+    _mk_task(task_repo, "idea", "running")
+    # 单轮：副作用取消任务 + 合法产出流；_finalize 的 CAS 必失败
+    client = SideEffectClient([
+        (_cancel_to(task_repo, "t1"), FakeStream([({"content": _idea_content("DONE_MARKER_I2")}, "stop")])),
+    ])
+    sub = _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.CANCELLED.value
+    # 不落产物（CAS 漂移→跳过 upsert）
+    assert art_repo.load("t1") is None
+    # 无 done 气泡
+    msgs = msg_svc.list_messages("s1")
+    assert not any(getattr(m, "content", "") == "DONE_MARKER_I2" for m in msgs)
+    assert len(client._pairs) == 0  # 脚本已消费
 
 
 def main():

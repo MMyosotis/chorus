@@ -16,7 +16,7 @@ import time
 import uuid
 from typing import Optional
 
-from kitty.agents.runtime import AgentContext, TurnState
+from kitty.agents.runtime import AgentContext
 from kitty.domain.prompt import build_subagent_system_prompt
 from kitty.domain.stream import StreamResult, drain_stream
 from kitty.domain.task import (
@@ -101,7 +101,14 @@ class SubAgentService:
         iteration = self._steps_repo.next_iteration(task_id)
         while iteration <= _MAX_STEPS:
             self._task_repo.touch_updated_at(task_id)  # 心跳防 zombie
-            result = self._call_model(entry, system_prompt, history, tools, ctx)
+            # 协作式取消：每轮复查任务态。被 cancel_pipeline/zombie 回收即退出本 worker，
+            # 不 append done 气泡、不 finalize（闭 I-1 double-execute / I-2 孤儿气泡）。
+            latest = self._task_repo.get(task_id)
+            if latest is None or latest.status != TaskStatus.RUNNING.value:
+                logger.info("subagent task %s no longer running (status=%s), abort loop",
+                            task_id, latest.status if latest else "gone")
+                return
+            result = self._call_model(entry, system_prompt, history, tools, ctx, iteration)
             tool_results = self._exec_tools(result, task, ctx) if result.tool_calls else []
             self._steps_repo.append(
                 task_id, iteration, _join_thinking(result),
@@ -133,9 +140,9 @@ class SubAgentService:
             prior.step_output if prior else None, task.feedback,
         )
 
-    def _call_model(self, entry, system_prompt, history, tools, ctx) -> StreamResult:
+    def _call_model(self, entry, system_prompt, history, tools, ctx, iteration: int) -> StreamResult:
         messages = [{"role": "system", "content": system_prompt}] + history
-        ctx.turn = TurnState()
+        ctx.turn.reset(iteration)  # 带 iteration，trace 行记正确轮次（修 M-1 恒为 0）
         ctx.turn.provider_messages = messages
         ctx.tool_schemas = tools
         list(self._hooks.trigger("BeforeModelRequest", ctx))  # 消费丢弃事件(trace 已写库)
@@ -168,24 +175,33 @@ class SubAgentService:
         return views
 
     def _finalize(self, task, result, profile) -> None:
-        """解析产物 → append done 气泡 → persist（事务内 artifacts upsert + CAS）。"""
+        """解析产物 → CAS running→awaiting_confirm|finished → 持有时落 artifacts + done 气泡。
+
+        CAS 先于产物落库（闭 I-2）：事务内先 CAS，持有（status 未漂移）才 upsert 产物；
+        漂移（被 cancel_pipeline/zombie 回收）则不 upsert、不 append done 气泡，避免孤儿
+        产物/气泡。parse_output 在 CAS 前——解析失败上抛 run() except 走 running→failed，
+        不消耗 CAS。done 气泡事务外尽力写（失败不回滚已落 task/产物）。
+        """
         content = "".join(result.text_parts)
         artifacts, narrative = parse_output(content, task.agent_type)
         done_text = (narrative.get("done_line") or "") if narrative else ""
-        self._message.append_progress_message(
-            task.session_id, message_id=uuid.uuid4().hex, content=done_text or "完成",
-        )
         to_status = (
             TaskStatus.FINISHED.value if task.agent_type == "finalize"
             else TaskStatus.AWAITING_CONFIRM.value
         )
+        # 事务内 CAS 先行 + 持有才 upsert：status 翻转与产物原子可见，漂移则两者皆不落
         with self._conn.transaction():
-            self._artifacts_repo.upsert(
-                task.id, step_output=artifacts, artifacts=artifacts, narrative=narrative,
-            )
             ok = self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, to_status)
+            if ok:
+                self._artifacts_repo.upsert(
+                    task.id, step_output=artifacts, artifacts=artifacts, narrative=narrative,
+                )
         if not ok:
             logger.warning("subagent finalize CAS failed (status drifted) for task %s", task.id)
+            return
+        self._message.append_progress_message(
+            task.session_id, message_id=uuid.uuid4().hex, content=done_text or "完成",
+        )
 
 
 def _parse_args(raw: str) -> dict:

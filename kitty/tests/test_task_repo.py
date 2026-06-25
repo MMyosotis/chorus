@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from kitty.domain.session import Session
-from kitty.domain.task import Task, TaskStatus
+from kitty.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
 from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.session import SessionRepository
 from kitty.repositories.task import TaskRepository
@@ -106,11 +106,13 @@ def test_cancel_pipeline():
     repo.insert(_mk("c", status="awaiting_confirm", pipeline_id="p1"))
     repo.insert(_mk("d", status="finished", pipeline_id="p1"))  # 终态不动
     repo.insert(_mk("e", status="pending", pipeline_id="p2"))    # 别的 pipeline 不动
-    n = repo.cancel_pipeline("p1")
+    n = repo.cancel_pipeline("p1", CANCELLABLE_STATUSES)
     assert n == 3
     assert repo.get("a").status == "cancelled"
     assert repo.get("d").status == "finished"
     assert repo.get("e").status == "pending"
+    # 空集合不翻转（防误调）
+    assert repo.cancel_pipeline("p1", []) == 0
 
 
 def test_touch_updated_at():
