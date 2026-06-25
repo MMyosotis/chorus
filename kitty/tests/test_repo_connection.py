@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
-"""ConnectionFactory.transaction 与 busy_timeout 的 smoke test。
+"""ConnectionFactory smoke test：transaction 提交/回滚/不可嵌套 + busy_timeout PRAGMA。
 
-运行：`.venv/bin/python -m kitty.tests.test_connection`
+运行：``.venv/bin/python -m kitty.tests.test_repo_connection``
 """
 from __future__ import annotations
 

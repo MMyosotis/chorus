@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""select_schemas_by_names smoke test。运行：.venv/bin/python -m kitty.tests.test_tool_select"""
+"""select_schemas_by_names smoke test。运行：.venv/bin/python -m kitty.tests.test_tools_select"""
 from __future__ import annotations
 
 from kitty.tools import select_schemas_by_names

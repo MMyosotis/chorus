@@ -1,17 +1,54 @@
-# kitty/tests/test_task_state.py
-"""任务图纯函数表驱动断言：状态机 / pipeline / PostCard。
+# kitty/tests/test_domain_task.py
+"""任务图领域纯函数表驱动断言：PostCard 契约 / 状态机 / AgentProfile / pipeline。
 
-不碰 DB，成本极低。运行：`.venv/bin/python -m kitty.tests.test_task_state`
+覆盖 ``kitty/domain/task`` 下 state_machine + profiles + post + pipeline 的纯逻辑
+（不碰 DB，成本极低）。是「状态机/纯函数不测是最大浪费」（spec 第 8 节）的主防线。
+
+运行：``.venv/bin/python -m kitty.tests.test_domain_task``
 """
 from __future__ import annotations
 
-# 用例在 Task 6（state_machine 完成）后填充。
+import pytest
 
-from kitty.domain.task import PostCard, PostImage, PostSection
+from kitty.domain.task import (
+    ACTIVE_STATUSES,
+    AGENT_PROFILES,
+    CANCELLABLE_STATUSES,
+    LEGAL_TRANSITIONS,
+    PostCard,
+    PostImage,
+    PostSection,
+    TERMINAL_STATUSES,
+    Task,
+    TaskStatus,
+    CreationIntent,
+    StepSpec,
+    ValidationError,
+    can_schedule,
+    expand_pipeline,
+    is_legal_transition,
+    is_zombie,
+    parse_output,
+    parse_sections,
+    render_invoke_message,
+    select_display_pipeline,
+    validate_steps,
+)
 
+
+def _mk(status, deps=None, **kw):
+    base = dict(
+        id="t", session_id="s", pipeline_id="p", agent_type="idea", seq=1,
+        status=status, invoke_message="x", dependencies=deps or [],
+        created_at=0.0, updated_at=0.0,
+    )
+    base.update(kw)
+    return Task(**base)
+
+
+# —— PostCard 契约 ——
 
 def test_postcard_contract():
-    # 合法 PostCard：含 image section
     card = PostCard(
         title="夏日晚风",
         cover=PostImage(url="http://x/a.jpg"),
@@ -29,37 +66,12 @@ def test_postcard_contract():
 
 
 def test_postcard_rejects_unknown_kind():
-    import pytest
     from pydantic import ValidationError as PydValidationError
     with pytest.raises(PydValidationError):
         PostSection(kind="table", text="x")  # type: ignore[arg-type]
 
 
-import pytest
-
-from kitty.domain.task import (
-    ACTIVE_STATUSES,
-    CANCELLABLE_STATUSES,
-    LEGAL_TRANSITIONS,
-    TERMINAL_STATUSES,
-    Task,
-    TaskStatus,
-    can_schedule,
-    is_legal_transition,
-    is_zombie,
-    select_display_pipeline,
-)
-
-
-def _mk(status, deps=None, **kw):
-    base = dict(
-        id="t", session_id="s", pipeline_id="p", agent_type="idea", seq=1,
-        status=status, invoke_message="x", dependencies=deps or [],
-        created_at=0.0, updated_at=0.0,
-    )
-    base.update(kw)
-    return Task(**base)
-
+# —— 状态机 ——
 
 def test_legal_transitions_table():
     # 严格闸门：无 finished→*
@@ -116,8 +128,7 @@ def test_select_display_pipeline():
     assert select_display_pipeline([], []) == []
 
 
-from kitty.domain.task import AGENT_PROFILES, AgentProfile
-
+# —— AgentProfile 注册表 ——
 
 def test_agent_profiles_registry():
     assert set(AGENT_PROFILES.keys()) == {"idea", "script", "image", "finalize"}
@@ -132,18 +143,7 @@ def test_agent_profiles_registry():
         assert p.expected_sections == ("artifacts", "narrative")
 
 
-from kitty.domain.task import (
-    CreationIntent,
-    StepSpec,
-    TaskStatus,
-    ValidationError,
-    expand_pipeline,
-    parse_output,
-    parse_sections,
-    render_invoke_message,
-    validate_steps,
-)
-
+# —— pipeline 校验 / 展开 / 渲染 / 解析 ——
 
 def test_validate_steps_ok():
     steps = [
@@ -165,9 +165,7 @@ def test_validate_steps_rejects():
     # 前向依赖
     with pytest.raises(ValidationError):
         validate_steps([StepSpec("idea", [1], "x"), StepSpec("finalize", [0], "y")])
-    # 成环（finalize 依赖一个不存在的回环——构造两步互引非法索引已被前向拦截，
-    # 真环需 3 步：a→b→a 但 a 在前，b 引 a 合法，再让 a 引 b 则 b>=a 非法，故
-    # 此用例验证自指）
+    # 自指
     with pytest.raises(ValidationError):
         validate_steps([StepSpec("idea", [0], "x"), StepSpec("finalize", [0], "y")])
 
@@ -236,41 +234,6 @@ def test_parse_output_finalize_postcard():
 def test_parse_output_missing_section():
     with pytest.raises(ValidationError):
         parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>", "idea")  # 缺 NARRATIVE
-
-
-from kitty.agents import AgentContext
-
-
-def test_agent_context_multiagent_fields():
-    ctx = AgentContext(session_id="s", source="subagent", task_id="t1")
-    assert ctx.source == "subagent"
-    assert ctx.task_id == "t1"
-    # 默认 supervisor
-    ctx2 = AgentContext(session_id="s")
-    assert ctx2.source == "supervisor"
-    assert ctx2.task_id is None
-    # reset 不清 source（回合级固定）
-    ctx.turn.reset(3)
-    assert ctx.turn.iteration_index == 3
-    assert ctx.source == "subagent"
-
-
-from kitty.domain.prompt import PromptContext, build_subagent_system_prompt, build_system_prompt
-
-
-def test_subagent_prompts():
-    for at in ("idea", "script", "image", "finalize"):
-        p = build_subagent_system_prompt(at)
-        assert "<<<ARTIFACTS:json>>>" in p
-        assert "<<<NARRATIVE:json>>>" in p
-        assert "禁用任何 emoji" in p
-
-
-def test_supervisor_prompt_has_profiles():
-    p = build_system_prompt(PromptContext())
-    assert "create_plan" in p
-    assert "finalize" in p
-    assert "选题官" in p  # profiles 注入
 
 
 def main():

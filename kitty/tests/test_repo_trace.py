@@ -1,29 +1,18 @@
-#!/usr/bin/env python3
-"""TraceRepository 多来源扩展的 smoke test。
+"""TraceRepository 多来源扩展的 smoke test：source/task_id 写入、按 session/task 聚合。
 
-运行：`.venv/bin/python -m kitty.tests.test_trace_repo`
+运行：``.venv/bin/python -m kitty.tests.test_repo_trace``
 """
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 from kitty.domain.trace import TraceEntry, TracePhase
-from kitty.repositories.connection import ConnectionFactory
-from kitty.repositories.session import SessionRepository
 from kitty.repositories.trace import TraceRepository
+from kitty.tests._helpers import fresh_conn, seed_session
 
 
 def _setup():
-    tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    SessionRepository(conn).insert(_session("s1"))
+    conn = fresh_conn()
+    seed_session(conn)
     return conn
-
-
-def _session(sid):
-    from kitty.domain.session import Session
-    return Session(id=sid, title="t", title_generated=False, created_at=0.0, updated_at=0.0)
 
 
 def test_add_with_source_and_task_id():

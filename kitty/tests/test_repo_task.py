@@ -1,20 +1,14 @@
-#!/usr/bin/env python3
-"""TaskRepository 的 smoke test：CAS / 哑查询 / cancel_pipeline。
+"""TaskRepository 的 smoke test：CAS / 哑查询 / cancel_pipeline / 心跳。
 
-运行：`.venv/bin/python -m kitty.tests.test_task_repo`
+运行：``.venv/bin/python -m kitty.tests.test_repo_task``
 """
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
-from kitty.domain.session import Session
 from kitty.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
-from kitty.repositories.connection import ConnectionFactory
-from kitty.repositories.session import SessionRepository
 from kitty.repositories.task import TaskRepository
+from kitty.tests._helpers import fresh_conn, seed_session
 
 
 def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None, seq=1, **kw):
@@ -28,12 +22,8 @@ def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None,
 
 
 def _repo():
-    tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    # tasks 外键引用 sessions（foreign_keys=ON），须先建 sessions 表并插父行
-    SessionRepository(conn).insert(
-        Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0)
-    )
+    conn = fresh_conn()
+    seed_session(conn)  # tasks 外键引用 sessions（foreign_keys=ON），须先建父行
     return TaskRepository(conn), conn
 
 
@@ -86,9 +76,7 @@ def test_find_running_before():
 def test_find_count_by_session_statuses():
     repo, conn = _repo()
     # 别的 session 的 task 不应被 s1 查到（跨 session 隔离）
-    SessionRepository(conn).insert(
-        Session(id="s2", title="t2", title_generated=False, created_at=0.0, updated_at=0.0)
-    )
+    seed_session(conn, sid="s2", title="t2")
     repo.insert(_mk("a", status="pending"))
     repo.insert(_mk("b", status="running"))
     repo.insert(_mk("c", status="finished"))

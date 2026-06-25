@@ -1,32 +1,21 @@
-# kitty/tests/test_message_repo.py
-#!/usr/bin/env python3
-"""message subtype + 并发 seq 重试 smoke test。
+"""MessageRepository + MessageService smoke test：subtype 回环 / progress 压缩 / 并发 seq 重试。
 
-运行：`.venv/bin/python -m kitty.tests.test_message_repo`
+运行：``.venv/bin/python -m kitty.tests.test_repo_message``
 """
 from __future__ import annotations
 
-import tempfile
 import threading
-from pathlib import Path
 
-from kitty.domain.session import Session
-from kitty.repositories.connection import ConnectionFactory
 from kitty.repositories.message import MessageRepository
-from kitty.repositories.session import SessionRepository
+from kitty.repositories.trace import TraceRepository
 from kitty.services.message import MessageService
+from kitty.tests._helpers import fresh_conn, seed_session
 
 
 def _setup():
-    tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    return MessageService(MessageRepository(conn), _noop_trace_repo(conn))
-
-
-def _noop_trace_repo(conn):
-    from kitty.repositories.trace import TraceRepository
-    return TraceRepository(conn)
+    conn = fresh_conn()
+    seed_session(conn)
+    return MessageService(MessageRepository(conn), TraceRepository(conn))
 
 
 def test_subtype_roundtrip():

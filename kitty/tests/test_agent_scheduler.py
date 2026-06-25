@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """TaskScheduler smoke test：派发 + zombie 回收 + CAS 竞态 + 限流。
 
-运行：.venv/bin/python -m kitty.tests.test_scheduler
+运行：.venv/bin/python -m kitty.tests.test_agent_scheduler
 """
 from __future__ import annotations
 

@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """TaskService HIL smoke test：confirm/retry/cancel + get_graph。
 
-运行：.venv/bin/python -m kitty.tests.test_task_service
+运行：.venv/bin/python -m kitty.tests.test_service_task
 """
 from __future__ import annotations
 

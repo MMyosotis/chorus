@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """SupervisorService 顺序契约：only_reply / new_plan / 校验失败降级。
 
-运行：.venv/bin/python -m kitty.tests.test_supervisor
+运行：.venv/bin/python -m kitty.tests.test_agent_supervisor
 """
 from __future__ import annotations
 

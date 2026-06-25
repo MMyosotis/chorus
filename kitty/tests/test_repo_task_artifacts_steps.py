@@ -1,31 +1,21 @@
-#!/usr/bin/env python3
-"""task_artifacts + task_steps repo 的 smoke test。
+"""task_artifacts + task_steps repo 的 smoke test：upsert/load_many、step 追加与去重。
 
-运行：`.venv/bin/python -m kitty.tests.test_task_artifacts_steps`
+运行：``.venv/bin/python -m kitty.tests.test_repo_task_artifacts_steps``
 """
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
-from kitty.domain.session import Session
 from kitty.domain.task import Task
-from kitty.repositories.connection import ConnectionFactory
-from kitty.repositories.session import SessionRepository
 from kitty.repositories.task import TaskRepository
 from kitty.repositories.task_artifacts import TaskArtifactsRepository
 from kitty.repositories.task_steps import TaskStepsRepository
+from kitty.tests._helpers import fresh_conn, seed_session
 
 
 def _setup():
-    tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    # tasks 外键引用 sessions（foreign_keys=ON），须先建 sessions 表并插父行
-    SessionRepository(conn).insert(
-        Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0)
-    )
+    conn = fresh_conn()
+    seed_session(conn)  # tasks 外键引用 sessions（foreign_keys=ON），须先建父行
     TaskRepository(conn).insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea", seq=1,
         status="running", invoke_message="x", dependencies=[],

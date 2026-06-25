@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """SubAgentService.run 的 smoke test：ReAct + 产物解析 + CAS awaiting_confirm/finished。
 
-运行：.venv/bin/python -m kitty.tests.test_subagent
+运行：.venv/bin/python -m kitty.tests.test_agent_subagent
 """
 from __future__ import annotations
 

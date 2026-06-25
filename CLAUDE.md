@@ -16,8 +16,11 @@ uv sync                                              # 安装依赖
 .venv/bin/uvicorn kitty.app:app --reload --port 8000 # 启动开发服务器
 ./scripts/start.sh                                   # 同时启动前后端
 
-# 不走 HTTP 的本地调试 CLI（直接调用 ChatService.stream，方便观察 SSE 事件）
-.venv/bin/python -m kitty.tests.test_cli
+# 不走 HTTP 的本地调试 CLI（直接调用 SupervisorService.stream，方便观察 SSE 事件）
+.venv/bin/python scripts/debug_cli.py
+
+# 一键跑全部自动化测试（逐模块裸跑；也可 `.venv/bin/python -m pytest kitty/tests/`）
+.venv/bin/python -m kitty.tests
 ```
 
 ### 前端
@@ -57,7 +60,8 @@ cd web && npm run build                # 构建生产版本
 | `hooks/` | `base`(Hook 单方法基类)、`manager`(HookManager 7 个具名方法 `on_xxx` 按字面顺序调用该事件 hook、fail-open)、`registry`(`build_hooks` 装配 8 个 hook 打包成 `HookBundle`) + `builtin/` 8 个类化 hook |
 | `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`、`chat`(SSE)、`settings`(/api/debug/test-mode) |
 | `resources/skills/` | 技能 markdown（frontmatter: name/description/tags） |
-| `tests/test_cli.py` | 手动调试 CLI（直接调 `ChatService.stream`，不经 HTTP） |
+| `tests/` | 自动化测试（前缀分组：`test_domain_*`/`test_repo_*`/`test_service_*`/`test_agent_*`/`test_tools_*`/`test_route_*`/`test_integration_*`），共享工具 `_helpers.py`，一键入口 `__main__.py` |
+| `scripts/debug_cli.py` | 手动调试 CLI（直接调 `SupervisorService.stream`，不经 HTTP），非自动化测试 |
 
 ### Agent Loop (`services/chat.py`)
 
@@ -154,12 +158,23 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为需要 POS
 
 ## 测试
 
-项目以 pytest 为 dev 依赖（`uv add --dev pytest`），但**不追求全覆盖**——只对纯领域函数 / 状态机 / repo smoke 用表驱动断言锚定（spec 第 8 节：「状态机/纯函数不测是最大浪费」）。测试文件在 `kitty/tests/`，用 `python -m kitty.tests.test_<name>` 跑（每个文件带 `main()` 入口聚合所有 `test_` 函数，可裸跑也可 pytest 跑）：
+项目以 pytest 为 dev 依赖（`uv add --dev pytest`），但**不追求全覆盖**——只对纯领域函数 / 状态机 / repo smoke / 关键编排路径用表驱动断言锚定（spec 第 8 节：「状态机/纯函数不测是最大浪费」）。测试文件在 `kitty/tests/`，**按层前缀分组**（`test_domain_*` / `test_repo_*` / `test_service_*` / `test_agent_*` / `test_tools_*` / `test_route_*` / `test_integration_*`），每个文件带 `main()` 入口聚合所有 `test_` 函数。运行方式：
 
-- `test_cli.py` — 手动调试交互 CLI（直接调 `ChatService.stream`，不经 HTTP），非自动化测试
-- `test_chat_pipeline.py` — supervisor only_reply 顺序契约 smoke test（FakeOpenAIStream 脚本化 chunk）
-- `test_task_state.py` — 任务图纯函数表驱动断言（状态机 / pipeline / PostCard）
-- `test_task_repo.py` / `test_task_artifacts_steps.py` / `test_connection.py` / `test_trace_repo.py` / `test_message_repo.py` — 各 repo 的 smoke test
+- 单文件：`python -m kitty.tests.test_<name>`（裸跑）
+- 一键全跑：`python -m kitty.tests`（逐模块裸跑 + 汇总）或 `python -m pytest kitty/tests/`（pytest 收集）
+
+文件清单（每个文件首行 docstring 注明用途与覆盖范围）：
+
+- `test_domain_task.py` — 任务图纯函数：PostCard 契约 / 状态机 LEGAL_TRANSITIONS / can_schedule / is_zombie / 状态集合 / select_display_pipeline / AgentProfile 注册表 / pipeline 校验-展开-渲染-解析
+- `test_domain_prompt.py` — 系统提示词拼装：supervisor（含 create_plan + profiles 注入）/ subagent 各角色（ARTIFACTS/NARRATIVE 锚点 + 禁 emoji）
+- `test_domain_stream.py` / `test_domain_message.py` / `test_domain_title.py` / `test_domain_events.py` / `test_domain_skill.py` — 各 domain 纯函数 smoke
+- `test_repo_connection.py` / `test_repo_message.py` / `test_repo_trace.py` / `test_repo_task.py` / `test_repo_task_artifacts_steps.py` — 各 repo 的 smoke test（CAS / 哑查询 / cancel_pipeline / 多来源 trace 等）
+- `test_service_task.py` / `test_service_session.py` — HIL 与会话锁的编排层 smoke
+- `test_agent_subagent.py` / `test_agent_scheduler.py` / `test_agent_supervisor.py` / `test_agent_runtime.py` — 三 loop + 运行时状态契约
+- `test_tools_select.py` — 工具 schema 选择规则
+- `test_route_task.py` — task 路由 HTTP 适配（404/409 映射）
+- `test_integration_pipeline.py` — 端到端 4 链路 smoke（建图→subagent→confirm→scheduler 派发，FakeClient 模拟 LLM）
+- `_helpers.py` — 共享 `fresh_conn()` / `seed_session()`（临时 DB + sessions 父行种子）；`__main__.py` — 一键跑全入口
 
 ## 开发约定
 
