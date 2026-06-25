@@ -16,10 +16,12 @@ import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
 import ProgressBanner from './main-panel/ProgressBanner.vue'
 import TeamPanel from './team-panel/TeamPanel.vue'
+import SettingsPanel from './SettingsPanel.vue'
 
 const traceStore = useTraceStore()
 const taskPolling = useTaskPolling()
 const consoleOpen = ref(false)
+const settingsOpen = ref(false)
 
 const sessions = ref([]) // [{id, title, created_at, updated_at}]
 const messagesBySession = reactive({}) // { [id]: Message[] }
@@ -188,6 +190,63 @@ async function loadMessages(id) {
 async function selectSession(id) {
   activeId.value = id
   await loadMessages(id)
+  injectTaskCards(id)
+  // 进入会话若已有 active task 图，恢复轮询（start 首 tick 拉图，active=False 自停）
+  taskPolling.start(id)
+}
+
+// 强制从服务器重拉 messages（轮询/done 后取回非流式 friendly_reply + progress 气泡）
+async function forceReloadMessages(id) {
+  try {
+    const raw = await fetchMessages(id)
+    messagesBySession[id] = mergeAssistantHistory(raw)
+    injectTaskCards(id)
+  } catch {
+    // 轮询期间忽略
+  }
+}
+
+// 把 polling graph 里 awaiting_confirm 的 task 与 finalize finished 的成品
+// 映射成虚拟 messages 条目，追加到该会话消息流末尾（供 ChatWindow 内嵌 HilCard/PostCard）。
+function injectTaskCards(id) {
+  const list = messagesBySession[id]
+  if (!list) return
+  const graph = taskPolling.getGraph(id)
+  // 去掉旧虚拟卡后重注入，避免重复
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].kind === 'hil' || list[i].kind === 'postcard') list.splice(i, 1)
+  }
+  if (!graph) return
+  const sorted = [...(graph.tasks || [])].sort((a, b) => a.seq - b.seq)
+  for (const t of sorted) {
+    if (t.status === 'awaiting_confirm') {
+      list.push({ kind: 'hil', task: t, id: 'hil:' + t.id, role: 'assistant' })
+    } else if (t.agent_type === 'finalize' && t.status === 'finished') {
+      list.push({ kind: 'postcard', task: t, id: 'postcard:' + t.id, role: 'assistant' })
+    }
+  }
+}
+
+// 注入轮询依赖（是否该会话正 SSE 流式 / 强制重拉 messages）
+taskPolling.configure({
+  isStreaming: (sid) => !!streamingBySession[sid],
+  reloadMessages: forceReloadMessages,
+})
+
+// HilCard 操作回调
+function onHilConfirmed(taskId) {
+  const sid = activeId.value
+  if (!sid) return
+  forceReloadMessages(sid)
+}
+function onHilRetried(taskId) {
+  const sid = activeId.value
+  if (!sid) return
+  taskPolling.start(sid) // 重跑后重新轮询跟踪进度
+}
+function onHilCancelled(sid) {
+  taskPolling.stop()
+  forceReloadMessages(sid)
 }
 
 async function onCreate() {
@@ -382,10 +441,15 @@ async function onSend(text) {
           title: payload.title,
         }
       }
+    } else if (payload.type === 'task_plan_created') {
+      // supervisor 建图落库后 yield 图骨架 → 启动该会话轮询
+      taskPolling.start(sessionId)
     } else if (payload.type === 'done') {
       finalizeCurrent()
       mergeTrailingEmptyBubble()
       streamingBySession[sessionId] = false
+      // friendly_reply 非流式落库, done 后重拉取回气泡 + 启动/续轮询
+      forceReloadMessages(sessionId).finally(() => taskPolling.start(sessionId))
     } else if (payload.type === 'error') {
       ensureAssistant().content = `[错误] ${payload.content}`
       streamingBySession[sessionId] = false
@@ -426,6 +490,7 @@ onMounted(async () => {
       @create="onCreate"
       @delete="onDelete"
       @rename="onRename"
+      @open-settings="settingsOpen = true"
     />
     <div class="main-panel">
       <header class="header">
@@ -439,13 +504,21 @@ onMounted(async () => {
           </svg>
         </button>
       </header>
-      <ChatWindow :messages="messages" :streaming="streaming" />
+      <ChatWindow
+        :messages="messages"
+        :streaming="streaming"
+        :session-id="activeId || ''"
+        @hil-confirmed="onHilConfirmed"
+        @hil-retried="onHilRetried"
+        @hil-cancelled="onHilCancelled"
+      />
       <ProgressBanner :graph="activeGraph" />
       <InputBar :streaming="streaming" @send="onSend" />
     </div>
     <TeamPanel :graph="activeGraph" />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
+  <SettingsPanel v-model:open="settingsOpen" />
 </template>
 
 <style scoped>
