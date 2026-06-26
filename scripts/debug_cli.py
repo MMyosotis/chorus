@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Chorus 后端调试 CLI — 直接调 SupervisorService.stream，不走 HTTP。
 
-贴近 HTTP 路由行为：从 SettingsService 读对话/生图模型与联网搜索开关传入 stream，
+贴近 HTTP 路由行为：从 SettingsService 读生图模型与联网搜索开关传入 stream（对话模型
+由 ChatModelProvider 内部按 settings 自取，supervisor.stream 不再接收 model 参数），
 使 CLI 与浏览器表现一致。只消费 supervisor 的 SSE 流；subagent/scheduler 在后台
 线程写库不连 SSE，其流水线进展 CLI 观察不到（前端靠轮询 get_graph，此处不模拟）。
 """
@@ -27,7 +28,7 @@ from chorus.startup import run_startup
 _supervisor = _app.app.state.supervisor_service
 _settings = _app.app.state.settings_service
 _session = _app.app.state.session_service
-run_startup(_supervisor._skill, _settings, _session, _app.app.state.scheduler)
+run_startup(_supervisor._skill, _session, _app.app.state.scheduler)
 
 
 COLORS = {
@@ -98,7 +99,6 @@ def main() -> None:
 
         for ev in _supervisor.stream(
             session_id, query,
-            model=_settings.get_chat_model(),
             image_model=_settings.get_image_model(),
             web_search=_settings.get_web_search(),
         ):

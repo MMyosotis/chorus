@@ -31,6 +31,7 @@ from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.task import TaskRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
+from chorus.services.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.tools import ToolCall, ToolCtxFactory, ToolRegistry, select_schemas_by_names
 
@@ -49,8 +50,7 @@ class SubAgentService:
         tool_registry: ToolRegistry,
         tool_ctx_factory: ToolCtxFactory,
         hooks: HookRegistry,
-        chat_models: dict,
-        subagent_models: dict,
+        chat_model_provider: ChatModelProvider,
         max_tokens: int,
         all_tool_schemas: list[dict],
         clock=time.time,
@@ -63,8 +63,7 @@ class SubAgentService:
         self._tools = tool_registry
         self._tool_ctx_factory = tool_ctx_factory
         self._hooks = hooks
-        self._models = chat_models
-        self._subagent_models = subagent_models
+        self._models = chat_model_provider
         self._max_tokens = max_tokens
         self._all_schemas = all_tool_schemas
         self._clock = clock
@@ -85,9 +84,10 @@ class SubAgentService:
             logger.warning("subagent: task %s not found", task_id)
             return
         profile = AGENT_PROFILES[task.agent_type]
+        entry = self._models.get_entry()
         ctx = AgentContext(
             session_id=task.session_id, source="subagent", task_id=task_id,
-            chat_model=self._subagent_models.get(task.agent_type, ""),
+            chat_model=entry.model_id,
         )
         # enter 进度气泡（静态出场语，narrative 尚未产出）
         self._message.append_progress_message(
@@ -97,7 +97,6 @@ class SubAgentService:
         system_prompt = build_subagent_system_prompt(task.agent_type)
         history: list[dict] = [{"role": "user", "content": invoke}]
         tools = select_schemas_by_names(self._all_schemas, profile.tools)
-        entry = self._models[self._subagent_models[task.agent_type]]
 
         iteration = self._steps_repo.next_iteration(task_id)
         while iteration <= _MAX_STEPS:

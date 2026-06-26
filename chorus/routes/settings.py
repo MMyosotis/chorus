@@ -65,8 +65,8 @@ class OptionsPatch(BaseModel):
 @settings_router.get("/models", response_model=ModelListsView)
 def get_model_lists():
     # 仅暴露 id（展示名 + 存储键）；base_url/api_key_env/model_id 是连接细节，不外露
-    chat_models = [ModelItem(id=m["id"]) for m in CHAT_MODELS]
-    image_models = [ModelItem(id=m["id"]) for m in IMAGE_MODELS]
+    chat_models = [ModelItem(id=m["model_name"]) for m in CHAT_MODELS]
+    image_models = [ModelItem(id=m["model_name"]) for m in IMAGE_MODELS]
     return ModelListsView(chat_models=chat_models, image_models=image_models)
 
 

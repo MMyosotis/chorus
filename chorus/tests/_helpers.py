@@ -27,3 +27,23 @@ def seed_session(conn: ConnectionFactory, sid: str = "s1", title: str = "t") -> 
     session = Session(id=sid, title=title, title_generated=False, created_at=0.0, updated_at=0.0)
     SessionRepository(conn).insert(session)
     return session
+
+
+def stub_chat_model_provider(client, model_id: str = "fake"):
+    """构造注入 ChatModelEntry 的假 ChatModelProvider（不经真实 OpenAI / settings）。
+
+    supervisor/subagent 测试用：get_entry() 恒返回包好 fake client 的 entry，
+    跳过 ChatModelProvider 的 config 解析与 settings 查询。
+    """
+    from chorus.services.chat_model import ChatModelEntry
+    entry = ChatModelEntry(client=client, model_id=model_id)
+
+    class _Stub:
+        def get_entry(self):
+            return entry
+
+        def title_entry(self):
+            return entry
+
+    return _Stub()
+

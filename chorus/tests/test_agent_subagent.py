@@ -21,6 +21,7 @@ from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
+from chorus.tests._helpers import stub_chat_model_provider
 from chorus.tools import Tool, ToolContext, ToolRegistry
 
 
@@ -113,12 +114,11 @@ def _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, fake_client)
     def tool_ctx_factory(session_id, image_model=None):
         return ToolContext(skill_loader=None, session_id=session_id, image_model=image_model)
 
-    _entry = types.SimpleNamespace(client=fake_client, model_id="fake")
+    _provider = stub_chat_model_provider(fake_client)
     return SubAgentService(
         conn, msg_svc, task_repo, art_repo, steps_repo,
         tool_registry, tool_ctx_factory, hooks,
-        {"fake": _entry}, {"idea": "fake", "finalize": "fake"},
-        1024, tool_registry.schemas_openai(),
+        _provider, 1024, tool_registry.schemas_openai(),
     )
 
 

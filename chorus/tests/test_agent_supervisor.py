@@ -9,7 +9,7 @@ import tempfile
 import types
 from pathlib import Path
 
-from chorus.agents.supervisor import ChatModelEntry, SupervisorService
+from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
@@ -20,6 +20,7 @@ from chorus.repositories.task import TaskRepository
 from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
+from chorus.tests._helpers import stub_chat_model_provider
 from chorus.tools import ToolContext, ToolRegistry
 from chorus.tools.builtin import CreatePlanTool, LoadSkillTool
 
@@ -75,10 +76,10 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     def tool_ctx_factory(session_id, image_model=None):
         return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
 
-    entry = ChatModelEntry(client=fake_client, model_id="fake")
+    entry = stub_chat_model_provider(fake_client)
     return SupervisorService(
-        session_svc, msg_svc, skill_loader, hooks, {"fake": entry},
-        "fake", 1024, task_repo, tool_registry, tool_ctx_factory,
+        session_svc, msg_svc, skill_loader, hooks, entry,
+        1024, task_repo, tool_registry, tool_ctx_factory,
     )
 
 

@@ -10,24 +10,19 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 
 from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
-from chorus.agents.supervisor import ChatModelEntry, SupervisorService
+from chorus.agents.supervisor import SupervisorService
 from chorus.config import (
     BAIDU_SEARCH_API_KEY,
     BAIDU_SEARCH_BASE_URL,
-    CHAT_MODELS,
     DATA_DIR,
-    DEFAULT_CHAT_MODEL_ID,
-    DEFAULT_IMAGE_MODEL_ID,
     IMAGE_MODELS,
     IMAGE_TEST_FAKE_URL,
     MAX_TOKENS,
     POOL_SIZE,
     SCHEDULER_INTERVAL,
-    SUBAGENT_MODELS,
     ZOMBIE_TIMEOUT,
 )
 from chorus.domain.skill import SkillLoader
@@ -46,6 +41,7 @@ from chorus.routes.sessions import router as sessions_router
 from chorus.routes.settings import router as settings_router
 from chorus.routes.settings import settings_router as model_options_router
 from chorus.routes.task import router as task_router
+from chorus.services.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
@@ -72,26 +68,17 @@ def create_app() -> FastAPI:
     session_service = SessionService(session_repo)
     message_service = MessageService(msg_repo, trace_repo)
 
-    chat_models: dict[str, ChatModelEntry] = {}
-    for m in CHAT_MODELS:
-        api_key = os.environ.get(m["api_key_env"], "")
-        chat_models[m["id"]] = ChatModelEntry(
-            client=OpenAI(api_key=api_key, base_url=m["base_url"], max_retries=3),
-            model_id=m["model_id"],
-        )
-    default_entry = chat_models.get(DEFAULT_CHAT_MODEL_ID)
-    if default_entry is None:
-        raise RuntimeError(f"DEFAULT_CHAT_MODEL_ID={DEFAULT_CHAT_MODEL_ID!r} 不在 CHAT_MODELS 中")
-    title_service = TitleGenerationService(default_entry.client, default_entry.model_id)
+    chat_model_provider = ChatModelProvider(settings_service)
+    # 标题生成固定用默认模型（不随用户当前对话设置变动）
+    title_entry = chat_model_provider.title_entry()
+    title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
 
     image_models: dict[str, ImageModelEntry] = {}
     for m in IMAGE_MODELS:
         api_key = os.environ.get(m["api_key_env"], "")
-        image_models[m["id"]] = ImageModelEntry(
+        image_models[m["model_name"]] = ImageModelEntry(
             client=ArkImageClient(api_key, m["base_url"]), model_id=m["model_id"],
         )
-    if DEFAULT_IMAGE_MODEL_ID not in image_models:
-        raise RuntimeError(f"DEFAULT_IMAGE_MODEL_ID={DEFAULT_IMAGE_MODEL_ID!r} 不在 IMAGE_MODELS 中")
 
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     tool_registry = ToolRegistry([
@@ -99,7 +86,7 @@ def create_app() -> FastAPI:
         OutputPlanTool(),
         GenerateImageTool(
             settings_service.get_image_test_mode, IMAGE_TEST_FAKE_URL,
-            image_models, DEFAULT_IMAGE_MODEL_ID,
+            image_models, IMAGE_MODELS[0]["model_name"],
         ),
         BaiduSearchTool(baidu_client),
         CreatePlanTool(task_repo, conn),
@@ -121,12 +108,12 @@ def create_app() -> FastAPI:
 
     supervisor_service = SupervisorService(
         session_service, message_service, skill_loader, hooks,
-        chat_models, DEFAULT_CHAT_MODEL_ID, MAX_TOKENS, task_repo,
+        chat_model_provider, MAX_TOKENS, task_repo,
         tool_registry, tool_ctx_factory,
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo, task_steps_repo,
-        tool_registry, tool_ctx_factory, hooks, chat_models, SUBAGENT_MODELS,
+        tool_registry, tool_ctx_factory, hooks, chat_model_provider,
         MAX_TOKENS, all_tool_schemas,
     )
     task_service = TaskService(task_repo, task_artifacts_repo, task_steps_repo, session_service)
@@ -163,7 +150,7 @@ def create_app() -> FastAPI:
 def _build_lifespan(skill_loader, settings_service, session_service, scheduler):
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
-        run_startup(skill_loader, settings_service, session_service, scheduler)
+        run_startup(skill_loader, session_service, scheduler)
         yield
         scheduler.stop()
     return _lifespan

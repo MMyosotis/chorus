@@ -12,10 +12,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass
 from typing import Iterator, Optional
-
-from openai import OpenAI
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import (
@@ -31,6 +28,7 @@ from chorus.domain.stream import consume_stream
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
 from chorus.repositories.task import TaskRepository
+from chorus.services.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.tools import ToolCall, ToolRegistry, select_schemas_by_names
@@ -42,12 +40,6 @@ from chorus.tools.framework import Reply, Terminal, ToolCtxFactory
 SUPERVISOR_TOOLS = ("create_plan", "load_skill", "baidu_search")
 
 
-@dataclass(frozen=True)
-class ChatModelEntry:
-    client: OpenAI
-    model_id: str
-
-
 class SupervisorService:
     def __init__(
         self,
@@ -55,8 +47,7 @@ class SupervisorService:
         message_service: MessageService,
         skill_loader: SkillLoader,
         hooks: HookRegistry,
-        models: dict,
-        default_model_id: str,
+        chat_model_provider: ChatModelProvider,
         max_tokens: int,
         task_repo: TaskRepository,
         tool_registry: ToolRegistry,
@@ -66,8 +57,7 @@ class SupervisorService:
         self._message = message_service
         self._skill = skill_loader
         self._hooks = hooks
-        self._models = models
-        self._default_model_id = default_model_id
+        self._models = chat_model_provider
         self._max_tokens = max_tokens
         self._task_repo = task_repo
         self._tools = tool_registry
@@ -75,7 +65,7 @@ class SupervisorService:
 
     def stream(
         self, session_id: str, user_message: str, *,
-        model: Optional[str] = None, image_model: Optional[str] = None,
+        image_model: Optional[str] = None,
         web_search: Optional[bool] = None,
     ) -> Iterator[SseEvent]:
         if not self._session.exists(session_id):
@@ -86,7 +76,7 @@ class SupervisorService:
         if self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES) > 0:
             yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
             return
-        entry = self._models[model or self._default_model_id]
+        entry = self._models.get_entry()
         schemas = self._tool_schemas(web_search)
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,

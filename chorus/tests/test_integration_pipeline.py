@@ -9,8 +9,8 @@ task-9 脚本 3 处 bug（本文件已修正）：
 1. hook 事件名↔方法名映射错：脚本用 ``getattr(t, e)``（e 为 "PreToolUse" 等大驼峰事件名），
    但 ``TraceEmitter`` 的方法是 snake_case 且非简单同名——正确映射是
    ``PreToolUse→on_tool_call``、``PostToolUse→on_tool_result``。
-2. subagent 的 chat_models 未包 ``ChatModelEntry``：脚本传 ``{'m': sub_client}``（裸 FakeClient），
-   而 ``SubAgentService`` 取 ``entry.client`` / ``entry.model_id``，裸 client 无 model_id。
+2. subagent 的模型未包 ``ChatModelEntry``：脚本传裸 FakeClient，而 ``SubAgentService`` 取
+   ``entry.client`` / ``entry.model_id``，裸 client 无 model_id。现已改用 stub provider。
 3. 调用了不存在的 repo 方法（原 /tmp 脚本的 ``list_by_session``）：正确方法是
    ``find_by_session_statuses`` / ``find_pending_with_deps``（已对照 repositories/task.py 核实）。
 
@@ -32,7 +32,7 @@ from pathlib import Path
 
 from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
-from chorus.agents.supervisor import ChatModelEntry, SupervisorService
+from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, TaskStatus, can_schedule
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
@@ -46,6 +46,7 @@ from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
+from chorus.tests._helpers import stub_chat_model_provider
 from chorus.tools import ToolContext, ToolRegistry
 from chorus.tools.builtin import CreatePlanTool
 
@@ -157,25 +158,21 @@ def _build_assembly():
                 name="create_plan", arguments=json.dumps(_plan_args(), ensure_ascii=False))
         )]}, "tool_calls"),
     ])])
-    sup_entry = ChatModelEntry(client=sup_client, model_id="fake")
     supervisor = SupervisorService(
-        session_svc, msg_svc, skill_loader, hooks, {"fake": sup_entry},
-        "fake", 1024, task_repo, tool_registry, tool_ctx_factory,
+        session_svc, msg_svc, skill_loader, hooks,
+        stub_chat_model_provider(sup_client), 1024, task_repo, tool_registry, tool_ctx_factory,
     )
 
     # subagent：idea + finalize 两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
-    # 修正 bug 2：chat_models 的值必须包成 ChatModelEntry（entry.client / entry.model_id）。
     # 入队两轮避免 task-9 脚本的「finalize 复用空队列→failed」fake 限制，让链路 4 真正跑通到 finished。
     sub_client = FakeClient([
         FakeStream([({"content": _idea_content()}, "stop")]),
         FakeStream([({"content": _finalize_content()}, "stop")]),
     ])
-    sub_entry = ChatModelEntry(client=sub_client, model_id="fake")
     subagent = SubAgentService(
         conn, msg_svc, task_repo, art_repo, steps_repo,
         tool_registry, tool_ctx_factory, hooks,
-        {"fake": sub_entry}, {"idea": "fake", "finalize": "fake"},
-        1024, tool_registry.schemas_openai(),
+        stub_chat_model_provider(sub_client), 1024, tool_registry.schemas_openai(),
     )
 
     task_service = TaskService(task_repo, art_repo, steps_repo, session_svc)

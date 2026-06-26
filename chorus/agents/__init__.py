@@ -13,7 +13,8 @@ if TYPE_CHECKING:
     # 仅类型注解用，运行时不导入（避免与下面的懒加载重复）。
     from chorus.agents.subagent import SubAgentService
     from chorus.agents.scheduler import TaskScheduler
-    from chorus.agents.supervisor import CREATE_PLAN_TOOL_SCHEMA, ChatModelEntry, SupervisorService
+    from chorus.agents.supervisor import CREATE_PLAN_TOOL_SCHEMA, SupervisorService
+    from chorus.services.chat_model import ChatModelEntry
 
 __all__ = [
     "AgentContext", "LoopOutcome", "TurnState",
@@ -38,7 +39,10 @@ def __getattr__(name: str):
     if name == "TaskScheduler":
         from chorus.agents.scheduler import TaskScheduler
         return TaskScheduler
-    if name in ("SupervisorService", "ChatModelEntry", "CREATE_PLAN_TOOL_SCHEMA"):
+    if name in ("SupervisorService", "CREATE_PLAN_TOOL_SCHEMA"):
         from chorus.agents import supervisor
         return getattr(supervisor, name)
+    if name == "ChatModelEntry":
+        from chorus.services.chat_model import ChatModelEntry
+        return ChatModelEntry
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

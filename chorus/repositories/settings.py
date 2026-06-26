@@ -46,13 +46,3 @@ class SettingsRepository:
 
     def delete(self, key: str) -> None:
         self._conn.get().execute("DELETE FROM settings WHERE key=?", (key,))
-
-    def all(self) -> dict[str, Any]:
-        rows = self._conn.get().execute("SELECT key, value_json FROM settings").fetchall()
-        result: dict[str, Any] = {}
-        for k, v in rows:
-            try:
-                result[k] = json.loads(v)
-            except json.JSONDecodeError:
-                continue
-        return result

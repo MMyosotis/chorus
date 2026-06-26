@@ -38,7 +38,6 @@ def chat_endpoint(
     if not lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="session is busy")
 
-    chat_model = settings.get_chat_model()
     image_model = settings.get_image_model()
     web_search = settings.get_web_search()
 
@@ -54,7 +53,7 @@ def chat_endpoint(
         try:
             for event in supervisor.stream(
                 session_id, req.message,
-                model=chat_model, image_model=image_model, web_search=web_search,
+                image_model=image_model, web_search=web_search,
             ):
                 yield f"data: {json.dumps(event.model_dump(mode='json'), ensure_ascii=False)}\n\n"
                 if event.type in ("done", "error"):

@@ -1,17 +1,13 @@
-"""SettingsService：进程级动态配置（如 image_test_mode）。
+"""SettingsService：进程级动态配置（如 image_test_mode / 模型选择 / 联网搜索）。
 
-内存 cache + 持久化双写，启动时 load_all 回灌。
+直接读写 settings 表，无内存缓存——读多写少场景下 DB 往返可接受，换来无需维护
+cache 与持久化的一致性。值的校验/默认在此层完成，repo 只做 KV 存取。
 """
 
 from __future__ import annotations
 
-import threading
-from typing import Any
-
 from chorus.config import (
     CHAT_MODELS,
-    DEFAULT_CHAT_MODEL_ID,
-    DEFAULT_IMAGE_MODEL_ID,
     IMAGE_MODELS,
 )
 from chorus.repositories.settings import SettingsRepository
@@ -20,50 +16,27 @@ from chorus.repositories.settings import SettingsRepository
 class SettingsService:
     def __init__(self, repo: SettingsRepository):
         self._repo = repo
-        self._cache: dict[str, Any] = {}
-        self._lock = threading.Lock()
-
-    def load_all(self) -> None:
-        with self._lock:
-            self._cache = self._repo.all()
 
     def get_image_test_mode(self) -> bool:
-        return bool(self._cache.get("image_test_mode", False))
+        return bool(self._repo.get("image_test_mode", False))
 
     def set_image_test_mode(self, enabled: bool) -> None:
-        self.set_raw("image_test_mode", bool(enabled))
+        self._repo.set("image_test_mode", bool(enabled))
 
-    # —— 输入框下方模型选项栏的进程级设置 ——
     def get_chat_model(self) -> str:
-        # 校验已存值是否仍在配置表中（配置删模型/迁移后旧值自动回退默认）
-        value = self._cache.get("chat_model")
-        if value and any(m["id"] == value for m in CHAT_MODELS):
-            return value
-        return DEFAULT_CHAT_MODEL_ID
+        return self._repo.get("chat_model") or CHAT_MODELS[0]["model_name"]
 
     def set_chat_model(self, value: str) -> None:
-        self.set_raw("chat_model", value)
+        self._repo.set("chat_model", value)
 
     def get_image_model(self) -> str:
-        # 校验已存值是否仍在配置表中（配置删模型/迁移后旧值自动回退默认）
-        value = self._cache.get("image_model")
-        if value and any(m["id"] == value for m in IMAGE_MODELS):
-            return value
-        return DEFAULT_IMAGE_MODEL_ID
+        return self._repo.get("image_model") or IMAGE_MODELS[0]["model_name"]
 
     def set_image_model(self, value: str) -> None:
-        self.set_raw("image_model", value)
+        self._repo.set("image_model", value)
 
     def get_web_search(self) -> bool:
-        return bool(self._cache.get("web_search", True))
+        return bool(self._repo.get("web_search", True))
 
     def set_web_search(self, enabled: bool) -> None:
-        self.set_raw("web_search", bool(enabled))
-
-    def get_raw(self, key: str, default: Any = None) -> Any:
-        return self._cache.get(key, default)
-
-    def set_raw(self, key: str, value: Any) -> None:
-        with self._lock:
-            self._cache[key] = value
-            self._repo.set(key, value)
+        self._repo.set("web_search", bool(enabled))
