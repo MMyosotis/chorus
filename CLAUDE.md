@@ -74,12 +74,12 @@ cd web && npm run build                # 构建生产版本
 
 #### 1. SupervisorService.stream (`agents/supervisor.py`，SSE 流式)
 
-`stream(session_id, user_message, *, model, image_model, web_search) -> Iterator[SseEvent]` —— 用户对话入口，单轮决策：普通对话走原生 content 流式（only_reply）；创作请求解析 `create_plan` 工具参数建任务图（new_plan）。`create_plan` tool_call **不落库**（瞬时路由信号），`friendly_reply` 作为普通 assistant 气泡 append。
+`stream(session_id, user_message, *, model, image_model, web_search) -> Iterator[SseEvent]` —— 用户对话入口，单轮决策：普通对话走原生 content 流式（only_reply）；创作请求经 `create_plan` 工具建任务图。loop 按 `isinstance(outcome, Reply|Terminal)` 分流，**不认识工具名、不认 Terminal 载荷类型**——工具副作用在工具内收口，主流程只管终止。
 
-1. append user 消息 → `while True` 每轮：`ctx.turn.reset(i)` + 分配 message_id → yield `message_start` → `build_system_prompt` + `MessageService.build_provider_messages` 写 `ctx.turn.provider_messages`（有 correction 则追加修正引导）→ `trigger("BeforeModelRequest")`
-2. 调 OpenAI 流式 API（只挂 `create_plan` schema），`consume_stream()` yield reasoning/token 事件、累积 text_parts / tool_calls
-3. `trigger("AfterModelResponse")` → `_route(ctx)`：无 tool_call → **only_reply**：append assistant 文本消息 → yield done → `trigger("Stop")`（标题生成）→ 结束
-4. 有 `create_plan` tool_call → **new_plan**：`_build_and_persist_plan`（validate_steps → expand_pipeline → 单活跃 pipeline 防护 → 事务批量 insert tasks）→ append friendly_reply 气泡 → yield `TaskPlanCreatedEvent` + done → 结束；建图失败带 correction 重试一轮，仍失败降级 `_fallback_only_reply`
+1. append user 消息 → `while True` 每轮：`ctx.turn.reset(i)` + 分配 message_id → yield `message_start` → `build_system_prompt` + `MessageService.build_provider_messages` 写 `ctx.turn.provider_messages` → `trigger("BeforeModelRequest")`
+2. 调 OpenAI 流式 API（挂 `SUPERVISOR_TOOLS` schema），`consume_stream()` yield reasoning/token 事件、累积 text_parts / tool_calls
+3. `trigger("AfterModelResponse")` → 无 tool_call → **only_reply**：append assistant 文本消息 → yield done → `trigger("Stop")`（标题生成）→ 结束
+4. 有 tool_call → `_dispatch_tools`：collect-then-persist 成对落库（一条 assistant(tool_calls=[全部]) + N tool(result)）→ 全 Reply 则回传模型继续 loop；首个 Terminal → `_handle_terminal`（只 yield done + `trigger("Stop")`，不认载荷）→ 结束。建图全过程（`validate_steps` → `expand_pipeline` → 事务批量 insert tasks）在 `create_plan` 工具 `run` 内，校验/落库失败返 `Reply(correction)` 由模型自纠
 5. 异常 → `except` 记 `ctx.outcome.exception` → `trigger("Error")`（`ErrorFinalizer` append `[Error]` 消息关闭本轮）→ yield `ErrorEvent`
 
 #### 2. SubAgentService.run (`agents/subagent.py`，后台线程，写库不连 SSE)
@@ -100,7 +100,7 @@ scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load 
 - **会话级锁**：`SessionService.get_lock(session_id)` 返回 per-session `threading.Lock`，`/api/sessions/{id}/chat` 用 `lock.acquire(blocking=False)` 探测，被占用返回 409；锁在 SSE 生成器 `finally` 释放（done/error 即释放）。不同会话锁独立。**注意**：subagent/scheduler 不经此锁（它们写 task_artifacts/task_steps，不抢会话 chat 锁）。
 - **每个 supervisor OpenAI 轮次 = 一条 assistant 历史消息 = 一个前端气泡**。`message_start` 通知前端建气泡；thinking/tools 元数据由 `TraceRepository.aggregate_message_trace(message_id)` 重建。
 - `MessageService.build_provider_messages()` 是传给 LLM 的消息序列**唯一**构建点：`[system] + 按 seq 的 user/assistant/tool 历史消息`。
-- **异常分级**：核心步骤 fail-closed（append user / 构建 prompt / 执行工具 / 落 assistant 消息失败即上抛）；扩展 hook fail-open（经 `trigger`，失败只记日志）。
+- **异常分级**：核心步骤 fail-closed（append user / 构建 prompt / 落 assistant 消息失败即上抛）；工具可预料失败内部收口返 `Reply` 让模型重试，仅意外异常由 `dispatch` fail-open 兜底；扩展 hook fail-open（经 `trigger`，失败只记日志）。
 
 ### 存储层
 
@@ -246,7 +246,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 - **主流程单文件可读全**：每个 agent loop 的主流程（supervisor: append user → build messages → call model → 路由 only_reply/new_plan → 建图落库 → finalize；subagent: load task → ReAct 循环 → 写 artifacts/steps → CAS finalize）**必须在各自 `SupervisorService.stream()` / `SubAgentService.run()` 一个文件内顺序可读**，核心业务提交（落库、构建 prompt、执行工具、SSE 核心事件 yield）在 loop 内，不进 hook。
 - **hook 是挂在稳定 loop 上的扩展点，不是主业务承载点**（遵循「挂在循环上，不写进循环里」）：loop 自己做主流程真身，hook 只做"前后织入 + 策略判断"。hook 收缩为扩展能力——观测（trace/日志/埋点）、收尾（title/summary）、异常收尾（`ErrorFinalizer`）；策略（权限拦截/上下文补充）、增强（输入注入/输出检查）为文档化的未来扩展点，**现不承载**。
 - **机制是 CC 式扁平注册表**：`event → list[callable]` 字典 + `trigger(event, ctx, *args) -> Iterator[SseEvent]`，loop 只调 `trigger`。**不引入** `Hook` ABC + `HookBundle` 命名字段 + `HookManager` 转发方法这类 1:1 退化的三层胶水。当前 `trigger` 观测-only（只 yield 事件，fail-open 吞异常记日志）；引入策略/拦截类 hook 时，`trigger` 加 verdict 返回 + loop 在对应事件加 `if blocked` 分支（演进路径，现不写死代码分支）。
-- **异常分级**：**核心步骤 fail-closed**（append user / 构建 prompt / 执行工具 / 落 assistant 消息——失败即上抛到外层 except，绝不静默继续，否则产生"消息没落库但循环继续"的静默数据不一致）；**扩展 hook fail-open**（经 `trigger`，失败只记日志，不阻断主流程）。分级由"是否经 trigger"自然落地，无需显式配置。异常时 `ErrorFinalizer` 经 `trigger("Error")` append 一条 `[Error]` 消息关闭本轮（失败轮 assistant 本就未入库，库内干净，不截断历史），loop 再 yield `ErrorEvent`。
+- **异常分级**：**核心步骤 fail-closed**（append user / 构建 prompt / 落 assistant 消息——失败即上抛到外层 except，绝不静默继续，否则产生"消息没落库但循环继续"的静默数据不一致）；**工具失败按可预料性分级**——工具内可预料失败（参数缺失 / 校验错 / 落库失败等业务失败）由工具自身收口返 `Reply(correction)` 让模型重试（落库类副作用经事务原子性兜底，不残留半张图），仅无法预料的意外异常由 `ToolRegistry.dispatch` fail-open 兜底转错误 `Reply`（不掺业务走向）；**扩展 hook fail-open**（经 `trigger`，失败只记日志，不阻断主流程）。分级由"是否经 trigger / 是否可预料"自然落地，无需显式配置。异常时 `ErrorFinalizer` 经 `trigger("Error")` append 一条 `[Error]` 消息关闭本轮（失败轮 assistant 本就未入库，库内干净，不截断历史），loop 再 yield `ErrorEvent`。
 - **顺序契约可测**：agent loop 重度依赖调用顺序与 `ctx.turn` 字段的读写时机，这类隐式契约**必须有用例锚定**（断言"给定输入 → 事件序列 + 入库消息序列"），改动主流程前先有安全网。
 
 ### Domain 内聚判据（红线）

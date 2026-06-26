@@ -12,11 +12,11 @@ from chorus.tools.builtin.generate_image import GenerateImageTool
 
 
 def _registry() -> ToolRegistry:
-    # 不需真实 client，只为 schema 全集
+    # 不需真实 client/repo，只为 schema 全集
     return ToolRegistry([
         LoadSkillTool(),
         OutputPlanTool(),
-        CreatePlanTool(),
+        CreatePlanTool(None, None),
         BaiduSearchTool(None),
         GenerateImageTool(lambda: False, "", {}, "x"),
     ])
@@ -47,9 +47,10 @@ def test_loop_does_not_reference_tool_name_literals():
     dispatch_src = inspect.getsource(SupervisorService._dispatch_tools)
     handle_src = inspect.getsource(SupervisorService._handle_terminal)
     assert "create_plan" not in dispatch_src  # 无硬编码名
-    # handle_terminal 按 isinstance(payload, PlanRequest) 分流，不按工具名
     assert "tc.get" not in dispatch_src and 'name == "create_plan"' not in dispatch_src
-    assert "isinstance" in handle_src  # 按 payload 类型分流
+    # handle_terminal 不认 Terminal 载荷类型——工具副作用自洽，主流程只管终止
+    assert "isinstance" not in handle_src
+    assert "payload" not in handle_src
 
 
 def main():

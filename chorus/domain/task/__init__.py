@@ -16,7 +16,6 @@ from chorus.domain.task.models import (
     TaskStep,
     TaskStatus,
 )
-from chorus.domain.task.request import PlanRequest
 from chorus.domain.task.post import PostCard, PostImage, PostSection
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.pipeline import (
@@ -46,7 +45,6 @@ __all__ = [
     "TaskArtifacts",
     "TaskStep",
     "TaskStatus",
-    "PlanRequest",
     "PostCard",
     "PostImage",
     "PostSection",

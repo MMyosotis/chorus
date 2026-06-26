@@ -70,7 +70,7 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
-    tool_registry = ToolRegistry([CreatePlanTool(), LoadSkillTool()])
+    tool_registry = ToolRegistry([CreatePlanTool(task_repo, conn), LoadSkillTool()])
 
     def tool_ctx_factory(session_id, image_model=None):
         return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
@@ -78,7 +78,7 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     entry = ChatModelEntry(client=fake_client, model_id="fake")
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, {"fake": entry},
-        "fake", 1024, task_repo, conn, tool_registry, tool_ctx_factory,
+        "fake", 1024, task_repo, tool_registry, tool_ctx_factory,
     )
 
 

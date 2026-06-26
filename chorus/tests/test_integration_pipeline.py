@@ -145,7 +145,7 @@ def _build_assembly():
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     skill_loader.load()
-    tool_registry = ToolRegistry([CreatePlanTool()])
+    tool_registry = ToolRegistry([CreatePlanTool(task_repo, conn)])
 
     def tool_ctx_factory(session_id, image_model=None):
         return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
@@ -160,7 +160,7 @@ def _build_assembly():
     sup_entry = ChatModelEntry(client=sup_client, model_id="fake")
     supervisor = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, {"fake": sup_entry},
-        "fake", 1024, task_repo, conn, tool_registry, tool_ctx_factory,
+        "fake", 1024, task_repo, tool_registry, tool_ctx_factory,
     )
 
     # subagent：idea + finalize 两轮产出按执行顺序入队（共享同一 FakeClient 队列）。

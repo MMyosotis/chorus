@@ -3,15 +3,14 @@
 
 主流程单文件可读全：append user → 每轮 build messages → 调模型 → consume_stream →
 按 outcome 分流：无 tool_call → only_reply 文本；有 tool_call → 统一 dispatch →
-Reply 回传继续 loop / Terminal 触发 handle_terminal 建图+成对落库+done。loop 按
-isinstance(outcome, ...) 分流，不认识工具名。会话级创作准入：有活跃任务 yield
-BusyEvent 拒绝（纵深防御，前端已挡但不可信）。横切（trace/title/异常收尾）挂扁平 hook。
+Reply 回传继续 loop / Terminal 触发 handle_terminal done 收尾。loop 按
+isinstance(outcome, ...) 分流，不认识工具名、不认 Terminal 载荷类型——工具副作用
+在工具内收口，主流程只管终止。会话级创作准入：有活跃任务 yield BusyEvent 拒绝
+（纵深防御，前端已挡但不可信）。横切（trace/title/异常收尾）挂扁平 hook。
 """
 from __future__ import annotations
 
 import json
-import logging
-import time
 import uuid
 from dataclasses import dataclass
 from typing import Iterator, Optional
@@ -29,16 +28,13 @@ from chorus.domain.events import (
 from chorus.domain.prompt import PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader, format_skill_hints
 from chorus.domain.stream import consume_stream
-from chorus.domain.task import ACTIVE_STATUSES, PlanRequest, expand_pipeline
+from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
-from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.task import TaskRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.tools import ToolCall, ToolRegistry, select_schemas_by_names
 from chorus.tools.framework import Reply, Terminal, ToolCtxFactory
-
-logger = logging.getLogger(__name__)
 
 # supervisor 工具白名单（与 AGENT_PROFILES.tools 同构的单一真源）。
 # 具体内容可后续调整；机制本身要求：supervisor 能力边界在此一处声明。
@@ -63,10 +59,8 @@ class SupervisorService:
         default_model_id: str,
         max_tokens: int,
         task_repo: TaskRepository,
-        conn: ConnectionFactory,
         tool_registry: ToolRegistry,
         tool_ctx_factory: ToolCtxFactory,
-        clock=time.time,
     ):
         self._session = session_service
         self._message = message_service
@@ -76,10 +70,8 @@ class SupervisorService:
         self._default_model_id = default_model_id
         self._max_tokens = max_tokens
         self._task_repo = task_repo
-        self._conn = conn
         self._tools = tool_registry
         self._tool_ctx_factory = tool_ctx_factory
-        self._clock = clock
 
     def stream(
         self, session_id: str, user_message: str, *,
@@ -201,27 +193,14 @@ class SupervisorService:
         return "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
 
     def _handle_terminal(self, session_id: str, ctx: AgentContext, call: ToolCall, d) -> Iterator[SseEvent]:
-        """Terminal 分支：建图副作用 + done（generator）。成对落库已在 _dispatch_tools 完成。
+        """Terminal 分支：工具已在自身内完成副作用，主流程只做 done 收尾 + Stop hook。
 
-        按载荷类型扩展（现阶段只 PlanRequest）。建图副作用（expand + 事务 insert）归此处。
-        建图成功只 yield done，建图状态靠前端轮询。
+        成对落库（assistant tool_calls + tool result）已在 _dispatch_tools 完成；
+        Terminal 载荷由工具自洽，主流程不按载荷类型分流——只管终止本轮。
         """
-        payload = d.outcome.payload
-        if isinstance(payload, PlanRequest):
-            tasks = expand_pipeline(payload.intent, payload.steps)
-            now = self._clock()
-            with self._conn.transaction():
-                for t in tasks:
-                    self._task_repo.insert(t.model_copy(update={
-                        "session_id": session_id, "created_at": now, "updated_at": now,
-                    }))
-            self._session.touch(session_id)
-            yield DoneEvent()
-            yield from self._hooks.trigger("Stop", ctx)
-            return
-        # 未知 payload：回退 done（防御性，不应发生）
-        logger.warning("未知 Terminal payload 类型: %r", type(payload))
+        self._session.touch(session_id)
         yield DoneEvent()
+        yield from self._hooks.trigger("Stop", ctx)
 
 
 def _to_tool_call_spec(call: ToolCall):

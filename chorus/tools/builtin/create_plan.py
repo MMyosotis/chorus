@@ -1,19 +1,25 @@
 # kitty/tools/builtin/create_plan.py
-"""create_plan 工具：声明型工具——只解析+纯校验+声明走向，不执行建图重副作用。
+"""create_plan 工具：建图副作用单元——解析+校验+整图成型+事务落库，全在工具内收口。
 
-对模型是普通工具（有 schema、被 dispatch、有 trace）；建图副作用（expand + insert）
-归编排层 supervisor（跨概念协调，且 run 是 sync 无法 yield SSE）。校验失败返
-Reply(correction) 由模型自纠；成功返 Terminal(PlanRequest) 触发 supervisor 建图。
+对模型是普通工具（有 schema、被 dispatch、有 trace）；建图全过程（expand + insert）
+归本工具，主流程只据 Terminal 终止本轮、不认载荷类型。可预料失败（参数缺失/校验错/
+落库失败）返 Reply(correction) 由模型自纠；仅无法预料的意外异常才由 dispatch 兜底
+（fail-open 转错误 Reply），对齐「工具可预料失败内部收口」约定。
 """
 from __future__ import annotations
 
+import time
+from typing import Callable
+
 from chorus.domain.task import (
     CreationIntent,
-    PlanRequest,
     StepSpec,
     ValidationError,
+    expand_pipeline,
     validate_steps,
 )
+from chorus.repositories.connection import ConnectionFactory
+from chorus.repositories.task import TaskRepository
 from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
 _SUMMARY = "已创建创作任务图，调度器将自动执行"
@@ -68,11 +74,24 @@ class CreatePlanTool(Tool):
     }
     running_label = "编排创作任务"
 
+    def __init__(
+        self,
+        task_repo: TaskRepository,
+        conn: ConnectionFactory,
+        clock: Callable[[], float] = time.time,
+    ):
+        self._task_repo = task_repo
+        self._conn = conn
+        self._clock = clock
+
     def display(self, arguments: dict) -> str:
         topic = (arguments.get("intent", {}) or {}).get("topic", "")
         return f"创作：{topic or '(未指定主题)'}"
 
     def run(self, arguments: dict, ctx: ToolContext):  # -> ToolOutcome
+        sid = ctx.session_id
+        if not sid:
+            return Reply("create_plan 缺少会话上下文，无法建图")
         try:
             intent_in = arguments["intent"]
             intent = CreationIntent(
@@ -86,8 +105,19 @@ class CreatePlanTool(Tool):
                 for s in arguments["steps"]
             ]
             validate_steps(steps)
+            tasks = expand_pipeline(intent, steps)
         except (KeyError, TypeError) as e:
             return Reply(f"create_plan 参数缺失或格式错: {e}")
         except ValidationError as e:
             return Reply(e.correction)
-        return Terminal(PlanRequest(intent=intent, steps=steps), summary=_SUMMARY)
+        # 落库失败是可预料副作用失败 → Reply 让模型重试（事务原子性兜底，不残留半张图）
+        try:
+            now = self._clock()
+            with self._conn.transaction():
+                for t in tasks:
+                    self._task_repo.insert(t.model_copy(update={
+                        "session_id": sid, "created_at": now, "updated_at": now,
+                    }))
+        except Exception as e:  # noqa: BLE001 — 落库可预料失败内部收口
+            return Reply(f"建图落库失败，请重试: {e}")
+        return Terminal(payload=None, summary=_SUMMARY)
