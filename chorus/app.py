@@ -14,8 +14,6 @@ from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
 from chorus.config import (
-    BAIDU_SEARCH_API_KEY,
-    BAIDU_SEARCH_BASE_URL,
     DATA_DIR,
     MAX_TOKENS,
     POOL_SIZE,
@@ -44,11 +42,7 @@ from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
 from chorus.startup import run_startup
-from chorus.tools import ToolContext, ToolCtxFactory, ToolRegistry
-from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, OutputPlanTool
-from chorus.tools.builtin.generate_image import GenerateImageTool
-from chorus.tools.clients.baidu_search import BaiduSearchClient
-from chorus.tools.image_model import ImageModelProvider
+from chorus.tools import build_tool_dispatch
 
 
 def create_app() -> FastAPI:
@@ -70,19 +64,7 @@ def create_app() -> FastAPI:
     title_entry = chat_models.title_entry()
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
 
-    image_models = ImageModelProvider(settings_service)
-
-    baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
-    tool_registry = ToolRegistry([
-        LoadSkillTool(),
-        OutputPlanTool(),
-        GenerateImageTool(settings_service, image_models),
-        BaiduSearchTool(baidu_client),
-        CreatePlanTool(task_repo, conn),
-    ])
-
-    def tool_ctx_factory(session_id):
-        return ToolContext(skill_loader=skill_loader, session_id=session_id)
+    tool_dispatcher = build_tool_dispatch(settings_service, task_repo, conn, skill_loader)
 
     hooks = HookRegistry()
     trace = TraceEmitter(message_service, MAX_TOKENS)
@@ -93,17 +75,15 @@ def create_app() -> FastAPI:
     hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop)
     hooks.register("Error", ErrorFinalizer(message_service).on_error)
 
-    all_tool_schemas = tool_registry.schemas_openai()
-
     supervisor_service = SupervisorService(
         session_service, message_service, skill_loader, hooks,
         chat_models, MAX_TOKENS, task_repo,
-        tool_registry, tool_ctx_factory,
+        tool_dispatcher,
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo, task_steps_repo,
-        tool_registry, tool_ctx_factory, hooks, chat_models,
-        MAX_TOKENS, all_tool_schemas,
+        tool_dispatcher, hooks, chat_models,
+        MAX_TOKENS,
     )
     task_service = TaskService(task_repo, task_artifacts_repo, task_steps_repo, session_service)
     scheduler = TaskScheduler(

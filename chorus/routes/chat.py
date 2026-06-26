@@ -10,11 +10,9 @@ from pydantic import BaseModel
 from chorus.agents.supervisor import SupervisorService
 from chorus.routes.providers import (
     provide_session_service,
-    provide_settings_service,
     provide_supervisor_service,
 )
 from chorus.services.session import SessionService
-from chorus.services.settings import SettingsService
 
 router = APIRouter(prefix="/api/sessions")
 
@@ -29,7 +27,6 @@ def chat_endpoint(
     req: ChatRequest,
     supervisor: SupervisorService = Depends(provide_supervisor_service),
     session: SessionService = Depends(provide_session_service),
-    settings: SettingsService = Depends(provide_settings_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
@@ -37,8 +34,6 @@ def chat_endpoint(
     lock = session.get_lock(session_id)
     if not lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="session is busy")
-
-    web_search = settings.get_web_search()
 
     def event_generator():
         released = False
@@ -50,10 +45,7 @@ def chat_endpoint(
                 lock.release()
 
         try:
-            for event in supervisor.stream(
-                session_id, req.message,
-                web_search=web_search,
-            ):
+            for event in supervisor.stream(session_id, req.message):
                 yield f"data: {json.dumps(event.model_dump(mode='json'), ensure_ascii=False)}\n\n"
                 if event.type in ("done", "error"):
                     _release()

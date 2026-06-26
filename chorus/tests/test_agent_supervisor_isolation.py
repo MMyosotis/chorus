@@ -1,63 +1,77 @@
-# kitty/tests/test_agent_supervisor_isolation.py
+# chorus/tests/test_agent_supervisor_isolation.py
 """supervisor 白名单隔离 + loop 工具名无关契约。
 
-运行：.venv/bin/python -m kitty.tests.test_agent_supervisor_isolation
+运行：.venv/bin/python -m chorus.tests.test_agent_supervisor_isolation
 """
 from __future__ import annotations
 
-from chorus.agents.supervisor import SUPERVISOR_TOOLS, SupervisorService
-from chorus.tools import ToolRegistry
+from chorus.agents.supervisor import SupervisorService
+from chorus.config import TOOL_WHITELISTS
+from chorus.tools import ToolDispatch
 from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, OutputPlanTool
 from chorus.tools.builtin.generate_image import GenerateImageTool
-
-
-def _registry() -> ToolRegistry:
-    # 不需真实 client/repo，只为 schema 全集
-    return ToolRegistry([
-        LoadSkillTool(),
-        OutputPlanTool(),
-        CreatePlanTool(None, None),
-        BaiduSearchTool(None),
-        GenerateImageTool(_stub_settings(), _stub_provider()),
-    ])
 
 
 def _stub_settings():
     class _S:
         def get_image_test_mode(self):
             return False
+
+        def get_web_search(self):
+            return True
     return _S()
 
 
 def _stub_provider():
     class _P:
         def get_entry(self):
-            raise AssertionError("schema 全集测试不应触发 run")
+            raise AssertionError("schema 筛选测试不应触发 run")
     return _P()
 
 
-def test_supervisor_tools_excludes_generate_image():
-    """白名单不含 generate_image——supervisor 不碰产物。"""
-    assert "generate_image" not in SUPERVISOR_TOOLS
-    assert "create_plan" in SUPERVISOR_TOOLS
+def _registry() -> ToolDispatch:
+    # 不需真实 client/repo，只为 schema 筛选
+    return ToolDispatch([
+        LoadSkillTool(None),
+        OutputPlanTool(),
+        CreatePlanTool(None, None),
+        BaiduSearchTool(None),
+        GenerateImageTool(_stub_settings(), _stub_provider()),
+    ], _stub_settings())
+
+
+def test_supervisor_whitelist_excludes_generate_image():
+    """supervisor 白名单不含 generate_image——它是传话筒/管人的领导，不碰产物。"""
+    tools = TOOL_WHITELISTS["supervisor"]
+    assert "generate_image" not in tools
+    assert "create_plan" in tools
 
 
 def test_supervisor_schemas_filtered_by_whitelist():
-    """从 registry 全集筛后，supervisor 喂 LLM 的 schemas 不含 generate_image/output_plan。"""
-    from chorus.tools import select_schemas_by_names
-    all_names = {s["function"]["name"] for s in _registry().schemas_openai()}
-    assert "generate_image" in all_names  # registry 全集有
-    sup_schemas = select_schemas_by_names(_registry().schemas_openai(), SUPERVISOR_TOOLS)
-    sup_names = {s["function"]["name"] for s in sup_schemas}
-    assert sup_names == set(SUPERVISOR_TOOLS)
+    """registry.select_schemas 按 supervisor 白名单筛后，喂 LLM 的 schemas 不含
+    generate_image / output_plan，且 web_search 关闭时再剔除 baidu_search。"""
+    reg = _registry()
+    sup_names = {s["function"]["name"] for s in reg.select_schemas(TOOL_WHITELISTS["supervisor"])}
+    assert sup_names == set(TOOL_WHITELISTS["supervisor"])  # web_search 开 → 全白名单命中
     assert "generate_image" not in sup_names
     assert "output_plan" not in sup_names
+
+
+def test_web_search_disabled_drops_baidu_search():
+    """web_search 关闭时 select_schemas 从结果里剔除 baidu_search。"""
+    class _OffSettings:
+        def get_web_search(self):
+            return False
+    reg = ToolDispatch([BaiduSearchTool(None), LoadSkillTool(None)], _OffSettings())
+    got = {s["function"]["name"] for s in reg.select_schemas(TOOL_WHITELISTS["supervisor"])}
+    assert "baidu_search" not in got
+    assert "load_skill" in got
 
 
 def test_loop_does_not_reference_tool_name_literals():
     """loop 分流只依赖 isinstance(outcome)，源码不出现 'create_plan' 字面量做路由判断。"""
     import inspect
-    # SUPERVISOR_TOOLS 常量声明里有 'create_plan'，但 _dispatch_tools/_handle_terminal 分流段不应硬判名
+    # TOOL_WHITELISTS 里有 'create_plan'，但 _dispatch_tools/_handle_terminal 分流段不应硬判名
     dispatch_src = inspect.getsource(SupervisorService._dispatch_tools)
     handle_src = inspect.getsource(SupervisorService._handle_terminal)
     assert "create_plan" not in dispatch_src  # 无硬编码名

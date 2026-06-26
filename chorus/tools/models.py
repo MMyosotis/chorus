@@ -1,43 +1,32 @@
 """工具领域模型。
 
-ToolSchema：OpenAI function 描述（frozen，to_openai 转 provider 格式）。
-ToolCall / ToolResult：规范化后的工具调用与执行结果，供 agent loop 与 hook 流转。
+ToolSchema：OpenAI function 描述（frozen，format 转 provider 格式）。
+ToolCall：规范化后的工具调用（arguments 已 json.loads），供 agent loop 流转。
+工具执行结果不单独建模——content 在 ToolOutcome（Reply/Terminal）上，duration_ms 在
+DispatchResult 上，由 dispatch 直接产出，不经中间模型。
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from dataclasses import dataclass, asdict
 
 
-class ToolSchema(BaseModel):
+@dataclass(frozen=True)
+class ToolSchema:
     """OpenAI function 描述。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     description: str
     parameters: dict
 
-    def to_openai(self) -> dict:
-        return {"type": "function", "function": self.model_dump()}
+    def format(self) -> dict:
+        return {"type": "function", "function": asdict(self)}
 
 
-class ToolCall(BaseModel):
+@dataclass(frozen=True)
+class ToolCall:
     """规范化后的工具调用（arguments 已 json.loads）。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     name: str
     arguments: dict
-
-
-class ToolResult(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    tool_call_id: str
-    name: str
-    content: str
-    duration_ms: int
-    display: str
-    is_error: bool = False

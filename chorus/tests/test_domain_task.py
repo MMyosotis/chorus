@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     ACTIVE_STATUSES,
     AGENT_PROFILES,
@@ -132,11 +133,10 @@ def test_select_display_pipeline():
 
 def test_agent_profiles_registry():
     assert set(AGENT_PROFILES.keys()) == {"idea", "script", "image", "finalize"}
-    img = AGENT_PROFILES["image"]
-    assert "generate_image" in img.tools  # 唯一带生图的角色
+    assert "generate_image" in TOOL_WHITELISTS["image"]  # 唯一带生图的角色
     # 前三步不含 generate_image
     for at in ("idea", "script", "finalize"):
-        assert "generate_image" not in AGENT_PROFILES[at].tools
+        assert "generate_image" not in TOOL_WHITELISTS[at]
     # enter_line 纯文本无 emoji（粗校：仅 ASCII / 中文标点，无典型 emoji 区段）
     for p in AGENT_PROFILES.values():
         assert p.enter_line and p.display_name

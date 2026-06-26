@@ -4,9 +4,16 @@
 """
 from __future__ import annotations
 
-from chorus.tools import Tool, ToolContext, ToolRegistry
+from chorus.tools import Tool, ToolContext, ToolDispatch
 from chorus.tools.framework import Reply, Terminal, DispatchResult
 from chorus.tools.models import ToolCall
+
+
+def _settings():
+    class _S:
+        def get_web_search(self):
+            return True
+    return _S()
 
 
 class _ReplyTool(Tool):
@@ -24,7 +31,7 @@ class _TerminalTool(Tool):
     parameters = {"type": "object", "properties": {}}
 
     def run(self, arguments, ctx):
-        return Terminal({"plan": "x"})
+        return Terminal("已执行")
 
 
 class _BoomTool(Tool):
@@ -37,45 +44,37 @@ class _BoomTool(Tool):
 
 
 def _ctx():
-    return ToolContext(skill_loader=None, session_id="s1")
+    return ToolContext(session_id="s1")
 
 
 def test_reply_dispatch_returns_reply_outcome():
-    reg = ToolRegistry([_ReplyTool()])
+    reg = ToolDispatch([_ReplyTool()], _settings())
     d = reg.dispatch(ToolCall(id="c1", name="reply_tool", arguments={}), _ctx())
     assert isinstance(d, DispatchResult)
     assert isinstance(d.outcome, Reply)
-    assert d.outcome.content == "回传内容"
-    assert d.tool_result.content == "回传内容"   # Reply.content 落库 + trace 共用
-    assert d.tool_result.is_error is False
-    assert d.tool_result.duration_ms >= 0
+    assert d.outcome.content == "回传内容"   # content 在 outcome 上，落库 + trace 共用
+    assert d.duration_ms >= 0
 
 
 def test_terminal_dispatch_returns_terminal_outcome():
-    reg = ToolRegistry([_TerminalTool()])
+    reg = ToolDispatch([_TerminalTool()], _settings())
     d = reg.dispatch(ToolCall(id="c1", name="terminal_tool", arguments={}), _ctx())
     assert isinstance(d.outcome, Terminal)
-    assert d.outcome.payload == {"plan": "x"}
-    # Terminal 的 tool_result.content 是语义摘要——此处 Tool 未自定义，dispatch 用默认占位
-    assert isinstance(d.tool_result.content, str)
-    assert d.tool_result.is_error is False
+    assert d.outcome.content == "已执行"
 
 
 def test_unexpected_exception_falls_back_to_reply():
-    """run 抛意外异常 → dispatch 兜底 Reply(错误文本)，is_error=True。"""
-    reg = ToolRegistry([_BoomTool()])
+    """run 抛意外异常 → dispatch 兜底 Reply(错误文本)。"""
+    reg = ToolDispatch([_BoomTool()], _settings())
     d = reg.dispatch(ToolCall(id="c1", name="boom_tool", arguments={}), _ctx())
     assert isinstance(d.outcome, Reply)
     assert "意外崩溃" in d.outcome.content
-    assert d.tool_result.is_error is True
-    assert d.tool_result.content == d.outcome.content
 
 
 def test_unknown_tool_reply():
-    reg = ToolRegistry([])
+    reg = ToolDispatch([], _settings())
     d = reg.dispatch(ToolCall(id="c1", name="ghost", arguments={}), _ctx())
     assert isinstance(d.outcome, Reply)
-    assert d.tool_result.is_error is True
 
 
 def main():

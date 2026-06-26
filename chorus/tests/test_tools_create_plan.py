@@ -1,7 +1,7 @@
 # kitty/tests/test_tools_create_plan.py
 """CreatePlanTool.run 契约：成功→Terminal + 整图落库；参数错/校验错/落库失败→Reply(correction)。
 
-建图副作用（expand + 事务 insert）已收进工具，成功 outcome 为 Terminal(payload=None)，
+建图副作用（expand + 事务 insert）已收进工具，成功 outcome 为 Terminal(content=如实建图摘要)，
 side effect 验 tasks 表落库。运行：.venv/bin/python -m kitty.tests.test_tools_create_plan
 """
 from __future__ import annotations
@@ -30,7 +30,7 @@ def _build():
     seed_session(conn, sid="s1")
     repo = TaskRepository(conn)
     tool = CreatePlanTool(repo, conn, clock=lambda: 1.0)
-    ctx = ToolContext(skill_loader=None, session_id="s1")
+    ctx = ToolContext(session_id="s1")
     return conn, repo, tool, ctx
 
 
@@ -38,8 +38,8 @@ def test_success_returns_terminal_and_persists_tasks():
     conn, repo, tool, ctx = _build()
     outcome = tool.run(_args(), ctx)
     assert isinstance(outcome, Terminal)
-    assert outcome.payload is None  # 载荷不携建图数据，副作用已在工具内落库
-    assert isinstance(outcome.summary, str) and outcome.summary
+    assert isinstance(outcome.content, str) and outcome.content  # 如实建图摘要
+    assert "pipeline=" in outcome.content  # 携真实 pipeline_id，非写死话术
     # 整图落库：idea + finalize 两个 active task，session_id 回填
     assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 2
     tasks = repo.find_by_session_statuses("s1", ACTIVE_STATUSES)
@@ -80,7 +80,7 @@ def test_circular_deps_returns_reply():
 def test_missing_session_context_returns_reply():
     """无 session_id → Reply，不建图（防御性）。"""
     _, repo, tool, _ = _build()
-    ctx = ToolContext(skill_loader=None, session_id=None)
+    ctx = ToolContext(session_id=None)
     outcome = tool.run(_args(), ctx)
     assert isinstance(outcome, Reply)
     assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0

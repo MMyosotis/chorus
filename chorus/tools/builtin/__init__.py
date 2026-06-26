@@ -1,4 +1,4 @@
-"""内置工具（类化版本，由 create_app() 装配进 ToolRegistry）。"""
+"""内置工具（类化版本，由 build_tool_dispatch 装配进 ToolDispatch）。"""
 
 from chorus.tools.builtin.baidu_search import BaiduSearchTool
 from chorus.tools.builtin.create_plan import CreatePlanTool

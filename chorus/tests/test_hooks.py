@@ -115,7 +115,9 @@ def test_trace_tool_result_payload_from_result_object():
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     call = {"id": "call-1", "name": "search", "arguments": {"q": "x"}}
-    result = types.SimpleNamespace(content="结果", duration_ms=42)
+    result = types.SimpleNamespace(
+        outcome=types.SimpleNamespace(content="结果"), duration_ms=42,
+    )
 
     events = list(emitter.on_tool_result(ctx, call, result))
 

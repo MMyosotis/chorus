@@ -1,7 +1,9 @@
-"""工具框架：schema 选择规则 + Tool ABC + 运行时上下文 + 注册表。
+"""工具框架：Tool ABC + 运行时上下文 + 调度器（含白名单筛选）。
 
-零件：select_tool_schemas（按联网搜索开关过滤）、Tool（抽象基类）、
-ToolContext（运行时上下文）、ToolRegistry（查找 / 执行入口，dispatch 统一计时包错）。
+零件：Tool（抽象基类）、ToolContext（运行时上下文）、ToolDispatch（查找 / 执行 /
+筛选入口——select_schemas 按名字白名单筛 schema，全集取自调度器自身、web_search 开关
+内部查 SettingsService，都不外部注入；dispatch 统一计时包错）。工具登记装配见
+tools/registry.py 的 build_tool_dispatch。
 """
 
 from __future__ import annotations
@@ -9,10 +11,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, Callable, Iterable, Optional
+from typing import Iterable, Optional
 
-from chorus.domain.skill import SkillLoader
-from chorus.tools.models import ToolCall, ToolResult, ToolSchema
+from chorus.services.settings import SettingsService
+from chorus.tools.models import ToolCall, ToolSchema
 
 _DISPLAY_MAX_LEN = 200
 
@@ -32,49 +34,30 @@ class Reply(ToolOutcome):
 
 @dataclass(frozen=True)
 class Terminal(ToolOutcome):
-    """分流型：携带载荷，loop 不回传模型，交编排层按载荷执行重副作用后结束本轮。
+    """终止型：loop 不回传模型，交编排层据此结束本轮。
 
-    summary 是 tool_result.content 的语义摘要（落库 + trace 共用），由 Tool 提供；
-    不给则 dispatch 用通用占位。
+    content 如实记录工具执行结果（落库 + trace 共用），由 Tool 提供——与 Reply 同形，
+    不写死默认值。外界只用 isinstance(..., Terminal) 判终止，tool_result 走与 Reply 相同
+    的落库路径，不做特殊处理。
     """
-    payload: Any
-    summary: str = "已执行"
+    content: str
 
 
 @dataclass(frozen=True)
 class DispatchResult:
-    """dispatch 返回：tool_result（落库+trace 共用 content）+ outcome（走向）。"""
-    tool_result: ToolResult
-    outcome: ToolOutcome
+    """dispatch 返回：outcome（含 content，走向 + 落库文本）+ duration_ms（dispatch 计时）。
 
-
-def select_tool_schemas(schemas: list[dict], *, web_search: bool) -> list[dict]:
-    """按联网搜索开关过滤 OpenAI 工具 schema：关闭时移除 baidu_search。"""
-    if web_search:
-        return schemas
-    return [
-        s for s in schemas
-        if s.get("function", {}).get("name") != WEB_SEARCH_TOOL_NAME
-    ]
-
-
-def select_schemas_by_names(all_schemas: list[dict], names: Iterable[str]) -> list[dict]:
-    """按工具名白名单筛 OpenAI 工具 schema（subagent 按 agent_type 工具白名单筛）。
-
-    保留 names 顺序对应的 schema；names 中不存在于 all_schemas 的名字静默跳过。
+    content 不在此重复存——外界从 outcome.content 取；duration_ms 是 dispatch 新增信息，
+    outcome 上没有，故存此。
     """
-    wanted = set(names)
-    return [
-        s for s in all_schemas
-        if s.get("function", {}).get("name") in wanted
-    ]
+    outcome: ToolOutcome
+    duration_ms: int
 
 
 @dataclass
 class ToolContext:
     """传给 Tool.run 的运行时上下文。"""
 
-    skill_loader: SkillLoader
     session_id: Optional[str] = None
 
 
@@ -91,79 +74,64 @@ class Tool(ABC):
         return self.name
 
     @abstractmethod
-    def run(self, arguments: dict, ctx: ToolContext) -> ToolOutcome:
-        ...
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolOutcome: ...
 
 
-class ToolRegistry:
-    def __init__(self, tools: list[Tool]):
-        self._by_name: dict[str, Tool] = {t.name: t for t in tools}
+class ToolDispatch:
+    def __init__(self, tools: list[Tool], settings_service: SettingsService):
+        self._tools: dict[str, Tool] = {t.name: t for t in tools}
+        self._settings = settings_service
 
-    def get(self, name: str) -> Optional[Tool]:
-        return self._by_name.get(name)
+    def select_schemas(self, names: Iterable[str]) -> list[dict]:
+        """按名字白名单筛本调度器的工具 schema：取交集；web_search 关闭时再剔除 baidu_search。
 
-    def schemas_openai(self) -> list[dict]:
-        return [t.schema().to_openai() for t in self._by_name.values()]
+        全集取自调度器自身（self._tools），web_search 开关内部查 SettingsService，
+        都不外部注入；只对命中的工具生成 OpenAI schema。
+        names 中未注册的名字静默跳过。结果按工具注册顺序。
+        """
+        web_search_on = self._settings.get_web_search()
+        return [
+            tool.schema().format()
+            for tool in self._tools.values()
+            if tool.name in names
+            and (web_search_on or tool.name != WEB_SEARCH_TOOL_NAME)
+        ]
 
     def format_display(self, name: str, arguments: dict) -> str:
-        tool = self._by_name.get(name)
-        if tool is None:
-            return name or "tool"
-        try:
-            text = tool.display(arguments or {})
-        except Exception:
-            return name
-        if not isinstance(text, str) or not text.strip():
-            return name
+        text = self._tools[name].display(arguments)
         text = text.replace("\n", " ").replace("\r", " ").strip()
         if len(text) > _DISPLAY_MAX_LEN:
-            text = text[:_DISPLAY_MAX_LEN] + "…"
+            return text[:_DISPLAY_MAX_LEN] + "…"
         return text
 
-    def running_label(self, name: str) -> Optional[str]:
-        tool = self._by_name.get(name)
-        return tool.running_label if tool else None
+    def running_label(self, name: str) -> str:
+        tool = self._tools.get(name)
+        return (tool and tool.running_label) or "工具调用中"
 
     def dispatch(self, call: ToolCall, ctx: ToolContext) -> DispatchResult:
         """统一执行入口：找工具、try/except 包错、计时，返回 DispatchResult。
 
-        - Reply：tool_result.content = Reply.content（落库 + trace 单一来源）。
-        - Terminal：tool_result.content = outcome.summary（Tool 自定义摘要，不给则通用占位）。
-        - 意外异常：强制 Reply(错误文本) + is_error=True，框架 fail-open 兜底，不掺业务走向。
+        - 正常：outcome = tool.run(...)（Reply 或 Terminal，content 即落库文本）。
+        - 意外异常：强制 Reply(错误文本)，框架 fail-open 兜底，不掺业务走向。
+        duration_ms 是 dispatch 计时；content 在 outcome 上，不另存。
+        ctx 由调用方造（ToolContext(session_id=...)），不经工厂封装。
         """
-        display = self.format_display(call.name, call.arguments)
-        tool = self._by_name.get(call.name)
+        tool = self._tools.get(call.name)
         if tool is None:
-            tr = ToolResult(
-                tool_call_id=call.id, name=call.name,
-                content=f"Error: unknown tool '{call.name}'",
-                duration_ms=0, display=display, is_error=True,
+            return DispatchResult(
+                outcome=Reply(f"Error: unknown tool '{call.name}'"),
+                duration_ms=0,
             )
-            return DispatchResult(tool_result=tr, outcome=Reply(tr.content))
-        t0 = perf_counter()
+
+        start = perf_counter()
         try:
             outcome = tool.run(call.arguments, ctx)
-        except Exception as e:  # noqa: BLE001 — 框架兜底意外异常
-            content = f"Error executing tool '{call.name}': {e}"
-            tr = ToolResult(
-                tool_call_id=call.id, name=call.name, content=content,
-                duration_ms=int((perf_counter() - t0) * 1000),
-                display=display, is_error=True,
+        except Exception as e:
+            return DispatchResult(
+                outcome=Reply(f"Error executing tool '{call.name}': {e}"),
+                duration_ms=int((perf_counter() - start) * 1000),
             )
-            return DispatchResult(tool_result=tr, outcome=Reply(content))
-        duration_ms = int((perf_counter() - t0) * 1000)
-        if isinstance(outcome, Terminal):
-            tr = ToolResult(
-                tool_call_id=call.id, name=call.name, content=outcome.summary,
-                duration_ms=duration_ms, display=display, is_error=False,
-            )
-            return DispatchResult(tool_result=tr, outcome=outcome)
-        # Reply
-        tr = ToolResult(
-            tool_call_id=call.id, name=call.name, content=outcome.content,
-            duration_ms=duration_ms, display=display, is_error=False,
+        return DispatchResult(
+            outcome=outcome,
+            duration_ms=int((perf_counter() - start) * 1000),
         )
-        return DispatchResult(tool_result=tr, outcome=outcome)
-
-
-ToolCtxFactory = Callable[[Optional[str]], ToolContext]

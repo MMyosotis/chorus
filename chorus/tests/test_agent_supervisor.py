@@ -21,7 +21,7 @@ from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.tests._helpers import stub_chat_model_provider
-from chorus.tools import ToolContext, ToolRegistry
+from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool, LoadSkillTool
 
 
@@ -49,6 +49,13 @@ class FakeClient:
         return self._scripts.pop(0)
 
 
+def _stub_settings():
+    class _S:
+        def get_web_search(self):
+            return True
+    return _S()
+
+
 def _setup():
     tmp = tempfile.mkdtemp()
     conn = ConnectionFactory(Path(tmp) / "t.db")
@@ -71,15 +78,12 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
-    tool_registry = ToolRegistry([CreatePlanTool(task_repo, conn), LoadSkillTool()])
-
-    def tool_ctx_factory(session_id):
-        return ToolContext(skill_loader=skill_loader, session_id=session_id)
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
 
     entry = stub_chat_model_provider(fake_client)
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, entry,
-        1024, task_repo, tool_registry, tool_ctx_factory,
+        1024, task_repo, tool_dispatcher,
     )
 
 

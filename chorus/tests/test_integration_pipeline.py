@@ -47,7 +47,7 @@ from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.tests._helpers import stub_chat_model_provider
-from chorus.tools import ToolContext, ToolRegistry
+from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool
 
 
@@ -122,6 +122,13 @@ def _plan_args() -> dict:
     }
 
 
+def _stub_settings():
+    class _S:
+        def get_web_search(self):
+            return True
+    return _S()
+
+
 def _build_assembly():
     """装配全链路组件到临时 DB。返回 (supervisor, subagent, task_service, scheduler, task_repo, session_svc)。"""
     conn = ConnectionFactory(Path(tempfile.mkdtemp()) / "t.db")
@@ -146,10 +153,7 @@ def _build_assembly():
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     skill_loader.load()
-    tool_registry = ToolRegistry([CreatePlanTool(task_repo, conn)])
-
-    def tool_ctx_factory(session_id):
-        return ToolContext(skill_loader=skill_loader, session_id=session_id)
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, conn)], _stub_settings())
 
     # supervisor：一次 create_plan tool_call 流
     sup_client = FakeClient([FakeStream([
@@ -160,7 +164,7 @@ def _build_assembly():
     ])])
     supervisor = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks,
-        stub_chat_model_provider(sup_client), 1024, task_repo, tool_registry, tool_ctx_factory,
+        stub_chat_model_provider(sup_client), 1024, task_repo, tool_dispatcher,
     )
 
     # subagent：idea + finalize 两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
@@ -171,8 +175,8 @@ def _build_assembly():
     ])
     subagent = SubAgentService(
         conn, msg_svc, task_repo, art_repo, steps_repo,
-        tool_registry, tool_ctx_factory, hooks,
-        stub_chat_model_provider(sub_client), 1024, tool_registry.schemas_openai(),
+        tool_dispatcher, hooks,
+        stub_chat_model_provider(sub_client), 1024,
     )
 
     task_service = TaskService(task_repo, art_repo, steps_repo, session_svc)

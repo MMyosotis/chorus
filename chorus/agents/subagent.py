@@ -1,7 +1,7 @@
 # kitty/agents/subagent.py
 """SubAgentService：子 Agent 后台线程 ReAct loop，写库不连 SSE。
 
-与 supervisor 共享纯件（drain_stream / ToolRegistry.dispatch / render_invoke_message /
+与 supervisor 共享纯件（drain_stream / ToolDispatch.dispatch / render_invoke_message /
 parse_output / 状态机），不抽共用 ReAct 基类（决策模式不同）。主流程单文件可读全：
 load task → render invoke → 循环 ReAct（heartbeat→drain→exec tools→task_steps.append
 →无 tool_call 则 parse+persist+return）→ 异常 CAS running→failed。
@@ -19,6 +19,7 @@ from typing import Optional
 from chorus.agents.runtime import AgentContext
 from chorus.domain.prompt import build_subagent_system_prompt
 from chorus.domain.stream import StreamResult, drain_stream
+from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
     TaskStatus,
@@ -33,7 +34,7 @@ from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
-from chorus.tools import ToolCall, ToolCtxFactory, ToolRegistry, select_schemas_by_names
+from chorus.tools import ToolCall, ToolContext, ToolDispatch
 
 logger = logging.getLogger(__name__)
 _MAX_STEPS = 8
@@ -47,12 +48,10 @@ class SubAgentService:
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
         task_steps_repo: TaskStepsRepository,
-        tool_registry: ToolRegistry,
-        tool_ctx_factory: ToolCtxFactory,
+        tool_dispatcher: ToolDispatch,
         hooks: HookRegistry,
         chat_model_provider: ChatModelProvider,
         max_tokens: int,
-        all_tool_schemas: list[dict],
         clock=time.time,
     ):
         self._conn = conn
@@ -60,12 +59,10 @@ class SubAgentService:
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
         self._steps_repo = task_steps_repo
-        self._tools = tool_registry
-        self._tool_ctx_factory = tool_ctx_factory
+        self._tools = tool_dispatcher
         self._hooks = hooks
         self._models = chat_model_provider
         self._max_tokens = max_tokens
-        self._all_schemas = all_tool_schemas
         self._clock = clock
 
     def run(self, task_id: str) -> None:
@@ -96,7 +93,7 @@ class SubAgentService:
         invoke = self._build_invoke(task)
         system_prompt = build_subagent_system_prompt(task.agent_type)
         history: list[dict] = [{"role": "user", "content": invoke}]
-        tools = select_schemas_by_names(self._all_schemas, profile.tools)
+        tools = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
 
         iteration = self._steps_repo.next_iteration(task_id)
         while iteration <= _MAX_STEPS:
@@ -164,7 +161,7 @@ class SubAgentService:
         return result
 
     def _exec_tools(self, result, task, ctx) -> list[dict]:
-        tool_ctx = self._tool_ctx_factory(task.session_id)
+        tool_ctx = ToolContext(session_id=task.session_id)
         views: list[dict] = []
         for _, tc in sorted(result.tool_calls.items()):
             call = ToolCall(id=tc["id"], name=tc["name"], arguments=_parse_args(tc["arguments"]))
@@ -175,10 +172,10 @@ class SubAgentService:
                 self._tools.running_label(call.name),
             ))
             d = self._tools.dispatch(call, tool_ctx)
-            list(self._hooks.trigger("PostToolUse", ctx, call_view, d.tool_result))
+            list(self._hooks.trigger("PostToolUse", ctx, call_view, d))
             views.append({
                 "tool_call_id": call.id, "name": call.name,
-                "content": d.tool_result.content, "duration_ms": d.tool_result.duration_ms,
+                "content": d.outcome.content, "duration_ms": d.duration_ms,
             })
         return views
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from chorus.domain.skill import SkillLoader
 from chorus.tools.framework import Reply, Tool, ToolContext
 
 
@@ -19,13 +20,16 @@ class LoadSkillTool(Tool):
     }
     running_label = "加载技能中"
 
+    def __init__(self, skill_loader: SkillLoader):
+        self._skill_loader = skill_loader
+
     def display(self, arguments: dict) -> str:
         return f"加载技能: {arguments.get('name') or '(未指定)'}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> Reply:
         name = arguments.get("name", "")
-        skill = ctx.skill_loader.get(name)
+        skill = self._skill_loader.get(name)
         if skill is None:
-            available = [s.name for s in ctx.skill_loader.list_summaries()]
+            available = [s.name for s in self._skill_loader.list_summaries()]
             return Reply(f"Error: skill '{name}' not found. Available skills: {json.dumps(available)}")
         return Reply(skill.full_content)

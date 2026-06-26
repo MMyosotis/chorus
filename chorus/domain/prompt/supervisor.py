@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 
 def _profiles_block() -> str:
     lines = []
     for p in AGENT_PROFILES.values():
-        tools = "/".join(p.tools)
+        tools = "/".join(TOOL_WHITELISTS[p.agent_type])
         lines.append(
             f"- {p.agent_type}（{p.display_name}）：{p.role_desc}。可用工具：{tools}。"
         )

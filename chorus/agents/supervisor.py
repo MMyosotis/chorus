@@ -25,19 +25,15 @@ from chorus.domain.events import (
 from chorus.domain.prompt import PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader, format_skill_hints
 from chorus.domain.stream import consume_stream
+from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
 from chorus.repositories.task import TaskRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
-from chorus.tools import ToolCall, ToolRegistry, select_schemas_by_names
-from chorus.tools.framework import Reply, Terminal, ToolCtxFactory
-
-# supervisor 工具白名单（与 AGENT_PROFILES.tools 同构的单一真源）。
-# 具体内容可后续调整；机制本身要求：supervisor 能力边界在此一处声明。
-# supervisor 是传话筒/管人的领导，不碰产物——generate_image 等业务技能工具不对它开放。
-SUPERVISOR_TOOLS = ("create_plan", "load_skill", "baidu_search")
+from chorus.tools import ToolCall, ToolContext, ToolDispatch
+from chorus.tools.framework import Reply, Terminal
 
 
 class SupervisorService:
@@ -50,8 +46,7 @@ class SupervisorService:
         chat_model_provider: ChatModelProvider,
         max_tokens: int,
         task_repo: TaskRepository,
-        tool_registry: ToolRegistry,
-        tool_ctx_factory: ToolCtxFactory,
+        tool_dispatcher: ToolDispatch,
     ):
         self._session = session_service
         self._message = message_service
@@ -60,12 +55,10 @@ class SupervisorService:
         self._models = chat_model_provider
         self._max_tokens = max_tokens
         self._task_repo = task_repo
-        self._tools = tool_registry
-        self._tool_ctx_factory = tool_ctx_factory
+        self._tools = tool_dispatcher
 
     def stream(
-        self, session_id: str, user_message: str, *,
-        web_search: Optional[bool] = None,
+        self, session_id: str, user_message: str,
     ) -> Iterator[SseEvent]:
         if not self._session.exists(session_id):
             yield ErrorEvent(content="session not found")
@@ -76,7 +69,7 @@ class SupervisorService:
             yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
             return
         entry = self._models.get_entry()
-        schemas = self._tool_schemas(web_search)
+        schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
@@ -122,14 +115,6 @@ class SupervisorService:
             yield from self._hooks.trigger("Error", ctx)
             yield ErrorEvent(content=str(e))
 
-    def _tool_schemas(self, web_search: Optional[bool]) -> list[dict]:
-        """supervisor 工具白名单：从 registry 全集按 SUPERVISOR_TOOLS 筛，再按联网开关过滤。"""
-        schemas = select_schemas_by_names(self._tools.schemas_openai(), SUPERVISOR_TOOLS)
-        if web_search is False:
-            schemas = [s for s in schemas
-                       if s.get("function", {}).get("name") != "baidu_search"]
-        return schemas
-
     def _dispatch_tools(
         self, session_id: str, ctx: AgentContext, schemas: list[dict],
     ) -> Iterator[SseEvent]:
@@ -141,7 +126,7 @@ class SupervisorService:
         tool(result)——OpenAI 多 tool_call 配对的真实结构，根除多 Reply tool_call 复用
         message_id 撞 messages PK 的回归。首个 Terminal 即结束本轮。
         """
-        tool_ctx = self._tool_ctx_factory(session_id)
+        tool_ctx = ToolContext(session_id=session_id)
         pairs = []          # [(call, dispatch_result)] 按索引顺序
         terminal = None     # 首个 Terminal 的 (call, d)
         for _, tc in sorted(ctx.turn.accumulated_tool_calls.items()):
@@ -153,7 +138,7 @@ class SupervisorService:
                 self._tools.running_label(call.name),
             ))
             d = self._tools.dispatch(call, tool_ctx)
-            list(self._hooks.trigger("PostToolUse", ctx, call_view, d.tool_result))
+            list(self._hooks.trigger("PostToolUse", ctx, call_view, d))
             pairs.append((call, d))
             if isinstance(d.outcome, Terminal) and terminal is None:
                 terminal = (call, d)
@@ -166,7 +151,7 @@ class SupervisorService:
         for call, d in pairs:
             self._message.append_tool_message(
                 session_id, tool_call_id=call.id, name=call.name,
-                content=d.tool_result.content,
+                content=d.outcome.content,
             )
         self._session.touch(session_id)
         if terminal is not None:

@@ -22,7 +22,7 @@ from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.tests._helpers import stub_chat_model_provider
-from chorus.tools import Tool, ToolContext, ToolRegistry
+from chorus.tools import Tool, ToolDispatch
 
 
 class _Delta(types.SimpleNamespace):
@@ -102,6 +102,13 @@ def _mk_task(task_repo, agent_type="idea", status="running", deps=None):
     return t
 
 
+def _stub_settings():
+    class _S:
+        def get_web_search(self):
+            return True
+    return _S()
+
+
 def _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, fake_client):
     hooks = HookRegistry()
     trace = TraceEmitter(msg_svc, max_tokens=1024)
@@ -109,16 +116,13 @@ def _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, fake_client)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    tool_registry = ToolRegistry([FakeTool()])
-
-    def tool_ctx_factory(session_id):
-        return ToolContext(skill_loader=None, session_id=session_id)
+    tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
 
     _provider = stub_chat_model_provider(fake_client)
     return SubAgentService(
         conn, msg_svc, task_repo, art_repo, steps_repo,
-        tool_registry, tool_ctx_factory, hooks,
-        _provider, 1024, tool_registry.schemas_openai(),
+        tool_dispatcher, hooks,
+        _provider, 1024,
     )
 
 

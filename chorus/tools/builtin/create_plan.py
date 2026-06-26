@@ -22,8 +22,6 @@ from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.task import TaskRepository
 from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
-_SUMMARY = "已创建创作任务图，调度器将自动执行"
-
 
 class CreatePlanTool(Tool):
     name = "create_plan"
@@ -120,4 +118,8 @@ class CreatePlanTool(Tool):
                     }))
         except Exception as e:  # noqa: BLE001 — 落库可预料失败内部收口
             return Reply(f"建图落库失败，请重试: {e}")
-        return Terminal(payload=None, summary=_SUMMARY)
+        roles = ", ".join(f"{t.agent_type}#{t.seq}" for t in tasks)
+        return Terminal(
+            f"已创建创作任务图：pipeline={tasks[0].pipeline_id}，"
+            f"{len(tasks)} 个任务 [{roles}]，调度器将自动执行"
+        )

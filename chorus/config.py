@@ -40,7 +40,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # 生图模型配置表：公共字段 + 厂商私有 options。
 #   model_name  —— 展示名 + 存储键 + 注册表键（settings 表存这个；改它已存设置会回退默认）
-#   provider    —— 选哪个 builder（image 各厂商协议不同，按此 dispatch；见 tools/image_model.py）
+#   provider    —— 选哪个 builder（image 各厂商协议不同，按此 dispatch；见 tools/builtin/generate_image.py）
 #   options     —— 厂商私有黑箱：含 model_id 与该 builder 需要的一切，只由对应 builder 读
 # 新增厂商 = 写 client + 注册 builder + config 条目标 provider；新增同厂商模型照抄 options。
 IMAGE_MODELS = [
@@ -70,6 +70,18 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
     "BAIDU_SEARCH_BASE_URL",
     "https://qianfan.baidubce.com/v2/ai_search/chat/completions",
 )
+
+# 各 agent 的工具白名单单一真源：supervisor + 四子角色能用的工具名。
+#   各 agent 查表取名字，再由 tools 包按 (名字 + web_search 开关) 筛 schema。
+#   supervisor 是调度者（非子角色），其工具配置独立于此表，不寄生 AgentProfile。
+#   工具名是字符串约定（非 import 依赖），改名时同步改本表。加角色只加一条。
+TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
+    "supervisor": ("create_plan", "load_skill", "baidu_search"),
+    "idea": ("baidu_search", "load_skill"),
+    "script": ("baidu_search", "load_skill"),
+    "image": ("baidu_search", "generate_image", "load_skill"),
+    "finalize": ("baidu_search", "load_skill"),
+}
 
 # 后台调度器参数
 SCHEDULER_INTERVAL = 1.0   # 调度器轮询周期（秒）
