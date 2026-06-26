@@ -148,8 +148,8 @@ def _build_assembly():
     skill_loader.load()
     tool_registry = ToolRegistry([CreatePlanTool(task_repo, conn)])
 
-    def tool_ctx_factory(session_id, image_model=None):
-        return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
+    def tool_ctx_factory(session_id):
+        return ToolContext(skill_loader=skill_loader, session_id=session_id)
 
     # supervisor：一次 create_plan tool_call 流
     sup_client = FakeClient([FakeStream([

@@ -73,8 +73,8 @@ def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
     tool_registry = ToolRegistry([CreatePlanTool(task_repo, conn), LoadSkillTool()])
 
-    def tool_ctx_factory(session_id, image_model=None):
-        return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
+    def tool_ctx_factory(session_id):
+        return ToolContext(skill_loader=skill_loader, session_id=session_id)
 
     entry = stub_chat_model_provider(fake_client)
     return SupervisorService(

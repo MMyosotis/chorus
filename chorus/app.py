@@ -5,7 +5,6 @@ create_app 只装配（new + 注入），不含启动副作用——副作用经
 """
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -18,13 +17,12 @@ from chorus.config import (
     BAIDU_SEARCH_API_KEY,
     BAIDU_SEARCH_BASE_URL,
     DATA_DIR,
-    IMAGE_MODELS,
-    IMAGE_TEST_FAKE_URL,
     MAX_TOKENS,
     POOL_SIZE,
     SCHEDULER_INTERVAL,
     ZOMBIE_TIMEOUT,
 )
+from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
 from chorus.domain.title import TitleGenerationService
 from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter
@@ -41,7 +39,6 @@ from chorus.routes.sessions import router as sessions_router
 from chorus.routes.settings import router as settings_router
 from chorus.routes.settings import settings_router as model_options_router
 from chorus.routes.task import router as task_router
-from chorus.services.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
@@ -49,9 +46,9 @@ from chorus.services.task import TaskService
 from chorus.startup import run_startup
 from chorus.tools import ToolContext, ToolCtxFactory, ToolRegistry
 from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, OutputPlanTool
-from chorus.tools.builtin.generate_image import GenerateImageTool, ImageModelEntry
-from chorus.tools.clients.ark_image import ArkImageClient
+from chorus.tools.builtin.generate_image import GenerateImageTool
 from chorus.tools.clients.baidu_search import BaiduSearchClient
+from chorus.tools.image_model import ImageModelProvider
 
 
 def create_app() -> FastAPI:
@@ -68,32 +65,24 @@ def create_app() -> FastAPI:
     session_service = SessionService(session_repo)
     message_service = MessageService(msg_repo, trace_repo)
 
-    chat_model_provider = ChatModelProvider(settings_service)
+    chat_models = ChatModelProvider(settings_service)
     # 标题生成固定用默认模型（不随用户当前对话设置变动）
-    title_entry = chat_model_provider.title_entry()
+    title_entry = chat_models.title_entry()
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
 
-    image_models: dict[str, ImageModelEntry] = {}
-    for m in IMAGE_MODELS:
-        api_key = os.environ.get(m["api_key_env"], "")
-        image_models[m["model_name"]] = ImageModelEntry(
-            client=ArkImageClient(api_key, m["base_url"]), model_id=m["model_id"],
-        )
+    image_models = ImageModelProvider(settings_service)
 
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     tool_registry = ToolRegistry([
         LoadSkillTool(),
         OutputPlanTool(),
-        GenerateImageTool(
-            settings_service.get_image_test_mode, IMAGE_TEST_FAKE_URL,
-            image_models, IMAGE_MODELS[0]["model_name"],
-        ),
+        GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
         CreatePlanTool(task_repo, conn),
     ])
 
-    def tool_ctx_factory(session_id, image_model=None):
-        return ToolContext(skill_loader=skill_loader, session_id=session_id, image_model=image_model)
+    def tool_ctx_factory(session_id):
+        return ToolContext(skill_loader=skill_loader, session_id=session_id)
 
     hooks = HookRegistry()
     trace = TraceEmitter(message_service, MAX_TOKENS)
@@ -108,12 +97,12 @@ def create_app() -> FastAPI:
 
     supervisor_service = SupervisorService(
         session_service, message_service, skill_loader, hooks,
-        chat_model_provider, MAX_TOKENS, task_repo,
+        chat_models, MAX_TOKENS, task_repo,
         tool_registry, tool_ctx_factory,
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo, task_steps_repo,
-        tool_registry, tool_ctx_factory, hooks, chat_model_provider,
+        tool_registry, tool_ctx_factory, hooks, chat_models,
         MAX_TOKENS, all_tool_schemas,
     )
     task_service = TaskService(task_repo, task_artifacts_repo, task_steps_repo, session_service)

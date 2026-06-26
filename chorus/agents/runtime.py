@@ -55,7 +55,6 @@ class AgentContext:
     session_id: str
     user_message: str = ""
     tool_schemas: list[dict] = field(default_factory=list)
-    image_model: Optional[str] = None
     chat_model: Optional[str] = None
     # 多智能体扩展（hook 据此区分来源 + trace 关联）
     source: str = "supervisor"        # 'supervisor' | 'subagent'

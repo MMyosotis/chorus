@@ -76,7 +76,6 @@ class ToolContext:
 
     skill_loader: SkillLoader
     session_id: Optional[str] = None
-    image_model: Optional[str] = None  # 用户选定的生图模型逻辑名（generate_image 用）
 
 
 class Tool(ABC):
@@ -167,4 +166,4 @@ class ToolRegistry:
         return DispatchResult(tool_result=tr, outcome=outcome)
 
 
-ToolCtxFactory = Callable[[Optional[str], Optional[str]], ToolContext]
+ToolCtxFactory = Callable[[Optional[str]], ToolContext]

@@ -1,8 +1,8 @@
 """ChatModelProvider：对话模型 ChatModelEntry 的创建与管理。
 
-依赖 SettingsService（编排层），故不进 domain/tools，归 services/。ChatModelEntry 一并
-迁来——services 不能反向 import agents，纯数据载体须从 supervisor.py 搬出。初始化时
-按 config 全量构建所有 entry（每模型一个常驻 OpenAI 客户端），读路径无锁、天然线程安全。
+消费者是 supervisor/subagent（agents/），provider 与消费者同层。chat 各家都是 OpenAI 兼容
+协议，单 builder 够用。初始化时按 config 全量构建所有 entry（每模型一个常驻客户端），读路径
+无锁、天然线程安全。
 """
 from __future__ import annotations
 
@@ -23,11 +23,7 @@ class ChatModelEntry:
 
 
 class ChatModelProvider:
-    def __init__(
-        self,
-        settings_service: SettingsService,
-        chat_models: Optional[list[dict]] = None,
-    ):
+    def __init__(self, settings_service: SettingsService, chat_models: Optional[list[dict]] = None):
         self._settings = settings_service
         self._entries: dict[str, ChatModelEntry] = {
             model["model_name"]: self._build_entry(model)

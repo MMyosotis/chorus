@@ -18,8 +18,22 @@ def _registry() -> ToolRegistry:
         OutputPlanTool(),
         CreatePlanTool(None, None),
         BaiduSearchTool(None),
-        GenerateImageTool(lambda: False, "", {}, "x"),
+        GenerateImageTool(_stub_settings(), _stub_provider()),
     ])
+
+
+def _stub_settings():
+    class _S:
+        def get_image_test_mode(self):
+            return False
+    return _S()
+
+
+def _stub_provider():
+    class _P:
+        def get_entry(self):
+            raise AssertionError("schema 全集测试不应触发 run")
+    return _P()
 
 
 def test_supervisor_tools_excludes_generate_image():

@@ -8,7 +8,7 @@ Chorus — **多智能体爆款图文博文创作助手**：用户一句话主�
 
 **DB 是三 loop 间通信媒介与单一事实源**：supervisor 建图写 `tasks` 表，scheduler 轮询 `tasks` 派发，subagent 写 `task_artifacts`/`task_steps`/`messages`，前端轮询 `get_graph` 渲染角色栏/HIL 卡片/成品。CAS 状态转换（pending/running/awaiting_confirm/finished/failed/cancelled）是协调核心。
 
-后端按 Java OOP 风格分层：`domain`（领域模型 + 纯领域逻辑 + 围绕单一概念的基础设施型 service，如 skill 扫描缓存、title 调 OpenAI 生成、task 状态机/pipeline/PostCard 契约）→ `tools`（工具子系统：模型 + 框架 + 内置工具 + 外部 client，依赖 `domain/skill`，规模较大故独立成顶层包）→ `repositories`（各表唯一 SQL 入口）→ `services`（应用 / HIL 编排：取数据→调领域→存数据）→ `agents`（三 loop 编排：supervisor / subagent / scheduler + 运行时脚手架）→ `routes`（HTTP）。依赖单向 `routes → agents/services → repositories → db`，`agents` 依赖 `services`/`domain`/`tools`/`hooks`；`domain` 不依赖 `repositories`/`services`/`hooks`/`tools`/`agents`，但允许直接持有围绕自身概念的外部依赖（文件系统 / openai / threading）。构造器注入，`create_app()` 内联装配（service 挂 `app.state`，中间对象为局部变量），副作用经 lifespan，无模块级全局单例。
+后端按 Java OOP 风格分层：`domain`（领域模型 + 纯领域逻辑 + 围绕单一概念的基础设施型 service，如 skill 扫描缓存、title 调 OpenAI 生成、task 状态机/pipeline/PostCard 契约）→ `tools`（工具子系统：模型 + 框架 + 内置工具 + 外部 client，依赖 `domain/skill` 与 `services`（如生图模型选择查 SettingsService），规模较大故独立成顶层包）→ `repositories`（各表唯一 SQL 入口）→ `services`（应用 / HIL 编排：取数据→调领域→存数据）→ `agents`（三 loop 编排：supervisor / subagent / scheduler + 运行时脚手架）→ `routes`（HTTP）。依赖单向 `routes → agents/services → repositories → db`，`agents` 依赖 `services`/`domain`/`tools`/`hooks`；`domain` 不依赖 `repositories`/`services`/`hooks`/`tools`/`agents`，但允许直接持有围绕自身概念的外部依赖（文件系统 / openai / threading）。构造器注入，`create_app()` 内联装配（service 挂 `app.state`，中间对象为局部变量），副作用经 lifespan，无模块级全局单例。
 
 ## Commands
 
@@ -33,14 +33,11 @@ cd web && npm run build                # 构建生产版本
 
 ### 环境变量
 在 `.env` 中配置：
-- `DEFAULT_CHAT_MODEL_ID` — 启动默认对话模型 + 标题生成固定模型（须是 `CHAT_MODELS` 中某条的 id，默认 `DeepSeek V4 Flash`）
-- `DEFAULT_IMAGE_MODEL_ID` — 启动默认生图模型（须是 `IMAGE_MODELS` 中某条的 id，默认 `Seedream 4`）
 - 对话模型密钥：`CHAT_MODELS` 每条用 `api_key_env` 指明取哪个环境变量（如 `DEEPSEEK_API_KEY` / `MINIMAX_API_KEY`），key 值写 `.env`，配置表只存变量名
 - `ARK_IMAGE_API_KEY` — 火山方舟图像生成 API 密钥（`IMAGE_MODELS` 各条默认用此变量，与对话密钥解耦；某条生图模型也可指向独立变量）
 - `BAIDU_SEARCH_API_KEY` / `BAIDU_SEARCH_BASE_URL` — 百度智能搜索生成 API（`baidu_search` 工具用，base_url 默认千帆 endpoint）
-- `IMAGE_TEST_FAKE_URL` — 图像测试模式下的固定返回 URL（默认是一张已知可用的橘猫图，可覆盖换图）。测试开关本身只在控制台「设置」中切换，默认关闭，进程级状态、重启回到关
 
-> 对话模型表 `CHAT_MODELS`、生图模型表 `IMAGE_MODELS` 与子 agent 角色模型表 `SUBAGENT_MODELS`（`agent_type → CHAT_MODELS id`，按角色选模型：idea/image 用便宜快、script/finalize 用强模型）均在 `chorus/config.py`。`CHAT_MODELS`/`IMAGE_MODELS` 结构同构：每条含 `id`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）。新增/删除/换 provider 改这两张表即可。调度参数 `SCHEDULER_INTERVAL`/`ZOMBIE_TIMEOUT`/`POOL_SIZE` 亦在 config.py。
+> 对话模型表 `CHAT_MODELS`、生图模型表 `IMAGE_MODELS` 与标题生成固定模型 `TITLE_MODEL`（字面量，须是 `CHAT_MODELS` 中某条的 model_name）均在 `chorus/config.py`。`CHAT_MODELS` 每条含 `model_name`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）；`IMAGE_MODELS` 每条含 `model_name`（展示名 + 存储键）/ `provider`（选哪个 builder，见 `tools/image_model.py`）/ `options`（厂商私有：base_url / api_key_env / model_id）。新增/删除对话模型改 `CHAT_MODELS`；新增生图厂商 = 写 client + 注册 builder + config 标 provider。调度参数 `SCHEDULER_INTERVAL`/`ZOMBIE_TIMEOUT`/`POOL_SIZE` 亦在 config.py。
 
 ## 数据存放位置
 
@@ -58,7 +55,7 @@ cd web && npm run build                # 构建生产版本
 | `app.py` | FastAPI 应用工厂 `create_app()`：内联装配所有 Repository / Service / Tool / Hook / 三 Agent / Scheduler（构造器注入，中间对象为局部变量），HTTP 需要的 service 挂 `app.state`；CORS、注册路由、副作用经 `_build_lifespan` |
 | `startup.py` | `run_startup(skill_loader, settings_service, session_service, scheduler)`：装配后的启动副作用——技能扫描、设置回灌、会话元数据加载、scheduler.start() |
 | `domain/` | 领域层，**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作 + 围绕该概念的基础设施型 service：`session`/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`，支持 `progress`/`plan` 等 subtype)/`trace`(多来源：supervisor/subagent/scheduler，靠 `message_id` 与 `task_id` 关联)/`skill`/`events`(SSE sealed 联合，含 `TaskPlanCreatedEvent`)/`title`/`stream`(`consume_stream` supervisor 用 / `drain_stream` subagent 用 + `StreamResult`)/`prompt`(`supervisor` SYSTEM_PROMPT + `PromptContext`/`build_system_prompt`；`subagent` 各角色 prompt)/`task`(`models` Task/StepSpec/CreationIntent + `state_machine` LEGAL_TRANSITIONS/CAS 规则 + `pipeline` validate_steps/expand_pipeline/render_invoke_message/parse_output + `profiles` AGENT_PROFILES + `post` PostCard 成品契约 + `errors`，单一概念内聚为包) |
-| `tools/` | 工具子系统（领域模型 + 框架，但因规模大而独立成顶层包）：`models` 纯模型 ToolSchema/ToolCall/ToolResult + `framework` select_schemas_by_names 与 Tool/ToolContext/ToolRegistry 框架 + `builtin/`(4 工具：load_skill / output_plan / generate_image / baidu_search) + `clients/`(ark_image / baidu_search 外部依赖封装)。**这些工具的 schema 暴露给 subagent ReAct**；supervisor 用自己内联的 `create_plan` schema（不经 registry）。依赖 `domain/skill`，单向，不反向被依赖 |
+| `tools/` | 工具子系统（领域模型 + 框架，但因规模大而独立成顶层包）：`models` 纯模型 ToolSchema/ToolCall/ToolResult + `framework` select_schemas_by_names 与 Tool/ToolContext/ToolRegistry 框架 + `builtin/`(4 工具：load_skill / output_plan / generate_image / baidu_search) + `clients/`(ark_image / baidu_search 外部依赖封装)。**这些工具的 schema 暴露给 subagent ReAct**；supervisor 用自己内联的 `create_plan` schema（不经 registry）。依赖 `domain/skill` 与 `services`（如生图模型选择查 SettingsService），单向，不反向被依赖 |
 | `agents/` | **三 loop 编排层**（取数据→调 domain/LLM/工具→存数据 + agent loop 流程控制）：`supervisor`(SupervisorService SSE 流式，建图/only_reply 路由，原 ChatService 迁入改造)、`subagent`(SubAgentService 后台线程 ReAct，写库不连 SSE)、`scheduler`(TaskScheduler 守护线程轮询派发 + zombie 回收，BoundedSemaphore 限流)、`runtime`(AgentContext/TurnState/LoopOutcome 运行时脚手架，三 loop 共享)。`__init__.py` 用 PEP 562 `__getattr__` 懒加载打破循环 import |
 | `repositories/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验、不开事务、不硬编码业务状态集合）：`connection`(线程局部 sqlite)、`session`/`message`/`trace`/`settings`/`task`/`task_artifacts`/`task_steps` |
 | `services/` | 应用 / HIL 编排层（取数据→调 domain→存数据）：`session`(锁 + 三 repo)、`message`(消息/trace 编排 + `build_provider_messages` 唯一构建点 + 并发 append 重试)、`settings`、`task`(HIL confirm/retry/cancel_pipeline + get_graph/get_steps)。**无 agent loop**——loop 已下沉到 `agents/`；纯领域逻辑在 `domain/`，单概念 infra service（skill/title）在 `domain/`，工具在 `tools/` |
@@ -89,7 +86,7 @@ scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load 
 关键设计：
 - **协作式取消**：每轮迭代复查任务态，状态漂移（如已 cancelled）立即早退，不残留孤儿产物。
 - **_finalize CAS 先于产物落库**：先 CAS running→终态成功，再 upsert artifacts/narrative；CAS 失败（状态漂移）则不落产物，避免孤儿 artifacts。
-- 子 agent 模型由 `SUBAGENT_MODELS` 按角色选（idea/image 用 Flash、script/finalize 用 Pro）。
+- 子 agent 与 supervisor 同走 SettingsService 当前对话模型（不按角色分模型），经 `ChatModelProvider.get_entry()` 取。
 
 #### 3. TaskScheduler (`agents/scheduler.py`，守护线程，无 LLM 无 hook)
 

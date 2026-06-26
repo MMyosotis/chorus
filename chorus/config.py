@@ -38,24 +38,29 @@ MAX_TOKENS = 2048
 # 运行时数据根目录（项目根 / data）：db 文件落点，启动自动创建
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-# 生图模型配置表：与 CHAT_MODELS 同构，每个模型一条独立连接信息。
+# 生图模型配置表：公共字段 + 厂商私有 options。
 #   model_name  —— 展示名 + 存储键 + 注册表键（settings 表存这个；改它已存设置会回退默认）
-#   base_url    —— 该 provider 的图像生成 endpoint
-#   api_key_env —— 从哪个环境变量取 API key（key 值写在 .env，不进配置明文）
-#   model_id    —— 传给图像 API 的真实 model 名
-# 新增/删除模型改这里即可；不同模型可指向不同 provider / key。
+#   provider    —— 选哪个 builder（image 各厂商协议不同，按此 dispatch；见 tools/image_model.py）
+#   options     —— 厂商私有黑箱：含 model_id 与该 builder 需要的一切，只由对应 builder 读
+# 新增厂商 = 写 client + 注册 builder + config 条目标 provider；新增同厂商模型照抄 options。
 IMAGE_MODELS = [
     {
         "model_name": "Seedream 4",
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "api_key_env": "ARK_IMAGE_API_KEY",
-        "model_id": "doubao-seedream-4-0-250828",
+        "provider": "ark",
+        "options": {
+            "base_url": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+            "api_key_env": "ARK_IMAGE_API_KEY",
+            "model_id": "doubao-seedream-4-0-250828",
+        },
     },
     {
         "model_name": "Seedream 5 Lite",
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "api_key_env": "ARK_IMAGE_API_KEY",
-        "model_id": "doubao-seedream-5-0-litenew",
+        "provider": "ark",
+        "options": {
+            "base_url": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+            "api_key_env": "ARK_IMAGE_API_KEY",
+            "model_id": "doubao-seedream-5-0-litenew",
+        },
     },
 ]
 
@@ -64,13 +69,6 @@ BAIDU_SEARCH_API_KEY = os.environ.get("BAIDU_SEARCH_API_KEY", "")
 BAIDU_SEARCH_BASE_URL = os.environ.get(
     "BAIDU_SEARCH_BASE_URL",
     "https://qianfan.baidubce.com/v2/ai_search/chat/completions",
-)
-
-# 图像生成测试开关：开启后 generate_image 工具不调用真实 API，直接返回写死的 URL。
-# 默认关闭，仅可在运行时通过控制台 (PATCH /api/debug/test-mode) 切换，进程重启回到默认。
-IMAGE_TEST_FAKE_URL = os.environ.get(
-    "IMAGE_TEST_FAKE_URL",
-    "https://ark-content-generation-v2-cn-beijing.tos-cn-beijing.volces.com/doubao-seedream-4-0/02178135974958637079cdcc08b35ab782b1fd6e8da4cf02940a7_0.jpeg?X-Tos-Algorithm=TOS4-HMAC-SHA256&X-Tos-Credential=AKLTYWJkZTExNjA1ZDUyNDc3YzhjNTM5OGIyNjBhNDcyOTQ%2F20260613%2Fcn-beijing%2Ftos%2Frequest&X-Tos-Date=20260613T140919Z&X-Tos-Expires=86400&X-Tos-Signature=ce55d8ee11f67e665c0b465df403d734e7304a1489d0b3f4fcfea53f531e59c3&X-Tos-SignedHeaders=host",
 )
 
 # 后台调度器参数

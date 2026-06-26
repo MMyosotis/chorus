@@ -31,7 +31,7 @@ from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.task import TaskRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
-from chorus.services.chat_model import ChatModelProvider
+from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.tools import ToolCall, ToolCtxFactory, ToolRegistry, select_schemas_by_names
 
@@ -164,7 +164,7 @@ class SubAgentService:
         return result
 
     def _exec_tools(self, result, task, ctx) -> list[dict]:
-        tool_ctx = self._tool_ctx_factory(task.session_id, None)
+        tool_ctx = self._tool_ctx_factory(task.session_id)
         views: list[dict] = []
         for _, tc in sorted(result.tool_calls.items()):
             call = ToolCall(id=tc["id"], name=tc["name"], arguments=_parse_args(tc["arguments"]))

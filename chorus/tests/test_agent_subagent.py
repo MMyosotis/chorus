@@ -111,8 +111,8 @@ def _build_subagent(conn, msg_svc, task_repo, art_repo, steps_repo, fake_client)
     hooks.register("PostToolUse", trace.on_tool_result)
     tool_registry = ToolRegistry([FakeTool()])
 
-    def tool_ctx_factory(session_id, image_model=None):
-        return ToolContext(skill_loader=None, session_id=session_id, image_model=image_model)
+    def tool_ctx_factory(session_id):
+        return ToolContext(skill_loader=None, session_id=session_id)
 
     _provider = stub_chat_model_provider(fake_client)
     return SubAgentService(

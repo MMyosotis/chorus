@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from chorus.agents.subagent import SubAgentService
     from chorus.agents.scheduler import TaskScheduler
     from chorus.agents.supervisor import CREATE_PLAN_TOOL_SCHEMA, SupervisorService
-    from chorus.services.chat_model import ChatModelEntry
+    from chorus.agents.chat_model import ChatModelEntry
 
 __all__ = [
     "AgentContext", "LoopOutcome", "TurnState",
@@ -43,6 +43,6 @@ def __getattr__(name: str):
         from chorus.agents import supervisor
         return getattr(supervisor, name)
     if name == "ChatModelEntry":
-        from chorus.services.chat_model import ChatModelEntry
+        from chorus.agents.chat_model import ChatModelEntry
         return ChatModelEntry
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

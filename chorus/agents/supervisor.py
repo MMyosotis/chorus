@@ -28,7 +28,7 @@ from chorus.domain.stream import consume_stream
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
 from chorus.repositories.task import TaskRepository
-from chorus.services.chat_model import ChatModelProvider
+from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.tools import ToolCall, ToolRegistry, select_schemas_by_names
@@ -65,7 +65,6 @@ class SupervisorService:
 
     def stream(
         self, session_id: str, user_message: str, *,
-        image_model: Optional[str] = None,
         web_search: Optional[bool] = None,
     ) -> Iterator[SseEvent]:
         if not self._session.exists(session_id):
@@ -80,7 +79,7 @@ class SupervisorService:
         schemas = self._tool_schemas(web_search)
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,
-            tool_schemas=schemas, image_model=image_model, chat_model=entry.model_id,
+            tool_schemas=schemas, chat_model=entry.model_id,
         )
         try:
             self._message.append_user_message(session_id, user_message)
@@ -142,7 +141,7 @@ class SupervisorService:
         tool(result)——OpenAI 多 tool_call 配对的真实结构，根除多 Reply tool_call 复用
         message_id 撞 messages PK 的回归。首个 Terminal 即结束本轮。
         """
-        tool_ctx = self._tool_ctx_factory(session_id, ctx.image_model)
+        tool_ctx = self._tool_ctx_factory(session_id)
         pairs = []          # [(call, dispatch_result)] 按索引顺序
         terminal = None     # 首个 Terminal 的 (call, d)
         for _, tc in sorted(ctx.turn.accumulated_tool_calls.items()):

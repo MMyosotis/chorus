@@ -35,7 +35,7 @@ def stub_chat_model_provider(client, model_id: str = "fake"):
     supervisor/subagent 测试用：get_entry() 恒返回包好 fake client 的 entry，
     跳过 ChatModelProvider 的 config 解析与 settings 查询。
     """
-    from chorus.services.chat_model import ChatModelEntry
+    from chorus.agents.chat_model import ChatModelEntry
     entry = ChatModelEntry(client=client, model_id=model_id)
 
     class _Stub:

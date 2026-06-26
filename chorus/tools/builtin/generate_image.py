@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable
-
+from chorus.services.settings import SettingsService
 from chorus.tools.framework import Reply, Tool, ToolContext
-from chorus.tools.clients.ark_image import ArkImageClient
+from chorus.tools.image_model import ImageModelProvider
 
-
-@dataclass(frozen=True)
-class ImageModelEntry:
-    """运行时生图模型条目：HTTP 客户端 + 传给图像 API 的真实 model 名。"""
-
-    client: ArkImageClient
-    model_id: str
+# 测试模式短路返回的固定 URL（不调真实 API，验证全链路渲染用）。
+_FAKE_URL = "https://gips2.baidu.com/it/u=195724436,3554684702&fm=3028&app=3028&f=JPEG&fmt=auto?w=1280&h=960"
 
 
 class GenerateImageTool(Tool):
@@ -25,9 +18,6 @@ class GenerateImageTool(Tool):
         "或对图片的描述——用户已经能直接看到图片。"
         "具体使用哪个 Seedream 模型由用户在前端选项栏选定，本工具不接受 model 参数。"
     )
-    # parameters 取各 Seedream 模型可接受参数的「并集」：不同模型支持的参数略有差异
-    # （如某些尺寸/水印选项），这里只暴露所有模型共同支持的 prompt + size 这一对超集，
-    # 使单个工具能服务任意用户选定的模型；模型特有、非通用的参数不进 schema。
     parameters = {
         "type": "object",
         "properties": {
@@ -45,17 +35,9 @@ class GenerateImageTool(Tool):
     }
     running_label = "图片生成中"
 
-    def __init__(
-        self,
-        image_test_mode_fn: Callable[[], bool],
-        fake_url: str,
-        models: dict[str, ImageModelEntry],
-        default_image_model_id: str,
-    ):
-        self._is_test = image_test_mode_fn
-        self._fake_url = fake_url
-        self._models = models
-        self._default_image_model_id = default_image_model_id
+    def __init__(self, settings_service: SettingsService, provider: ImageModelProvider):
+        self._settings = settings_service
+        self._provider = provider
 
     def display(self, arguments: dict) -> str:
         prompt = (arguments.get("prompt") or "").strip().replace("\n", " ")
@@ -64,10 +46,10 @@ class GenerateImageTool(Tool):
         return f"生成图像: {prompt or '(空提示词)'}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> Reply:
-        if self._is_test():
-            return Reply(self._fake_url)
-        # ctx.image_model 来自 SettingsService.get_image_model（已校验必在注册表中）或 None（取默认）
-        entry = self._models[ctx.image_model or self._default_image_model_id]
+        if self._settings.get_image_test_mode():
+            return Reply(_FAKE_URL)
+
+        entry = self._provider.get_entry()
         return Reply(entry.client.generate(
             arguments.get("prompt", ""),
             entry.model_id,

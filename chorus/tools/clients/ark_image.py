@@ -16,9 +16,6 @@ class ArkImageClient:
         self._base_url = base_url
 
     def generate(self, prompt: str, model_id: str, size: str) -> str:
-        if not self._api_key:
-            return "Error: 图像生成 API key 未配置，无法调用图像生成 API"
-
         payload = {
             "model": model_id,
             "prompt": prompt,
@@ -26,35 +23,24 @@ class ArkImageClient:
             "response_format": "url",
             "watermark": False,
         }
-        body = json.dumps(payload).encode("utf-8")
-        url = f"{self._base_url.rstrip('/')}/images/generations"
         req = urlrequest.Request(
-            url, data=body, method="POST",
+            self._base_url,
+            data=json.dumps(payload).encode("utf-8"),
+            method="POST",
             headers={
                 "Authorization": f"Bearer {self._api_key}",
                 "Content-Type": "application/json",
             },
         )
+
         try:
             with urlrequest.urlopen(req, timeout=120) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urlerror.HTTPError as e:
-            return self._http_error(e)
+            return f"Error: 图像服务返回 HTTP {e.code}"
         except Exception as e:
-            return f"Error: image API request failed: {e}"
+            return f"Error: 图像请求失败: {type(e).__name__}"
 
         items = data.get("data") or []
-        if not items:
-            return f"Error: image API returned no data: {json.dumps(data, ensure_ascii=False)[:500]}"
-        img_url = items[0].get("url")
-        if not img_url:
-            return f"Error: image API returned no url: {json.dumps(items[0], ensure_ascii=False)[:500]}"
-        return img_url
-
-    @staticmethod
-    def _http_error(e: urlerror.HTTPError) -> str:
-        try:
-            err_body = e.read().decode("utf-8")
-        except Exception:
-            err_body = ""
-        return f"Error: image API HTTP {e.code}: {err_body[:500]}"
+        img_url = items[0].get("url") if items else ""
+        return img_url or "Error: 图像服务未返回图片"

@@ -99,7 +99,6 @@ def main() -> None:
 
         for ev in _supervisor.stream(
             session_id, query,
-            image_model=_settings.get_image_model(),
             web_search=_settings.get_web_search(),
         ):
             _handle_event(ev)
