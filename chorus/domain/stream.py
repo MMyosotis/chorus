@@ -38,6 +38,7 @@ def consume_stream(stream) -> Iterator[SseEvent]:
     text_parts: list[str] = []
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = []
+    seq_counter = 0  # thinking 段与 tool_call 共享的全局时序序号
 
     cur_parts: list[str] = []
     started_at: Optional[float] = None
@@ -58,7 +59,8 @@ def consume_stream(stream) -> Iterator[SseEvent]:
             yield ReasoningEvent(content=reasoning)
 
         if in_progress and (delta.content or delta.tool_calls):
-            duration = _close_thinking(cur_parts, started_at, thinking_segments)
+            seq_counter += 1
+            duration = _close_thinking(cur_parts, started_at, thinking_segments, seq_counter)
             yield ReasoningDoneEvent(duration_ms=duration)
             in_progress = False
 
@@ -68,10 +70,11 @@ def consume_stream(stream) -> Iterator[SseEvent]:
 
         if delta.tool_calls:
             for tc in delta.tool_calls:
-                _merge_tool_call(accumulated, tc)
+                seq_counter = _merge_tool_call(accumulated, tc, seq_counter)
 
     if in_progress:
-        duration = _close_thinking(cur_parts, started_at, thinking_segments)
+        seq_counter += 1
+        duration = _close_thinking(cur_parts, started_at, thinking_segments, seq_counter)
         yield ReasoningDoneEvent(duration_ms=duration)
 
     return StreamResult(
@@ -92,6 +95,7 @@ def drain_stream(stream) -> StreamResult:
     text_parts: list[str] = []
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = []
+    seq_counter = 0
 
     cur_parts: list[str] = []
     started_at: Optional[float] = None
@@ -111,7 +115,8 @@ def drain_stream(stream) -> StreamResult:
             cur_parts.append(reasoning)
 
         if in_progress and (delta.content or delta.tool_calls):
-            _close_thinking(cur_parts, started_at, thinking_segments)
+            seq_counter += 1
+            _close_thinking(cur_parts, started_at, thinking_segments, seq_counter)
             in_progress = False
 
         if delta.content:
@@ -119,10 +124,11 @@ def drain_stream(stream) -> StreamResult:
 
         if delta.tool_calls:
             for tc in delta.tool_calls:
-                _merge_tool_call(accumulated, tc)
+                seq_counter = _merge_tool_call(accumulated, tc, seq_counter)
 
     if in_progress:
-        _close_thinking(cur_parts, started_at, thinking_segments)
+        seq_counter += 1
+        _close_thinking(cur_parts, started_at, thinking_segments, seq_counter)
 
     return StreamResult(
         text_parts=text_parts,
@@ -133,20 +139,25 @@ def drain_stream(stream) -> StreamResult:
 
 
 def _close_thinking(
-    parts: list[str], started_at: Optional[float], segments: list[ThinkingSegment]
+    parts: list[str], started_at: Optional[float], segments: list[ThinkingSegment], seq: int
 ) -> int:
     if started_at is None:
         duration = 0
     else:
         duration = int((perf_counter() - started_at) * 1000)
-    segments.append(ThinkingSegment(text="".join(parts), duration_ms=duration))
+    segments.append(ThinkingSegment(text="".join(parts), duration_ms=duration, seq=seq))
     parts.clear()
     return duration
 
 
-def _merge_tool_call(accumulated: dict[int, dict], tc_delta) -> None:
+def _merge_tool_call(accumulated: dict[int, dict], tc_delta, seq_counter: int) -> int:
+    """合并流式 tool_call 分片。首次见到某 idx 时分配 seq（递增计数器回传），后续分片沿用。"""
     idx = tc_delta.index
-    entry = accumulated.setdefault(idx, {"id": "", "name": "", "arguments": ""})
+    entry = accumulated.get(idx)
+    if entry is None:
+        seq_counter += 1
+        entry = {"id": "", "name": "", "arguments": "", "seq": seq_counter}
+        accumulated[idx] = entry
     if tc_delta.id:
         entry["id"] = tc_delta.id
     if tc_delta.function:
@@ -154,3 +165,4 @@ def _merge_tool_call(accumulated: dict[int, dict], tc_delta) -> None:
             entry["name"] = tc_delta.function.name
         if tc_delta.function.arguments:
             entry["arguments"] += tc_delta.function.arguments
+    return seq_counter

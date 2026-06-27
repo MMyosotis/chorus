@@ -51,7 +51,11 @@ function makeEmptyAssistant() {
 function normalizeAssistant(msg) {
   const thinkingItems = Array.isArray(msg.thinking) ? msg.thinking : []
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
-  let seq = 0
+  // 透传后端 seq（thinking 段与 tool 段共享同一时序），让前端按真实发生顺序交错展示；
+  // 旧数据无 seq 时兜底按"先 thinking 后 tool"编号，保持兼容。
+  const hasSeq = [...thinkingItems, ...toolItems].some((it) => it.seq != null)
+  let fallback = 0
+  const nextSeq = (it) => (hasSeq ? (it.seq ?? 0) : ++fallback)
   return {
     role: 'assistant',
     content: msg.content || '',
@@ -60,7 +64,7 @@ function normalizeAssistant(msg) {
       items: thinkingItems.map((it) => ({
         text: it.text || '',
         duration_ms: it.duration_ms ?? null,
-        seq: ++seq,
+        seq: nextSeq(it),
       })),
       expanded: false,
     },
@@ -72,7 +76,7 @@ function normalizeAssistant(msg) {
         duration_ms: it.duration_ms ?? null,
         content: it.content || '',
         display: it.display || it.name,
-        seq: ++seq,
+        seq: nextSeq(it),
       })),
       expanded: false,
     },
@@ -91,14 +95,18 @@ function mergeAssistantHistory(raw) {
     for (let i = result.length - 1; i >= 0; i--) {
       if (result[i].role === 'assistant') {
         const target = result[i]
+        // 透传 pending 项的原 seq（保留跨轮合并的真实顺序）；无 seq 时续号兜底。
+        const hasSeq = [...pendingThinking, ...pendingTools].some((t) => t.seq != null)
         let s = 0
-        for (const x of target.thinking.items) if ((x.seq || 0) > s) s = x.seq
-        for (const x of target.tools.items) if ((x.seq || 0) > s) s = x.seq
+        if (!hasSeq) {
+          for (const x of target.thinking.items) if ((x.seq || 0) > s) s = x.seq
+          for (const x of target.tools.items) if ((x.seq || 0) > s) s = x.seq
+        }
         for (const t of pendingThinking) {
           target.thinking.items.push({
             text: t.text || '',
             duration_ms: t.duration_ms ?? null,
-            seq: ++s,
+            seq: hasSeq ? (t.seq ?? 0) : ++s,
           })
         }
         for (const t of pendingTools) {
@@ -108,7 +116,7 @@ function mergeAssistantHistory(raw) {
             duration_ms: t.duration_ms ?? null,
             content: t.content || '',
             display: t.display || t.name,
-            seq: ++s,
+            seq: hasSeq ? (t.seq ?? 0) : ++s,
           })
         }
         if (target.thinking.items.length) target.thinking.state = 'completed'

@@ -142,6 +142,22 @@ def test_drain_stream_accumulates_tool_calls():
     assert result.text_parts == []
 
 
+def test_thinking_and_tool_share_seq_in_real_order():
+    """思考段与 tool_call 共享同一时序序号，按真实交替顺序递增（P2 回归锚定）：
+    think1 → tool1 → think2 → tool2 应得 seq 1,2,3,4，刷新回放按 seq 交错还原。"""
+    tc1 = _Delta(index=0, id="c1", function=_Delta(name="gen", arguments="{}"))
+    tc2 = _Delta(index=1, id="c2", function=_Delta(name="gen", arguments="{}"))
+    stream = [
+        _chunk({"reasoning_content": "想一"}, None),
+        _chunk({"tool_calls": [tc1]}, None),    # 关闭想一(seq=1)，tool1 首见(seq=2)
+        _chunk({"reasoning_content": "想二"}, None),
+        _chunk({"tool_calls": [tc2]}, "tool_calls"),  # 关闭想二(seq=3)，tool2 首见(seq=4)
+    ]
+    _events, result = _run(stream)
+    assert [seg.seq for seg in result.thinking_segments] == [1, 3]
+    assert [result.tool_calls[0]["seq"], result.tool_calls[1]["seq"]] == [2, 4]
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

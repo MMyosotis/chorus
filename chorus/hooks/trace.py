@@ -38,6 +38,7 @@ class TraceEmitter:
         return [self._emit(ctx, TracePhase.TOOL_CALL, {
             "id": call["id"], "name": call["name"], "arguments": call["arguments"],
             "display": display, "running_label": running_label,
+            "seq": call.get("seq", 0),
         })]
 
     def on_tool_result(self, ctx: AgentContext, call: dict, result: Any) -> Iterable[SseEvent]:

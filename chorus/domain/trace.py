@@ -24,16 +24,24 @@ class TracePhase(str, Enum):
 
 
 class ThinkingSegment(BaseModel):
-    """一段连续的思考过程。"""
+    """一段连续的思考过程。
+
+    seq 是与 ToolInvocation 共享的全局时序序号（单次响应内按真实发生顺序递增），
+    供前端按 seq 交错还原 thinking↔tools 真实顺序；回放历史时不再被强制重排。
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     text: str
     duration_ms: int
+    seq: int = 0
 
 
 class ToolInvocation(BaseModel):
-    """一次工具调用的展示摘要（给前端折叠面板用）。"""
+    """一次工具调用的展示摘要（给前端折叠面板用）。
+
+    seq 与 ThinkingSegment 共享同一时序序号（见 ThinkingSegment.seq 说明）。
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -43,6 +51,7 @@ class ToolInvocation(BaseModel):
     display: str
     duration_ms: int
     content: str
+    seq: int = 0
 
 
 class TraceEntry(BaseModel):
