@@ -98,7 +98,10 @@ class ToolDispatch:
         ]
 
     def format_display(self, name: str, arguments: dict) -> str:
-        text = self._tools[name].display(arguments)
+        tool = self._tools.get(name)
+        if tool is None:
+            return f"(未知工具: {name})"
+        text = tool.display(arguments)
         text = text.replace("\n", " ").replace("\r", " ").strip()
         if len(text) > _DISPLAY_MAX_LEN:
             return text[:_DISPLAY_MAX_LEN] + "…"

@@ -77,6 +77,19 @@ def test_unknown_tool_reply():
     assert isinstance(d.outcome, Reply)
 
 
+def test_format_display_unknown_tool_does_not_raise():
+    """未注册工具名 → format_display 返回占位文案而非抛 KeyError，保证 dispatch 的
+    Reply 自愈路径在 PreToolUse 求值阶段不被绕过（supervisor/subagent 在 trigger
+    前先求值 format_display）。"""
+    reg = ToolDispatch([], _settings())
+    assert "ghost" in reg.format_display("ghost", {})
+
+
+def test_format_display_known_tool():
+    reg = ToolDispatch([_ReplyTool()], _settings())
+    assert reg.format_display("reply_tool", {}) == "reply_tool"
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
