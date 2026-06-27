@@ -10,6 +10,7 @@ load task → render invoke → 循环 ReAct（heartbeat→drain→exec tools→
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import time
@@ -189,7 +190,7 @@ class SubAgentService:
         """
         content = "".join(result.text_parts)
         artifacts, narrative = parse_output(content, task.agent_type)
-        done_text = (narrative.get("done_line") or "") if narrative else ""
+        done_text = narrative.done_line
         to_status = (
             TaskStatus.FINISHED.value if task.agent_type == "finalize"
             else TaskStatus.AWAITING_CONFIRM.value
@@ -198,8 +199,10 @@ class SubAgentService:
         with self._conn.transaction():
             ok = self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, to_status)
             if ok:
+                artifacts_dict = dataclasses.asdict(artifacts)
                 self._artifacts_repo.upsert(
-                    task.id, step_output=artifacts, artifacts=artifacts, narrative=narrative,
+                    task.id, step_output=artifacts_dict, artifacts=artifacts_dict,
+                    narrative=dataclasses.asdict(narrative),
                 )
         if not ok:
             logger.warning("subagent finalize CAS failed (status drifted) for task %s", task.id)

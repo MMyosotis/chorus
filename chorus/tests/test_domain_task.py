@@ -1,7 +1,7 @@
 # kitty/tests/test_domain_task.py
 """任务图领域纯函数表驱动断言：PostCard 契约 / 状态机 / AgentProfile / pipeline。
 
-覆盖 ``kitty/domain/task`` 下 state_machine + profiles + post + pipeline 的纯逻辑
+覆盖 ``kitty/domain/task`` 下 state + profiles + post + pipeline 的纯逻辑
 （不碰 DB，成本极低）。是「状态机/纯函数不测是最大浪费」（spec 第 8 节）的主防线。
 
 运行：``.venv/bin/python -m kitty.tests.test_domain_task``
@@ -168,6 +168,13 @@ def test_validate_steps_rejects():
     # 自指
     with pytest.raises(ValidationError):
         validate_steps([StepSpec("idea", [0], "x"), StepSpec("finalize", [0], "y")])
+    # 非首步无依赖
+    with pytest.raises(ValidationError):
+        validate_steps([
+            StepSpec("idea", [], "x"),
+            StepSpec("script", [], "y"),
+            StepSpec("finalize", [1], "z"),
+        ])
 
 
 def test_expand_pipeline():
@@ -176,9 +183,10 @@ def test_expand_pipeline():
         StepSpec("idea", [], "选题"),
         StepSpec("finalize", [0], "汇总"),
     ]
-    tasks = expand_pipeline(intent, steps)
+    tasks = expand_pipeline(intent, steps, "sess-x", 1000.0)
     assert len(tasks) == 2
     assert all(t.status == TaskStatus.PENDING.value for t in tasks)
+    assert all(t.session_id == "sess-x" and t.created_at == 1000.0 for t in tasks)
     assert tasks[0].dependencies == []
     assert tasks[1].dependencies == [tasks[0].id]
     assert all(t.pipeline_id == tasks[0].pipeline_id for t in tasks)
@@ -207,11 +215,23 @@ def test_parse_sections():
 def test_parse_output_idea_ok():
     content = (
         '<<<ARTIFACTS:json>>>\n{"candidates":[{"index":0,"title":"t","angle":"a","reason":"r"}],"selected":null}\n<<<ARTIFACTS_END>>>\n'
-        '<<<NARRATIVE:json>>>\n{"busy_lines":["x"],"awaiting_line":"y","done_line":"z"}\n<<<NARRATIVE_END>>>'
+        '<<<NARRATIVE:json>>>\n{"awaiting_line":"y","done_line":"z"}\n<<<NARRATIVE_END>>>'
     )
     artifacts, narrative = parse_output(content, "idea")
-    assert "candidates" in artifacts
-    assert narrative["done_line"] == "z"
+    assert len(artifacts.candidates) == 1
+    assert artifacts.candidates[0].title == "t"
+    assert narrative.done_line == "z"
+    assert narrative.awaiting_line == "y"
+
+
+def test_parse_output_narrative_bad_type():
+    """narrative 字段类型错（done_line 非 str）→ ValidationError。"""
+    content = (
+        '<<<ARTIFACTS:json>>>\n{"candidates":[]}\n<<<ARTIFACTS_END>>>\n'
+        '<<<NARRATIVE:json>>>\n{"awaiting_line":"y","done_line":123}\n<<<NARRATIVE_END>>>'
+    )
+    with pytest.raises(ValidationError):
+        parse_output(content, "idea")
 
 
 def test_parse_output_finalize_postcard():
@@ -225,10 +245,10 @@ def test_parse_output_finalize_postcard():
     }
     content = (
         f'<<<ARTIFACTS:json>>>\n{_json.dumps(card)}\n<<<ARTIFACTS_END>>>\n'
-        f'<<<NARRATIVE:json>>>\n{{"busy_lines":[],"awaiting_line":"","done_line":""}}\n<<<NARRATIVE_END>>>'
+        f'<<<NARRATIVE:json>>>\n{{"awaiting_line":"","done_line":""}}\n<<<NARRATIVE_END>>>'
     )
     artifacts, _ = parse_output(content, "finalize")
-    assert artifacts["title"] == "夏日晚风"
+    assert artifacts.title == "夏日晚风"
 
 
 def test_parse_output_missing_section():

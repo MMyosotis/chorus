@@ -77,15 +77,6 @@ def test_circular_deps_returns_reply():
     assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0
 
 
-def test_missing_session_context_returns_reply():
-    """无 session_id → Reply，不建图（防御性）。"""
-    _, repo, tool, _ = _build()
-    ctx = ToolContext(session_id=None)
-    outcome = tool.run(_args(), ctx)
-    assert isinstance(outcome, Reply)
-    assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0
-
-
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

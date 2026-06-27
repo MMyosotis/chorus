@@ -9,22 +9,14 @@ const props = defineProps({
 const emit = defineEmits(['expand'])
 
 const expanded = ref(false)
-const busyIdx = ref(0)
-const showBusy = ref(false)
 
 const roleName = computed(() => ROLE_LABELS[props.task.agent_type] || props.task.agent_type)
 const badge = computed(() => badgeOf(props.task.status))
 const narrative = computed(() => props.task.narrative || {})
-const busyLines = computed(() => narrative.value.busy_lines || [])
 
 function toggleExpand() {
   expanded.value = !expanded.value
   if (expanded.value) emit('expand', props.task.id)
-}
-
-function cycleBusy() {
-  if (!busyLines.value.length) return
-  busyIdx.value = (busyIdx.value + 1) % busyLines.value.length
 }
 </script>
 
@@ -38,18 +30,8 @@ function cycleBusy() {
       </div>
     </div>
 
-    <!-- 工作中：话术轮播（点开才看，不强制） -->
-    <div v-if="task.status === 'running' && busyLines.length" class="role-line">
-      <button class="line-toggle" @click="showBusy = !showBusy">
-        {{ showBusy ? '收起' : '看在忙什么' }}
-      </button>
-      <div v-if="showBusy" class="busy-line" @click="cycleBusy">
-        {{ busyLines[busyIdx] }}
-      </div>
-    </div>
-
     <!-- awaiting：弹引导语，把用户引向主面板 HIL 卡片（自身不放按钮/列表） -->
-    <div v-else-if="task.status === 'awaiting_confirm' && narrative.awaiting_line" class="role-line guide">
+    <div v-if="task.status === 'awaiting_confirm' && narrative.awaiting_line" class="role-line guide">
       {{ narrative.awaiting_line }}
     </div>
 
@@ -92,10 +74,5 @@ function cycleBusy() {
 .role-line { margin-top: 8px; font-size: 13px; color: #475569; }
 .role-line.guide { color: #b45309; font-weight: 500; }
 .role-line.done { color: #047857; }
-.line-toggle {
-  border: none; background: transparent; color: #6366f1;
-  cursor: pointer; font-size: 12px; padding: 0;
-}
-.busy-line { margin-top: 4px; cursor: pointer; }
 .role-error { margin-top: 6px; font-size: 12px; color: #b91c1c; }
 </style>

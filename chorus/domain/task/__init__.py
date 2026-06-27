@@ -10,13 +10,22 @@ from chorus.domain.task.errors import ValidationError
 from chorus.domain.task.models import (
     AgentType,
     CreationIntent,
+    IdeaArtifacts,
+    IdeaCandidate,
+    ImageArtifacts,
+    ImageItem,
+    Narrative,
+    PostCard,
+    PostImage,
+    PostSection,
+    ScriptArtifacts,
+    ScriptBlock,
     StepSpec,
     Task,
     TaskArtifacts,
     TaskStep,
     TaskStatus,
 )
-from chorus.domain.task.post import PostCard, PostImage, PostSection
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.pipeline import (
     expand_pipeline,
@@ -25,7 +34,7 @@ from chorus.domain.task.pipeline import (
     render_invoke_message,
     validate_steps,
 )
-from chorus.domain.task.state_machine import (
+from chorus.domain.task.state import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     LEGAL_TRANSITIONS,
@@ -40,6 +49,13 @@ __all__ = [
     "ValidationError",
     "AgentType",
     "CreationIntent",
+    "IdeaArtifacts",
+    "IdeaCandidate",
+    "ImageArtifacts",
+    "ImageItem",
+    "Narrative",
+    "ScriptArtifacts",
+    "ScriptBlock",
     "StepSpec",
     "Task",
     "TaskArtifacts",

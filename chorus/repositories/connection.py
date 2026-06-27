@@ -50,9 +50,3 @@ class ConnectionFactory:
             raise
         finally:
             self._tls.in_txn = False
-
-    def close_all(self) -> None:
-        conn = getattr(self._tls, "conn", None)
-        if conn is not None:
-            conn.close()
-            self._tls.conn = None

@@ -3,15 +3,18 @@
 TaskArtifacts / TaskStep。
 
 纯 Pydantic 模型，不 import repos/services/hooks/tools/agents。状态语义与转移
-规则不在此（见 state_machine.py），这里只承载数据形状。
+规则不在此（见 state.py），这里只承载数据形状。
+
+pydantic dataclass 走位置参数 __init__，无默认值字段必须排在有默认值字段之前。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
+from pydantic.dataclasses import dataclass as pydataclass
 
 
 class TaskStatus(str, Enum):
@@ -30,10 +33,9 @@ class AgentType(str, Enum):
     FINALIZE = "finalize"
 
 
-class Task(BaseModel):
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class Task:
     """tasks 表一行的领域模型。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     session_id: str
@@ -42,38 +44,121 @@ class Task(BaseModel):
     seq: int
     status: str  # TaskStatus 值
     invoke_message: str
+    created_at: float
+    updated_at: float
     dependencies: list[str] = Field(default_factory=list)  # 前置 task_id 列表
     feedback: Optional[dict] = None  # retry 时注入的用户反馈
     error: Optional[str] = None
-    created_at: float
-    updated_at: float
 
 
-class TaskArtifacts(BaseModel):
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class TaskArtifacts:
     """task_artifacts 表一行的领域模型（1:1 关联 tasks，大 JSON 产物）。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     task_id: str
     step_output: Optional[Any] = None  # 下游注入用（= artifacts 同值）
     artifacts: Optional[Any] = None  # 前端渲染用结构化产物
-    narrative: Optional[dict] = None  # 角色话术
+    narrative: Optional[dict] = None  # 角色话术（Narrative 校验后 asdict 入库）
 
 
-class TaskStep(BaseModel):
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class Narrative:
+    """subagent 产出的角色话术——parse 期强校验值对象，校验后 asdict 回 dict 入库。
+
+    awaiting_line: HIL 等待确认引导语（awaiting_confirm 态展示）；
+    done_line: 完成总结一句话（finished 态展示）。执行完一次性产出。
+    """
+
+    awaiting_line: str
+    done_line: str
+
+
+# ---- artifacts 内容模型（parse 期强校验值对象，校验后 asdict 回 dict 入库）----
+# 与 Narrative 同层：存储行模型 TaskArtifacts.artifacts 仍是松 Any（落 JSON blob），
+# 这里的模型只在 parse_output 校验时一次性构造，验完即 asdict。finalize 复用 PostCard。
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class IdeaCandidate:
+    index: int
+    title: str
+    angle: str
+    reason: str
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class IdeaArtifacts:
+    """idea 角色产物：候选选题列表 + 选中索引（selected 由 HIL 确认后写入，parse 期可空）。"""
+
+    candidates: list[IdeaCandidate]
+    selected: Optional[int] = None
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ScriptBlock:
+    kind: str  # heading/paragraph/list 等（中间产物，不强制 Literal，留弹性）
+    text: str
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ScriptArtifacts:
+    """script 角色产物：正文块序列。"""
+
+    blocks: list[ScriptBlock]
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ImageItem:
+    url: str
+    caption: str = ""
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ImageArtifacts:
+    """image 角色产物：配图列表。"""
+
+    images: list[ImageItem]
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class PostImage:
+    url: str
+    caption: str = ""
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class PostSection:
+    kind: Literal["paragraph", "heading", "list", "quote", "image"]
+    text: str = ""  # paragraph/heading/quote 文本; list 用 \n 分条
+    image: Optional[PostImage] = None  # kind=image 时必填
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class PostCard:
+    """finalize 角色产物（= 成品契约）：博文卡片树，前端 PostCard.vue 拿到即渲染。
+
+    kind 枚举固定有界，前端按 kind 套样式，不猜内容格式。
+    """
+
+    title: str
+    sections: list[PostSection]
+    cover: Optional[PostImage] = None
+    tags: list[str] = Field(default_factory=list)
+    summary: str = ""
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class TaskStep:
     """task_steps 表一行的领域模型（1:N，每轮 ReAct 一行）。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     task_id: str
     iteration: int  # 1-based
+    created_at: float
     thinking: Optional[str] = None
     text: Optional[str] = None
     tool_calls: Optional[list[dict]] = None
     tool_results: Optional[list[dict]] = None
     finish_reason: Optional[str] = None
-    created_at: float
 
 
 @dataclass

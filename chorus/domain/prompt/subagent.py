@@ -15,7 +15,7 @@ _BASE = (
     "完成创作后，在最后一轮（不再调用工具时）按以下分隔符段格式输出，段外可加少量引导语：\n\n"
     "<<<ARTIFACTS:json>>>\n{artifacts_shape}\n<<<ARTIFACTS_END>>>\n\n"
     "<<<NARRATIVE:json>>>\n"
-    '{{"busy_lines":["工作中轮播话术1","话术2"],"awaiting_line":"等用户确认时的引导语","done_line":"完成总结一句话"}}\n'
+    '{{"awaiting_line":"等用户确认时的引导语","done_line":"完成总结一句话"}}\n'
     "<<<NARRATIVE_END>>>\n\n"
     "{task_guidance}\n"
     "JSON 必须合法，不要用代码块包裹，不要在段内加注释。"
@@ -39,7 +39,7 @@ _SHAPES = {
 }
 
 _GUIDANCE = {
-    "idea": "给出 3-5 个候选标题与切入角度，busy_lines 轮播你在调研热点的过程。",
+    "idea": "给出 3-5 个候选标题与切入角度。",
     "script": "把正文拆成有序 blocks（heading/paragraph/list），不要塞成单个长字符串。",
     "image": "调用 generate_image 生成配图，把返回的 url 填进 images，配图数量按意图要求。",
     "postcard": "你是唯一成品出口：装配前三步原料成整棵 PostCard。"

@@ -93,7 +93,7 @@ def _idea_content() -> str:
         "candidates": [{"index": 0, "title": "夏日晚风", "angle": "清凉", "reason": "应季"}],
         "selected": None,
     }
-    narrative = {"busy_lines": ["翻翻热点"], "awaiting_line": "等你挑一个", "done_line": "选题定了"}
+    narrative = {"awaiting_line": "等你挑一个", "done_line": "选题定了"}
     return _wrap_sections(artifacts, narrative)
 
 
@@ -106,7 +106,7 @@ def _finalize_content() -> str:
         "tags": ["#夏天"],
         "summary": "一篇夏日博文",
     }
-    narrative = {"busy_lines": ["组装中"], "awaiting_line": "", "done_line": "成品出炉"}
+    narrative = {"awaiting_line": "", "done_line": "成品出炉"}
     return _wrap_sections(card, narrative)
 
 

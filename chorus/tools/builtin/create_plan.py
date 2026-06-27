@@ -87,9 +87,6 @@ class CreatePlanTool(Tool):
         return f"创作：{topic or '(未指定主题)'}"
 
     def run(self, arguments: dict, ctx: ToolContext):  # -> ToolOutcome
-        sid = ctx.session_id
-        if not sid:
-            return Reply("create_plan 缺少会话上下文，无法建图")
         try:
             intent_in = arguments["intent"]
             intent = CreationIntent(
@@ -98,27 +95,28 @@ class CreatePlanTool(Tool):
                 image_count=intent_in.get("image_count", 3),
                 extra=intent_in.get("extra", {}),
             )
+
             steps = [
-                StepSpec(agent_type=s["agent_type"], deps=s.get("deps", []), focus=s["focus"])
-                for s in arguments["steps"]
+                StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []), focus=step["focus"])
+                for step in arguments["steps"]
             ]
             validate_steps(steps)
-            tasks = expand_pipeline(intent, steps)
+
+            now = self._clock()
+            tasks = expand_pipeline(intent, steps, ctx.session_id, now)
         except (KeyError, TypeError) as e:
             return Reply(f"create_plan 参数缺失或格式错: {e}")
         except ValidationError as e:
             return Reply(e.correction)
-        # 落库失败是可预料副作用失败 → Reply 让模型重试（事务原子性兜底，不残留半张图）
+
         try:
-            now = self._clock()
             with self._conn.transaction():
-                for t in tasks:
-                    self._task_repo.insert(t.model_copy(update={
-                        "session_id": sid, "created_at": now, "updated_at": now,
-                    }))
-        except Exception as e:  # noqa: BLE001 — 落库可预料失败内部收口
+                for task in tasks:
+                    self._task_repo.insert(task)
+        except Exception as e:
             return Reply(f"建图落库失败，请重试: {e}")
-        roles = ", ".join(f"{t.agent_type}#{t.seq}" for t in tasks)
+
+        roles = ", ".join(f"{task.agent_type}#{task.seq}" for task in tasks)
         return Terminal(
             f"已创建创作任务图：pipeline={tasks[0].pipeline_id}，"
             f"{len(tasks)} 个任务 [{roles}]，调度器将自动执行"

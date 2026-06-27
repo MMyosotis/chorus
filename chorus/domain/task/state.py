@@ -1,4 +1,4 @@
-# kitty/domain/task/state_machine.py
+# kitty/domain/task/state.py
 """任务图状态机：转移规则表 + 基于集合运算的纯判定函数。
 
 所有状态语义集中此处一处。加状态=枚举+规则表+决定集合归属；加转移=规则表+一处

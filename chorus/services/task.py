@@ -8,6 +8,7 @@ rowcount=0 抛 ConflictError（route 转 409）。get_graph 选 active pipeline�
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Optional
 
 from chorus.domain.task import (
@@ -100,7 +101,7 @@ class TaskService:
         """该 task 的 ReAct 过程（按 iteration 升序），供角色详情页。"""
         if self._task_repo.get(task_id) is None:
             raise KeyError(task_id)
-        return [s.model_dump() for s in self._steps_repo.list_by_task(task_id)]
+        return [dataclasses.asdict(s) for s in self._steps_repo.list_by_task(task_id)]
 
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)

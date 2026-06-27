@@ -132,7 +132,7 @@ def test_subagent_idea_awaiting_confirm():
     _mk_task(task_repo, "idea", "running")
     # 一轮文本回复（产出协议）
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"busy_lines": ["x"], "awaiting_line": "y", "done_line": "定了"}
+    narrative = {"awaiting_line": "y", "done_line": "定了"}
     content = (
         f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
@@ -155,7 +155,7 @@ def test_subagent_finalize_finished():
     card = {"title": "夏日晚风", "cover": {"url": "http://x/a.jpg"},
             "sections": [{"kind": "paragraph", "text": "一段"}],
             "tags": ["#夏天"], "summary": "摘要"}
-    narrative = {"busy_lines": [], "awaiting_line": "", "done_line": "汇总完成"}
+    narrative = {"awaiting_line": "", "done_line": "汇总完成"}
     content = (
         f"<<<ARTIFACTS:json>>>\n{json.dumps(card)}\n<<<ARTIFACTS_END>>>\n"
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
@@ -172,7 +172,7 @@ def test_subagent_react_with_tool():
     conn, msg_svc, task_repo, art_repo, steps_repo = _setup()
     _mk_task(task_repo, "idea", "running")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"busy_lines": ["x"], "awaiting_line": "y", "done_line": "z"}
+    narrative = {"awaiting_line": "y", "done_line": "z"}
     content = (
         f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
@@ -218,7 +218,7 @@ def test_subagent_self_corrects_on_bad_output():
     conn, msg_svc, task_repo, art_repo, steps_repo = _setup()
     _mk_task(task_repo, "idea", "running")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"busy_lines": ["x"], "awaiting_line": "y", "done_line": "定了"}
+    narrative = {"awaiting_line": "y", "done_line": "定了"}
     good = (
         f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
@@ -240,7 +240,7 @@ def test_subagent_self_corrects_on_bad_output():
 def _idea_content(done_line="DONE_MARKER"):
     """构造合法 idea 产出文本（artifacts + narrative 两段）。"""
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"busy_lines": ["x"], "awaiting_line": "y", "done_line": done_line}
+    narrative = {"awaiting_line": "y", "done_line": done_line}
     return (
         f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
