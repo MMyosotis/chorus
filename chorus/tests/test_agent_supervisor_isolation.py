@@ -49,12 +49,13 @@ def test_supervisor_whitelist_excludes_generate_image():
 
 def test_supervisor_schemas_filtered_by_whitelist():
     """registry.select_schemas 按 supervisor 白名单筛后，喂 LLM 的 schemas 不含
-    generate_image / output_plan，且 web_search 关闭时再剔除 baidu_search。"""
+    generate_image（领导不碰产物），output_plan 是独立展示计划工具故暴露；web_search
+    关闭时再剔除 baidu_search。"""
     reg = _registry()
     sup_names = {s["function"]["name"] for s in reg.select_schemas(TOOL_WHITELISTS["supervisor"])}
     assert sup_names == set(TOOL_WHITELISTS["supervisor"])  # web_search 开 → 全白名单命中
     assert "generate_image" not in sup_names
-    assert "output_plan" not in sup_names
+    assert "output_plan" in sup_names
 
 
 def test_web_search_disabled_drops_baidu_search():
@@ -75,7 +76,8 @@ def test_loop_does_not_reference_tool_name_literals():
     dispatch_src = inspect.getsource(SupervisorService._dispatch_tools)
     handle_src = inspect.getsource(SupervisorService._handle_terminal)
     assert "create_plan" not in dispatch_src  # 无硬编码名
-    assert "tc.get" not in dispatch_src and 'name == "create_plan"' not in dispatch_src
+    # 禁按工具名做相等路由（tc.get("name") 后比名）；tc.get("seq") 取时序字段不属此列
+    assert 'tc.get("name")' not in dispatch_src and 'name == "create_plan"' not in dispatch_src
     # handle_terminal 不认 Terminal 载荷类型——工具副作用自洽，主流程只管终止
     assert "isinstance" not in handle_src
     assert "payload" not in handle_src

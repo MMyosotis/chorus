@@ -76,7 +76,7 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
 #   supervisor 是调度者（非子角色），其工具配置独立于此表，不寄生 AgentProfile。
 #   工具名是字符串约定（非 import 依赖），改名时同步改本表。加角色只加一条。
 TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
-    "supervisor": ("create_plan", "load_skill", "baidu_search"),
+    "supervisor": ("create_plan", "load_skill", "baidu_search", "output_plan"),
     "idea": ("baidu_search", "load_skill"),
     "script": ("baidu_search", "load_skill"),
     "image": ("baidu_search", "generate_image", "load_skill"),
