@@ -23,7 +23,7 @@ from chorus.domain.events import (
     SseEvent,
 )
 from chorus.domain.prompt import PromptContext, build_system_prompt
-from chorus.domain.skill import SkillLoader, format_skill_hints
+from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import ACTIVE_STATUSES
@@ -83,7 +83,7 @@ class SupervisorService:
                 ctx.turn.message_id = uuid.uuid4().hex
                 yield MessageStartEvent(id=ctx.turn.message_id)
                 prompt = build_system_prompt(PromptContext(
-                    skill_hints=format_skill_hints(self._skill.list_summaries()),
+                    skill_hints=self._skill.format_hints(),
                 ))
                 ctx.turn.provider_messages = self._message.build_provider_messages(session_id, prompt)
                 yield from self._hooks.trigger("BeforeModelRequest", ctx)

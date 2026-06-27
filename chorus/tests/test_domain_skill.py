@@ -1,8 +1,8 @@
 # kitty/tests/test_domain_skill.py
-"""Skill 领域纯逻辑断言：from_markdown / SkillSummary / format_skill_hints / SkillLoader。
+"""Skill 领域纯逻辑断言：from_markdown / SkillLoader（扫描 + 摘要 + 提示段）。
 
 覆盖 ``kitty/domain/skill``：frontmatter 解析（name/description, 无 tags 字段——实际行为）、
-缺 frontmatter 用 fallback_name、format_skill_hints 拼成 prompt 段、SkillLoader 扫描
+缺 frontmatter 用 fallback_name、SkillLoader.format_hints 拼成 prompt 段、SkillLoader 扫描
 ``*/SKILL.md`` 并按 name 缓存。用 tempfile 临时目录, 不碰项目 DB。
 
 运行：``.venv/bin/python -m kitty.tests.test_domain_skill``
@@ -12,12 +12,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from chorus.domain.skill import (
-    SkillContent,
-    SkillLoader,
-    SkillSummary,
-    format_skill_hints,
-)
+from chorus.domain.skill import SkillContent, SkillLoader
 
 
 def test_from_markdown_parses_frontmatter():
@@ -53,16 +48,18 @@ def test_from_markdown_malformed_frontmatter_falls_back():
     assert c.description == ""
 
 
-def test_format_skill_hints_empty_returns_empty_string():
-    assert format_skill_hints([]) == ""
+def test_format_hints_empty_returns_empty_string():
+    tmp = Path(tempfile.mkdtemp())
+    loader = SkillLoader(skills_dir=tmp)
+    assert loader.format_hints() == ""
 
 
-def test_format_skill_hints_renders_names_and_descriptions():
-    summaries = [
-        SkillSummary(name="infographic", description="做信息图"),
-        SkillSummary(name="writer", description="写文案"),
-    ]
-    out = format_skill_hints(summaries)
+def test_format_hints_renders_names_and_descriptions():
+    tmp = Path(tempfile.mkdtemp())
+    _write_skill(tmp, "infographic", "---\nname: infographic\ndescription: 做信息图\n---\nb")
+    _write_skill(tmp, "writer", "---\nname: writer\ndescription: 写文案\n---\nb")
+    loader = SkillLoader(skills_dir=tmp)
+    out = loader.format_hints()
     assert "## 可用技能" in out
     assert "load_skill" in out
     assert "**infographic**: 做信息图" in out
@@ -77,11 +74,10 @@ def _write_skill(root: Path, dir_name: str, body: str) -> Path:
     return f
 
 
-def test_skill_loader_scans_temp_dir_and_caches_by_name():
+def test_skill_loader_scans_temp_dir_and_resolves_by_name():
     tmp = Path(tempfile.mkdtemp())
     _write_skill(tmp, "alpha", "---\nname: alpha-skill\ndescription: 阿尔法\n---\nbody-a")
     loader = SkillLoader(skills_dir=tmp)
-    loader.load()
     summaries = loader.list_summaries()
     assert [s.name for s in summaries] == ["alpha-skill"]
     assert summaries[0].description == "阿尔法"
@@ -96,7 +92,6 @@ def test_skill_loader_fallback_name_is_parent_dir_name():
     # 无 frontmatter, name 应回退为目录名
     _write_skill(tmp, "dir-named", "纯正文")
     loader = SkillLoader(skills_dir=tmp)
-    loader.load()
     assert loader.get("dir-named") is not None
     assert loader.get("dir-named").description == ""
 
@@ -107,15 +102,13 @@ def test_skill_loader_ignores_non_skill_md_files():
     # 非 SKILL.md 命名的文件应被忽略（glob 是 */SKILL.md）
     (tmp / "alpha" / "README.md").write_text("noise", encoding="utf-8")
     loader = SkillLoader(skills_dir=tmp)
-    loader.load()
     names = [s.name for s in loader.list_summaries()]
     assert names == ["a"]  # 只扫到 SKILL.md
 
 
 def test_skill_loader_missing_dir_yields_empty():
     loader = SkillLoader(skills_dir=Path("/nonexistent-skill-dir-xyz"))
-    loader.load()  # 不抛
-    assert loader.list_summaries() == []
+    assert loader.list_summaries() == []  # 不抛
 
 
 def main():

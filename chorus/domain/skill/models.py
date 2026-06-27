@@ -6,22 +6,20 @@ SkillContent：load_skill 工具返回的完整内容，from_markdown 解析 fro
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from dataclasses import dataclass
 
 
-class SkillSummary(BaseModel):
+@dataclass(frozen=True)
+class SkillSummary:
     """注入 system prompt 的摘要。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     description: str
 
 
-class SkillContent(BaseModel):
+@dataclass(frozen=True)
+class SkillContent:
     """load_skill 工具返回的完整内容。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
     description: str
@@ -30,25 +28,22 @@ class SkillContent(BaseModel):
     @classmethod
     def from_markdown(cls, text: str, fallback_name: str) -> "SkillContent":
         """从 skill markdown 文本构造：解析 frontmatter（name/description），full_content 为原文。"""
-        name = fallback_name
-        description = ""
-        if text.startswith("---"):
-            parts = text.split("---", 2)
-            if len(parts) >= 3:
-                name, description = cls._parse_frontmatter(parts[1], fallback_name)
+        name, description = fallback_name, ""
+        parts = text.split("---", 2) if text.startswith("---") else []
+        if len(parts) >= 3:
+            name, description = cls._parse_frontmatter(parts[1], fallback_name)
         return cls(name=name, description=description, full_content=text)
 
     @staticmethod
     def _parse_frontmatter(frontmatter: str, fallback_name: str) -> tuple[str, str]:
-        name = fallback_name
-        description = ""
+        values = {"name": fallback_name, "description": ""}
         for line in frontmatter.strip().splitlines():
-            if ":" not in line:
-                continue
-            key, _, val = line.partition(":")
-            key, val = key.strip(), val.strip()
-            if key == "name":
-                name = val
-            elif key == "description":
-                description = val
-        return name, description
+            key, val = SkillContent._split_kv(line)
+            values[key] = val
+        return values["name"], values["description"]
+
+    @staticmethod
+    def _split_kv(line: str) -> tuple[str, str]:
+        """按第一个冒号拆 key/value 并去空白；无冒号时 key 为整行、val 为空。"""
+        key, _, val = line.partition(":")
+        return key.strip(), val.strip()

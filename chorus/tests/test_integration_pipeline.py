@@ -152,7 +152,6 @@ def _build_assembly():
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    skill_loader.load()
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, conn)], _stub_settings())
 
     # supervisor：一次 create_plan tool_call 流

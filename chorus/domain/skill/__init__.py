@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from chorus.domain.skill.loader import SKILLS_DIR, SkillLoader, format_skill_hints
+from chorus.domain.skill.loader import SKILLS_DIR, SkillLoader
 from chorus.domain.skill.models import SkillContent, SkillSummary
 
 __all__ = [
     "SkillSummary",
     "SkillContent",
     "SkillLoader",
-    "format_skill_hints",
     "SKILLS_DIR",
 ]

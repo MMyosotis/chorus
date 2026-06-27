@@ -70,7 +70,6 @@ def _setup():
 
 def _build_supervisor(conn, session_svc, msg_svc, task_repo, fake_client):
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    skill_loader.load()
     hooks = HookRegistry()
     trace = TraceEmitter(msg_svc, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
