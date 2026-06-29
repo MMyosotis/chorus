@@ -38,7 +38,7 @@ def test_confirm_idea_with_selected():
     svc, task_repo = _setup()
     _mk(task_repo, "t1", "idea", "awaiting_confirm")
     TaskArtifactsRepository(_conn_of(task_repo)).upsert(
-        "t1", {"candidates": [{"index": 0}]}, {"candidates": [{"index": 0}]}, {"done_line": "x"})
+        "t1", {"candidates": [{"index": 0}]}, {"done_line": "x"})
     res = svc.confirm("t1", selected=0)
     assert res["status"] == TaskStatus.FINISHED.value
     assert task_repo.get("t1").status == TaskStatus.FINISHED.value

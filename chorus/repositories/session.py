@@ -1,8 +1,14 @@
-"""sessions 表的唯一 SQL 入口。"""
+"""sessions 表的唯一 SQL 入口。
+
+映射归框架（命名绑定 + model_fields 派生列名），形状转换（title_generated int↔bool）
+集中在 SessionRow.to_domain / from_domain。
+"""
 
 from __future__ import annotations
 
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.session import Session
 from chorus.repositories.connection import ConnectionFactory
@@ -19,38 +25,67 @@ CREATE INDEX IF NOT EXISTS idx_session_updated ON sessions(updated_at DESC);
 """
 
 
+class SessionRow(BaseModel):
+    """sessions 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。
+
+    title_generated 物理列是 INTEGER，Row 诚实贴 int，to_domain 里 bool()。
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    id: str
+    title: str
+    title_generated: int
+    created_at: float
+    updated_at: float
+
+    def to_domain(self) -> Session:
+        return Session(
+            id=self.id,
+            title=self.title,
+            title_generated=bool(self.title_generated),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, session: Session) -> "SessionRow":
+        return cls(
+            id=session.id,
+            title=session.title,
+            title_generated=1 if session.title_generated else 0,
+            created_at=session.created_at,
+            updated_at=session.updated_at,
+        )
+
+
+_COLS = ", ".join(SessionRow.model_fields)
+_PH = ", ".join(f":{k}" for k in SessionRow.model_fields)
+
+
 class SessionRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
 
     def insert(self, session: Session) -> None:
+        row = SessionRow.from_domain(session)
         self._conn.get().execute(
-            "INSERT INTO sessions(id, title, title_generated, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                session.id,
-                session.title,
-                1 if session.title_generated else 0,
-                session.created_at,
-                session.updated_at,
-            ),
+            f"INSERT INTO sessions({_COLS}) VALUES ({_PH})", row.model_dump()
         )
 
     def get(self, session_id: str) -> Optional[Session]:
         row = self._conn.get().execute(
-            "SELECT id, title, title_generated, created_at, updated_at "
-            "FROM sessions WHERE id=?",
+            f"SELECT {_COLS} FROM sessions WHERE id=?",
             (session_id,),
         ).fetchone()
-        return self._row_to_session(row) if row else None
+        return SessionRow(**dict(row)).to_domain() if row else None
 
     def list_all(self) -> list[Session]:
         rows = self._conn.get().execute(
-            "SELECT id, title, title_generated, created_at, updated_at "
-            "FROM sessions ORDER BY updated_at DESC"
+            f"SELECT {_COLS} FROM sessions ORDER BY updated_at DESC"
         ).fetchall()
-        return [self._row_to_session(r) for r in rows]
+        return [SessionRow(**dict(r)).to_domain() for r in rows]
 
     def update_meta(
         self,
@@ -90,14 +125,4 @@ class SessionRepository:
         rows = self._conn.get().execute(
             "SELECT id FROM sessions WHERE updated_at < ?", (ttl_cut,)
         ).fetchall()
-        return [r[0] for r in rows]
-
-    @staticmethod
-    def _row_to_session(row) -> Session:
-        return Session(
-            id=row[0],
-            title=row[1],
-            title_generated=bool(row[2]),
-            created_at=row[3],
-            updated_at=row[4],
-        )
+        return [r["id"] for r in rows]

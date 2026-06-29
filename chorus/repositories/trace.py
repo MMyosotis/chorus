@@ -1,19 +1,26 @@
 """traces 表的唯一 SQL 入口。
 
-表结构：traces(id, session_id, message_id, iteration, phase, ts, payload_json)，
-索引 idx_traces_session_ts / idx_traces_message。trace 与 message 物理解耦，仅靠 message_id 关联。
+表结构：traces(id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json)，
+索引 idx_traces_session_ts / idx_traces_message / idx_traces_task。trace 与 message 物理解耦，
+仅靠 message_id 关联。
 
 payload 各 phase 的 schema（写入方约定，聚合方依赖）：
     model_request : {model, messages, tools, max_tokens}
     model_response: {content, finish_reason, tool_calls[], thinking_segments[]}
     tool_call     : {id, name, arguments, display, running_label}
     tool_result   : {tool_call_id, name, content, duration_ms}
+
+映射归框架（sqlite3.Row 命名访问 + pydantic 装配 + model_fields 派生列名），
+形状转换（phase str↔enum / payload_json↔dict / source 默认值）集中在
+TraceRow.to_domain / from_domain。聚合逻辑 _aggregate 不动。
 """
 
 from __future__ import annotations
 
 import json
 from typing import Optional
+
+from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.trace import (
     MessageTrace,
@@ -43,52 +50,90 @@ CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, ts);
 """
 
 
+class TraceRow(BaseModel):
+    """traces 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    id: Optional[int] = None
+    session_id: str
+    message_id: Optional[str] = None
+    task_id: Optional[str] = None
+    source: str = "supervisor"
+    iteration: Optional[int] = None
+    phase: str
+    ts: float
+    payload_json: str
+
+    def to_domain(self) -> TraceEntry:
+        try:
+            payload = json.loads(self.payload_json) if self.payload_json else {}
+        except json.JSONDecodeError:
+            payload = {}
+        return TraceEntry(
+            id=self.id,
+            session_id=self.session_id,
+            message_id=self.message_id,
+            task_id=self.task_id,
+            source=self.source or "supervisor",
+            iteration=self.iteration,
+            phase=TracePhase(self.phase),
+            ts=self.ts,
+            payload=payload,
+        )
+
+    @classmethod
+    def from_domain(cls, entry: TraceEntry) -> "TraceRow":
+        return cls(
+            id=entry.id,
+            session_id=entry.session_id,
+            message_id=entry.message_id,
+            task_id=entry.task_id,
+            source=entry.source,
+            iteration=entry.iteration,
+            phase=entry.phase.value,
+            ts=entry.ts,
+            payload_json=json.dumps(entry.payload, ensure_ascii=False),
+        )
+
+
+_COLS = ", ".join(TraceRow.model_fields)
+_PH = ", ".join(f":{k}" for k in TraceRow.model_fields)
+
+
 class TraceRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
 
     def add(self, entry: TraceEntry) -> int:
+        row = TraceRow.from_domain(entry)
         cur = self._conn.get().execute(
-            "INSERT INTO traces(session_id, message_id, task_id, source, iteration, phase, ts, payload_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                entry.session_id,
-                entry.message_id,
-                entry.task_id,
-                entry.source,
-                entry.iteration,
-                entry.phase.value,
-                entry.ts,
-                json.dumps(entry.payload, ensure_ascii=False),
-            ),
+            f"INSERT INTO traces({_COLS}) VALUES ({_PH})", row.model_dump()
         )
         return int(cur.lastrowid) if cur.lastrowid is not None else 0
 
     def list_by_session(self, session_id: str) -> list[TraceEntry]:
         rows = self._conn.get().execute(
-            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
-            "FROM traces WHERE session_id=? ORDER BY ts ASC, id ASC",
+            f"SELECT {_COLS} FROM traces WHERE session_id=? ORDER BY ts ASC, id ASC",
             (session_id,),
         ).fetchall()
-        return [self._row_to_entry(r) for r in rows]
+        return [TraceRow(**dict(r)).to_domain() for r in rows]
 
     def list_by_message(self, message_id: str) -> list[TraceEntry]:
         rows = self._conn.get().execute(
-            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
-            "FROM traces WHERE message_id=? ORDER BY ts ASC, id ASC",
+            f"SELECT {_COLS} FROM traces WHERE message_id=? ORDER BY ts ASC, id ASC",
             (message_id,),
         ).fetchall()
-        return [self._row_to_entry(r) for r in rows]
+        return [TraceRow(**dict(r)).to_domain() for r in rows]
 
     def list_by_task(self, task_id: str) -> list[TraceEntry]:
         """按 task 取该 subagent/scheduler 的全部 trace（调试单 task 用）。"""
         rows = self._conn.get().execute(
-            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
-            "FROM traces WHERE task_id=? ORDER BY ts ASC, id ASC",
+            f"SELECT {_COLS} FROM traces WHERE task_id=? ORDER BY ts ASC, id ASC",
             (task_id,),
         ).fetchall()
-        return [self._row_to_entry(r) for r in rows]
+        return [TraceRow(**dict(r)).to_domain() for r in rows]
 
     def aggregate_message_trace(self, message_id: str) -> MessageTrace:
         """从该 message 的若干 trace 行重建 thinking + tools。"""
@@ -104,13 +149,13 @@ class TraceRepository:
             return {}
         placeholders = ",".join("?" * len(ids))
         rows = self._conn.get().execute(
-            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
-            f"FROM traces WHERE message_id IN ({placeholders}) ORDER BY ts ASC, id ASC",
+            f"SELECT {_COLS} FROM traces "
+            f"WHERE message_id IN ({placeholders}) ORDER BY ts ASC, id ASC",
             ids,
         ).fetchall()
         grouped: dict[str, list[TraceEntry]] = {}
         for row in rows:
-            entry = self._row_to_entry(row)
+            entry = TraceRow(**dict(row)).to_domain()
             if entry.message_id:
                 grouped.setdefault(entry.message_id, []).append(entry)
         return {mid: self._aggregate(mid, entries) for mid, entries in grouped.items()}
@@ -137,25 +182,6 @@ class TraceRepository:
 
     def delete_by_message(self, message_id: str) -> None:
         self._conn.get().execute("DELETE FROM traces WHERE message_id=?", (message_id,))
-
-    @staticmethod
-    def _row_to_entry(row) -> TraceEntry:
-        eid, session_id, message_id, task_id, source, iteration, phase, ts, payload_json = row
-        try:
-            payload = json.loads(payload_json) if payload_json else {}
-        except json.JSONDecodeError:
-            payload = {}
-        return TraceEntry(
-            id=eid,
-            session_id=session_id,
-            message_id=message_id,
-            task_id=task_id,
-            source=source or "supervisor",
-            iteration=iteration,
-            phase=TracePhase(phase),
-            ts=ts,
-            payload=payload,
-        )
 
     @staticmethod
     def _extract_thinking(payload: dict) -> list[ThinkingSegment]:

@@ -13,7 +13,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-import time
 from typing import Optional
 
 from chorus.agents.runtime import AgentContext
@@ -52,7 +51,6 @@ class SubAgentService:
         hooks: HookRegistry,
         chat_model_provider: ChatModelProvider,
         max_tokens: int,
-        clock=time.time,
     ):
         self._conn = conn
         self._message = message_service
@@ -63,7 +61,6 @@ class SubAgentService:
         self._hooks = hooks
         self._models = chat_model_provider
         self._max_tokens = max_tokens
-        self._clock = clock
 
     def run(self, task_id: str) -> None:
         """后台线程入口：跑子 Agent ReAct，写库不连 SSE。异常 CAS running→failed。"""
@@ -135,10 +132,10 @@ class SubAgentService:
         for dep_id in task.dependencies:
             dep_art = self._artifacts_repo.load(dep_id)
             if dep_art is not None:
-                deps_outputs[dep_id] = dep_art.step_output
+                deps_outputs[dep_id] = dep_art.artifacts
         return render_invoke_message(
             task, deps_outputs,
-            prior.step_output if prior else None, task.feedback,
+            prior.artifacts if prior else None, task.feedback,
         )
 
     def _call_model(self, entry, system_prompt, history, tools, ctx, iteration: int) -> StreamResult:
@@ -195,7 +192,7 @@ class SubAgentService:
             if ok:
                 artifacts_dict = dataclasses.asdict(artifacts)
                 self._artifacts_repo.upsert(
-                    task.id, step_output=artifacts_dict, artifacts=artifacts_dict,
+                    task.id, artifacts=artifacts_dict,
                     narrative=dataclasses.asdict(narrative),
                 )
         if not ok:

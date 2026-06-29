@@ -16,13 +16,15 @@ from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.session import SessionRepository
 from chorus.repositories.task import TaskRepository
 from chorus.repositories.trace import TraceRepository
+from chorus.services.trace import TraceService
 
 
 def _setup():
     tmp = tempfile.mkdtemp()
     conn = ConnectionFactory(Path(tmp) / "t.db")
     SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    return conn, TaskRepository(conn), TraceRepository(conn)
+    trace_svc = TraceService(TraceRepository(conn))
+    return conn, TaskRepository(conn), trace_svc
 
 
 def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
@@ -35,11 +37,11 @@ def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
 
 def test_dispatch_pending_with_finished_deps():
     """pending + deps 全 finished → CAS running + 调 subagent_run。"""
-    conn, task_repo, trace_repo = _setup()
+    conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "dep", status="finished")
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
-    sched = TaskScheduler(task_repo, trace_repo, lambda tid: ran.append(tid) or None,
+    sched = TaskScheduler(task_repo, trace_svc, lambda tid: ran.append(tid) or None,
                           _fake_session(), interval=0.01, zombie_timeout=999, pool_size=2)
     sched._tick()
     time.sleep(0.05)  # 等 worker 线程跑完
@@ -49,11 +51,11 @@ def test_dispatch_pending_with_finished_deps():
 
 def test_blocked_by_unfinished_dep():
     """pending + dep 是 running（进行中、未完成）→ t1 不调度。"""
-    conn, task_repo, trace_repo = _setup()
+    conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "dep", status="running", updated_at=time.time())
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
-    sched = TaskScheduler(task_repo, trace_repo, lambda tid: ran.append(tid), _fake_session(),
+    sched = TaskScheduler(task_repo, trace_svc, lambda tid: ran.append(tid), _fake_session(),
                           interval=0.01, zombie_timeout=999, pool_size=2)
     sched._tick()
     assert ran == []
@@ -62,9 +64,9 @@ def test_blocked_by_unfinished_dep():
 
 def test_zombie_reclaim():
     """running + 心跳超时 → CAS running→pending。"""
-    conn, task_repo, trace_repo = _setup()
+    conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "t1", status="running", updated_at=0.0)  # 很久以前的心跳
-    sched = TaskScheduler(task_repo, trace_repo, lambda tid: None, _fake_session(),
+    sched = TaskScheduler(task_repo, trace_svc, lambda tid: None, _fake_session(),
                           interval=0.01, zombie_timeout=1, pool_size=2)
     sched._reclaim_zombies()
     assert task_repo.get("t1").status == TaskStatus.PENDING.value
@@ -72,9 +74,9 @@ def test_zombie_reclaim():
 
 def test_pool_limit_skips_when_full():
     """pool 满（信号量耗尽）→ 不 CAS，task 仍 pending。"""
-    conn, task_repo, trace_repo = _setup()
+    conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "t1", status="pending")
-    sched = TaskScheduler(task_repo, trace_repo, lambda tid: time.sleep(0.1), _fake_session(),
+    sched = TaskScheduler(task_repo, trace_svc, lambda tid: time.sleep(0.1), _fake_session(),
                           interval=0.01, pool_size=1)
     # 占满唯一槽位
     assert sched._semaphore.acquire(blocking=False)

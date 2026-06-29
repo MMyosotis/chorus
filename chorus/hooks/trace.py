@@ -7,18 +7,17 @@ payload 各 phase schema 见 repositories/trace.py 头注释。
 
 from __future__ import annotations
 
-import time
 from typing import Any, Iterable
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import SseEvent, TraceEvent
-from chorus.domain.trace import TraceEntry, TracePhase
-from chorus.services.message import MessageService
+from chorus.domain.trace import TracePhase
+from chorus.services.trace import TraceService
 
 
 class TraceEmitter:
-    def __init__(self, message_service: MessageService, max_tokens: int):
-        self._message = message_service
+    def __init__(self, trace_service: TraceService, max_tokens: int):
+        self._trace = trace_service
         self._max_tokens = max_tokens
 
     def before_model_request(self, ctx: AgentContext) -> Iterable[SseEvent]:
@@ -48,15 +47,15 @@ class TraceEmitter:
         })]
 
     def _emit(self, ctx: AgentContext, phase: TracePhase, payload: dict) -> SseEvent:
-        ts = time.time()
-        self._message.add_trace(TraceEntry(
+        ts = self._trace.add_trace(
             session_id=ctx.session_id,
             message_id=ctx.turn.message_id or None,
             source=ctx.source,
             task_id=ctx.task_id,
             iteration=ctx.turn.iteration_index,
-            phase=phase, ts=ts, payload=payload,
-        ))
+            phase=phase,
+            payload=payload,
+        )
         return TraceEvent(
             phase=phase, iteration=ctx.turn.iteration_index,
             message_id=ctx.turn.message_id or None, ts=ts, payload=payload,

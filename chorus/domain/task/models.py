@@ -53,11 +53,14 @@ class Task:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskArtifacts:
-    """task_artifacts 表一行的领域模型（1:1 关联 tasks，大 JSON 产物）。"""
+    """task_artifacts 表一行的领域模型（1:1 关联 tasks，大 JSON 产物）。
+
+    artifacts 既是前端渲染用的结构化产物，也作下游注入数据——二者同源同值，
+    故只存一列（曾分 step_output/artifacts 两列，物理冗余已合并）。
+    """
 
     task_id: str
-    step_output: Optional[Any] = None  # 下游注入用（= artifacts 同值）
-    artifacts: Optional[Any] = None  # 前端渲染用结构化产物
+    artifacts: Optional[Any] = None  # 结构化产物：前端渲染用 + 下游注入用（同值）
     narrative: Optional[dict] = None  # 角色话术（Narrative 校验后 asdict 入库）
 
 

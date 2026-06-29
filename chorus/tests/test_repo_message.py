@@ -7,13 +7,14 @@ from __future__ import annotations
 from chorus.repositories.message import MessageRepository
 from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
+from chorus.services.trace import TraceService
 from chorus.tests._helpers import fresh_conn, seed_session
 
 
 def _setup():
     conn = fresh_conn()
     seed_session(conn)
-    return MessageService(MessageRepository(conn), TraceRepository(conn))
+    return MessageService(MessageRepository(conn), TraceService(TraceRepository(conn)))
 
 
 def test_three_role_roundtrip():

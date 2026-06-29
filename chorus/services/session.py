@@ -1,6 +1,6 @@
 """SessionService：会话元数据编排（元数据 CRUD + per-session 锁 + 内存缓存）。
 
-收窄后只管会话概念本身：create/list/get/delete/rename/set_title_if_unset/get_lock。
+收窄后只管会话概念本身：create/list/get/delete/rename/is_title_set/set_title/get_lock。
 消息 / trace 的写入与读取归 MessageService；session 的 updated_at 刷新由编排层
 （ChatService）在消息落库后调 touch() 触发——跨概念协调归编排，不在此处。
 """
@@ -98,8 +98,20 @@ class SessionService:
         self._replace_cache(updated)
         return updated
 
-    def set_title_if_unset(self, session_id: str, title: str) -> bool:
-        # 自动标题：宽容归一化（空→跳过，超长→截断），不打扰用户。
+    def is_title_set(self, session_id: str) -> bool:
+        """标题是否已正式确定（自动生成或用户手改）。
+
+        供调用方在昂贵操作（如调 LLM 生成标题）前短路。注意：这是读缓存快照，
+        非锁内权威判断——落库仍以 set_title 的锁内复检为准。
+        """
+        return self.get(session_id).title_generated
+
+    def set_title(self, session_id: str, title: str) -> bool:
+        """落自动标题：宽容归一化（空→跳过，超长→截断），不打扰用户。
+
+        锁内复检 title_generated：防 done 释放锁后 rename 抢先定名导致的覆盖。
+        未落返回 False（已定名 / 归一为空）。
+        """
         title = normalize_title(title)
         if not title:
             return False

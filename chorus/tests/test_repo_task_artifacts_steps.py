@@ -28,15 +28,14 @@ def test_artifacts_upsert_load():
     conn = _setup()
     repo = TaskArtifactsRepository(conn)
     assert repo.load("t1") is None
-    repo.upsert("t1", step_output={"a": 1}, artifacts={"a": 1}, narrative={"done_line": "ok"})
+    repo.upsert("t1", artifacts={"a": 1}, narrative={"done_line": "ok"})
     got = repo.load("t1")
     assert got is not None
-    assert got.step_output == {"a": 1}
     assert got.artifacts == {"a": 1}
     assert got.narrative["done_line"] == "ok"
     # upsert 覆盖
-    repo.upsert("t1", step_output={"a": 2}, artifacts={"a": 2}, narrative={"done_line": "new"})
-    assert repo.load("t1").step_output == {"a": 2}
+    repo.upsert("t1", artifacts={"a": 2}, narrative={"done_line": "new"})
+    assert repo.load("t1").artifacts == {"a": 2}
 
 
 def test_artifacts_load_many():
@@ -47,8 +46,8 @@ def test_artifacts_load_many():
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(conn)
-    repo.upsert("t1", {"a": 1}, {"a": 1}, {"done_line": "x"})
-    repo.upsert("t2", {"b": 2}, {"b": 2}, {"done_line": "y"})
+    repo.upsert("t1", {"a": 1}, {"done_line": "x"})
+    repo.upsert("t2", {"b": 2}, {"done_line": "y"})
     many = repo.load_many(["t1", "t2", "t3"])
     assert set(many.keys()) == {"t1", "t2"}
     assert many["t2"].artifacts == {"b": 2}

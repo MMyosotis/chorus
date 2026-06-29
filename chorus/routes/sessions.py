@@ -9,9 +9,14 @@ from pydantic import BaseModel
 
 from chorus.domain.message import MessageView
 from chorus.domain.trace import TraceEntry
-from chorus.routes.providers import provide_message_service, provide_session_service
+from chorus.routes.providers import (
+    provide_message_service,
+    provide_session_service,
+    provide_trace_service,
+)
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
+from chorus.services.trace import TraceService
 
 router = APIRouter(prefix="/api/sessions")
 
@@ -73,11 +78,11 @@ def get_messages(
 def get_traces(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
-    message: MessageService = Depends(provide_message_service),
+    trace: TraceService = Depends(provide_trace_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"traces": [_trace_to_dict(t) for t in message.list_traces(session_id)]}
+    return {"traces": [_trace_to_dict(t) for t in trace.list_traces(session_id)]}
 
 
 def _view_to_dict(v: MessageView) -> dict:

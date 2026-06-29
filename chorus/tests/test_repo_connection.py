@@ -19,7 +19,7 @@ def test_transaction_commit():
         with conn.transaction():
             conn.get().execute("INSERT INTO t(v) VALUES(?)", ("a",))
         rows = conn.get().execute("SELECT v FROM t").fetchall()
-        assert rows == [("a",)]
+        assert [r["v"] for r in rows] == ["a"]  # row_factory=Row，按列名取
 
 
 def test_transaction_rollback():

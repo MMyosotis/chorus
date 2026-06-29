@@ -23,6 +23,7 @@ class ConnectionFactory:
         conn = getattr(self._tls, "conn", None)
         if conn is None:
             conn = sqlite3.connect(self.db_path, isolation_level=None)
+            conn.row_factory = sqlite3.Row  # 行按列名访问，repo 侧靠命名装配 Row（见各 repo）
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA foreign_keys=ON")

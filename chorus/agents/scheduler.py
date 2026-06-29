@@ -15,10 +15,10 @@ from typing import Optional
 
 from chorus.config import POOL_SIZE, SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
 from chorus.domain.task import TaskStatus, can_schedule
-from chorus.domain.trace import TraceEntry, TracePhase
+from chorus.domain.trace import TracePhase
 from chorus.repositories.task import TaskRepository
-from chorus.repositories.trace import TraceRepository
 from chorus.services.session import SessionService
+from chorus.services.trace import TraceService
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +27,19 @@ class TaskScheduler:
     def __init__(
         self,
         task_repo: TaskRepository,
-        trace_repo: TraceRepository,
+        trace_service: TraceService,        # trace 经 add_trace 统一落库（ts 由 service 打戳）
         subagent_run,                       # callable(task_id) -> None
         session_service: SessionService,    # 预留：未来 session 级协调（app.py 装配时传入）
         interval: float = SCHEDULER_INTERVAL,
         zombie_timeout: int = ZOMBIE_TIMEOUT,
         pool_size: int = POOL_SIZE,
-        clock=time.time,
     ):
         self._task_repo = task_repo
-        self._trace_repo = trace_repo
+        self._trace = trace_service
         self._subagent_run = subagent_run
         self._session = session_service
         self._interval = interval
         self._zombie_timeout = zombie_timeout
-        self._clock = clock
         self._semaphore = threading.BoundedSemaphore(pool_size)
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
@@ -112,7 +110,7 @@ class TaskScheduler:
 
     def _reclaim_zombies(self) -> None:
         """回收 running 且心跳超时的 task：CAS running→pending。"""
-        now = self._clock()
+        now = time.time()
         for task in self._task_repo.find_running_before(now - self._zombie_timeout):
             ok = self._task_repo.cas_update(
                 task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value,
@@ -128,11 +126,11 @@ class TaskScheduler:
             task = self._task_repo.get(task_id)
             if task is None:
                 return
-            self._trace_repo.add(TraceEntry(
+            self._trace.add_trace(
                 session_id=task.session_id, task_id=task_id, source="scheduler",
-                phase=TracePhase.SCHEDULE, ts=self._clock(),
+                phase=TracePhase.SCHEDULE,
                 payload={"event": event, "task_id": task_id, "from_status": from_status,
                          "to_status": to_status, "detail": detail},
-            ))
+            )
         except Exception:  # noqa: BLE001 — trace fail-open
             logger.warning("scheduler trace 写入失败 task=%s event=%s", task_id, event)

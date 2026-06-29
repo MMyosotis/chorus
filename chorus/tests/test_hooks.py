@@ -7,8 +7,8 @@
 - TraceEmitter：before_model_request / on_tool_result 写 TraceEntry 并 yield TraceEvent；
   PF-B 验证 source/task_id 从 ctx 传播到持久化 TraceEntry（subagent 'subagent'+'t1'，
   默认 'supervisor'+None）。注：TraceEvent 本身不载 source/task_id，传播落点在 TraceEntry。
-- TitlePostProcessor.on_stop：首轮 user/assistant 对生成标题，set_title_if_unset 未设则
-  yield TitleUpdateEvent；已设 / generate 返 None 则 return None。
+- TitlePostProcessor.on_stop：首轮 user/assistant 对生成标题，set_title 未设则
+  yield TitleUpdateEvent；已设（is_title_set 短路，不调 LLM）/ generate 返 None 则 return None。
 
 运行：.venv/bin/python -m kitty.tests.test_hooks
 """
@@ -25,21 +25,23 @@ from chorus.repositories.session import SessionRepository
 from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
+from chorus.services.trace import TraceService
 from chorus.tests._helpers import fresh_conn, seed_session
 
 
 def _setup():
     conn = fresh_conn()
     seed_session(conn)                                # "s1" 供异常收尾/trace（FK 父行）
-    msg_svc = MessageService(MessageRepository(conn), TraceRepository(conn))
+    trace_svc = TraceService(TraceRepository(conn))
+    msg_svc = MessageService(MessageRepository(conn), trace_svc)
     session_svc = SessionService(SessionRepository(conn))
-    return msg_svc, session_svc
+    return msg_svc, trace_svc, session_svc
 
 
 # ---- ErrorFinalizer ----
 
 def test_error_finalizer_appends_error_message_when_message_id_allocated():
-    msg_svc, _ = _setup()
+    msg_svc, trace_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = "m-err"
@@ -58,7 +60,7 @@ def test_error_finalizer_appends_error_message_when_message_id_allocated():
 
 
 def test_error_finalizer_skips_when_message_id_not_allocated():
-    msg_svc, _ = _setup()
+    msg_svc, trace_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = ""                          # 异常发生在分配 message_id 之前
@@ -73,8 +75,8 @@ def test_error_finalizer_skips_when_message_id_not_allocated():
 # ---- TraceEmitter ----
 
 def test_trace_propagates_subagent_source_and_task_id():
-    msg_svc, _ = _setup()
-    emitter = TraceEmitter(msg_svc, max_tokens=512)
+    msg_svc, trace_svc, _ = _setup()
+    emitter = TraceEmitter(trace_svc, max_tokens=512)
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     ctx.turn.iteration_index = 2
@@ -91,27 +93,27 @@ def test_trace_propagates_subagent_source_and_task_id():
     assert ev.payload["model"] == "fake-model"
     assert ev.payload["max_tokens"] == 512
     # PF-B：source/task_id 传播到持久化 TraceEntry（TraceEvent 本身不载这两个字段）
-    entry = msg_svc.list_traces("s1")[0]
+    entry = trace_svc.list_traces("s1")[0]
     assert entry.source == "subagent"
     assert entry.task_id == "t1"
     assert entry.message_id == "m1"
 
 
 def test_trace_default_supervisor_when_ctx_unset():
-    msg_svc, _ = _setup()
-    emitter = TraceEmitter(msg_svc, max_tokens=256)
+    msg_svc, trace_svc, _ = _setup()
+    emitter = TraceEmitter(trace_svc, max_tokens=256)
     ctx = AgentContext(session_id="s1")               # 默认 source="supervisor", task_id=None
 
     list(emitter.before_model_request(ctx))
 
-    entry = msg_svc.list_traces("s1")[0]
+    entry = trace_svc.list_traces("s1")[0]
     assert entry.source == "supervisor"
     assert entry.task_id is None
 
 
 def test_trace_tool_result_payload_from_result_object():
-    msg_svc, _ = _setup()
-    emitter = TraceEmitter(msg_svc, max_tokens=256)
+    msg_svc, trace_svc, _ = _setup()
+    emitter = TraceEmitter(trace_svc, max_tokens=256)
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     call = {"id": "call-1", "name": "search", "arguments": {"q": "x"}}
@@ -128,7 +130,7 @@ def test_trace_tool_result_payload_from_result_object():
     assert ev.payload["name"] == "search"
     assert ev.payload["content"] == "结果"
     assert ev.payload["duration_ms"] == 42
-    assert msg_svc.list_traces("s1")[0].source == "subagent"
+    assert trace_svc.list_traces("s1")[0].source == "subagent"
 
 
 # ---- TitlePostProcessor ----
@@ -152,7 +154,7 @@ def _seed_first_pair(msg_svc, sid):
 
 
 def test_title_on_stop_yields_update_when_unset():
-    msg_svc, session_svc = _setup()
+    msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
     _seed_first_pair(msg_svc, s.id)
     stub = _StubTitleService("夏日晚风")
@@ -174,7 +176,7 @@ def test_title_on_stop_yields_update_when_unset():
 
 
 def test_title_skips_when_already_set():
-    msg_svc, session_svc = _setup()
+    msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
     session_svc.rename(s.id, "用户起的名")             # title_generated=True
     _seed_first_pair(msg_svc, s.id)
@@ -183,12 +185,13 @@ def test_title_skips_when_already_set():
 
     result = TitlePostProcessor(session_svc, msg_svc, stub).on_stop(ctx)
 
-    assert result is None                              # set_title_if_unset 返 False → 跳过
+    assert result is None                              # is_title_set 短路 → 跳过
+    assert stub.calls == []                            # 已定名不调 LLM（重构核心收益）
     assert session_svc.get(s.id).title == "用户起的名"
 
 
 def test_title_skips_when_generate_returns_none():
-    msg_svc, session_svc = _setup()
+    msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
     _seed_first_pair(msg_svc, s.id)
     stub = _StubTitleService(None)

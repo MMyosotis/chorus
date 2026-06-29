@@ -42,6 +42,7 @@ from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
+from chorus.services.trace import TraceService
 from chorus.startup import run_startup
 from chorus.tools import build_tool_dispatch
 
@@ -58,7 +59,8 @@ def create_app() -> FastAPI:
     task_artifacts_repo = TaskArtifactsRepository(conn)
     task_steps_repo = TaskStepsRepository(conn)
     session_service = SessionService(session_repo)
-    message_service = MessageService(msg_repo, trace_repo)
+    trace_service = TraceService(trace_repo)
+    message_service = MessageService(msg_repo, trace_service)
 
     chat_models = ChatModelProvider(settings_service)
     # 标题生成固定用默认模型（不随用户当前对话设置变动）
@@ -68,7 +70,7 @@ def create_app() -> FastAPI:
     tool_dispatcher = build_tool_dispatch(settings_service, task_repo, conn, skill_loader)
 
     hooks = HookRegistry()
-    trace = TraceEmitter(message_service, MAX_TOKENS)
+    trace = TraceEmitter(trace_service, MAX_TOKENS)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
@@ -88,7 +90,7 @@ def create_app() -> FastAPI:
     )
     task_service = TaskService(task_repo, task_artifacts_repo, task_steps_repo, session_service)
     scheduler = TaskScheduler(
-        task_repo, trace_repo, subagent_service.run, session_service,
+        task_repo, trace_service, subagent_service.run, session_service,
         SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT, POOL_SIZE,
     )
 
@@ -99,6 +101,7 @@ def create_app() -> FastAPI:
     )
     app.state.session_service = session_service
     app.state.message_service = message_service
+    app.state.trace_service = trace_service
     app.state.supervisor_service = supervisor_service
     app.state.task_service = task_service
     app.state.scheduler = scheduler

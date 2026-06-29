@@ -90,7 +90,7 @@ def render_invoke_message(
 ) -> str:
     """拼首轮 user 消息：invoke_message + deps 产物 +（重跑）self_prior/feedback。
 
-    - deps_outputs: {task_id: 该 dep 的 step_output}
+    - deps_outputs: {task_id: 该 dep 的 artifacts}
     - self_prior: 本 task 上轮产物（retry 时非空），指示定向改进
     - feedback: 用户复核反馈（retry 时注入）
     """

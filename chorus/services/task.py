@@ -113,7 +113,7 @@ class TaskService:
         artifacts = dict(artifacts)
         artifacts["selected"] = selected
         self._artifacts_repo.upsert(
-            task_id, step_output=artifacts, artifacts=artifacts,
+            task_id, artifacts=artifacts,
             narrative=art.narrative if art else None,
         )
 

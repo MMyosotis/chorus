@@ -46,6 +46,7 @@ from chorus.repositories.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
+from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool
@@ -140,11 +141,12 @@ def _build_assembly():
     steps_repo = TaskStepsRepository(conn)
 
     session_svc = SessionService(session_repo)
-    msg_svc = MessageService(msg_repo, trace_repo)
+    trace_svc = TraceService(trace_repo)
+    msg_svc = MessageService(msg_repo, trace_svc)
 
     # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复（修正 bug 1：显式 snake_case 方法名映射）
     hooks = HookRegistry()
-    trace = TraceEmitter(msg_svc, max_tokens=1024)
+    trace = TraceEmitter(trace_svc, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
@@ -180,7 +182,7 @@ def _build_assembly():
 
     task_service = TaskService(task_repo, art_repo, steps_repo, session_svc)
     scheduler = TaskScheduler(
-        task_repo, trace_repo, subagent.run, session_svc,
+        task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999, pool_size=2,
     )
     return supervisor, subagent, task_service, scheduler, task_repo, session_svc

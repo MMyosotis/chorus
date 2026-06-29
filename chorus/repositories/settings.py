@@ -32,7 +32,7 @@ class SettingsRepository:
         if row is None:
             return default
         try:
-            return json.loads(row[0])
+            return json.loads(row["value_json"])
         except json.JSONDecodeError:
             return default
 

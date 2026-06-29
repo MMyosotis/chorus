@@ -10,6 +10,7 @@ from fastapi import Request
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
+from chorus.services.trace import TraceService
 
 
 def provide_session_service(request: Request) -> SessionService:
@@ -18,6 +19,10 @@ def provide_session_service(request: Request) -> SessionService:
 
 def provide_message_service(request: Request) -> MessageService:
     return request.app.state.message_service
+
+
+def provide_trace_service(request: Request) -> TraceService:
+    return request.app.state.trace_service
 
 
 def provide_settings_service(request: Request) -> SettingsService:

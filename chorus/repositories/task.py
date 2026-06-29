@@ -11,6 +11,8 @@ import json
 import time
 from typing import Iterable, Optional
 
+from pydantic import BaseModel, ConfigDict
+
 from chorus.domain.task import Task
 from chorus.repositories.connection import ConnectionFactory
 
@@ -38,32 +40,77 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 _CAS_FIELDS = {"error", "feedback", "updated_at"}
 
 
+class TaskRow(BaseModel):
+    """tasks 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。
+
+    dependencies/feedback 是 JSON 列；agent_type/status 在领域即 str（存 enum 值），无转换。
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    id: str
+    session_id: str
+    pipeline_id: str
+    agent_type: str
+    seq: int
+    status: str
+    invoke_message: str
+    dependencies: str
+    feedback: Optional[str] = None
+    error: Optional[str] = None
+    created_at: float
+    updated_at: float
+
+    def to_domain(self) -> Task:
+        try:
+            deps = json.loads(self.dependencies) if self.dependencies else []
+        except json.JSONDecodeError:
+            deps = []
+        try:
+            feedback = json.loads(self.feedback) if self.feedback else None
+        except json.JSONDecodeError:
+            feedback = None
+        return Task(
+            id=self.id, session_id=self.session_id, pipeline_id=self.pipeline_id,
+            agent_type=self.agent_type, seq=self.seq, status=self.status,
+            invoke_message=self.invoke_message, dependencies=deps,
+            feedback=feedback, error=self.error,
+            created_at=self.created_at, updated_at=self.updated_at,
+        )
+
+    @classmethod
+    def from_domain(cls, task: Task) -> "TaskRow":
+        return cls(
+            id=task.id, session_id=task.session_id, pipeline_id=task.pipeline_id,
+            agent_type=task.agent_type, seq=task.seq, status=task.status,
+            invoke_message=task.invoke_message,
+            dependencies=json.dumps(task.dependencies, ensure_ascii=False),
+            feedback=json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
+            error=task.error, created_at=task.created_at, updated_at=task.updated_at,
+        )
+
+
+_COLS = ", ".join(TaskRow.model_fields)
+_PH = ", ".join(f":{k}" for k in TaskRow.model_fields)
+
+
 class TaskRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
 
     def insert(self, task: Task) -> None:
+        row = TaskRow.from_domain(task)
         self._conn.get().execute(
-            "INSERT INTO tasks(id, session_id, pipeline_id, agent_type, seq, status, "
-            "invoke_message, dependencies, feedback, error, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                task.id, task.session_id, task.pipeline_id, task.agent_type, task.seq,
-                task.status, task.invoke_message,
-                json.dumps(task.dependencies, ensure_ascii=False),
-                json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
-                task.error, task.created_at, task.updated_at,
-            ),
+            f"INSERT INTO tasks({_COLS}) VALUES ({_PH})", row.model_dump()
         )
 
     def get(self, task_id: str) -> Optional[Task]:
         row = self._conn.get().execute(
-            "SELECT id, session_id, pipeline_id, agent_type, seq, status, invoke_message, "
-            "dependencies, feedback, error, created_at, updated_at FROM tasks WHERE id=?",
+            f"SELECT {_COLS} FROM tasks WHERE id=?",
             (task_id,),
         ).fetchone()
-        return self._row_to_task(row) if row else None
+        return TaskRow(**dict(row)).to_domain() if row else None
 
     def cas_update(
         self, task_id: str, from_status: str, to_status: str, **fields
@@ -114,24 +161,22 @@ class TaskRepository:
     def find_pending_with_deps(self) -> list[tuple[Task, list[Task]]]:
         """返所有 pending task + 其 deps 行（哑查询，调度判定交 domain can_schedule）。"""
         pending_rows = self._conn.get().execute(
-            "SELECT id, session_id, pipeline_id, agent_type, seq, status, invoke_message, "
-            "dependencies, feedback, error, created_at, updated_at FROM tasks WHERE status='pending'"
+            f"SELECT {_COLS} FROM tasks WHERE status='pending'"
         ).fetchall()
         result: list[tuple[Task, list[Task]]] = []
         for row in pending_rows:
-            task = self._row_to_task(row)
+            task = TaskRow(**dict(row)).to_domain()
             deps = [self.get(d) for d in task.dependencies if d]
             result.append((task, [d for d in deps if d is not None]))
         return result
 
     def find_running_before(self, cutoff_ts: float) -> list[Task]:
         rows = self._conn.get().execute(
-            "SELECT id, session_id, pipeline_id, agent_type, seq, status, invoke_message, "
-            "dependencies, feedback, error, created_at, updated_at FROM tasks "
+            f"SELECT {_COLS} FROM tasks "
             "WHERE status='running' AND updated_at < ?",
             (cutoff_ts,),
         ).fetchall()
-        return [self._row_to_task(r) for r in rows]
+        return [TaskRow(**dict(r)).to_domain() for r in rows]
 
     def find_by_session_statuses(
         self, session_id: str, statuses: Iterable[str]
@@ -141,12 +186,11 @@ class TaskRepository:
             return []
         placeholders = ",".join("?" * len(statuses))
         rows = self._conn.get().execute(
-            f"SELECT id, session_id, pipeline_id, agent_type, seq, status, invoke_message, "
-            f"dependencies, feedback, error, created_at, updated_at FROM tasks "
+            f"SELECT {_COLS} FROM tasks "
             f"WHERE session_id=? AND status IN ({placeholders}) ORDER BY seq",
             (session_id, *statuses),
         ).fetchall()
-        return [self._row_to_task(r) for r in rows]
+        return [TaskRow(**dict(r)).to_domain() for r in rows]
 
     def count_by_session_statuses(
         self, session_id: str, statuses: Iterable[str]
@@ -160,21 +204,3 @@ class TaskRepository:
             (session_id, *statuses),
         ).fetchone()
         return int(row[0]) if row else 0
-
-    @staticmethod
-    def _row_to_task(row) -> Task:
-        (tid, sid, pid, at, seq, status, invoke, deps_json, fb_json, err,
-         created, updated) = row
-        try:
-            deps = json.loads(deps_json) if deps_json else []
-        except json.JSONDecodeError:
-            deps = []
-        try:
-            feedback = json.loads(fb_json) if fb_json else None
-        except json.JSONDecodeError:
-            feedback = None
-        return Task(
-            id=tid, session_id=sid, pipeline_id=pid, agent_type=at, seq=seq,
-            status=status, invoke_message=invoke, dependencies=deps,
-            feedback=feedback, error=err, created_at=created, updated_at=updated,
-        )
