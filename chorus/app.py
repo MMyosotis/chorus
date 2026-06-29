@@ -32,6 +32,7 @@ from chorus.repositories.task import TaskRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.repositories.trace import TraceRepository
+from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
 from chorus.routes.sessions import router as sessions_router
 from chorus.routes.settings import router as settings_router
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"], allow_headers=["*"],
     )
     app.include_router(sessions_router)
+    app.include_router(agents_router)
     app.include_router(chat_router)
     app.include_router(task_router)
     app.include_router(settings_router)

@@ -1,6 +1,7 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ROLE_LABELS } from '../team-panel/roleMeta.js'
+import { getAgentProfiles } from '../api.js'
 
 // status → 进度条段状态
 function segState(status) {
@@ -12,6 +13,12 @@ function segState(status) {
 }
 
 const props = defineProps({ graph: { type: Object, default: null } })
+
+// 角色档案（enter_line 后端唯一来源，启动拉一次缓存）
+const profiles = ref({})
+onMounted(async () => {
+  profiles.value = await getAgentProfiles()
+})
 
 const tasks = computed(() => {
   const ts = props.graph?.tasks || []
@@ -35,19 +42,26 @@ const label = computed(() => {
   if (cur.status === 'running') return `创作进行中 · 第 ${idx}/${ts.length} 步 · ${role}`
   return `第 ${idx}/${ts.length} 步 · ${role}`
 })
+
+// 每段的台词：running→enter_line、awaiting→narrative.awaiting_line、finished→narrative.done_line
+function lineOf(t) {
+  const nar = t.narrative || {}
+  if (t.status === 'running') return profiles.value[t.agent_type]?.enter_line || ''
+  if (t.status === 'awaiting_confirm') return nar.awaiting_line || ''
+  if (t.status === 'finished') return nar.done_line || ''
+  return ''
+}
 </script>
 
 <template>
   <div v-if="tasks.length" class="progress-banner">
     <span class="progress-label">{{ label }}</span>
     <div class="progress-segs">
-      <span
-        v-for="t in tasks"
-        :key="t.id"
-        class="seg"
-        :class="segState(t.status)"
-        :title="ROLE_LABELS[t.agent_type] || t.agent_type"
-      />
+      <div v-for="t in tasks" :key="t.id" class="seg-cell">
+        <span class="seg" :class="segState(t.status)" />
+        <span class="seg-role">{{ ROLE_LABELS[t.agent_type] || t.agent_type }}</span>
+        <span v-if="lineOf(t)" class="seg-line" :class="segState(t.status)">{{ lineOf(t) }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -64,16 +78,20 @@ const label = computed(() => {
   color: #475569;
   flex-shrink: 0;
 }
-.progress-label {
-  white-space: nowrap;
-}
+.progress-label { white-space: nowrap; }
 .progress-segs {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   flex: 1;
 }
-.seg {
+.seg-cell {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.seg {
   height: 4px;
   border-radius: 2px;
   background: #e2e8f0;
@@ -85,6 +103,23 @@ const label = computed(() => {
 .seg.waiting { background: #fbbf24; }
 .seg.done { background: #34d399; }
 .seg.failed { background: #f87171; }
+.seg-role {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seg-line {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.seg-line.running { color: #6366f1; }
+.seg-line.waiting { color: #b45309; }
+.seg-line.done { color: #047857; }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

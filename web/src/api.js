@@ -148,6 +148,16 @@ export async function getModelLists() {
   return res.json()
 }
 
+// —— 角色档案（流水线渲染用 enter_line / display_name，后端 AGENT_PROFILES 唯一来源）——
+let _profilesCache = null
+export async function getAgentProfiles() {
+  if (_profilesCache) return _profilesCache
+  const res = await fetch('/api/agents/profiles')
+  if (!res.ok) throw new Error(`getAgentProfiles failed: ${res.status}`)
+  _profilesCache = await res.json()
+  return _profilesCache
+}
+
 export async function getOptions() {
   const res = await fetch(`${SETTINGS_BASE}/options`)
   if (!res.ok) throw new Error(`getOptions failed: ${res.status}`)

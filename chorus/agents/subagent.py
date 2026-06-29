@@ -14,7 +14,6 @@ import dataclasses
 import json
 import logging
 import time
-import uuid
 from typing import Optional
 
 from chorus.agents.runtime import AgentContext
@@ -86,10 +85,6 @@ class SubAgentService:
         ctx = AgentContext(
             session_id=task.session_id, source="subagent", task_id=task_id,
             chat_model=entry.model_id,
-        )
-        # enter 进度气泡（静态出场语，narrative 尚未产出）
-        self._message.append_progress_message(
-            task.session_id, message_id=uuid.uuid4().hex, content=profile.enter_line,
         )
         invoke = self._build_invoke(task)
         system_prompt = build_subagent_system_prompt(task.agent_type)
@@ -181,16 +176,15 @@ class SubAgentService:
         return views
 
     def _finalize(self, task, result, profile) -> None:
-        """解析产物 → CAS running→awaiting_confirm|finished → 持有时落 artifacts + done 气泡。
+        """解析产物 → CAS running→awaiting_confirm|finished → 持有时落 artifacts。
 
         CAS 先于产物落库（闭 I-2）：事务内先 CAS，持有（status 未漂移）才 upsert 产物；
-        漂移（被 cancel_pipeline/zombie 回收）则不 upsert、不 append done 气泡，避免孤儿
-        产物/气泡。parse_output 抛 ValidationError 不在此处理——上抛到 _run_loop 由其喂回
-        correction 供模型自纠。done 气泡事务外尽力写（失败不回滚已落 task/产物）。
+        漂移（被 cancel_pipeline/zombie 回收）则不 upsert，避免孤儿产物。parse_output 抛
+        ValidationError 不在此处理——上抛到 _run_loop 由其喂回 correction 供模型自纠。
+        done 台词随 narrative 落 task_artifacts，由前端流水线查 graph 渲染，不进 messages。
         """
         content = "".join(result.text_parts)
         artifacts, narrative = parse_output(content, task.agent_type)
-        done_text = narrative.done_line
         to_status = (
             TaskStatus.FINISHED.value if task.agent_type == "finalize"
             else TaskStatus.AWAITING_CONFIRM.value
@@ -206,10 +200,6 @@ class SubAgentService:
                 )
         if not ok:
             logger.warning("subagent finalize CAS failed (status drifted) for task %s", task.id)
-            return
-        self._message.append_progress_message(
-            task.session_id, message_id=uuid.uuid4().hex, content=done_text or "完成",
-        )
 
 
 def _parse_args(raw: str) -> dict:

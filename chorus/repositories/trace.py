@@ -47,17 +47,6 @@ class TraceRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
-        self._ensure_columns()
-
-    def _ensure_columns(self) -> None:
-        """旧库平滑加列（开发库重建策略的兜底，避免必须删库）。"""
-        cols = {r[1] for r in self._conn.get().execute("PRAGMA table_info(traces)").fetchall()}
-        if "task_id" not in cols:
-            self._conn.get().execute("ALTER TABLE traces ADD COLUMN task_id TEXT")
-        if "source" not in cols:
-            self._conn.get().execute(
-                "ALTER TABLE traces ADD COLUMN source TEXT NOT NULL DEFAULT 'supervisor'"
-            )
 
     def add(self, entry: TraceEntry) -> int:
         cur = self._conn.get().execute(
@@ -103,9 +92,34 @@ class TraceRepository:
 
     def aggregate_message_trace(self, message_id: str) -> MessageTrace:
         """从该 message 的若干 trace 行重建 thinking + tools。"""
+        return self._aggregate(message_id, self.list_by_message(message_id))
+
+    def batch_aggregate(self, message_ids) -> dict[str, MessageTrace]:
+        """一次 IN 查询批量聚合多条 message 的 trace（供 history_view 预取，避免 N+1）。
+
+        返回 {message_id: MessageTrace}；无 trace 行的 message_id 不在结果中（调用方按缺失处理）。
+        """
+        ids = list(message_ids)
+        if not ids:
+            return {}
+        placeholders = ",".join("?" * len(ids))
+        rows = self._conn.get().execute(
+            "SELECT id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json "
+            f"FROM traces WHERE message_id IN ({placeholders}) ORDER BY ts ASC, id ASC",
+            ids,
+        ).fetchall()
+        grouped: dict[str, list[TraceEntry]] = {}
+        for row in rows:
+            entry = self._row_to_entry(row)
+            if entry.message_id:
+                grouped.setdefault(entry.message_id, []).append(entry)
+        return {mid: self._aggregate(mid, entries) for mid, entries in grouped.items()}
+
+    def _aggregate(self, message_id: str, entries: list[TraceEntry]) -> MessageTrace:
+        """从若干 trace 行重建 thinking + tools（单条与批量共用）。"""
         thinking: list[ThinkingSegment] = []
         tools: dict[str, dict] = {}
-        for entry in self.list_by_message(message_id):
+        for entry in entries:
             if entry.phase is TracePhase.MODEL_RESPONSE:
                 thinking.extend(self._extract_thinking(entry.payload))
             elif entry.phase is TracePhase.TOOL_CALL:

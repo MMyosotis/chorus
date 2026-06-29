@@ -6,7 +6,7 @@ frozen + extra=forbid 使消息不可变，改历史只能 append 新行。
 
 from __future__ import annotations
 
-from typing import Annotated, Callable, Iterable, Literal, Optional, Union
+from typing import Annotated, Iterable, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,7 +22,6 @@ class _MessageBase(BaseModel):
     session_id: str
     seq: int  # 在 session 内的递增序号，落库主键的一部分
     created_at: float
-    subtype: Optional[str] = None  # None 普通 / "progress" 进度气泡
 
 
 class UserMessage(_MessageBase):
@@ -34,33 +33,26 @@ class UserMessage(_MessageBase):
 
 
 class ToolCallSpec(BaseModel):
-    """assistant 决定要调用的工具，保留 LLM 流式拼回的原始字符串形态。"""
-
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    id: str  # OpenAI 给的 tool_call_id
+    id: str
     name: str
     arguments_json: str
 
 
 class AssistantMessage(_MessageBase):
     role: Literal["assistant"] = "assistant"
-    content: Optional[str] = None  # 纯 tool_calls 时为 None
+    content: Optional[str] = None
     tool_calls: list[ToolCallSpec] = Field(default_factory=list)
 
     def to_provider_dict(self) -> dict:
-        content = self.content
-        if self.subtype == "progress" and content:
-            # 进度气泡压成单行摘要，避免完整话术污染 supervisor 上下文
-            first_line = content.strip().split("\n", 1)[0]
-            content = first_line[:40] if len(first_line) > 40 else first_line
-            content = f"[进度] {content}"
-        entry: dict = {"role": "assistant", "content": content}
+        entry: dict = {"role": "assistant", "content": self.content}
         if self.tool_calls:
-            entry["tool_calls"] = [
-                {"id": tc.id, "type": "function",
-                 "function": {"name": tc.name, "arguments": tc.arguments_json}}
-                for tc in self.tool_calls
+            entry["tool_calls"] = [{
+                "id": call.id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": call.arguments_json}}
+                for call in self.tool_calls
             ]
         return entry
 
@@ -106,22 +98,24 @@ def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> 
 
 def build_history_view(
     messages: Iterable[Message],
-    trace_of: Callable[[str], MessageTrace],
+    traces: dict[str, MessageTrace],
 ) -> list[MessageView]:
-    """前端视图：过滤 tool，assistant 挂回 thinking/tools（由 trace_of 取每条 assistant 的聚合 trace）。"""
+    """前端视图：过滤 tool，assistant 挂回 thinking/tools（从预取的 traces 字典按 message_id 取）。
+
+    traces 由调用方（service）预取聚合好注入，避免在 domain 内逐条查 trace（N+1）。
+    缺失的 message_id 退化为空 thinking/tools。
+    """
     result: list[MessageView] = []
     for msg in messages:
         if isinstance(msg, UserMessage):
             result.append(MessageView(id=msg.id, role="user", content=msg.content))
         elif isinstance(msg, AssistantMessage):
-            trace = trace_of(msg.id)
-            result.append(
-                MessageView(
-                    id=msg.id,
-                    role="assistant",
-                    content=msg.content or "",
-                    thinking=trace.thinking,
-                    tools=trace.tools,
-                )
-            )
+            trace = traces.get(msg.id)
+            result.append(MessageView(
+                id=msg.id,
+                role="assistant",
+                content=msg.content or "",
+                thinking=trace.thinking if trace else [],
+                tools=trace.tools if trace else [],
+            ))
     return result

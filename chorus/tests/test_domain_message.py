@@ -28,10 +28,10 @@ def _user(seq, content, mid="u1"):
     return UserMessage(id=mid, session_id="s", seq=seq, created_at=0.0, content=content)
 
 
-def _assistant(seq, content=None, tool_calls=None, mid="a1", subtype=None):
+def _assistant(seq, content=None, tool_calls=None, mid="a1"):
     return AssistantMessage(
         id=mid, session_id="s", seq=seq, created_at=0.0,
-        content=content, tool_calls=tool_calls or [], subtype=subtype,
+        content=content, tool_calls=tool_calls or [],
     )
 
 
@@ -69,20 +69,10 @@ def test_assistant_tool_calls_in_provider_dict():
     ]
 
 
-def test_assistant_progress_subtype_compressed():
-    long = "这是一段很长的进度话术第一行内容\n第二行不该出现"
-    d = _assistant(1, content=long, subtype="progress").to_provider_dict()
-    assert d["content"].startswith("[进度] ")
-    assert "第二行" not in d["content"]
-    # 超过 40 字的首行被截到 40
-    d2 = _assistant(2, content="啊" * 50, subtype="progress").to_provider_dict()
-    assert d2["content"] == "[进度] " + "啊" * 40
-
-
 def test_build_history_view_filters_tool_and_attaches_trace():
     a_id = "a1"
     msgs = [_user(1, "hi"), _assistant(2, "yo", mid=a_id), _tool(3)]
-    trace_table = {
+    traces = {
         a_id: MessageTrace(
             message_id=a_id,
             thinking=[ThinkingSegment(text="想", duration_ms=5)],
@@ -90,7 +80,7 @@ def test_build_history_view_filters_tool_and_attaches_trace():
                                   display="搜索", duration_ms=10, content="r")],
         )
     }
-    views = build_history_view(msgs, lambda mid: trace_table.get(mid, MessageTrace(message_id=mid)))
+    views = build_history_view(msgs, traces)
     assert len(views) == 2  # tool 被过滤
     assert [v.role for v in views] == ["user", "assistant"]
     assert views[0].content == "hi"
@@ -101,14 +91,14 @@ def test_build_history_view_filters_tool_and_attaches_trace():
 
 def test_build_history_view_assistant_none_content_becomes_empty():
     msgs = [_assistant(1, content=None)]
-    views = build_history_view(msgs, lambda mid: MessageTrace(message_id=mid))
+    views = build_history_view(msgs, {})  # 无 trace → 空 thinking/tools
     assert views[0].content == ""
     assert isinstance(views[0], MessageView)
 
 
 def test_build_history_view_user_has_no_trace_meta():
     msgs = [_user(1, "hi")]
-    views = build_history_view(msgs, lambda mid: MessageTrace(message_id=mid))
+    views = build_history_view(msgs, {})
     assert views[0].thinking == []
     assert views[0].tools == []
 
