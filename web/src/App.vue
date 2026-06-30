@@ -496,8 +496,9 @@ onMounted(async () => {
   if (sessions.value.length === 0) {
     await onCreate()
   } else {
-    activeId.value = sessions.value[0].id
-    await loadMessages(activeId.value)
+    // 复用 selectSession 完整路径：loadMessages + injectTaskCards + 轮询启动。
+    // 刷新后 graph 靠轮询恢复，否则 Dock / TeamPanel 全空。
+    await selectSession(sessions.value[0].id)
   }
 })
 </script>
