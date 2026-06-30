@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { getTaskActivities } from '../api.js'
 import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 
@@ -54,6 +54,11 @@ watch(() => props.task?.status, (s) => {
   if (s !== 'running') { stop(); loadMore(true) }
   else if (!timer) { start() }
 })
+
+// 卸载时清理定时器：Dock mode 翻转（如另一任务 → failed）会卸载本组件，
+// 此时 task 仍 running、status watcher 不会触发 stop，需在此兜底，避免泄漏与对陈旧 task.id 的轮询
+onUnmounted(stop)
+
 </script>
 
 <template>

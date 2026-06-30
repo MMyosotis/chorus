@@ -11,7 +11,7 @@ const isImage = computed(() => props.task?.agent_type === 'image')
 </script>
 
 <template>
-  <div v-if="task" class="work-card">
+  <div class="work-card">
     <div class="wc-head">
       <span class="wc-role">{{ ROLE_LABELS[task.agent_type] || task.agent_type }}</span>
       <!-- image running：current/total 计数进度条 -->
