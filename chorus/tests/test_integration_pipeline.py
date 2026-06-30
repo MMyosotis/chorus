@@ -182,7 +182,7 @@ def _build_assembly():
         stub_chat_model_provider(sub_client), 1024,
     )
 
-    task_service = TaskService(task_repo, art_repo, steps_repo, session_svc)
+    task_service = TaskService(task_repo, art_repo, steps_repo, TaskActivitiesRepository(conn), session_svc)
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999, pool_size=2,

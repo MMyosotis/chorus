@@ -14,9 +14,12 @@ from chorus.domain.task import Task, TaskStatus
 from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.session import SessionRepository
 from chorus.repositories.task import TaskRepository
+from chorus.repositories.task_activities import TaskActivitiesRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
+from chorus.services.session import SessionService
 from chorus.services.task import ConflictError, TaskService
+from chorus.tests._helpers import fresh_conn, seed_session
 
 
 def _setup():
@@ -24,7 +27,12 @@ def _setup():
     conn = ConnectionFactory(Path(tmp) / "t.db")
     SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
     task_repo = TaskRepository(conn)
-    return TaskService(task_repo, TaskArtifactsRepository(conn), TaskStepsRepository(conn), None), task_repo
+    act_repo = TaskActivitiesRepository(conn)
+    session_svc = SessionService(SessionRepository(conn))
+    svc = TaskService(
+        task_repo, TaskArtifactsRepository(conn), TaskStepsRepository(conn), act_repo, session_svc,
+    )
+    return svc, task_repo
 
 
 def _mk(task_repo, tid, agent_type="idea", status="awaiting_confirm", pipeline_id="p1", seq=1, updated_at=0.0):
@@ -112,6 +120,68 @@ def test_get_graph_recent_finished():
 
 def _conn_of(task_repo):
     return task_repo._conn  # noqa: SLF001 — 测试辅助
+
+
+def test_get_graph_includes_current_activity_and_timestamps():
+    """get_graph 每个 task 含 updated_at/started_at/finished_at/metadata/current_activity。"""
+    from chorus.repositories.task_activities import TaskActivitiesRepository
+    from chorus.domain.task import Task
+    conn = fresh_conn()
+    seed_session(conn)
+    task_repo = TaskRepository(conn)
+    art_repo = TaskArtifactsRepository(conn)
+    steps_repo = TaskStepsRepository(conn)
+    act_repo = TaskActivitiesRepository(conn)
+    from chorus.services.session import SessionService
+    from chorus.repositories.session import SessionRepository
+    svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
+    task_repo.insert(Task(
+        id="t1", session_id="s1", pipeline_id="p1", agent_type="image", seq=1,
+        status="running", invoke_message="x", dependencies=[],
+        created_at=0.0, updated_at=10.0, started_at=5.0,
+        metadata={"progress_total": 3},
+    ))
+    act_repo.append("t1", "started", "generating_image", "出图中")
+    graph = svc.get_graph("s1")
+    t = graph["tasks"][0]
+    assert t["started_at"] == 5.0
+    assert t["updated_at"] == 10.0
+    assert t["metadata"] == {"progress_total": 3}
+    assert t["current_activity"] is not None
+    assert t["current_activity"]["role_line"] == "出图中"
+    assert t["current_activity"]["event_type"] == "started"
+
+
+def test_get_activities_returns_serialized_list():
+    """get_activities 返 dict 列表（TypeAdapter 序列化），按 seq 升序。"""
+    from chorus.repositories.task_activities import TaskActivitiesRepository
+    from chorus.domain.task import Task
+    conn = fresh_conn()
+    seed_session(conn)
+    task_repo = TaskRepository(conn)
+    art_repo = TaskArtifactsRepository(conn)
+    steps_repo = TaskStepsRepository(conn)
+    act_repo = TaskActivitiesRepository(conn)
+    from chorus.services.session import SessionService
+    from chorus.repositories.session import SessionRepository
+    svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
+    task_repo.insert(Task(
+        id="t1", session_id="s1", pipeline_id="p1", agent_type="idea", seq=1,
+        status="running", invoke_message="x", dependencies=[],
+        created_at=0.0, updated_at=0.0, started_at=1.0,
+    ))
+    act_repo.append("t1", "started", "planning", "a")
+    act_repo.append("t1", "done", "summarizing", "b", status="done",
+                    summary_json={"type": "search_results", "total": 1})
+    acts = svc.get_activities("t1")
+    assert [a["seq"] for a in acts] == [1, 2]
+    assert acts[1]["summary_json"]["total"] == 1
+    # TypeAdapter dump_python 产出的 dict 可 JSON 序列化
+    import json as _json
+    _json.dumps(acts)
+    # after_seq 增量
+    tail = svc.get_activities("t1", after_seq=1)
+    assert [a["seq"] for a in tail] == [2]
 
 
 def main():

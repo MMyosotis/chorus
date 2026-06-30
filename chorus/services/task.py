@@ -11,17 +11,28 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Optional
 
+from pydantic import TypeAdapter
+
 from chorus.domain.task import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
+    TaskActivity,
     TaskStatus,
     select_display_pipeline,
 )
 from chorus.repositories.task import TaskRepository
+from chorus.repositories.task_activities import TaskActivitiesRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.services.session import SessionService
+
+_TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
+
+
+def _dump_activity(a: TaskActivity) -> dict:
+    """pydantic dataclass 无 model_dump，用 TypeAdapter 序列化（不用 dataclasses.asdict）。"""
+    return _TASK_ACTIVITY_ADAPTER.dump_python(a)
 
 
 class ConflictError(Exception):
@@ -34,11 +45,13 @@ class TaskService:
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
         task_steps_repo: TaskStepsRepository,
+        task_activities_repo: TaskActivitiesRepository,
         session_service: SessionService,
     ):
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
         self._steps_repo = task_steps_repo
+        self._activities_repo = task_activities_repo
         self._session = session_service
 
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
@@ -98,10 +111,23 @@ class TaskService:
         return self._graph_dict(latest.pipeline_id, display, False)
 
     def get_steps(self, task_id: str) -> list[dict]:
-        """该 task 的 ReAct 过程（按 iteration 升序），供角色详情页。"""
+        """该 task 的 ReAct 过程（按 iteration 升序），供角色详情页。
+
+        已被 get_activities（用户态活动流）部分取代，保留供 ReAct 开发者视图。
+        """
         if self._task_repo.get(task_id) is None:
             raise KeyError(task_id)
         return [dataclasses.asdict(s) for s in self._steps_repo.list_by_task(task_id)]
+
+    def get_activities(
+        self, task_id: str, *, limit: int = 50, after_seq: Optional[int] = None,
+    ) -> list[dict]:
+        """该 task 的用户态活动（按 seq 升序），供 Dock 活动流。"""
+        if self._task_repo.get(task_id) is None:
+            raise KeyError(task_id)
+        limit = max(1, min(100, limit))
+        rows = self._activities_repo.list_by_task(task_id, limit=limit, after_seq=after_seq)
+        return [_dump_activity(a) for a in rows]
 
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
@@ -119,12 +145,16 @@ class TaskService:
 
     def _graph_dict(self, pipeline_id: str, tasks: list, active: bool) -> dict:
         arts = self._artifacts_repo.load_many([t.id for t in tasks])
+        latest = self._activities_repo.latest_by_tasks([t.id for t in tasks])
         return {
             "pipeline_id": pipeline_id,
             "active": active,
             "tasks": [
                 {
                     "id": t.id, "agent_type": t.agent_type, "seq": t.seq, "status": t.status,
+                    "updated_at": t.updated_at, "started_at": t.started_at,
+                    "finished_at": t.finished_at, "metadata": t.metadata,
+                    "current_activity": _dump_activity(latest[t.id]) if t.id in latest else None,
                     "artifacts": (arts[t.id].artifacts if t.id in arts else None),
                     "narrative": (arts[t.id].narrative if t.id in arts else None),
                     "error": t.error,
