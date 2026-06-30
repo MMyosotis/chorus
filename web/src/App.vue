@@ -14,7 +14,8 @@ import {
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
-import ProgressBanner from './main-panel/ProgressBanner.vue'
+import PipelineProgressBar from './main-panel/PipelineProgressBar.vue'
+import PipelineRuntimeDock from './main-panel/PipelineRuntimeDock.vue'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import SettingsPanel from './SettingsPanel.vue'
 
@@ -27,6 +28,23 @@ const sessions = ref([]) // [{id, title, created_at, updated_at}]
 const messagesBySession = reactive({}) // { [id]: Message[] }
 const streamingBySession = reactive({}) // { [id]: boolean }
 const activeId = ref(null)
+
+// 单一焦点对象 + 展开布尔（评审决策：不保留 selectedTaskId/expandedTaskId 两套）
+const focusedTaskId = ref(null)
+const expanded = ref(false)
+
+function onTaskFocus(taskId) {
+  // 点 RoleCard 切 focus，不强制收起
+  focusedTaskId.value = taskId
+}
+function onTaskExpand(taskId) {
+  if (focusedTaskId.value === taskId) {
+    expanded.value = !expanded.value
+  } else {
+    focusedTaskId.value = taskId
+    expanded.value = true
+  }
+}
 
 const messages = computed(() => messagesBySession[activeId.value] || [])
 const streaming = computed(() => !!streamingBySession[activeId.value])
@@ -203,6 +221,8 @@ async function selectSession(id) {
   injectTaskCards(id)
   // 进入会话若已有 active task 图，恢复轮询（start 首 tick 拉图，active=False 自停）
   taskPolling.start(id)
+  focusedTaskId.value = null
+  expanded.value = false
 }
 
 // 强制从服务器重拉 messages（轮询/done 后取回非流式 friendly_reply + progress 气泡）
@@ -224,13 +244,15 @@ function injectTaskCards(id) {
   const graph = taskPolling.getGraph(id)
   // 去掉旧虚拟卡后重注入，避免重复
   for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].kind === 'hil' || list[i].kind === 'postcard') list.splice(i, 1)
+    if (list[i].kind === 'hil' || list[i].kind === 'postcard' || list[i].kind === 'recovery') list.splice(i, 1)
   }
   if (!graph) return
   const sorted = [...(graph.tasks || [])].sort((a, b) => a.seq - b.seq)
   for (const t of sorted) {
     if (t.status === 'awaiting_confirm') {
       list.push({ kind: 'hil', task: t, id: 'hil:' + t.id, role: 'assistant' })
+    } else if (t.status === 'failed') {
+      list.push({ kind: 'recovery', task: t, id: 'recovery:' + t.id, role: 'assistant' })
     } else if (t.agent_type === 'finalize' && t.status === 'finished') {
       list.push({ kind: 'postcard', task: t, id: 'postcard:' + t.id, role: 'assistant' })
     }
@@ -523,7 +545,18 @@ onMounted(async () => {
         @hil-retried="onHilRetried"
         @hil-cancelled="onHilCancelled"
       />
-      <ProgressBanner :graph="activeGraph" />
+      <PipelineProgressBar :graph="activeGraph" />
+      <PipelineRuntimeDock
+        :graph="activeGraph"
+        :focused-task-id="focusedTaskId"
+        :expanded="expanded"
+        :session-id="activeId || ''"
+        @focus="onTaskFocus"
+        @expand="onTaskExpand"
+        @hil-retried="onHilRetried"
+        @hil-cancelled="onHilCancelled"
+        @finish-done="forceReloadMessages(activeId)"
+      />
       <InputBar :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
     </div>
     <TeamPanel :graph="activeGraph" />

@@ -3,6 +3,7 @@ import { ref, watch, nextTick } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import PostCard from './PostCard.vue'
+import RecoveryCard from './RecoveryCard.vue'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -57,6 +58,13 @@ watch(
           @cancelled="$emit('hil-cancelled', $event)"
         />
         <PostCard v-else-if="msg.kind === 'postcard'" :task="msg.task" />
+        <RecoveryCard
+          v-else-if="msg.kind === 'recovery'"
+          :task="msg.task"
+          :session-id="sessionId"
+          @retried="$emit('hil-retried', $event)"
+          @cancelled="$emit('hil-cancelled', $event)"
+        />
         <MessageBubble
           v-else
           :role="msg.role"
