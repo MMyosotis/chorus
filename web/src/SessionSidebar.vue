@@ -159,23 +159,24 @@ watch(
 
 <style scoped>
 .sidebar {
-  width: 260px;
+  width: clamp(250px, 18vw, 290px);
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.66);
-  backdrop-filter: blur(22px) saturate(160%);
-  -webkit-backdrop-filter: blur(22px) saturate(160%);
-  border-right: 1px solid rgba(226, 232, 240, 0.6);
-  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.5) inset;
+  background: var(--ch-surface-soft);
+  border: none;
+  border-right: 1px solid var(--ch-border);
+  border-radius: 0;
+  box-shadow: none;
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 28px 16px 8px;
+  padding: 28px 20px 10px;
   flex-shrink: 0;
 }
 
@@ -190,17 +191,17 @@ watch(
 
 .brand-title {
   font-family: 'ZCOOL QingKe HuangYou', cursive;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 400;
   letter-spacing: 1px;
-  background: linear-gradient(120deg, #6366f1, #7c83f3);
+  background: linear-gradient(120deg, var(--ch-orange), var(--ch-violet));
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 .sidebar-header {
-  padding: 14px 14px 10px;
+  padding: 14px 20px 10px;
   flex-shrink: 0;
 }
 
@@ -208,18 +209,18 @@ watch(
   width: 100%;
   padding: 9px 12px;
   border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--ch-orange-mid), var(--ch-orange));
   color: #fff;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.30), 0 1px 2px rgba(99, 102, 241, 0.20);
+  box-shadow: 0 10px 22px rgba(234, 88, 12, 0.22);
   transition: box-shadow 0.2s, filter 0.2s;
 }
 .new-btn:hover {
   filter: brightness(1.05);
-  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.38), 0 1px 2px rgba(99, 102, 241, 0.24);
+  box-shadow: 0 12px 26px rgba(234, 88, 12, 0.28);
 }
 .new-btn:active {
   filter: brightness(0.97);
@@ -228,13 +229,13 @@ watch(
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 4px 14px 12px;
+  padding: 8px 20px 12px;
   scrollbar-width: thin;
 }
 
 .sidebar-footer {
-  padding: 8px 14px 12px;
-  border-top: 1px solid rgba(226, 232, 240, 0.6);
+  padding: 10px 20px 18px;
+  border-top: 1px solid var(--ch-border);
 }
 
 .settings-btn {
@@ -243,7 +244,7 @@ watch(
   border: 1px solid #e2e8f0;
   background: #fff;
   color: #475569;
-  border-radius: 8px;
+  border-radius: 14px;
   cursor: pointer;
   font-size: 13px;
   transition: background 0.15s, border-color 0.15s;
@@ -259,25 +260,25 @@ watch(
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 9px 12px;
-  min-height: 42px;
-  border-radius: 10px;
+  padding: 11px 14px;
+  min-height: 54px;
+  border-radius: 17px;
   cursor: pointer;
   font-size: 14px;
   color: #1e293b;
   transition: background 0.16s, box-shadow 0.16s;
-  margin-bottom: 2px;
+  margin-bottom: 8px;
   box-sizing: border-box;
 }
 
 .session-item:hover {
-  background: rgba(99, 102, 241, 0.05);
-  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.12);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.8);
 }
 
 .session-item.active {
-  background: rgba(99, 102, 241, 0.10);
-  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.35), 0 4px 14px rgba(99, 102, 241, 0.12);
+  background: #eef2ff;
+  box-shadow: inset 0 0 0 1px #c7d2fe;
 }
 
 .session-title {

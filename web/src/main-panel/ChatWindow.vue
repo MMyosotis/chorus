@@ -85,17 +85,17 @@ watch(
 .chat-window {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 16px;
+  padding: 34px 16px 10px;
   background: transparent;
   scrollbar-gutter: stable;
 }
 
 .chat-inner {
-  max-width: 768px;
+  max-width: var(--ch-chat-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 32px;
 }
 
 .empty-hint {
@@ -105,7 +105,7 @@ watch(
   justify-content: center;
   gap: 12px;
   height: 240px;
-  color: #94a3b8;
+  color: var(--ch-faint);
   font-size: 16px;
   letter-spacing: 0.5px;
 }

@@ -534,13 +534,13 @@ onMounted(async () => {
         @hil-retried="onHilRetried"
         @hil-cancelled="onHilCancelled"
       />
-      <PipelineProgressBar :graph="activeGraph" />
       <PipelineRuntimeDock
         :graph="activeGraph"
         :focused-task-id="focusedTaskId"
         :session-id="activeId || ''"
         @finish-done="forceReloadMessages(activeId)"
       />
+      <PipelineProgressBar :graph="activeGraph" />
       <InputBar :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
     </div>
     <TeamPanel :graph="activeGraph" :focused-task-id="focusedTaskId" @focus="onTaskFocus" />
@@ -555,12 +555,9 @@ onMounted(async () => {
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  /* 柔和氛围光：基色 + 三个低透明度径向光斑，营造光感而非纯色块 */
-  background:
-    radial-gradient(820px 620px at 8% -6%, rgba(129, 140, 248, 0.13), transparent 60%),
-    radial-gradient(720px 560px at 102% 0%, rgba(56, 189, 248, 0.10), transparent 58%),
-    radial-gradient(900px 700px at 50% 112%, rgba(236, 72, 153, 0.05), transparent 62%),
-    #f6f8fd;
+  background: #fff;
+  padding: 0;
+  gap: 0;
 }
 
 .main-panel {
@@ -569,6 +566,10 @@ onMounted(async () => {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  height: 100%;
+  background: #fff;
+  border: none;
+  box-shadow: none;
 }
 
 .header {
@@ -576,22 +577,18 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 24px;
-  height: 56px;
-  /* 半透明白 + 背景模糊，让底部的氛围光透上来 */
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  color: #1e293b;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.55);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  padding: 0 34px;
+  height: 64px;
+  background: #fff;
+  color: var(--ch-text);
+  border-bottom: 1px solid var(--ch-border);
   flex-shrink: 0;
 }
 
 .session-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: #1e293b;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ch-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -604,10 +601,10 @@ onMounted(async () => {
   transform: translateY(-50%);
   width: 34px;
   height: 34px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #5b6b85;
-  border-radius: 9px;
+  border: 1px solid var(--ch-border);
+  background: #fff;
+  color: var(--ch-muted);
+  border-radius: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -616,15 +613,21 @@ onMounted(async () => {
 }
 
 .header-console-btn:hover {
-  background: rgba(99, 102, 241, 0.07);
-  color: #6366f1;
-  border-color: rgba(129, 140, 248, 0.25);
+  background: var(--ch-violet-soft);
+  color: var(--ch-violet);
+  border-color: #c7d2fe;
 }
 
 .header-console-btn.active {
-  background: rgba(99, 102, 241, 0.10);
-  border-color: rgba(129, 140, 248, 0.4);
-  color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), 0 8px 24px rgba(99, 102, 241, 0.20);
+  background: var(--ch-violet-soft);
+  border-color: #c7d2fe;
+  color: var(--ch-violet);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 0;
+  }
 }
 </style>

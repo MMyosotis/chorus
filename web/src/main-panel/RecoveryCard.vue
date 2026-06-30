@@ -51,18 +51,19 @@ async function onCancel() {
 </template>
 
 <style scoped>
-.recovery-card { border: 1px solid rgba(248, 113, 113, 0.5); border-radius: 12px;
-  background: rgba(254, 242, 242, 0.7); padding: 14px; margin: 8px 0; }
-.rc-title { font-weight: 500; color: #b91c1c; margin-bottom: 8px; }
+.recovery-card { border: 1px solid #fecaca; border-radius: var(--ch-radius-md);
+  background: var(--ch-red-soft); padding: 20px 22px; margin: 4px 0;
+  box-shadow: 0 18px 38px rgba(185, 28, 28, 0.08); }
+.rc-title { font-size: 18px; font-weight: 850; color: #b91c1c; margin-bottom: 10px; }
 .rc-error-text { font-size: 13px; color: #b91c1c; background: rgba(248, 113, 113, 0.1);
-  border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; }
-.rc-feedback { width: 100%; box-sizing: border-box; border: 1px solid #e2e8f0; border-radius: 6px;
+  border-radius: 14px; padding: 8px 10px; margin-bottom: 10px; }
+.rc-feedback { width: 100%; box-sizing: border-box; border: 1px solid var(--ch-border); border-radius: 14px;
   padding: 6px 8px; font-size: 13px; resize: vertical; margin-bottom: 8px; }
 .rc-actions { display: flex; gap: 8px; }
-.btn { border: 1px solid #cbd5e1; background: #fff; color: #475569; padding: 6px 12px;
-  border-radius: 6px; cursor: pointer; font-size: 13px; }
+.btn { border: 1px solid #cbd5e1; background: #fff; color: var(--ch-muted); padding: 8px 14px;
+  border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 760; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #6366f1; border-color: #6366f1; color: #fff; }
+.btn.primary { background: #fff; border-color: #fca5a5; color: #b91c1c; }
 .btn.danger { color: #b91c1c; border-color: #fca5a5; }
 .rc-error { color: #b91c1c; font-size: 12px; margin-top: 6px; }
 </style>

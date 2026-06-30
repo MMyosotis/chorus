@@ -31,12 +31,12 @@ watch(() => props.task?.status, (s) => {
 </template>
 
 <style scoped>
-.finish-wrap { display: flex; align-items: center; gap: 10px; justify-content: center;
-  padding: 24px; border-radius: 12px; background: rgba(52, 211, 153, 0.08);
-  border: 1px solid rgba(52, 211, 153, 0.3); margin: 8px 0; }
-.fw-icon { width: 36px; height: 36px; border-radius: 50%; background: #34d399; color: #fff;
+.finish-wrap { display: flex; align-items: center; gap: 12px; justify-content: center;
+  padding: 20px 24px; border-radius: var(--ch-radius-lg); background: var(--ch-green-soft);
+  border: 1px solid #bbf7d0; margin: 0; }
+.fw-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--ch-green-mid); color: #fff;
   display: flex; align-items: center; justify-content: center; font-size: 20px; }
-.fw-text { font-size: 15px; color: #047857; font-weight: 500; }
+.fw-text { font-size: 15px; color: #047857; font-weight: 800; }
 .finish-wrap.wrapping .fw-icon { animation: pop 0.4s ease; }
 @keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 </style>

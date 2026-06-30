@@ -36,18 +36,22 @@ function onFocus(id) {
 
 <style scoped>
 .team-panel {
-  width: 260px;
+  width: clamp(290px, 22vw, 340px);
   flex-shrink: 0;
-  border-left: 1px solid rgba(226, 232, 240, 0.55);
-  background: rgba(255, 255, 255, 0.5);
+  border: none;
+  border-left: 1px solid var(--ch-border);
+  border-radius: 0;
+  background: var(--ch-team-surface);
+  box-shadow: none;
   overflow-y: auto;
-  padding: 12px;
+  padding: 30px 32px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 16px;
+  height: 100%;
 }
 .team-empty {
-  color: #94a3b8;
+  color: var(--ch-faint);
   font-size: 13px;
   text-align: center;
   padding: 24px 0;

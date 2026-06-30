@@ -9,15 +9,49 @@
 html,
 body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans SC', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f8fafc;
+  background: linear-gradient(135deg, #fff7ed 0%, #eef2ff 100%);
 }
 
 #app {
   height: 100%;
+}
+
+:root {
+  --ch-bg-warm: #fff7ed;
+  --ch-bg-cool: #eef2ff;
+  --ch-surface: rgba(255, 255, 255, 0.94);
+  --ch-surface-soft: #f8fafc;
+  --ch-team-surface: #fafafa;
+  --ch-border: #e2e8f0;
+  --ch-text: #111827;
+  --ch-body: #334155;
+  --ch-muted: #64748b;
+  --ch-faint: #94a3b8;
+  --ch-violet: #4f46e5;
+  --ch-violet-soft: #f5f3ff;
+  --ch-orange: #ea580c;
+  --ch-orange-mid: #fb923c;
+  --ch-orange-soft: #fff7ed;
+  --ch-orange-border: #fed7aa;
+  --ch-amber: #f59e0b;
+  --ch-green: #059669;
+  --ch-green-mid: #34d399;
+  --ch-green-soft: #ecfdf5;
+  --ch-red: #dc2626;
+  --ch-red-soft: #fef2f2;
+  --ch-radius-xl: 32px;
+  --ch-radius-lg: 28px;
+  --ch-radius-md: 22px;
+  --ch-radius-sm: 16px;
+  --ch-chat-width: 820px;
+  --ch-runtime-width: 760px;
+  --ch-shadow-workbench: 0 22px 52px rgba(30, 27, 75, 0.14);
+  --ch-shadow-dock: 0 -4px 28px rgba(49, 46, 129, 0.12),
+                    0 16px 34px rgba(49, 46, 129, 0.08);
 }
 
 ::-webkit-scrollbar {

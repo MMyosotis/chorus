@@ -6,3 +6,4 @@ node_modules
 dist
 .vite
 /data/
+.DS_Store

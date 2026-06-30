@@ -39,30 +39,30 @@ const card = computed(() => props.task.artifacts || {})
 
 <style scoped>
 .post-card {
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-md);
   background: #fff;
   overflow: hidden;
-  margin: 12px 0;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  margin: 4px 0;
+  box-shadow: 0 18px 42px rgba(30, 27, 75, 0.10);
 }
 .pc-cover { width: 100%; max-height: 320px; object-fit: cover; display: block; }
-.pc-title { font-size: 18px; font-weight: 600; color: #1e293b; margin: 14px 16px 8px; }
-.pc-sections { padding: 0 16px 8px; }
-.pc-heading { font-size: 15px; font-weight: 600; color: #334155; margin: 12px 0 4px; }
-.pc-paragraph { font-size: 14px; color: #475569; line-height: 1.7; margin: 6px 0; }
-.pc-list { font-size: 13px; color: #475569; white-space: pre-wrap; margin: 6px 0; font-family: inherit; }
+.pc-title { font-size: 22px; font-weight: 850; color: var(--ch-text); margin: 18px 22px 10px; }
+.pc-sections { padding: 0 22px 12px; }
+.pc-heading { font-size: 16px; font-weight: 800; color: var(--ch-body); margin: 14px 0 6px; }
+.pc-paragraph { font-size: 14px; color: var(--ch-body); line-height: 1.75; margin: 6px 0; }
+.pc-list { font-size: 13px; color: var(--ch-body); white-space: pre-wrap; margin: 6px 0; font-family: inherit; }
 .pc-quote {
-  border-left: 3px solid #818cf8; padding: 6px 12px; margin: 8px 0;
-  color: #64748b; font-size: 14px; background: #f8fafc; border-radius: 0 6px 6px 0;
+  border-left: 3px solid var(--ch-orange-mid); padding: 8px 12px; margin: 10px 0;
+  color: var(--ch-muted); font-size: 14px; background: var(--ch-orange-soft); border-radius: 0 12px 12px 0;
 }
 .pc-image { margin: 8px 0; }
-.pc-image img { width: 100%; border-radius: 8px; }
-.pc-image figcaption { font-size: 12px; color: #94a3b8; margin-top: 4px; }
-.pc-tags { padding: 4px 16px 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+.pc-image img { width: 100%; border-radius: 18px; }
+.pc-image figcaption { font-size: 12px; color: var(--ch-faint); margin-top: 4px; }
+.pc-tags { padding: 4px 22px 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 .pc-tag {
-  font-size: 12px; color: #6366f1; background: rgba(99, 102, 241, 0.08);
+  font-size: 12px; color: #c2410c; background: var(--ch-orange-soft);
   padding: 2px 8px; border-radius: 10px;
 }
-.pc-summary { padding: 8px 16px 14px; font-size: 13px; color: #94a3b8; border-top: 1px solid #f1f5f9; margin: 0; }
+.pc-summary { padding: 10px 22px 16px; font-size: 13px; color: var(--ch-faint); border-top: 1px solid #f1f5f9; margin: 0; }
 </style>

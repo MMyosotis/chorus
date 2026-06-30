@@ -13,7 +13,7 @@ const textarea = ref(null)
 
 const disabled = computed(() => props.streaming || props.hasActiveTask)
 const placeholder = computed(() =>
-  props.hasActiveTask ? '正在创作中，请稍候…' : '输入消息...'
+  props.hasActiveTask ? '创作进行中，暂时不能输入；确认节点或完成后恢复。' : '输入消息...'
 )
 
 function handleKeydown(e) {
@@ -41,7 +41,7 @@ function adjustHeight() {
 </script>
 
 <template>
-  <div class="input-bar">
+  <div class="input-bar" :class="{ locked: hasActiveTask }">
     <div class="input-inner">
       <textarea
         ref="textarea"
@@ -73,55 +73,43 @@ function adjustHeight() {
 <style scoped>
 .input-bar {
   flex-shrink: 0;
-  padding: 40px 22px 20px 16px;
+  padding: 0 16px 20px;
   background: transparent;
   position: relative;
   z-index: 10;
-  margin-top: -50px;
 }
 
 .input-bar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  backdrop-filter: blur(28px) saturate(180%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  background: linear-gradient(
-    to bottom,
-    rgba(246, 248, 253, 0) 0%,
-    rgba(246, 248, 253, 0.85) 50%,
-    rgba(246, 248, 253, 1) 100%
-  );
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 50%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 50%);
-  z-index: -1;
+  content: none;
 }
 
 .input-inner {
   position: relative;
-  max-width: 768px;
+  max-width: var(--ch-runtime-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 10px 14px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 8px 28px rgba(99, 102, 241, 0.10), 0 2px 6px rgba(99, 102, 241, 0.06),
-    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  gap: 4px;
+  padding: 8px 10px 8px 20px;
+  border: 1px solid var(--ch-border);
+  border-radius: 19px;
+  background: #fff;
+  box-shadow: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .input-inner:focus-within {
-  border-color: rgba(129, 140, 248, 0.7);
+  border-color: var(--ch-orange-mid);
   background: #ffffff;
-  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.22),
-    0 0 0 4px rgba(129, 140, 248, 0.14),
-    0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.12);
+}
+
+.input-bar.locked .input-inner {
+  min-height: 38px;
+  background: #f1f5f9;
+  border-color: transparent;
+  justify-content: center;
+  padding: 0 22px;
 }
 
 .input-field {
@@ -134,11 +122,18 @@ function adjustHeight() {
   line-height: 1.5;
   resize: none;
   font-family: inherit;
-  min-height: 44px;
+  min-height: 38px;
   max-height: 180px;
   overflow-y: auto;
   scrollbar-width: none;
   padding: 2px 2px;
+}
+
+.input-bar.locked .input-field {
+  min-height: 28px;
+  height: 28px !important;
+  font-size: 12px;
+  color: var(--ch-muted);
 }
 
 .input-field:disabled {
@@ -164,6 +159,10 @@ function adjustHeight() {
   gap: 10px;
 }
 
+.input-bar.locked .input-footer {
+  display: none;
+}
+
 .send-btn {
   flex-shrink: 0;
   width: 36px;
@@ -173,16 +172,16 @@ function adjustHeight() {
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  background: linear-gradient(135deg, var(--ch-orange-mid), var(--ch-orange));
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.32), 0 1px 2px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 8px 18px rgba(234, 88, 12, 0.25);
   transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
 }
 
 .send-btn:hover:not(:disabled) {
   filter: brightness(1.06);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4), 0 1px 2px rgba(99, 102, 241, 0.24);
+  box-shadow: 0 10px 22px rgba(234, 88, 12, 0.34);
 }
 
 .send-btn:active:not(:disabled) {

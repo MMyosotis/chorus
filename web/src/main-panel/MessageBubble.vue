@@ -295,12 +295,11 @@ function closePreview() {
 
 .bubble.user {
   max-width: 75%;
-  padding: 10px 16px;
-  border-radius: 16px;
-  border-bottom-right-radius: 4px;
-  background: linear-gradient(135deg, #6366f1, #818cf8);
-  color: #fff;
-  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.28), 0 1px 2px rgba(99, 102, 241, 0.18);
+  padding: 16px 26px;
+  border-radius: 22px;
+  background: #f1f5f9;
+  color: var(--ch-body);
+  box-shadow: none;
 }
 
 .bubble.assistant {
@@ -620,17 +619,16 @@ function closePreview() {
 }
 
 .plan-card {
-  border-left: 3px solid #6366f1;
-  background: #f8fafc;
-  border-radius: 0 10px 10px 0;
+  border: 1px solid var(--ch-orange-border);
+  background: var(--ch-orange-soft);
+  border-radius: 22px;
   padding: 12px 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 }
 
 .plan-header {
   font-size: 13px;
   font-weight: 600;
-  color: #6366f1;
+  color: #c2410c;
   letter-spacing: 0.3px;
   margin-bottom: 8px;
   line-height: 1;
@@ -675,15 +673,15 @@ function closePreview() {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(30, 41, 59, 0.14), 0 2px 6px rgba(30, 41, 59, 0.06);
+  border-radius: 18px;
+  box-shadow: 0 14px 32px rgba(30, 41, 59, 0.14), 0 2px 6px rgba(30, 41, 59, 0.06);
 }
 
 .image-placeholder {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 10px;
+  border-radius: 18px;
   overflow: hidden;
   background: #eef2f7;
 }
