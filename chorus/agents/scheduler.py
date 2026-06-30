@@ -80,8 +80,12 @@ class TaskScheduler:
         # 限流：非阻塞 acquire，满则跳过（task 仍 pending，下轮再试）
         if not self._semaphore.acquire(blocking=False):
             return
+        # CAS pending→running 顺带写 started_at（subagent 运行租约锚点）；不写 finished_at。
+        # scheduler 不注入 TaskActivitiesRepository、不写 activity（纯粹性）。
+        now = time.time()
         ok = self._task_repo.cas_update(
             task.id, TaskStatus.PENDING.value, TaskStatus.RUNNING.value,
+            started_at=now, updated_at=now,
         )
         if not ok:
             self._semaphore.release()

@@ -40,6 +40,7 @@ from chorus.repositories.connection import ConnectionFactory
 from chorus.repositories.message import MessageRepository
 from chorus.repositories.session import SessionRepository
 from chorus.repositories.task import TaskRepository
+from chorus.repositories.task_activities import TaskActivitiesRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.repositories.trace import TraceRepository
@@ -176,6 +177,7 @@ def _build_assembly():
     ])
     subagent = SubAgentService(
         conn, msg_svc, task_repo, art_repo, steps_repo,
+        TaskActivitiesRepository(conn),
         tool_dispatcher, hooks,
         stub_chat_model_provider(sub_client), 1024,
     )
