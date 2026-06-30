@@ -9,6 +9,7 @@ rowcount=0 抛 ConflictError（route 转 409）。get_graph 选 active pipeline�
 from __future__ import annotations
 
 import dataclasses
+import time
 from typing import Any, Optional
 
 from pydantic import TypeAdapter
@@ -67,6 +68,7 @@ class TaskService:
             self._set_selected(task_id, selected)
         ok = self._task_repo.cas_update(
             task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value,
+            finished_at=time.time(),
         )
         if not ok:
             raise ConflictError("CAS 失败（状态已漂移）")

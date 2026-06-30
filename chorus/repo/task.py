@@ -180,11 +180,12 @@ class TaskRepository:
         if not statuses:
             return 0
         placeholders = ",".join("?" * len(statuses))
+        now = time.time()
         with self._conn.transaction():
             cur = self._conn.get().execute(
-                f"UPDATE tasks SET status='cancelled', updated_at=? "
+                f"UPDATE tasks SET status='cancelled', updated_at=?, finished_at=? "
                 f"WHERE pipeline_id=? AND status IN ({placeholders})",
-                (time.time(), pipeline_id, *statuses),
+                (now, now, pipeline_id, *statuses),
             )
             return cur.rowcount
 
