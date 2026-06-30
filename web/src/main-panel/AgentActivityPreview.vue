@@ -6,9 +6,9 @@ import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 const props = defineProps({
   task: { type: Object, default: null }, // graph.tasks 项
 })
-const emit = defineEmits(['focus'])
 
 const activities = ref([])
+const expanded = ref(false)
 const afterSeq = ref(0)
 const loading = ref(false)
 let timer = null
@@ -50,7 +50,7 @@ function start() {
   }
 }
 
-watch(() => props.task?.id, () => { afterSeq.value = 0; activities.value = []; start() }, { immediate: true })
+watch(() => props.task?.id, () => { afterSeq.value = 0; activities.value = []; expanded.value = false; start() }, { immediate: true })
 watch(() => props.task?.status, (s) => {
   if (s !== 'running') { stop(); loadMore(true) }
   else if (!timer) { start() }
@@ -70,6 +70,8 @@ const roleLine = computed(() => {
 })
 const progress = computed(() => current.value?.progress_json || null)
 const recent = computed(() => activities.value.slice(-2))
+// 展开时显示全部活动（倒序：最新在上），否则只显最近 2 条
+const shownActivities = computed(() => expanded.value ? [...activities.value].reverse() : recent.value)
 </script>
 
 <template>
@@ -81,7 +83,9 @@ const recent = computed(() => activities.value.slice(-2))
         <div class="ap-title">{{ roleName }}正在推进</div>
         <div class="ap-line">{{ roleLine }}</div>
       </div>
-      <span class="detail-pill" @click="emit('focus', props.task?.id)">查看详情</span>
+      <span class="detail-pill" @click="expanded = !expanded">
+        {{ expanded ? '收起' : '查看详情' }}
+      </span>
     </div>
 
     <div v-if="progress?.total" class="mini-progress">
@@ -91,8 +95,8 @@ const recent = computed(() => activities.value.slice(-2))
       </div>
     </div>
 
-    <div v-if="recent.length" class="ap-list">
-      <div v-for="a in recent" :key="a.seq" class="ap-item" :class="a.status">
+    <div v-if="shownActivities.length" class="ap-list">
+      <div v-for="a in shownActivities" :key="a.seq" class="ap-item" :class="a.status">
         <span class="ap-dot" :class="a.status" />
         <span class="ap-recent-line">{{ a.role_line }}</span>
       </div>

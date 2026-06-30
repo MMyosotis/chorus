@@ -540,7 +540,6 @@ onMounted(async () => {
         :focused-task-id="focusedTaskId"
         :session-id="activeId || ''"
         @finish-done="forceReloadMessages(activeId)"
-        @focus-task="onTaskFocus"
       />
       <PipelineProgressBar :graph="activeGraph" />
       <InputBar :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />

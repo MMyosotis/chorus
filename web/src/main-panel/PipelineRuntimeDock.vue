@@ -8,7 +8,7 @@ const props = defineProps({
   focusedTaskId: { type: String, default: null },
   sessionId: { type: String, default: '' },
 })
-const emit = defineEmits(['finish-done', 'focus-task'])
+const emit = defineEmits(['finish-done'])
 
 const tasks = computed(() => {
   const ts = props.graph?.tasks || []
@@ -27,14 +27,13 @@ const hasInteraction = computed(() =>
 const activityTask = computed(() => {
   if (hasInteraction.value) return null
   // 有 running：自动跟踪进行中任务（焦点 running 优先）——遥测。
-  // 无 running：退为回看模式，用户点了哪个 RoleCard 就显示哪个——
-  // 不自动占用末位 finished task，避免汇总官 finished 后活动卡残留；
-  // 但全图完成后点回看仍能展开焦点框。
+  // 无 running：回看模式——用户点了哪个 RoleCard 显示哪个；未点则默认
+  // 显示 finalize finished（成品作者）作为入口，供"查看详情"展开。
   const running = tasks.value.find((x) => x.status === 'running')
   if (running) {
     return (focusedTask.value && focusedTask.value.status === 'running') ? focusedTask.value : running
   }
-  return focusedTask.value
+  return focusedTask.value || tasks.value.find((t) => t.agent_type === 'finalize' && t.status === 'finished') || null
 })
 
 const finalizeFinished = computed(() =>
@@ -50,7 +49,7 @@ const visible = computed(() => tasks.value.length > 0 && (activityTask.value || 
     <!-- Dock 纯遥测：只渲染一张 ActivityPreview 焦点卡 + 收尾卡。
          交互卡（HilCard / RecoveryCard / PostCard）归 ChatStream，经 injectTaskCards 注入消息流——
          Dock 不重复，避免双卡。awaiting_confirm / failed 时 Dock 整体退场。 -->
-    <AgentActivityPreview v-if="activityTask" :task="activityTask" @focus="$emit('focus-task', $event)" />
+    <AgentActivityPreview v-if="activityTask" :task="activityTask" />
     <FinishWrapCard v-if="finalizeFinished" :task="finalizeFinished" @done="$emit('finish-done', $event)" />
   </div>
 </template>

@@ -3,13 +3,14 @@ import { ref, watch } from 'vue'
 import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 
 const FINISH_WRAP_MS = 1200
+const FINISH_HOLD_MS = 1500
 
 const props = defineProps({
   task: { type: Object, required: true },
 })
 const emit = defineEmits(['done'])
 
-const phase = ref('idle') // idle → wrapping → done
+const phase = ref('idle') // idle → wrapping → done → idle（退场）
 
 watch(() => props.task?.status, (s) => {
   // 仅 finalize finished 触发；cancelled/failed 不触发
@@ -18,6 +19,8 @@ watch(() => props.task?.status, (s) => {
     setTimeout(() => {
       phase.value = 'done'
       emit('done', props.task.id)
+      // "创作完成"短暂停留后退场，不常驻占位
+      setTimeout(() => { phase.value = 'idle' }, FINISH_HOLD_MS)
     }, FINISH_WRAP_MS)
   }
 }, { immediate: true })
