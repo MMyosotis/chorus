@@ -29,6 +29,7 @@ from chorus.repositories.message import MessageRepository
 from chorus.repositories.session import SessionRepository
 from chorus.repositories.settings import SettingsRepository
 from chorus.repositories.task import TaskRepository
+from chorus.repositories.task_activities import TaskActivitiesRepository
 from chorus.repositories.task_artifacts import TaskArtifactsRepository
 from chorus.repositories.task_steps import TaskStepsRepository
 from chorus.repositories.trace import TraceRepository
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     task_repo = TaskRepository(conn)
     task_artifacts_repo = TaskArtifactsRepository(conn)
     task_steps_repo = TaskStepsRepository(conn)
+    task_activities_repo = TaskActivitiesRepository(conn)
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
     message_service = MessageService(msg_repo, trace_service)
@@ -85,10 +87,14 @@ def create_app() -> FastAPI:
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo, task_steps_repo,
+        task_activities_repo,
         tool_dispatcher, hooks, chat_models,
         MAX_TOKENS,
     )
-    task_service = TaskService(task_repo, task_artifacts_repo, task_steps_repo, session_service)
+    task_service = TaskService(
+        task_repo, task_artifacts_repo, task_steps_repo,
+        task_activities_repo, session_service,
+    )
     scheduler = TaskScheduler(
         task_repo, trace_service, subagent_service.run, session_service,
         SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT, POOL_SIZE,
