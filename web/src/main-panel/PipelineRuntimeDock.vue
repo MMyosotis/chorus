@@ -26,12 +26,15 @@ const hasInteraction = computed(() =>
 
 const activityTask = computed(() => {
   if (hasInteraction.value) return null
-  // 活动卡只服务"进行中"语义：焦点若是 running 优先，否则取任一 running。
-  // 整图无 running 时让位给 FinishWrapCard，不回退到末位 finished task——
-  // 否则汇总官 finished 后活动卡仍指向它，与收尾卡同框残留。
+  // 有 running：自动跟踪进行中任务（焦点 running 优先）——遥测。
+  // 无 running：退为回看模式，用户点了哪个 RoleCard 就显示哪个——
+  // 不自动占用末位 finished task，避免汇总官 finished 后活动卡残留；
+  // 但全图完成后点回看仍能展开焦点框。
   const running = tasks.value.find((x) => x.status === 'running')
-  if (!running) return null
-  return (focusedTask.value && focusedTask.value.status === 'running') ? focusedTask.value : running
+  if (running) {
+    return (focusedTask.value && focusedTask.value.status === 'running') ? focusedTask.value : running
+  }
+  return focusedTask.value
 })
 
 const finalizeFinished = computed(() =>
