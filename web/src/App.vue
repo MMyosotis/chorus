@@ -29,21 +29,11 @@ const messagesBySession = reactive({}) // { [id]: Message[] }
 const streamingBySession = reactive({}) // { [id]: boolean }
 const activeId = ref(null)
 
-// 单一焦点对象 + 展开布尔（评审决策：不保留 selectedTaskId/expandedTaskId 两套）
+// 单一焦点任务：点 RoleCard 切 focus（Dock 纯遥测，不再回传 focus/expand）
 const focusedTaskId = ref(null)
-const expanded = ref(false)
 
 function onTaskFocus(taskId) {
-  // 点 RoleCard 切 focus，不强制收起
   focusedTaskId.value = taskId
-}
-function onTaskExpand(taskId) {
-  if (focusedTaskId.value === taskId) {
-    expanded.value = !expanded.value
-  } else {
-    focusedTaskId.value = taskId
-    expanded.value = true
-  }
 }
 
 const messages = computed(() => messagesBySession[activeId.value] || [])
@@ -222,7 +212,6 @@ async function selectSession(id) {
   // 进入会话若已有 active task 图，恢复轮询（start 首 tick 拉图，active=False 自停）
   taskPolling.start(id)
   focusedTaskId.value = null
-  expanded.value = false
 }
 
 // 强制从服务器重拉 messages（轮询/done 后取回非流式 friendly_reply + progress 气泡）
@@ -549,17 +538,12 @@ onMounted(async () => {
       <PipelineRuntimeDock
         :graph="activeGraph"
         :focused-task-id="focusedTaskId"
-        :expanded="expanded"
         :session-id="activeId || ''"
-        @focus="onTaskFocus"
-        @expand="onTaskExpand"
-        @hil-retried="onHilRetried"
-        @hil-cancelled="onHilCancelled"
         @finish-done="forceReloadMessages(activeId)"
       />
       <InputBar :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
     </div>
-    <TeamPanel :graph="activeGraph" />
+    <TeamPanel :graph="activeGraph" :focused-task-id="focusedTaskId" @focus="onTaskFocus" />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
   <SettingsPanel v-model:open="settingsOpen" />

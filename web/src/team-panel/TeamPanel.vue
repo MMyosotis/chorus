@@ -1,21 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
 import RoleCard from './RoleCard.vue'
-import TaskProcess from './TaskProcess.vue'
 
-const props = defineProps({ graph: { type: Object, default: null } })
+const props = defineProps({
+  graph: { type: Object, default: null },
+  focusedTaskId: { type: String, default: null },
+})
+const emit = defineEmits(['focus'])
 
 const tasks = computed(() => {
   const ts = props.graph?.tasks || []
   return [...ts].sort((a, b) => a.seq - b.seq)
 })
 
-const expandedTaskId = ref(null)
-const expandedTask = computed(() => tasks.value.find((t) => t.id === expandedTaskId.value) || null)
-
-function onExpand(id) {
-  expandedTaskId.value = expandedTaskId.value === id ? null : id
+function onFocus(id) {
+  emit('focus', id)
 }
 </script>
 
@@ -27,9 +27,9 @@ function onExpand(id) {
         v-for="t in tasks"
         :key="t.id"
         :task="t"
-        @expand="onExpand"
+        :focused="t.id === focusedTaskId"
+        @focus="onFocus(t.id)"
       />
-      <TaskProcess v-if="expandedTask" :task="expandedTask" />
     </template>
   </aside>
 </template>
