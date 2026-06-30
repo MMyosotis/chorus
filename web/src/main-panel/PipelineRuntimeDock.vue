@@ -17,28 +17,34 @@ const tasks = computed(() => {
 
 const focusedTask = computed(() => tasks.value.find((t) => t.id === props.focusedTaskId) || null)
 
-// 交互卡归 ChatStream；Dock 只负责遥测。HIL/failed 时也显示对应 task 的只读活动，不放按钮。
-const mode = computed(() => {
-  const ts = tasks.value
-  const hil = ts.find((t) => t.status === 'awaiting_confirm')
-  if (hil) return { kind: 'activity', task: hil }
-  const failed = ts.find((t) => t.status === 'failed')
-  if (failed) return { kind: 'activity', task: failed }
+// 交互卡归 ChatStream（verdict B：Dock 纯遥测）。
+// awaiting_confirm / failed 时 Dock 不渲染活动卡——按钮在 ChatStream 的 HilCard / RecoveryCard，
+// 这里再显示就会双卡。FinishWrapCard 独立绑 finalize finished，与活动卡解耦。
+const hasInteraction = computed(() =>
+  tasks.value.some((t) => t.status === 'awaiting_confirm' || t.status === 'failed')
+)
+
+const activityTask = computed(() => {
+  if (hasInteraction.value) return null
   // 默认：焦点任务活动流（无焦点则取当前 running，再退到末位任务）
-  const t = focusedTask.value || ts.find((x) => x.status === 'running') || ts[ts.length - 1]
-  return { kind: 'activity', task: t }
+  return focusedTask.value || tasks.value.find((x) => x.status === 'running') || tasks.value[tasks.value.length - 1] || null
 })
+
+const finalizeFinished = computed(() =>
+  tasks.value.find((t) => t.status === 'finished' && t.agent_type === 'finalize') || null
+)
+
+// Dock 可见：有活动卡或收尾卡时才渲染，避免 HIL/failed 时空框
+const visible = computed(() => tasks.value.length > 0 && (activityTask.value || finalizeFinished.value))
 </script>
 
 <template>
-  <div v-if="tasks.length" class="runtime-dock">
-    <!-- Dock 纯遥测：只渲染一张 ActivityPreview 焦点卡。
-         交互卡（HilCard / RecoveryCard / PostCard）归 ChatStream，经 injectTaskCards 注入消息流——Dock 不重复，避免双卡。
-         hil(awaiting_confirm) 与 failed 在 Dock 仍显示只读活动，不放按钮。 -->
-    <template v-if="mode.kind === 'activity'">
-      <AgentActivityPreview :task="mode.task" />
-      <FinishWrapCard :task="mode.task" @done="$emit('finish-done', $event)" />
-    </template>
+  <div v-if="visible" class="runtime-dock">
+    <!-- Dock 纯遥测：只渲染一张 ActivityPreview 焦点卡 + 收尾卡。
+         交互卡（HilCard / RecoveryCard / PostCard）归 ChatStream，经 injectTaskCards 注入消息流——
+         Dock 不重复，避免双卡。awaiting_confirm / failed 时 Dock 整体退场。 -->
+    <AgentActivityPreview v-if="activityTask" :task="activityTask" />
+    <FinishWrapCard v-if="finalizeFinished" :task="finalizeFinished" @done="$emit('finish-done', $event)" />
   </div>
 </template>
 
