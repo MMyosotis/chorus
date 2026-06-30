@@ -279,6 +279,37 @@ def test_lease_takeover_prevents_stale_finalize():
     assert task_repo.get("t1").status == TaskStatus.RUNNING.value
 
 
+def test_lease_takeover_prevents_stale_failed_on_exception():
+    """运行租约（run-except 路径）：_call_model 抛异常时任务已被新 worker 抢占
+    （zombie 回收 + 重派，status 仍 running 但 started_at 漂移到 999）。旧 worker 的
+    run-except 租约校验失败 → 不 CAS failed、不写 failed activity。
+
+    run-except 是 subagent 终态 CAS 唯一未租约门控的位点——CAS 单独会成功（status 仍
+    running），从而偷走新 worker 的 task 到 failed 并写伪 failed activity；租约用
+    started_at 区分新旧 worker，旧 worker 早退不污染。与 _finalize 路径对称。
+    """
+    conn, msg_svc, trace_svc, task_repo, art_repo, steps_repo, act_repo = _setup()
+    _mk_image_task(task_repo, started_at=100.0, agent_type="idea")
+
+    def _takeover_and_boom():
+        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, started_at=999)
+        task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, started_at=999.0)
+        # 旧 worker 的网络调用随后抛异常（触发 run 的 except）
+        raise RuntimeError("model boom")
+
+    # _SideClient: side 先跑（takeover+raise），stream 永远不会被用到
+    client = _SideClient([(_takeover_and_boom, None)])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, steps_repo, act_repo, client, [])
+    sub.run("t1")
+    acts = act_repo.list_by_task("t1")
+    # 旧 worker 租约失效 → 不写 failed（CAS 单独会成功，租约拦下）
+    assert not any(a.event_type == "failed" for a in acts), \
+        f"租约漂移后不应写 failed activity，实际: {[a.event_type for a in acts]}"
+    # 任务仍 running（新 worker 持有，旧 worker 无权 CAS 到 failed）
+    assert task_repo.get("t1").status == TaskStatus.RUNNING.value
+
+
 def test_finalize_drift_writes_no_done_activity():
     """CAS 漂移（被 cancel）→ 不写 done/awaiting activity（与现有 I-2 一致）。"""
     from chorus.domain.task import Task

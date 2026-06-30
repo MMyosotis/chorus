@@ -78,27 +78,35 @@ class SubAgentService:
         self._max_tokens = max_tokens
 
     def run(self, task_id: str) -> None:
-        """后台线程入口：跑子 Agent ReAct，写库不连 SSE。异常 CAS running→failed。"""
-        try:
-            self._run_loop(task_id)
-        except Exception as e:
-            logger.exception("subagent task %s failed", task_id)
-            self._task_repo.cas_update(
-                task_id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value,
-                error=str(e), finished_at=time.time(),
-            )
-            task = self._task_repo.get(task_id)
-            if task is not None:
-                self._write_activity(task, failed_activity(task.agent_type, str(e)))
+        """后台线程入口：跑子 Agent ReAct，写库不连 SSE。异常 CAS running→failed。
 
-    def _run_loop(self, task_id: str) -> None:
+        run_started_at 在 try 外捕获并与 _run_loop 共用同一份租约令牌；except 路径据此
+        校验租约——闭 takeover 竞态：旧 worker 的 _call_model 抛异常时若任务已被新 worker
+        抢占（started_at 漂移），不 CAS failed、不写 failed activity，让新 worker 继续。
+        """
         task = self._task_repo.get(task_id)
         if task is None:
             logger.warning("subagent: task %s not found", task_id)
             return
-        # 运行租约：捕获本次 pending->running 的 started_at，写 activity/finalize 前校验未漂移。
-        # entry 校验是多线程竞态护栏（被 zombie reclaim + 新 worker 重 CAS 即 started_at 变）。
         run_started_at = task.started_at
+        try:
+            self._run_loop(task, run_started_at)
+        except Exception as e:
+            logger.exception("subagent task %s failed", task_id)
+            # 租约校验：漂移（被 zombie reclaim + 新 worker 重抢）则不动新 worker 的 task
+            if not self._lease_valid(task_id, run_started_at):
+                logger.info("subagent task %s lease expired on failure, skip failed CAS", task_id)
+                return
+            self._task_repo.cas_update(
+                task_id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value,
+                error=str(e), finished_at=time.time(),
+            )
+            self._write_activity(task, failed_activity(task.agent_type, str(e)))
+
+    def _run_loop(self, task, run_started_at: Optional[float]) -> None:
+        task_id = task.id
+        # 运行租约：run 已在 try 外捕获 started_at（与 except 共用同一份令牌）；entry 校验是
+        # 多线程竞态护栏（被 zombie reclaim + 新 worker 重 CAS 即 started_at 变）。
         if not self._lease_valid(task_id, run_started_at):
             logger.info("subagent task %s lease expired on enter, abort", task_id)
             return
