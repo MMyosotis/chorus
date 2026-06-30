@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 
 def test_transaction_commit():

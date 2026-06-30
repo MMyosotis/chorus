@@ -12,7 +12,7 @@ task-9 脚本 3 处 bug（本文件已修正）：
 2. subagent 的模型未包 ``ChatModelEntry``：脚本传裸 FakeClient，而 ``SubAgentService`` 取
    ``entry.client`` / ``entry.model_id``，裸 client 无 model_id。现已改用 stub provider。
 3. 调用了不存在的 repo 方法（原 /tmp 脚本的 ``list_by_session``）：正确方法是
-   ``find_by_session_statuses`` / ``find_pending_with_deps``（已对照 repositories/task.py 核实）。
+   ``find_by_session_statuses`` / ``find_pending_with_deps``（已对照 repo/task.py 核实）。
 
 4 条链路（任一断裂即测试失败）：
 1. ``supervisor.stream`` 产出 ``done``（create_plan 经 dispatch Terminal 建图）+ 落库 2 个 active task（idea + finalize）。
@@ -36,14 +36,14 @@ from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, TaskStatus, can_schedule
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.message import MessageRepository
+from chorus.repo.session import SessionRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService

@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 
 from chorus.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
-from chorus.repositories.task import TaskRepository
+from chorus.repo.task import TaskRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
 

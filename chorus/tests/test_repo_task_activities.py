@@ -9,8 +9,8 @@ import time
 
 import pytest
 
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task import TaskRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
 

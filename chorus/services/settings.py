@@ -10,7 +10,7 @@ from chorus.config import (
     CHAT_MODELS,
     IMAGE_MODELS,
 )
-from chorus.repositories.settings import SettingsRepository
+from chorus.repo.settings import SettingsRepository
 
 
 class SettingsService:

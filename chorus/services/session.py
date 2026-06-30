@@ -14,7 +14,7 @@ from typing import Callable
 
 from chorus.domain.session import Session, SessionSummary
 from chorus.domain.title import STORED_TITLE_MAX_LEN, normalize_title
-from chorus.repositories.session import SessionRepository
+from chorus.repo.session import SessionRepository
 
 
 class SessionService:

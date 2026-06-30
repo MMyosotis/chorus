@@ -21,10 +21,10 @@ from chorus.domain.task import (
     TaskStatus,
     select_display_pipeline,
 )
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
 from chorus.services.session import SessionService
 
 _TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)

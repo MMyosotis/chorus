@@ -8,13 +8,13 @@
 """
 from __future__ import annotations
 
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.message import MessageRow, MessageRepository
-from chorus.repositories.session import SessionRow, SessionRepository
-from chorus.repositories.task import TaskRow, TaskRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRow, TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepRow, TaskStepsRepository
-from chorus.repositories.trace import TraceRow, TraceRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.message import MessageRow, MessageRepository
+from chorus.repo.session import SessionRow, SessionRepository
+from chorus.repo.task import TaskRow, TaskRepository
+from chorus.repo.task_artifacts import TaskArtifactsRow, TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepRow, TaskStepsRepository
+from chorus.repo.trace import TraceRow, TraceRepository
 from chorus.tests._helpers import fresh_conn
 
 

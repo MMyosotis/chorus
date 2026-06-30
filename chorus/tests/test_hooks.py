@@ -20,9 +20,9 @@ from chorus.agents import AgentContext
 from chorus.domain.events import TitleUpdateEvent
 from chorus.domain.trace import TracePhase
 from chorus.hooks import ErrorFinalizer, TitlePostProcessor, TraceEmitter
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.message import MessageRepository
+from chorus.repo.session import SessionRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService

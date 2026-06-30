@@ -11,12 +11,12 @@ import pytest
 
 from chorus.domain.session import Session
 from chorus.domain.task import Task, TaskStatus
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.session import SessionRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
 from chorus.services.session import SessionService
 from chorus.services.task import ConflictError, TaskService
 from chorus.tests._helpers import fresh_conn, seed_session
@@ -124,7 +124,7 @@ def _conn_of(task_repo):
 
 def test_get_graph_includes_current_activity_and_timestamps():
     """get_graph 每个 task 含 updated_at/started_at/finished_at/metadata/current_activity。"""
-    from chorus.repositories.task_activities import TaskActivitiesRepository
+    from chorus.repo.task_activities import TaskActivitiesRepository
     from chorus.domain.task import Task
     conn = fresh_conn()
     seed_session(conn)
@@ -133,7 +133,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
     steps_repo = TaskStepsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     from chorus.services.session import SessionService
-    from chorus.repositories.session import SessionRepository
+    from chorus.repo.session import SessionRepository
     svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image", seq=1,
@@ -154,7 +154,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
 
 def test_get_activities_returns_serialized_list():
     """get_activities 返 dict 列表（TypeAdapter 序列化），按 seq 升序。"""
-    from chorus.repositories.task_activities import TaskActivitiesRepository
+    from chorus.repo.task_activities import TaskActivitiesRepository
     from chorus.domain.task import Task
     conn = fresh_conn()
     seed_session(conn)
@@ -163,7 +163,7 @@ def test_get_activities_returns_serialized_list():
     steps_repo = TaskStepsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     from chorus.services.session import SessionService
-    from chorus.repositories.session import SessionRepository
+    from chorus.repo.session import SessionRepository
     svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea", seq=1,

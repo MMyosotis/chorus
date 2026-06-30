@@ -21,7 +21,7 @@ from chorus.domain.message import (
     UserMessage,
 )
 from chorus.domain.message import build_history_view, build_provider_messages
-from chorus.repositories.message import MessageRepository
+from chorus.repo.message import MessageRepository
 from chorus.services.trace import TraceService
 
 # _append_with_seq 透传具体消息类型（model_copy 返回同型），保持调用方返回类型精确

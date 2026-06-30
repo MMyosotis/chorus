@@ -22,7 +22,7 @@ from chorus.domain.message import (
     ToolMessage,
     UserMessage,
 )
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS messages (

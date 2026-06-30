@@ -28,7 +28,7 @@ from chorus.domain.stream import consume_stream
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
-from chorus.repositories.task import TaskRepository
+from chorus.repo.task import TaskRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
@@ -130,8 +130,8 @@ class SupervisorService:
         pairs = []          # [(call, dispatch_result)] 按索引顺序
         terminal = None     # 首个 Terminal 的 (call, d)
         for _, tc in sorted(ctx.turn.accumulated_tool_calls.items()):
-            call = ToolCall(id=tc["id"], name=tc["name"], arguments=_parse_args(tc["arguments"]))
-            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments, "seq": tc.get("seq", 0)}
+            call = ToolCall(id=tc.id, name=tc.name, arguments=_parse_args(tc.arguments))
+            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments, "seq": tc.seq}
             list(self._hooks.trigger(
                 "PreToolUse", ctx, call_view,
                 self._tools.format_display(call.name, call.arguments),

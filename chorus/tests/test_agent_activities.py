@@ -23,14 +23,14 @@ from chorus.agents.subagent import SubAgentService
 from chorus.domain.session import Session
 from chorus.domain.task import TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.message import MessageRepository
+from chorus.repo.session import SessionRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider

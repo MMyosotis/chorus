@@ -4,10 +4,11 @@ version = "0.1.0"
 description = "多智能体爆款图文博文创作助手"
 requires-python = ">=3.9"
 dependencies = [
-    "openai>=1.0.0",
+    "openai>=2.44.0",
     "python-dotenv>=1.0.0",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.13.4",
 ]
 
 [dependency-groups]

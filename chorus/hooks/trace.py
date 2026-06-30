@@ -2,7 +2,7 @@
 
 原 TraceHook 逻辑去掉 Hook ABC，方法对齐 HookRegistry 事件点。各方法返回
 Iterable[SseEvent] | None；经 trigger 调用时由 trigger 负责 fail-open。
-payload 各 phase schema 见 repositories/trace.py 头注释。
+payload 各 phase schema 见 repo/trace.py 头注释。
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ class TraceEmitter:
     def _response_payload(ctx: AgentContext) -> dict:
         accumulated = ctx.turn.accumulated_tool_calls or {}
         tool_calls = [
-            {"id": e["id"], "name": e["name"], "arguments": e["arguments"]}
+            {"id": e.id, "name": e.name, "arguments": e.arguments}
             for _, e in sorted(accumulated.items())
         ]
         return {

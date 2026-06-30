@@ -10,8 +10,8 @@ import tempfile
 from pathlib import Path
 
 from chorus.domain.session import Session
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.session import SessionRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.session import SessionRepository
 
 
 def fresh_conn(db_name: str = "t.db") -> ConnectionFactory:

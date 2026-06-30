@@ -7,7 +7,7 @@ side effect 验 tasks 表落库。运行：.venv/bin/python -m kitty.tests.test_
 from __future__ import annotations
 
 from chorus.domain.task import ACTIVE_STATUSES
-from chorus.repositories.task import TaskRepository
+from chorus.repo.task import TaskRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 from chorus.tools.builtin.create_plan import CreatePlanTool
 from chorus.tools.framework import Reply, Terminal, ToolContext

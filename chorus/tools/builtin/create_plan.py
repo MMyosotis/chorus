@@ -18,8 +18,8 @@ from chorus.domain.task import (
     expand_pipeline,
     validate_steps,
 )
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.task import TaskRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.task import TaskRepository
 from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
 

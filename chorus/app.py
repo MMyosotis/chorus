@@ -24,15 +24,15 @@ from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
 from chorus.domain.title import TitleGenerationService
 from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.settings import SettingsRepository
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.message import MessageRepository
+from chorus.repo.session import SessionRepository
+from chorus.repo.settings import SettingsRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
+from chorus.repo.trace import TraceRepository
 from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
 from chorus.routes.sessions import router as sessions_router

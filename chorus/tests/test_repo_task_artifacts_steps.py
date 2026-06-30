@@ -7,9 +7,9 @@ from __future__ import annotations
 import pytest
 
 from chorus.domain.task import Task
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
 

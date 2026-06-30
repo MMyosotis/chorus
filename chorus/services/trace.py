@@ -10,7 +10,7 @@ import time
 from typing import Optional
 
 from chorus.domain.trace import TraceEntry, TracePhase
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.trace import TraceRepository
 
 
 class TraceService:

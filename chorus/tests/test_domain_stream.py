@@ -101,9 +101,9 @@ def test_tool_call_deltas_merged_by_index_no_event():
     assert events == []  # consume_stream 只累积工具调用, 不 yield ToolCallEvent
     assert set(result.tool_calls.keys()) == {0}
     merged = result.tool_calls[0]
-    assert merged["id"] == "c1"
-    assert merged["name"] == "gen"
-    assert merged["arguments"] == '{"a":1}'
+    assert merged.id == "c1"
+    assert merged.name == "gen"
+    assert merged.arguments == '{"a":1}'
     assert result.finish_reason == "tool_calls"
 
 
@@ -136,8 +136,8 @@ def test_drain_stream_returns_result_without_yielding():
 def test_drain_stream_accumulates_tool_calls():
     tc = _Delta(index=0, id="c1", function=_Delta(name="search", arguments='{"q":"猫"}'))
     result = drain_stream([_chunk({"tool_calls": [tc]}, "tool_calls")])
-    assert result.tool_calls[0]["arguments"] == '{"q":"猫"}'
-    assert result.tool_calls[0]["name"] == "search"
+    assert result.tool_calls[0].arguments == '{"q":"猫"}'
+    assert result.tool_calls[0].name == "search"
     assert result.finish_reason == "tool_calls"
     assert result.text_parts == []
 
@@ -155,7 +155,7 @@ def test_thinking_and_tool_share_seq_in_real_order():
     ]
     _events, result = _run(stream)
     assert [seg.seq for seg in result.thinking_segments] == [1, 3]
-    assert [result.tool_calls[0]["seq"], result.tool_calls[1]["seq"]] == [2, 4]
+    assert [result.tool_calls[0].seq, result.tool_calls[1].seq] == [2, 4]
 
 
 def main():

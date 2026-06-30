@@ -16,7 +16,7 @@ from typing import Optional
 from chorus.config import POOL_SIZE, SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
 from chorus.domain.task import TaskStatus, can_schedule
 from chorus.domain.trace import TracePhase
-from chorus.repositories.task import TaskRepository
+from chorus.repo.task import TaskRepository
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
 

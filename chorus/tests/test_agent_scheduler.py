@@ -12,10 +12,10 @@ from pathlib import Path
 from chorus.agents.scheduler import TaskScheduler
 from chorus.domain.session import Session
 from chorus.domain.task import Task, TaskStatus
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.session import SessionRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.trace import TraceService
 
 

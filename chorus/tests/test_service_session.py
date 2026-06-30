@@ -17,9 +17,9 @@ import threading
 import pytest
 
 from chorus.domain.session import Session, SessionSummary
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.message import MessageRepository
+from chorus.repo.session import SessionRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService

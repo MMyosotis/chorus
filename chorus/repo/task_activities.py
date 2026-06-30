@@ -1,4 +1,4 @@
-# kitty/repositories/task_activities.py
+# kitty/repo/task_activities.py
 """task_activities 表的唯一 SQL 入口（用户态活动流，1:N 关联 tasks）。
 
 与 task_steps 分工：task_activities = 用户可见活动（按事件粒度，append 递进）；
@@ -18,7 +18,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import TaskActivity
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS task_activities (

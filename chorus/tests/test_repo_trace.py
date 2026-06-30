@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from chorus.domain.trace import TraceEntry, TracePhase
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.trace import TraceRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
 

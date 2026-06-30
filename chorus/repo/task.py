@@ -1,4 +1,4 @@
-# kitty/repositories/task.py
+# kitty/repo/task.py
 """tasks 表的唯一 SQL 入口（哑查询，永不开事务，无业务规则）。
 
 表结构见 spec 3.1。CAS 合法性分工：domain 出 LEGAL_TRANSITIONS 规则表；service 方法
@@ -14,7 +14,7 @@ from typing import Iterable, Optional
 from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import Task
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS tasks (

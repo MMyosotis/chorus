@@ -9,7 +9,7 @@ import json
 import time
 from typing import Any
 
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS settings (

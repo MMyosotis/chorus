@@ -29,7 +29,7 @@ from chorus.domain.trace import (
     TraceEntry,
     TracePhase,
 )
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS traces (

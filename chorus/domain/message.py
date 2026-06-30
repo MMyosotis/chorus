@@ -39,6 +39,13 @@ class ToolCallSpec(BaseModel):
     name: str
     arguments_json: str
 
+    def to_provider_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "type": "function",
+            "function": {"name": self.name, "arguments": self.arguments_json},
+        }
+
 
 class AssistantMessage(_MessageBase):
     role: Literal["assistant"] = "assistant"
@@ -48,12 +55,7 @@ class AssistantMessage(_MessageBase):
     def to_provider_dict(self) -> dict:
         entry: dict = {"role": "assistant", "content": self.content}
         if self.tool_calls:
-            entry["tool_calls"] = [{
-                "id": call.id,
-                "type": "function",
-                "function": {"name": call.name, "arguments": call.arguments_json}}
-                for call in self.tool_calls
-            ]
+            entry["tool_calls"] = [call.to_provider_dict() for call in self.tool_calls]
         return entry
 
 

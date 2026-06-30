@@ -13,11 +13,11 @@ from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.session import SessionRepository
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.message import MessageRepository
+from chorus.repo.session import SessionRepository
+from chorus.repo.task import TaskRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService

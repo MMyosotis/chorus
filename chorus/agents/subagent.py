@@ -39,11 +39,11 @@ from chorus.domain.task.activity import (
     tool_started_activity,
 )
 from chorus.hooks import HookRegistry
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.task import TaskRepository
-from chorus.repositories.task_activities import TaskActivitiesRepository
-from chorus.repositories.task_artifacts import TaskArtifactsRepository
-from chorus.repositories.task_steps import TaskStepsRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_steps import TaskStepsRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.tools import ToolCall, ToolContext, ToolDispatch
@@ -219,8 +219,8 @@ class SubAgentService:
         tool_ctx = ToolContext(session_id=task.session_id)
         views: list[dict] = []
         for _, tc in sorted(result.tool_calls.items()):
-            call = ToolCall(id=tc["id"], name=tc["name"], arguments=_parse_args(tc["arguments"]))
-            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments, "seq": tc.get("seq", 0)}
+            call = ToolCall(id=tc.id, name=tc.name, arguments=_parse_args(tc.arguments))
+            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments, "seq": tc.seq}
             list(self._hooks.trigger(
                 "PreToolUse", ctx, call_view,
                 self._tools.format_display(call.name, call.arguments),
@@ -306,7 +306,7 @@ def _join_thinking(result: StreamResult) -> Optional[str]:
 
 def _tool_calls_view(result: StreamResult) -> list[dict]:
     return [
-        {"id": tc["id"], "name": tc["name"], "arguments": _parse_args(tc["arguments"])}
+        {"id": tc.id, "name": tc.name, "arguments": _parse_args(tc.arguments)}
         for _, tc in sorted(result.tool_calls.items())
     ]
 
@@ -316,8 +316,8 @@ def _assistant_view(result: StreamResult) -> dict:
         "role": "assistant",
         "content": "".join(result.text_parts) or None,
         "tool_calls": [
-            {"id": tc["id"], "type": "function",
-             "function": {"name": tc["name"], "arguments": tc["arguments"]}}
+            {"id": tc.id, "type": "function",
+             "function": {"name": tc.name, "arguments": tc.arguments}}
             for _, tc in sorted(result.tool_calls.items())
         ],
     }

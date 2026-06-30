@@ -16,7 +16,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import TaskArtifacts
-from chorus.repositories.connection import ConnectionFactory
+from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS task_artifacts (

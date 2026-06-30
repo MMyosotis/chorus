@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from chorus.config import BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL
 from chorus.domain.skill import SkillLoader
-from chorus.repositories.connection import ConnectionFactory
-from chorus.repositories.task import TaskRepository
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.task import TaskRepository
 from chorus.services.settings import SettingsService
 from chorus.tools.builtin import (
     BaiduSearchTool,

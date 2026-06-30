@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
 
+from chorus.domain.stream import ToolCallAccumulator
 from chorus.domain.trace import ThinkingSegment
 
 if TYPE_CHECKING:
@@ -23,7 +24,7 @@ class TurnState:
     iteration_index: int = 0
     message_id: str = ""
     text_parts: list[str] = field(default_factory=list)
-    accumulated_tool_calls: dict[int, dict] = field(default_factory=dict)
+    accumulated_tool_calls: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
     provider_messages: Optional[list[dict]] = None

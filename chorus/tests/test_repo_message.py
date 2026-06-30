@@ -4,8 +4,8 @@
 """
 from __future__ import annotations
 
-from chorus.repositories.message import MessageRepository
-from chorus.repositories.trace import TraceRepository
+from chorus.repo.message import MessageRepository
+from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import fresh_conn, seed_session
