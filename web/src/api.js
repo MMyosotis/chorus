@@ -195,6 +195,19 @@ export async function getTaskSteps(taskId) {
   return data.steps || []
 }
 
+export async function getTaskActivities(taskId, { limit = 50, afterSeq = null } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (afterSeq != null) params.set('after_seq', String(afterSeq))
+  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/activities?${params}`)
+  if (res.status === 404) {
+    const err = new Error('task not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`getTaskActivities failed: ${res.status}`)
+  return res.json()
+}
+
 export async function confirmTask(taskId, selected) {
   const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/confirm`, {
     method: 'POST',
