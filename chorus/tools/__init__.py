@@ -10,6 +10,7 @@ from chorus.tools.framework import (
     ToolContext,
     ToolDispatch,
     ToolOutcome,
+    ToolRunResult,
     WEB_SEARCH_TOOL_NAME,
 )
 from chorus.tools.models import ToolCall, ToolSchema
@@ -25,6 +26,7 @@ __all__ = [
     "Reply",
     "Terminal",
     "DispatchResult",
+    "ToolRunResult",
     "ToolDispatch",
     "build_tool_dispatch",
 ]

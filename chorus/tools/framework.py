@@ -44,14 +44,22 @@ class Terminal(ToolOutcome):
 
 
 @dataclass(frozen=True)
-class DispatchResult:
-    """dispatch 返回：outcome（含 content，走向 + 落库文本）+ duration_ms（dispatch 计时）。
+class ToolRunResult:
+    """工具 run 的显式双通道返回：outcome（模型可见）+ activity_meta（运行时结构化产物）。
 
-    content 不在此重复存——外界从 outcome.content 取；duration_ms 是 dispatch 新增信息，
-    outcome 上没有，故存此。
+    模型看到的 Reply.content 文本契约不变；activity_meta 只给 task_activities 翻译层用，
+    不偷偷挂在 ToolContext 上。工具可返回裸 ToolOutcome（视作 activity_meta=None）。
     """
     outcome: ToolOutcome
+    activity_meta: Optional[dict] = None
+
+
+@dataclass(frozen=True)
+class DispatchResult:
+    """dispatch 返回：outcome + duration_ms + activity_meta（由 ToolRunResult 透传）。"""
+    outcome: ToolOutcome
     duration_ms: int
+    activity_meta: Optional[dict] = None
 
 
 @dataclass
@@ -74,7 +82,7 @@ class Tool(ABC):
         return self.name
 
     @abstractmethod
-    def run(self, arguments: dict, ctx: ToolContext) -> ToolOutcome: ...
+    def run(self, arguments: dict, ctx: ToolContext) -> "ToolOutcome | ToolRunResult": ...
 
 
 class ToolDispatch:
@@ -114,27 +122,34 @@ class ToolDispatch:
     def dispatch(self, call: ToolCall, ctx: ToolContext) -> DispatchResult:
         """统一执行入口：找工具、try/except 包错、计时，返回 DispatchResult。
 
-        - 正常：outcome = tool.run(...)（Reply 或 Terminal，content 即落库文本）。
-        - 意外异常：强制 Reply(错误文本)，框架 fail-open 兜底，不掺业务走向。
-        duration_ms 是 dispatch 计时；content 在 outcome 上，不另存。
+        工具 run 可返回裸 ToolOutcome 或 ToolRunResult(outcome, activity_meta)；
+        此处 normalize 成 DispatchResult。意外异常 fail-open 兜底转 Reply，activity_meta=None。
         ctx 由调用方造（ToolContext(session_id=...)），不经工厂封装。
         """
         tool = self._tools.get(call.name)
         if tool is None:
             return DispatchResult(
                 outcome=Reply(f"Error: unknown tool '{call.name}'"),
-                duration_ms=0,
+                duration_ms=0, activity_meta=None,
             )
 
         start = perf_counter()
         try:
-            outcome = tool.run(call.arguments, ctx)
+            raw = tool.run(call.arguments, ctx)
         except Exception as e:
             return DispatchResult(
                 outcome=Reply(f"Error executing tool '{call.name}': {e}"),
                 duration_ms=int((perf_counter() - start) * 1000),
+                activity_meta=None,
+            )
+        if isinstance(raw, ToolRunResult):
+            return DispatchResult(
+                outcome=raw.outcome,
+                duration_ms=int((perf_counter() - start) * 1000),
+                activity_meta=raw.activity_meta,
             )
         return DispatchResult(
-            outcome=outcome,
+            outcome=raw,
             duration_ms=int((perf_counter() - start) * 1000),
+            activity_meta=None,
         )

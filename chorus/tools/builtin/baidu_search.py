@@ -6,7 +6,7 @@ client 只负责真实 API 调用（成功返原始 list[dict]，失败返错误
 
 from __future__ import annotations
 
-from chorus.tools.framework import Reply, Tool, ToolContext
+from chorus.tools.framework import Reply, Tool, ToolContext, ToolRunResult
 from chorus.tools.clients.baidu_search import BaiduSearchClient
 
 
@@ -26,6 +26,17 @@ def _format_references(refs: list[dict]) -> str:
         meta = f"  ({' · '.join(meta_parts)})" if meta_parts else ""
         lines.append(f"[{i}] {title}{meta}\n    URL: {url}\n    摘要: {content or '(无摘要)'}")
     return "\n".join(lines)
+
+
+def _to_meta_refs(refs: list[dict]) -> list[dict]:
+    return [
+        {
+            "title": (r.get("title") or "").strip() or "(无标题)",
+            "url": (r.get("url") or "").strip(),
+            "snippet": (r.get("content") or "").strip().replace("\n", " ")[:400],
+        }
+        for r in refs
+    ]
 
 
 class BaiduSearchTool(Tool):
@@ -66,14 +77,19 @@ class BaiduSearchTool(Tool):
         suffix = f" ({recency})" if recency in {"week", "month", "semiyear", "year"} else ""
         return f"百度搜索: {q or '(空查询)'}{suffix}"
 
-    def run(self, arguments: dict, ctx: ToolContext) -> Reply:
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         query = (arguments.get("query") or "").strip()
         if not query:
-            return Reply("Error: query 不能为空")
+            return ToolRunResult(Reply("Error: query 不能为空"))
         try:
             top_k = max(1, min(20, int(arguments.get("top_k", 8))))
         except (TypeError, ValueError):
             top_k = 8
 
         result = self._client.search(query, arguments.get("recency"), top_k)
-        return Reply(result if isinstance(result, str) else _format_references(result))
+        if isinstance(result, str):
+            return ToolRunResult(Reply(result))  # 错误文本，无结构化产物
+        return ToolRunResult(
+            Reply(_format_references(result)),
+            activity_meta={"refs": _to_meta_refs(result)},
+        )

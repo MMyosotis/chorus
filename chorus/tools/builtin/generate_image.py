@@ -14,7 +14,7 @@ from typing import Optional, Protocol
 from chorus.config import IMAGE_MODELS
 from chorus.services.settings import SettingsService
 from chorus.tools.clients.ark_image import ArkImageClient
-from chorus.tools.framework import Reply, Tool, ToolContext
+from chorus.tools.framework import Reply, Tool, ToolContext, ToolRunResult
 
 # 测试模式短路返回的固定 URL（不调真实 API，验证全链路渲染用）。
 _FAKE_URL = "https://gips2.baidu.com/it/u=195724436,3554684702&fm=3028&app=3028&f=JPEG&fmt=auto?w=1280&h=960"
@@ -93,13 +93,13 @@ class GenerateImageTool(Tool):
             prompt = prompt[:60] + "…"
         return f"生成图像: {prompt or '(空提示词)'}"
 
-    def run(self, arguments: dict, ctx: ToolContext) -> Reply:
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         if self._settings.get_image_test_mode():
-            return Reply(_FAKE_URL)
-
+            return ToolRunResult(Reply(_FAKE_URL), activity_meta={"url": _FAKE_URL})
         entry = self._provider.get_entry()
-        return Reply(entry.client.generate(
+        url = entry.client.generate(
             arguments.get("prompt", ""),
             entry.model_id,
             arguments.get("size", "1024x1024"),
-        ))
+        )
+        return ToolRunResult(Reply(url), activity_meta={"url": url})
