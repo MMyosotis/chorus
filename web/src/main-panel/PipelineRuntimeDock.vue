@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import AgentActivityPreview from './AgentActivityPreview.vue'
 import AgentWorkCard from './AgentWorkCard.vue'
-import RecoveryCard from './RecoveryCard.vue'
 import FinishWrapCard from './FinishWrapCard.vue'
 
 const props = defineProps({
@@ -11,7 +10,7 @@ const props = defineProps({
   expanded: { type: Boolean, default: false },
   sessionId: { type: String, default: '' },
 })
-const emit = defineEmits(['focus', 'expand', 'hil-confirmed', 'hil-retried', 'hil-cancelled', 'finish-done'])
+const emit = defineEmits(['finish-done'])
 
 const tasks = computed(() => {
   const ts = props.graph?.tasks || []
@@ -38,15 +37,12 @@ const mode = computed(() => {
 
 <template>
   <div v-if="tasks.length" class="runtime-dock">
-    <!-- HIL：复用主面板 ChatWindow 的 HilCard 注入路径；Dock 这里只对 failed/activity 渲染。
-         HIL 仍由 injectTaskCards 注入消息流，Dock 不重复，避免双卡。 -->
-    <template v-if="mode.kind === 'failed'">
-      <RecoveryCard :task="mode.task" :session-id="sessionId"
-        @retried="$emit('hil-retried', $event)" @cancelled="$emit('hil-cancelled', $event)" />
-    </template>
-    <template v-else-if="mode.task">
+    <!-- Dock 纯遥测：仅渲染 detail/activity 的实时活动流（AgentWorkCard + AgentActivityPreview + FinishWrapCard）。
+         交互卡（HilCard / RecoveryCard / PostCard）归 ChatStream，经 injectTaskCards 注入消息流——Dock 不重复，避免双卡。
+         hil(awaiting_confirm) 与 failed 在 Dock 不渲染任何卡片（chat 流已承载交互）。 -->
+    <template v-if="mode.kind === 'detail' || mode.kind === 'activity'">
       <AgentWorkCard :task="mode.task" />
-      <AgentActivityPreview v-if="mode.kind === 'detail' || mode.kind === 'activity'" :task="mode.task" />
+      <AgentActivityPreview :task="mode.task" />
       <FinishWrapCard :task="mode.task" @done="$emit('finish-done', $event)" />
     </template>
   </div>
