@@ -10,6 +10,7 @@ TaskArtifactsRow.from_values / to_domain。upsert 收原语（签名不变），
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -21,7 +22,8 @@ _DDL = """
 CREATE TABLE IF NOT EXISTS task_artifacts (
     task_id     TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
     artifacts   TEXT,
-    narrative   TEXT
+    narrative   TEXT,
+    updated_at  REAL
 );
 """
 
@@ -34,6 +36,7 @@ class TaskArtifactsRow(BaseModel):
     task_id: str
     artifacts: Optional[str] = None
     narrative: Optional[str] = None
+    updated_at: Optional[float] = None
 
     def to_domain(self) -> TaskArtifacts:
         return TaskArtifacts(
@@ -44,13 +47,14 @@ class TaskArtifactsRow(BaseModel):
 
     @classmethod
     def from_values(
-        cls, task_id: str, artifacts: Any, narrative: Any
+        cls, task_id: str, artifacts: Any, narrative: Any, updated_at: Optional[float] = None,
     ) -> "TaskArtifactsRow":
         """原语 → Row（签名与 upsert 对齐，不收领域对象）。narrative 允许 None。"""
         return cls(
             task_id=task_id,
             artifacts=json.dumps(artifacts, ensure_ascii=False) if artifacts is not None else None,
             narrative=json.dumps(narrative, ensure_ascii=False) if narrative is not None else None,
+            updated_at=updated_at,
         )
 
 
@@ -62,15 +66,25 @@ class TaskArtifactsRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """幂等加列（无迁移框架，CREATE TABLE IF NOT EXISTS 不覆盖已存在的旧表）。"""
+        cols = {
+            row["name"]
+            for row in self._conn.get().execute("PRAGMA table_info(task_artifacts)").fetchall()
+        }
+        if "updated_at" not in cols:
+            self._conn.get().execute("ALTER TABLE task_artifacts ADD COLUMN updated_at REAL")
 
     def upsert(
         self, task_id: str, artifacts: Any, narrative: Any
     ) -> None:
-        row = TaskArtifactsRow.from_values(task_id, artifacts, narrative)
+        row = TaskArtifactsRow.from_values(task_id, artifacts, narrative, time.time())
         self._conn.get().execute(
             f"INSERT INTO task_artifacts({_COLS}) VALUES ({_PH}) "
             "ON CONFLICT(task_id) DO UPDATE SET "
-            "artifacts=excluded.artifacts, narrative=excluded.narrative",
+            "artifacts=excluded.artifacts, narrative=excluded.narrative, updated_at=excluded.updated_at",
             row.model_dump(),
         )
 

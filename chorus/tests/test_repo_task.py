@@ -113,6 +113,30 @@ def test_touch_updated_at():
     repo.touch_updated_at("nope")
 
 
+def test_cas_update_started_and_finished_at():
+    """started_at/finished_at 经 cas_update 写入（裸 float，进 _CAS_FIELDS）。"""
+    repo, _ = _repo()
+    repo.insert(_mk("t1", status="pending"))
+    assert repo.cas_update("t1", "pending", "running", started_at=100.0) is True
+    t = repo.get("t1")
+    assert t.status == "running" and t.started_at == 100.0
+    # running -> awaiting_confirm 不写 finished_at（HIL 阻塞态非 terminal）
+    assert repo.cas_update("t1", "running", "awaiting_confirm") is True
+    assert repo.get("t1").finished_at is None
+    # awaiting_confirm -> finished 才写 finished_at
+    assert repo.cas_update("t1", "awaiting_confirm", "finished", finished_at=200.0) is True
+    assert repo.get("t1").finished_at == 200.0
+
+
+def test_metadata_persists_via_insert_not_cas():
+    """metadata 走 insert，不进 _CAS_FIELDS（cas_update 带 metadata 须报错）。"""
+    repo, _ = _repo()
+    repo.insert(_mk("t1", metadata={"progress_total": 3}))
+    assert repo.get("t1").metadata == {"progress_total": 3}
+    with pytest.raises(ValueError):
+        repo.cas_update("t1", "pending", "running", metadata={"x": 1})
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

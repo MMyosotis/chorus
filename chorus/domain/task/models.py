@@ -49,6 +49,9 @@ class Task:
     dependencies: list[str] = Field(default_factory=list)  # 前置 task_id 列表
     feedback: Optional[dict] = None  # retry 时注入的用户反馈
     error: Optional[str] = None
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    metadata: Optional[dict] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -162,6 +165,33 @@ class TaskStep:
     tool_calls: Optional[list[dict]] = None
     tool_results: Optional[list[dict]] = None
     finish_reason: Optional[str] = None
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class TaskActivity:
+    """task_activities 表一行的领域模型（1:N，用户态活动流，按事件粒度 append）。
+
+    summary_json/progress_json/artifact_preview_json 在 Row 层已反序列化为 dict；
+    序列化给前端用 TypeAdapter.dump_python（pydantic dataclass 无 model_dump）。
+    """
+
+    id: str
+    task_id: str
+    seq: int
+    event_type: str
+    action_type: str
+    role_line: str
+    status: str
+    created_at: float
+    updated_at: float
+    iteration: Optional[int] = None
+    tool_name: Optional[str] = None
+    tool_call_id: Optional[str] = None
+    title: Optional[str] = None
+    detail_md: Optional[str] = None
+    summary_json: Optional[dict] = None
+    progress_json: Optional[dict] = None
+    artifact_preview_json: Optional[dict] = None
 
 
 @dataclass

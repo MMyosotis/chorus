@@ -60,11 +60,16 @@ def expand_pipeline(
     for i, s in enumerate(steps):
         deps_ids = [ids[dep] for dep in s.deps]
         invoke = _render_skeleton(intent, s)
+        metadata = (
+            {"goal": f"生成 {intent.image_count} 张配图",
+             "progress_total": intent.image_count, "progress_unit": "张图"}
+            if s.agent_type == "image" else None
+        )
         tasks.append(Task(
             id=ids[i], session_id=session_id, pipeline_id=pipeline_id,
             agent_type=s.agent_type, seq=i + 1, status=TaskStatus.PENDING.value,
             invoke_message=invoke, dependencies=deps_ids,
-            created_at=now, updated_at=now,
+            created_at=now, updated_at=now, metadata=metadata,
         ))
     return tasks
 

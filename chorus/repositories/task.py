@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     error          TEXT,
     created_at     REAL NOT NULL,
     updated_at     REAL NOT NULL,
+    started_at     REAL,
+    finished_at    REAL,
+    metadata       TEXT,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -37,7 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 """
 
 # cas_update 允许顺带更新的字段（白名单，防 SQL 注入与误写）
-_CAS_FIELDS = {"error", "feedback", "updated_at"}
+_CAS_FIELDS = {"error", "feedback", "updated_at", "started_at", "finished_at"}
 
 
 class TaskRow(BaseModel):
@@ -60,6 +63,9 @@ class TaskRow(BaseModel):
     error: Optional[str] = None
     created_at: float
     updated_at: float
+    started_at: Optional[float] = None
+    finished_at: Optional[float] = None
+    metadata: Optional[str] = None
 
     def to_domain(self) -> Task:
         try:
@@ -76,6 +82,8 @@ class TaskRow(BaseModel):
             invoke_message=self.invoke_message, dependencies=deps,
             feedback=feedback, error=self.error,
             created_at=self.created_at, updated_at=self.updated_at,
+            started_at=self.started_at, finished_at=self.finished_at,
+            metadata=json.loads(self.metadata) if self.metadata else None,
         )
 
     @classmethod
@@ -87,6 +95,8 @@ class TaskRow(BaseModel):
             dependencies=json.dumps(task.dependencies, ensure_ascii=False),
             feedback=json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
             error=task.error, created_at=task.created_at, updated_at=task.updated_at,
+            started_at=task.started_at, finished_at=task.finished_at,
+            metadata=json.dumps(task.metadata, ensure_ascii=False) if task.metadata is not None else None,
         )
 
 
@@ -98,6 +108,20 @@ class TaskRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
+        self._ensure_columns()
+
+    def _ensure_columns(self) -> None:
+        """幂等加列（无迁移框架，CREATE TABLE IF NOT EXISTS 不覆盖已存在的旧表）。"""
+        cols = {
+            row["name"]
+            for row in self._conn.get().execute("PRAGMA table_info(tasks)").fetchall()
+        }
+        if "started_at" not in cols:
+            self._conn.get().execute("ALTER TABLE tasks ADD COLUMN started_at REAL")
+        if "finished_at" not in cols:
+            self._conn.get().execute("ALTER TABLE tasks ADD COLUMN finished_at REAL")
+        if "metadata" not in cols:
+            self._conn.get().execute("ALTER TABLE tasks ADD COLUMN metadata TEXT")
 
     def insert(self, task: Task) -> None:
         row = TaskRow.from_domain(task)
@@ -116,19 +140,25 @@ class TaskRepository:
         self, task_id: str, from_status: str, to_status: str, **fields
     ) -> bool:
         """原子原语：UPDATE ... WHERE id=? AND status=from_status，看 rowcount。
-        不管翻转合不合法（合法性由 domain LEGAL_TRANSITIONS + service 保证）。
-        **fields 仅允许 error/feedback/updated_at。
+        **fields 仅允许 error/feedback/updated_at/started_at/finished_at。
+        error/feedback 走 JSON；started_at/finished_at 是裸 float。
         """
         bad = set(fields) - _CAS_FIELDS
         if bad:
             raise ValueError(f"cas_update 不允许字段: {bad}")
         sets = ["status=?", "updated_at=?"]
         params: list[object] = [to_status, fields.get("updated_at", time.time())]
-        for f in ("error", "feedback"):
+        # JSON 列
+        if "error" in fields:
+            sets.append("error=?"); params.append(fields["error"])
+        if "feedback" in fields:
+            val = fields["feedback"]
+            sets.append("feedback=?")
+            params.append(json.dumps(val, ensure_ascii=False) if val is not None else None)
+        # 裸 float 列
+        for f in ("started_at", "finished_at"):
             if f in fields:
-                sets.append(f"{f}=?")
-                val = fields[f]
-                params.append(json.dumps(val, ensure_ascii=False) if f == "feedback" and val is not None else val)
+                sets.append(f"{f}=?"); params.append(fields[f])
         params.extend([task_id, from_status])
         cur = self._conn.get().execute(
             f"UPDATE tasks SET {', '.join(sets)} WHERE id=? AND status=?", params
