@@ -26,8 +26,12 @@ const hasInteraction = computed(() =>
 
 const activityTask = computed(() => {
   if (hasInteraction.value) return null
-  // 默认：焦点任务活动流（无焦点则取当前 running，再退到末位任务）
-  return focusedTask.value || tasks.value.find((x) => x.status === 'running') || tasks.value[tasks.value.length - 1] || null
+  // 活动卡只服务"进行中"语义：焦点若是 running 优先，否则取任一 running。
+  // 整图无 running 时让位给 FinishWrapCard，不回退到末位 finished task——
+  // 否则汇总官 finished 后活动卡仍指向它，与收尾卡同框残留。
+  const running = tasks.value.find((x) => x.status === 'running')
+  if (!running) return null
+  return (focusedTask.value && focusedTask.value.status === 'running') ? focusedTask.value : running
 })
 
 const finalizeFinished = computed(() =>
