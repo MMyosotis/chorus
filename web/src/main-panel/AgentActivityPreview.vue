@@ -6,6 +6,7 @@ import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 const props = defineProps({
   task: { type: Object, default: null }, // graph.tasks 项
 })
+const emit = defineEmits(['focus'])
 
 const activities = ref([])
 const afterSeq = ref(0)
@@ -80,7 +81,7 @@ const recent = computed(() => activities.value.slice(-2))
         <div class="ap-title">{{ roleName }}正在推进</div>
         <div class="ap-line">{{ roleLine }}</div>
       </div>
-      <span class="detail-pill">查看详情</span>
+      <span class="detail-pill" @click="emit('focus', props.task?.id)">查看详情</span>
     </div>
 
     <div v-if="progress?.total" class="mini-progress">
@@ -157,7 +158,10 @@ const recent = computed(() => activities.value.slice(-2))
   font-size: 11px;
   font-weight: 850;
   white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
 }
+.detail-pill:hover { background: var(--ch-orange-mid); color: #fff; }
 .mini-progress {
   display: grid;
   grid-template-columns: auto 1fr;

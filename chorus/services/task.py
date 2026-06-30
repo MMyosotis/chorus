@@ -101,7 +101,10 @@ class TaskService:
         """任务图视图：active pipeline 优先，无 active 选最近 finished。"""
         active_tasks = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         if active_tasks:
-            return self._graph_dict(active_tasks[0].pipeline_id, active_tasks, True)
+            # 渲染整图（含已 finished 的前序 task），否则团队成员会随完成逐个消失
+            pipeline_id = active_tasks[0].pipeline_id
+            all_tasks = self._task_repo.find_by_pipeline(pipeline_id)
+            return self._graph_dict(pipeline_id, all_tasks, True)
         # 无 active：找该 session 所有终态 task，按 pipeline 分组取最近 finished
         terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
         if not terminal:

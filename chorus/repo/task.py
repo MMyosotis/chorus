@@ -223,6 +223,14 @@ class TaskRepository:
         ).fetchall()
         return [TaskRow(**dict(r)).to_domain() for r in rows]
 
+    def find_by_pipeline(self, pipeline_id: str) -> list[Task]:
+        """该 pipeline 全部 task（按 seq 升序），含终态。哑查询。"""
+        rows = self._conn.get().execute(
+            f"SELECT {_COLS} FROM tasks WHERE pipeline_id=? ORDER BY seq",
+            (pipeline_id,),
+        ).fetchall()
+        return [TaskRow(**dict(r)).to_domain() for r in rows]
+
     def count_by_session_statuses(
         self, session_id: str, statuses: Iterable[str]
     ) -> int:

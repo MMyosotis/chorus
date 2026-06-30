@@ -8,7 +8,7 @@ const props = defineProps({
   focusedTaskId: { type: String, default: null },
   sessionId: { type: String, default: '' },
 })
-const emit = defineEmits(['finish-done'])
+const emit = defineEmits(['finish-done', 'focus-task'])
 
 const tasks = computed(() => {
   const ts = props.graph?.tasks || []
@@ -47,7 +47,7 @@ const visible = computed(() => tasks.value.length > 0 && (activityTask.value || 
     <!-- Dock 纯遥测：只渲染一张 ActivityPreview 焦点卡 + 收尾卡。
          交互卡（HilCard / RecoveryCard / PostCard）归 ChatStream，经 injectTaskCards 注入消息流——
          Dock 不重复，避免双卡。awaiting_confirm / failed 时 Dock 整体退场。 -->
-    <AgentActivityPreview v-if="activityTask" :task="activityTask" />
+    <AgentActivityPreview v-if="activityTask" :task="activityTask" @focus="$emit('focus-task', $event)" />
     <FinishWrapCard v-if="finalizeFinished" :task="finalizeFinished" @done="$emit('finish-done', $event)" />
   </div>
 </template>
