@@ -11,6 +11,9 @@ dist
 /.claude/
 /.superpowers/
 
+# docs
+/docs
+
 # chorus
 /data/
 .env
