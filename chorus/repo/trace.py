@@ -1,6 +1,6 @@
 """traces 表的唯一 SQL 入口。
 
-表结构：traces(id, session_id, message_id, task_id, source, iteration, phase, ts, payload_json)，
+表结构：traces(id, session_id, message_id, task_id, source, phase, ts, payload_json)，
 索引 idx_traces_session_ts / idx_traces_message / idx_traces_task。trace 与 message 物理解耦，
 仅靠 message_id 关联。
 
@@ -38,7 +38,6 @@ CREATE TABLE IF NOT EXISTS traces (
     message_id      TEXT,
     task_id         TEXT,
     source          TEXT NOT NULL DEFAULT 'supervisor',
-    iteration       INTEGER,
     phase           TEXT NOT NULL,
     ts              REAL NOT NULL,
     payload_json    TEXT NOT NULL,
@@ -60,7 +59,6 @@ class TraceRow(BaseModel):
     message_id: Optional[str] = None
     task_id: Optional[str] = None
     source: str = "supervisor"
-    iteration: Optional[int] = None
     phase: str
     ts: float
     payload_json: str
@@ -76,7 +74,6 @@ class TraceRow(BaseModel):
             message_id=self.message_id,
             task_id=self.task_id,
             source=self.source or "supervisor",
-            iteration=self.iteration,
             phase=TracePhase(self.phase),
             ts=self.ts,
             payload=payload,
@@ -90,7 +87,6 @@ class TraceRow(BaseModel):
             message_id=entry.message_id,
             task_id=entry.task_id,
             source=entry.source,
-            iteration=entry.iteration,
             phase=entry.phase.value,
             ts=entry.ts,
             payload_json=json.dumps(entry.payload, ensure_ascii=False),

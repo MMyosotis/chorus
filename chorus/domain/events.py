@@ -56,7 +56,6 @@ class ToolResultEvent(_EventBase):
 class TraceEvent(_EventBase):
     type: Literal["trace"] = "trace"
     phase: TracePhase
-    iteration: Optional[int] = None
     message_id: Optional[str] = None
     ts: float
     payload: dict

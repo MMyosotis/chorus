@@ -79,7 +79,6 @@ def test_trace_propagates_subagent_source_and_task_id():
     emitter = TraceEmitter(trace_svc, max_tokens=512)
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
-    ctx.turn.iteration_index = 2
     ctx.chat_model = "fake-model"
 
     events = list(emitter.before_model_request(ctx))
@@ -88,7 +87,6 @@ def test_trace_propagates_subagent_source_and_task_id():
     ev = events[0]
     assert ev.type == "trace"
     assert ev.phase is TracePhase.MODEL_REQUEST
-    assert ev.iteration == 2
     assert ev.message_id == "m1"
     assert ev.payload["model"] == "fake-model"
     assert ev.payload["max_tokens"] == 512

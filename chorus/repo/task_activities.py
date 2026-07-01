@@ -1,8 +1,7 @@
 # kitty/repo/task_activities.py
 """task_activities 表的唯一 SQL 入口（用户态活动流，1:N 关联 tasks）。
 
-与 task_steps 分工：task_activities = 用户可见活动（按事件粒度，append 递进）；
-task_steps = raw ReAct iteration（开发者/兼容期）。哑查询，永不开事务。
+用户可见活动：按事件粒度 append 递进。哑查询，永不开事务。
 
 映射归框架（命名绑定 + model_fields 派生列名），形状转换（3×json）集中在
 TaskActivityRow.from_values / to_domain。append 收原语（签名不变），内部生成
@@ -25,7 +24,6 @@ CREATE TABLE IF NOT EXISTS task_activities (
     id                    TEXT PRIMARY KEY,
     task_id               TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     seq                   INTEGER NOT NULL,
-    iteration             INTEGER,
     event_type            TEXT NOT NULL,
     tool_name             TEXT,
     tool_call_id          TEXT,
@@ -54,7 +52,6 @@ class TaskActivityRow(BaseModel):
     id: str
     task_id: str
     seq: int
-    iteration: Optional[int] = None
     event_type: str
     tool_name: Optional[str] = None
     tool_call_id: Optional[str] = None
@@ -69,7 +66,7 @@ class TaskActivityRow(BaseModel):
 
     def to_domain(self) -> TaskActivity:
         return TaskActivity(
-            id=self.id, task_id=self.task_id, seq=self.seq, iteration=self.iteration,
+            id=self.id, task_id=self.task_id, seq=self.seq,
             event_type=self.event_type,
             tool_name=self.tool_name, tool_call_id=self.tool_call_id,
             role_line=self.role_line, detail_md=self.detail_md,
@@ -83,14 +80,14 @@ class TaskActivityRow(BaseModel):
     def from_values(
         cls, task_id: str, seq: int, event_type: str,
         role_line: str, status: str, now: float,
-        *, iteration: Optional[int] = None, tool_name: Optional[str] = None,
+        *, tool_name: Optional[str] = None,
         tool_call_id: Optional[str] = None,
         detail_md: Optional[str] = None, summary_json: Any = None,
         progress_json: Any = None, artifact_preview_json: Any = None,
         updated_at: Optional[float] = None,
     ) -> "TaskActivityRow":
         return cls(
-            id=uuid.uuid4().hex, task_id=task_id, seq=seq, iteration=iteration,
+            id=uuid.uuid4().hex, task_id=task_id, seq=seq,
             event_type=event_type, tool_name=tool_name,
             tool_call_id=tool_call_id, role_line=role_line,
             detail_md=detail_md,
@@ -123,7 +120,7 @@ class TaskActivitiesRepository:
 
     def append(
         self, task_id: str, event_type: str, role_line: str,
-        status: str = "running", *, iteration: Optional[int] = None,
+        status: str = "running", *,
         tool_name: Optional[str] = None, tool_call_id: Optional[str] = None,
         detail_md: Optional[str] = None,
         summary_json: Any = None, progress_json: Any = None,
@@ -133,7 +130,7 @@ class TaskActivitiesRepository:
         seq = self.next_seq(task_id)
         row = TaskActivityRow.from_values(
             task_id, seq, event_type, role_line, status, now,
-            iteration=iteration, tool_name=tool_name, tool_call_id=tool_call_id,
+            tool_name=tool_name, tool_call_id=tool_call_id,
             detail_md=detail_md, summary_json=summary_json,
             progress_json=progress_json, artifact_preview_json=artifact_preview_json,
             updated_at=updated_at,

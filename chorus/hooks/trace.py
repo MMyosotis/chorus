@@ -52,12 +52,11 @@ class TraceEmitter:
             message_id=ctx.turn.message_id or None,
             source=ctx.source,
             task_id=ctx.task_id,
-            iteration=ctx.turn.iteration_index,
             phase=phase,
             payload=payload,
         )
         return TraceEvent(
-            phase=phase, iteration=ctx.turn.iteration_index,
+            phase=phase,
             message_id=ctx.turn.message_id or None, ts=ts, payload=payload,
         )
 

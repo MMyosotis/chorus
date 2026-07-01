@@ -3,8 +3,8 @@
 
 与 supervisor 共享纯件（drain_stream / ToolDispatch.dispatch / render_invoke_message /
 parse_output / 状态机），不抽共用 ReAct 基类（决策模式不同）。主流程单文件可读全：
-load task → render invoke → 循环 ReAct（heartbeat→drain→exec tools→task_steps.append
-→无 tool_call 则 parse+persist+return）→ 异常 CAS running→failed。
+load task → render invoke → 循环 ReAct（heartbeat→drain→exec tools→无 tool_call 则
+parse+persist+return）→ 异常 CAS running→failed。
 横切（trace）经扁平 hook 注册表，ctx 带 source=subagent + task_id；hook 事件用 list()
 消费丢弃（subagent 不连 SSE，trace 已在 hook 内写库）。
 """
@@ -43,7 +43,6 @@ from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
-from chorus.repo.task_steps import TaskStepsRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.tools import ToolCall, ToolContext, ToolDispatch
@@ -59,7 +58,6 @@ class SubAgentService:
         message_service: MessageService,
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
-        task_steps_repo: TaskStepsRepository,
         task_activities_repo: TaskActivitiesRepository,
         tool_dispatcher: ToolDispatch,
         hooks: HookRegistry,
@@ -70,7 +68,6 @@ class SubAgentService:
         self._message = message_service
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
-        self._steps_repo = task_steps_repo
         self._activities = task_activities_repo
         self._tools = tool_dispatcher
         self._hooks = hooks
@@ -124,7 +121,7 @@ class SubAgentService:
         tools = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
         done_images: list[str] = []  # image 专用：累计已生成 URL，task 重跑随重置
 
-        iteration = self._steps_repo.next_iteration(task_id)
+        iteration = 1  # 内存计数器，仅用于撞 _MAX_STEPS 上限判断（不落库、不喂 trace）
         while iteration <= _MAX_STEPS:
             self._task_repo.touch_updated_at(task_id)  # 心跳防 zombie
             # 协作式取消：每轮复查任务态。被 cancel_pipeline/zombie 回收即退出本 worker，
@@ -134,14 +131,8 @@ class SubAgentService:
                 logger.info("subagent task %s no longer running (status=%s), abort loop",
                             task_id, latest.status if latest else "gone")
                 return
-            result = self._call_model(entry, system_prompt, history, tools, ctx, iteration)
+            result = self._call_model(entry, system_prompt, history, tools, ctx)
             tool_results = self._exec_tools(result, task, ctx, done_images) if result.tool_calls else []
-            self._steps_repo.append(
-                task_id, iteration, _join_thinking(result),
-                "".join(result.text_parts) or None,
-                _tool_calls_view(result) or None,
-                tool_results or None, result.finish_reason,
-            )
             if not result.tool_calls:
                 try:
                     self._finalize(task, result, profile, run_started_at)
@@ -172,7 +163,7 @@ class SubAgentService:
             return False
         return latest.started_at == run_started_at
 
-    def _write_activity(self, task, draft: ActivityDraft, *, iteration: Optional[int] = None,
+    def _write_activity(self, task, draft: ActivityDraft, *,
                         tool_call_id: Optional[str] = None, tool_name: Optional[str] = None) -> None:
         """写用户态活动，fail-open（失败只记日志，不影响主流程）。"""
         try:
@@ -180,7 +171,7 @@ class SubAgentService:
                 task.id,
                 event_type=draft.event_type,
                 role_line=draft.role_line, status=draft.status,
-                iteration=iteration, tool_name=tool_name, tool_call_id=tool_call_id,
+                tool_name=tool_name, tool_call_id=tool_call_id,
                 detail_md=draft.detail_md,
                 summary_json=draft.summary_json, progress_json=draft.progress_json,
                 artifact_preview_json=draft.artifact_preview_json,
@@ -200,9 +191,9 @@ class SubAgentService:
             prior.artifacts if prior else None, task.feedback,
         )
 
-    def _call_model(self, entry, system_prompt, history, tools, ctx, iteration: int) -> StreamResult:
+    def _call_model(self, entry, system_prompt, history, tools, ctx) -> StreamResult:
         messages = [{"role": "system", "content": system_prompt}] + history
-        ctx.turn.reset(iteration)  # 带 iteration，trace 行记正确轮次（修 M-1 恒为 0）
+        ctx.turn.reset()
         ctx.turn.provider_messages = messages
         ctx.tool_schemas = tools
         list(self._hooks.trigger("BeforeModelRequest", ctx))  # 消费丢弃事件(trace 已写库)
@@ -298,17 +289,6 @@ def _parse_args(raw: str) -> dict:
         return json.loads(raw) if raw else {}
     except json.JSONDecodeError:
         return {}
-
-
-def _join_thinking(result: StreamResult) -> Optional[str]:
-    return "\n".join(s.text for s in result.thinking_segments) or None
-
-
-def _tool_calls_view(result: StreamResult) -> list[dict]:
-    return [
-        {"id": tc.id, "name": tc.name, "arguments": _parse_args(tc.arguments)}
-        for _, tc in sorted(result.tool_calls.items())
-    ]
 
 
 def _assistant_view(result: StreamResult) -> dict:

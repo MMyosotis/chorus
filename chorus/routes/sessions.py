@@ -97,7 +97,6 @@ def _trace_to_dict(t: TraceEntry) -> dict:
     return {
         "type": "trace",
         "phase": t.phase.value,
-        "iteration": t.iteration,
         "message_id": t.message_id,
         "task_id": t.task_id,
         "source": t.source,

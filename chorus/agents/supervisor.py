@@ -77,9 +77,8 @@ class SupervisorService:
         try:
             self._message.append_user_message(session_id, user_message)
             self._session.touch(session_id)
-            i = 0
             while True:
-                ctx.turn.reset(i)
+                ctx.turn.reset()
                 ctx.turn.message_id = uuid.uuid4().hex
                 yield MessageStartEvent(id=ctx.turn.message_id)
                 prompt = build_system_prompt(PromptContext(
@@ -109,7 +108,6 @@ class SupervisorService:
                 got_terminal = yield from self._dispatch_tools(session_id, ctx, schemas)
                 if got_terminal:
                     return  # Terminal 已结束本轮
-                i += 1
         except Exception as e:
             ctx.outcome.exception = e
             yield from self._hooks.trigger("Error", ctx)

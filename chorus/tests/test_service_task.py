@@ -16,7 +16,6 @@ from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
-from chorus.repo.task_steps import TaskStepsRepository
 from chorus.services.session import SessionService
 from chorus.services.task import ConflictError, TaskService
 from chorus.tests._helpers import fresh_conn, seed_session
@@ -30,7 +29,7 @@ def _setup():
     act_repo = TaskActivitiesRepository(conn)
     session_svc = SessionService(SessionRepository(conn))
     svc = TaskService(
-        task_repo, TaskArtifactsRepository(conn), TaskStepsRepository(conn), act_repo, session_svc,
+        task_repo, TaskArtifactsRepository(conn), act_repo, session_svc,
     )
     return svc, task_repo
 
@@ -155,11 +154,10 @@ def test_get_graph_includes_current_activity_and_timestamps():
     seed_session(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
-    steps_repo = TaskStepsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     from chorus.services.session import SessionService
     from chorus.repo.session import SessionRepository
-    svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
+    svc = TaskService(task_repo, art_repo, act_repo, SessionService(SessionRepository(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", invoke_message="x", dependencies=[],
@@ -184,11 +182,10 @@ def test_get_activities_returns_serialized_list():
     seed_session(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
-    steps_repo = TaskStepsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     from chorus.services.session import SessionService
     from chorus.repo.session import SessionRepository
-    svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
+    svc = TaskService(task_repo, art_repo, act_repo, SessionService(SessionRepository(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", invoke_message="x", dependencies=[],

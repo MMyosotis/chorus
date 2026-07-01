@@ -24,7 +24,6 @@ from chorus.domain.task.models import (
     Task,
     TaskActivity,
     TaskArtifacts,
-    TaskStep,
     TaskStatus,
 )
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
@@ -62,7 +61,6 @@ __all__ = [
     "Task",
     "TaskActivity",
     "TaskArtifacts",
-    "TaskStep",
     "TaskStatus",
     "PostCard",
     "PostImage",

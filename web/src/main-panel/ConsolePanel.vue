@@ -10,7 +10,6 @@ const props = defineProps({
 const emit = defineEmits(['update:open'])
 
 const tab = ref('trace') // 'settings' | 'trace'
-const traceView = ref('source') // 'source' | 'iteration'
 
 function close() {
   emit('update:open', false)
@@ -44,48 +43,6 @@ async function toggleTestMode() {
 
 // trace 数据：当前会话的列表
 const traces = computed(() => props.traceStore.getTraces(props.activeId))
-
-// 把 iteration === -1 的 tool 事件按 ts 归并到最近的 model_request 所在 iteration。
-// 后端 trace（model_request / model_response）带 iteration，
-// 前端补的 tool_call / tool_result 没法知道 iteration，按时间顺序贴到上一个 model_request。
-//
-// 给每个 item 注入 step_ms（到下一条 trace 的耗时，跨 group 也连续）；
-// 给每个 group 注入 total_ms（本组首条到末条 ts 的差）。
-const tracesByIteration = computed(() => {
-  const list = traces.value
-  let lastIter = 0
-  const groups = new Map()
-  for (let i = 0; i < list.length; i++) {
-    const t = list[i]
-    let iter = t.iteration
-    if (iter == null || iter < 0) {
-      iter = lastIter
-    } else {
-      lastIter = iter
-    }
-    if (!groups.has(iter)) groups.set(iter, [])
-    const next = list[i + 1]
-    const stepMs =
-      next && t.ts && next.ts ? Math.max(0, Math.round((next.ts - t.ts) * 1000)) : null
-    groups.get(iter).push({ ...t, step_ms: stepMs })
-  }
-  const entries = [...groups.entries()].sort((a, b) => a[0] - b[0])
-  return entries.map(([iter, items]) => {
-    const first = items[0]
-    const last = items[items.length - 1]
-    const totalMs =
-      first && last && first.ts && last.ts
-        ? Math.max(0, Math.round((last.ts - first.ts) * 1000))
-        : null
-    return [iter, items, totalMs]
-  })
-})
-
-function fmtMs(ms) {
-  if (ms == null) return ''
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}s`
-}
 
 // 按来源分组树：supervisor / 各 task(task_id) / scheduler（spec 6.8）
 const tracesBySource = computed(() => {
@@ -237,16 +194,12 @@ function renderMessageContent(m) {
       <section v-else class="console-body trace-body">
         <div class="trace-toolbar">
           <span class="hint">当前会话的 LLM 请求/响应、工具调用 trace</span>
-          <div class="view-toggle">
-            <button :class="{ active: traceView === 'source' }" @click="traceView = 'source'">按来源</button>
-            <button :class="{ active: traceView === 'iteration' }" @click="traceView = 'iteration'">按轮次</button>
-          </div>
           <button class="text-btn" @click="clearCurrentTrace" :disabled="!traces.length">清空</button>
         </div>
         <div v-if="!traces.length" class="empty-hint">暂无 trace。发条消息试试。</div>
 
-        <!-- 按来源分组树（supervisor / 各 task / scheduler） -->
-        <details v-if="traceView === 'source'" v-for="g in tracesBySource" :key="g.key" class="iter-group src-group" open>
+        <!-- 按来源分组树（supervisor / 各 task / scheduler），组内按 ts 时间顺序 -->
+        <details v-for="g in tracesBySource" :key="g.key" class="iter-group src-group" open>
           <summary>
             <span class="iter-title">{{ g.label }}</span>
             <span class="iter-meta"><span class="iter-count">{{ g.items.length }} 事件</span></span>
@@ -255,25 +208,6 @@ function renderMessageContent(m) {
             <div class="trace-head">
               <span class="phase-tag">{{ it.phase }}</span>
               <span class="ts">{{ fmtTs(it.ts) }}</span>
-            </div>
-            <pre v-if="it.payload" class="text-block">{{ shortJson(it.payload) }}</pre>
-          </div>
-        </details>
-
-        <details v-if="traceView === 'iteration'" v-for="[iter, items, totalMs] in tracesByIteration" :key="iter" class="iter-group" open>
-          <summary>
-            <span class="iter-title">Iteration #{{ iter }}</span>
-            <span class="iter-meta">
-              <span v-if="totalMs != null" class="iter-total">{{ fmtMs(totalMs) }}</span>
-              <span class="iter-count">{{ items.length }} 事件</span>
-            </span>
-          </summary>
-
-          <div v-for="(it, idx) in items" :key="idx" class="trace-item" :class="`phase-${it.phase}`">
-            <div class="trace-head">
-              <span class="phase-tag">{{ it.phase }}</span>
-              <span class="ts">{{ fmtTs(it.ts) }}</span>
-              <span v-if="it.step_ms != null" class="step-ms" title="到下一步耗时">+{{ fmtMs(it.step_ms) }}</span>
             </div>
 
             <!-- model_request: 显示 messages + tools schema -->
@@ -334,7 +268,7 @@ function renderMessageContent(m) {
               </details>
             </template>
 
-            <!-- 前端合成：tool_call -->
+            <!-- tool_call -->
             <template v-else-if="it.phase === 'tool_call'">
               <div class="kv">
                 <span class="k">tool</span>
@@ -347,7 +281,7 @@ function renderMessageContent(m) {
               <pre class="text-block">{{ shortJson(it.payload?.arguments) }}</pre>
             </template>
 
-            <!-- 前端合成：tool_result -->
+            <!-- tool_result -->
             <template v-else-if="it.phase === 'tool_result'">
               <div class="kv">
                 <span class="k">tool</span>
@@ -355,6 +289,11 @@ function renderMessageContent(m) {
                 <span v-if="it.payload?.duration_ms != null" class="dur">{{ it.payload.duration_ms }}ms</span>
               </div>
               <pre class="text-block">{{ previewText(it.payload?.content || '', 4000) }}</pre>
+            </template>
+
+            <!-- schedule（scheduler 派发/CAS/zombie 事件）-->
+            <template v-else>
+              <pre v-if="it.payload" class="text-block">{{ shortJson(it.payload) }}</pre>
             </template>
           </div>
         </details>
@@ -585,26 +524,6 @@ input:disabled + .slider {
   font-size: 12px;
 }
 
-.view-toggle {
-  display: flex;
-  gap: 4px;
-  margin-left: auto;
-  margin-right: 8px;
-}
-.view-toggle button {
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #64748b;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.view-toggle button.active {
-  background: #6366f1;
-  border-color: #6366f1;
-  color: #fff;
-}
 .src-group > .trace-item .text-block {
   max-height: 200px;
   overflow-y: auto;
@@ -654,27 +573,8 @@ input:disabled + .slider {
   gap: 8px;
 }
 
-.iter-total {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.10);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
 .iter-count {
   color: #64748b;
-}
-
-.step-ms {
-  margin-left: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  color: #64748b;
-  background: #f1f5f9;
-  padding: 0 5px;
-  border-radius: 3px;
 }
 
 .trace-item {

@@ -137,21 +137,6 @@ class PostCard:
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class TaskStep:
-    """task_steps 表一行的领域模型（1:N，每轮 ReAct 一行）。"""
-
-    id: str
-    task_id: str
-    iteration: int
-    created_at: float
-    thinking: Optional[str] = None
-    text: Optional[str] = None
-    tool_calls: Optional[list[dict]] = None
-    tool_results: Optional[list[dict]] = None
-    finish_reason: Optional[str] = None
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskActivity:
     """活动流一行：按事件粒度追加的用户态活动。"""
 
@@ -163,7 +148,6 @@ class TaskActivity:
     status: str
     created_at: float
     updated_at: float
-    iteration: Optional[int] = None
     tool_name: Optional[str] = None
     tool_call_id: Optional[str] = None
     detail_md: Optional[str] = None

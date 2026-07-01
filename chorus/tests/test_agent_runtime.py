@@ -2,7 +2,7 @@
 """AgentContext / TurnState 运行时状态断言。
 
 覆盖 ``kitty/agents/runtime.py``：多智能体字段（source/task_id）默认值、
-``TurnState.reset`` 保留回合级固定字段（source 不被清）、iteration 计数。
+``TurnState.reset`` 保留回合级固定字段（source 不被清）。
 loop 运行时状态机契约的锚点。
 
 运行：``.venv/bin/python -m kitty.tests.test_agent_runtime``
@@ -21,8 +21,7 @@ def test_agent_context_multiagent_fields():
     assert ctx2.source == "supervisor"
     assert ctx2.task_id is None
     # reset 不清 source（回合级固定）
-    ctx.turn.reset(3)
-    assert ctx.turn.iteration_index == 3
+    ctx.turn.reset()
     assert ctx.source == "subagent"
 
 

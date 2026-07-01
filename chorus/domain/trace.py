@@ -62,9 +62,8 @@ class TraceEntry(BaseModel):
     id: Optional[int] = None
     session_id: str
     message_id: Optional[str] = None
-    task_id: Optional[str] = None      # 新增：subagent/scheduler trace 填此
-    source: str = "supervisor"         # 新增：'supervisor'|'subagent'|'scheduler'
-    iteration: Optional[int] = None
+    task_id: Optional[str] = None      # subagent/scheduler trace 填此
+    source: str = "supervisor"         # 'supervisor'|'subagent'|'scheduler'
     phase: TracePhase
     ts: float
     payload: dict

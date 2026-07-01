@@ -53,9 +53,6 @@ class FakeTaskService:
     def get_graph(self, session_id):
         return self._call("get_graph", session_id)
 
-    def get_steps(self, task_id):
-        return self._call("get_steps", task_id)
-
     def get_activities(self, task_id, *, limit=50, after_seq=None):
         return self._call("get_activities", task_id)
 
@@ -96,24 +93,6 @@ def test_get_tasks_ok():
     r = _client(session, task).get("/api/tasks", params={"session_id": "s1"})
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "active": True, "tasks": []}
-
-
-# —— GET /api/tasks/{id}/steps ——
-
-
-def test_get_steps_not_found():
-    """未知 task_id（fake 默认 KeyError）→ 404。"""
-    r = _client(FakeSessionService({"s1"}), FakeTaskService()).get("/api/tasks/nope/steps")
-    assert r.status_code == 404
-
-
-def test_get_steps_ok():
-    """已知 task → 200，body 包成 {"steps": [...]}。"""
-    task = FakeTaskService()
-    task.set("get_steps", "t1", [{"iteration": 1, "finish_reason": "stop"}])
-    r = _client(FakeSessionService({"s1"}), task).get("/api/tasks/t1/steps")
-    assert r.status_code == 200
-    assert r.json() == {"steps": [{"iteration": 1, "finish_reason": "stop"}]}
 
 
 # —— POST /api/tasks/{id}/confirm ——

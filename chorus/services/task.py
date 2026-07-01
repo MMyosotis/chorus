@@ -8,7 +8,6 @@ rowcount=0 抛 ConflictError（route 转 409）。get_graph 选 active pipeline�
 """
 from __future__ import annotations
 
-import dataclasses
 import time
 from typing import Any, Optional
 
@@ -26,7 +25,6 @@ from chorus.domain.task import (
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
-from chorus.repo.task_steps import TaskStepsRepository
 from chorus.services.session import SessionService
 
 _TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
@@ -46,13 +44,11 @@ class TaskService:
         self,
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
-        task_steps_repo: TaskStepsRepository,
         task_activities_repo: TaskActivitiesRepository,
         session_service: SessionService,
     ):
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
-        self._steps_repo = task_steps_repo
         self._activities_repo = task_activities_repo
         self._session = session_service
 
@@ -115,15 +111,6 @@ class TaskService:
         same_pipeline = [t for t in terminal if t.pipeline_id == latest.pipeline_id]
         display = select_display_pipeline([], same_pipeline)  # active 空，返 finished 子集
         return self._graph_dict(latest.pipeline_id, display, False)
-
-    def get_steps(self, task_id: str) -> list[dict]:
-        """该 task 的 ReAct 过程（按 iteration 升序），供角色详情页。
-
-        已被 get_activities（用户态活动流）部分取代，保留供 ReAct 开发者视图。
-        """
-        if self._task_repo.get(task_id) is None:
-            raise KeyError(task_id)
-        return [dataclasses.asdict(s) for s in self._steps_repo.list_by_task(task_id)]
 
     def get_activities(
         self, task_id: str, *, limit: int = 50, after_seq: Optional[int] = None,

@@ -42,7 +42,6 @@ from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
-from chorus.repo.task_steps import TaskStepsRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
@@ -139,7 +138,6 @@ def _build_assembly():
     trace_repo = TraceRepository(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
-    steps_repo = TaskStepsRepository(conn)
 
     session_svc = SessionService(session_repo)
     trace_svc = TraceService(trace_repo)
@@ -176,13 +174,13 @@ def _build_assembly():
         FakeStream([({"content": _finalize_content()}, "stop")]),
     ])
     subagent = SubAgentService(
-        conn, msg_svc, task_repo, art_repo, steps_repo,
+        conn, msg_svc, task_repo, art_repo,
         TaskActivitiesRepository(conn),
         tool_dispatcher, hooks,
         stub_chat_model_provider(sub_client), 1024,
     )
 
-    task_service = TaskService(task_repo, art_repo, steps_repo, TaskActivitiesRepository(conn), session_svc)
+    task_service = TaskService(task_repo, art_repo, TaskActivitiesRepository(conn), session_svc)
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999, pool_size=2,

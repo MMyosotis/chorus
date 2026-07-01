@@ -1,7 +1,7 @@
 // trace store：单例 reactive，模块级共享给 App.vue 和 ConsolePanel.vue
 //
 // 数据形态：tracesBySession = { [sessionId]: TraceItem[] }
-// TraceItem 是后端 SSE/REST 返回的 trace 事件原文（含 phase / iteration / message_id / ts / payload）。
+// TraceItem 是后端 SSE/REST 返回的 trace 事件原文（含 phase / message_id / task_id / source / ts / payload）。
 //
 // 数据来源：完全来自后端 SQLite。
 // - 进入会话或刷新页面时调 loadFromServer(sessionId) 拉历史 trace 灌进 store

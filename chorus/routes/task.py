@@ -33,17 +33,6 @@ def get_task_graph(
     return task.get_graph(session_id)
 
 
-@router.get("/tasks/{task_id}/steps")
-def get_task_steps(
-    task_id: str,
-    task: TaskService = Depends(provide_task_service),
-):
-    try:
-        return {"steps": task.get_steps(task_id)}
-    except KeyError:
-        raise HTTPException(status_code=404, detail="task not found")
-
-
 @router.get("/tasks/{task_id}/activities")
 def get_task_activities(
     task_id: str,

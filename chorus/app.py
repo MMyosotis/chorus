@@ -31,7 +31,6 @@ from chorus.repo.settings import SettingsRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
-from chorus.repo.task_steps import TaskStepsRepository
 from chorus.repo.trace import TraceRepository
 from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
@@ -58,7 +57,6 @@ def create_app() -> FastAPI:
     trace_repo = TraceRepository(conn)
     task_repo = TaskRepository(conn)
     task_artifacts_repo = TaskArtifactsRepository(conn)
-    task_steps_repo = TaskStepsRepository(conn)
     task_activities_repo = TaskActivitiesRepository(conn)
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
@@ -86,13 +84,13 @@ def create_app() -> FastAPI:
         tool_dispatcher,
     )
     subagent_service = SubAgentService(
-        conn, message_service, task_repo, task_artifacts_repo, task_steps_repo,
+        conn, message_service, task_repo, task_artifacts_repo,
         task_activities_repo,
         tool_dispatcher, hooks, chat_models,
         MAX_TOKENS,
     )
     task_service = TaskService(
-        task_repo, task_artifacts_repo, task_steps_repo,
+        task_repo, task_artifacts_repo,
         task_activities_repo, session_service,
     )
     scheduler = TaskScheduler(

@@ -183,18 +183,6 @@ export async function getTaskGraph(sessionId) {
   return res.json()
 }
 
-export async function getTaskSteps(taskId) {
-  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/steps`)
-  if (res.status === 404) {
-    const err = new Error('task not found')
-    err.status = 404
-    throw err
-  }
-  if (!res.ok) throw new Error(`getTaskSteps failed: ${res.status}`)
-  const data = await res.json()
-  return data.steps || []
-}
-
 export async function getTaskActivities(taskId, { limit = 50, afterSeq = null } = {}) {
   const params = new URLSearchParams({ limit: String(limit) })
   if (afterSeq != null) params.set('after_seq', String(afterSeq))

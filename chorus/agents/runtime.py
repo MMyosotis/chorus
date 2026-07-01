@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 class TurnState:
     """单轮迭代可变累积状态，每轮开始 reset。"""
 
-    iteration_index: int = 0
     message_id: str = ""
     text_parts: list[str] = field(default_factory=list)
     accumulated_tool_calls: dict[int, ToolCallAccumulator] = field(default_factory=dict)
@@ -29,8 +28,7 @@ class TurnState:
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
     provider_messages: Optional[list[dict]] = None
 
-    def reset(self, index: int) -> None:
-        self.iteration_index = index
+    def reset(self) -> None:
         self.message_id = ""
         self.text_parts.clear()
         self.accumulated_tool_calls.clear()
