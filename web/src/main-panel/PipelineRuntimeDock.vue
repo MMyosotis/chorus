@@ -10,10 +10,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['finish-done'])
 
-const tasks = computed(() => {
-  const ts = props.graph?.tasks || []
-  return [...ts].sort((a, b) => a.seq - b.seq)
-})
+const tasks = computed(() => props.graph?.tasks || [])
 
 const focusedTask = computed(() => tasks.value.find((t) => t.id === props.focusedTaskId) || null)
 

@@ -12,10 +12,7 @@ function segState(status) {
   return 'pending'
 }
 
-const tasks = computed(() => {
-  const ts = props.graph?.tasks || []
-  return [...ts].sort((a, b) => a.seq - b.seq)
-})
+const tasks = computed(() => props.graph?.tasks || [])
 
 const current = computed(() => {
   const t = tasks.value.find((x) => x.status !== 'finished' && x.status !== 'failed' && x.status !== 'cancelled')

@@ -21,6 +21,7 @@ from chorus.domain.task import (
     TaskActivity,
     TaskStatus,
     select_display_pipeline,
+    topological_order,
 )
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
@@ -149,14 +150,15 @@ class TaskService:
         )
 
     def _graph_dict(self, pipeline_id: str, tasks: list, active: bool) -> dict:
-        arts = self._artifacts_repo.load_many([t.id for t in tasks])
-        latest = self._activities_repo.latest_by_tasks([t.id for t in tasks])
+        ordered = topological_order(tasks)
+        arts = self._artifacts_repo.load_many([t.id for t in ordered])
+        latest = self._activities_repo.latest_by_tasks([t.id for t in ordered])
         return {
             "pipeline_id": pipeline_id,
             "active": active,
             "tasks": [
                 {
-                    "id": t.id, "agent_type": t.agent_type, "seq": t.seq, "status": t.status,
+                    "id": t.id, "agent_type": t.agent_type, "status": t.status,
                     "updated_at": t.updated_at, "started_at": t.started_at,
                     "finished_at": t.finished_at, "metadata": t.metadata,
                     "current_activity": _dump_activity(latest[t.id]) if t.id in latest else None,
@@ -164,6 +166,6 @@ class TaskService:
                     "narrative": (arts[t.id].narrative if t.id in arts else None),
                     "error": t.error,
                 }
-                for t in tasks
+                for t in ordered
             ],
         }

@@ -230,7 +230,7 @@ def test_new_plan_blocked_by_active_task():
     sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, client)
     s = session_svc.create("test")
     task_repo.insert(Task(id="active1", session_id=s.id, pipeline_id="p1", agent_type="idea",
-                          seq=1, status="running", invoke_message="x", dependencies=[],
+                          status="running", invoke_message="x", dependencies=[],
                           created_at=0.0, updated_at=0.0))
     events = list(sup.stream(s.id, "再帮我写一篇"))
     types_seq = [e.type for e in events]

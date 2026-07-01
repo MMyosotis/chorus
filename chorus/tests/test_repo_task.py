@@ -11,10 +11,10 @@ from chorus.repo.task import TaskRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
 
-def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None, seq=1, **kw):
+def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None, **kw):
     base = dict(
         id=task_id, session_id=session_id, pipeline_id=pipeline_id,
-        agent_type="idea", seq=seq, status=status, invoke_message="x",
+        agent_type="idea", status=status, invoke_message="x",
         dependencies=deps or [], created_at=0.0, updated_at=0.0,
     )
     base.update(kw)

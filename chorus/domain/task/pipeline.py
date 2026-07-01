@@ -67,7 +67,7 @@ def expand_pipeline(
         )
         tasks.append(Task(
             id=ids[i], session_id=session_id, pipeline_id=pipeline_id,
-            agent_type=s.agent_type, seq=i + 1, status=TaskStatus.PENDING.value,
+            agent_type=s.agent_type, status=TaskStatus.PENDING.value,
             invoke_message=invoke, dependencies=deps_ids,
             created_at=now, updated_at=now, metadata=metadata,
         ))

@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     session_id     TEXT NOT NULL,
     pipeline_id    TEXT NOT NULL,
     agent_type     TEXT NOT NULL,
-    seq            INTEGER NOT NULL,
     status         TEXT NOT NULL,
     invoke_message TEXT NOT NULL,
     dependencies   TEXT NOT NULL DEFAULT '[]',
@@ -55,7 +54,6 @@ class TaskRow(BaseModel):
     session_id: str
     pipeline_id: str
     agent_type: str
-    seq: int
     status: str
     invoke_message: str
     dependencies: str
@@ -78,7 +76,7 @@ class TaskRow(BaseModel):
             feedback = None
         return Task(
             id=self.id, session_id=self.session_id, pipeline_id=self.pipeline_id,
-            agent_type=self.agent_type, seq=self.seq, status=self.status,
+            agent_type=self.agent_type, status=self.status,
             invoke_message=self.invoke_message, dependencies=deps,
             feedback=feedback, error=self.error,
             created_at=self.created_at, updated_at=self.updated_at,
@@ -90,7 +88,7 @@ class TaskRow(BaseModel):
     def from_domain(cls, task: Task) -> "TaskRow":
         return cls(
             id=task.id, session_id=task.session_id, pipeline_id=task.pipeline_id,
-            agent_type=task.agent_type, seq=task.seq, status=task.status,
+            agent_type=task.agent_type, status=task.status,
             invoke_message=task.invoke_message,
             dependencies=json.dumps(task.dependencies, ensure_ascii=False),
             feedback=json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
@@ -218,15 +216,15 @@ class TaskRepository:
         placeholders = ",".join("?" * len(statuses))
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM tasks "
-            f"WHERE session_id=? AND status IN ({placeholders}) ORDER BY seq",
+            f"WHERE session_id=? AND status IN ({placeholders}) ORDER BY created_at, id",
             (session_id, *statuses),
         ).fetchall()
         return [TaskRow(**dict(r)).to_domain() for r in rows]
 
     def find_by_pipeline(self, pipeline_id: str) -> list[Task]:
-        """该 pipeline 全部 task（按 seq 升序），含终态。哑查询。"""
+        """该 pipeline 全部 task（按 created_at 升序，含终态）。哑查询；展示用拓扑序由 service 排。"""
         rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM tasks WHERE pipeline_id=? ORDER BY seq",
+            f"SELECT {_COLS} FROM tasks WHERE pipeline_id=? ORDER BY created_at, id",
             (pipeline_id,),
         ).fetchall()
         return [TaskRow(**dict(r)).to_domain() for r in rows]

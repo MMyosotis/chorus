@@ -35,9 +35,9 @@ def _setup():
     return svc, task_repo
 
 
-def _mk(task_repo, tid, agent_type="idea", status="awaiting_confirm", pipeline_id="p1", seq=1, updated_at=0.0):
+def _mk(task_repo, tid, agent_type="idea", status="awaiting_confirm", pipeline_id="p1", updated_at=0.0):
     task_repo.insert(Task(
-        id=tid, session_id="s1", pipeline_id=pipeline_id, agent_type=agent_type, seq=seq,
+        id=tid, session_id="s1", pipeline_id=pipeline_id, agent_type=agent_type,
         status=status, invoke_message="x", dependencies=[], created_at=0.0, updated_at=updated_at,
     ))
 
@@ -128,7 +128,7 @@ def test_cancel_pipeline_writes_finished_at():
 def test_get_graph_active():
     svc, task_repo = _setup()
     _mk(task_repo, "a", status="running")
-    _mk(task_repo, "b", status="pending", seq=2)
+    _mk(task_repo, "b", status="pending")
     graph = svc.get_graph("s1")
     assert graph["active"] is True
     assert {t["id"] for t in graph["tasks"]} == {"a", "b"}
@@ -161,7 +161,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
     from chorus.repo.session import SessionRepository
     svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
     task_repo.insert(Task(
-        id="t1", session_id="s1", pipeline_id="p1", agent_type="image", seq=1,
+        id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", invoke_message="x", dependencies=[],
         created_at=0.0, updated_at=10.0, started_at=5.0,
         metadata={"progress_total": 3},
@@ -191,7 +191,7 @@ def test_get_activities_returns_serialized_list():
     from chorus.repo.session import SessionRepository
     svc = TaskService(task_repo, art_repo, steps_repo, act_repo, SessionService(SessionRepository(conn)))
     task_repo.insert(Task(
-        id="t1", session_id="s1", pipeline_id="p1", agent_type="idea", seq=1,
+        id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", invoke_message="x", dependencies=[],
         created_at=0.0, updated_at=0.0, started_at=1.0,
     ))

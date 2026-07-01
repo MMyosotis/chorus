@@ -19,7 +19,7 @@ def _seed_task(conn, task_id="t1"):
     from chorus.domain.task import Task
     TaskRepository(conn).insert(Task(
         id=task_id, session_id="s1", pipeline_id="p1", agent_type="idea",
-        seq=1, status="pending", invoke_message="x", dependencies=[],
+        status="pending", invoke_message="x", dependencies=[],
         created_at=0.0, updated_at=0.0,
     ))
     return task_id

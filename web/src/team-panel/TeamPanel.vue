@@ -9,10 +9,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['focus'])
 
-const tasks = computed(() => {
-  const ts = props.graph?.tasks || []
-  return [...ts].sort((a, b) => a.seq - b.seq)
-})
+const tasks = computed(() => props.graph?.tasks || [])
 
 function onFocus(id) {
   emit('focus', id)

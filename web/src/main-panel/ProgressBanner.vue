@@ -20,10 +20,7 @@ onMounted(async () => {
   profiles.value = await getAgentProfiles()
 })
 
-const tasks = computed(() => {
-  const ts = props.graph?.tasks || []
-  return [...ts].sort((a, b) => a.seq - b.seq)
-})
+const tasks = computed(() => props.graph?.tasks || [])
 
 const current = computed(() => {
   // 当前步 = 第一个非终态（running/awaiting_confirm/pending），否则末步

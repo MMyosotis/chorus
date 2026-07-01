@@ -236,8 +236,7 @@ function injectTaskCards(id) {
     if (list[i].kind === 'hil' || list[i].kind === 'postcard' || list[i].kind === 'recovery') list.splice(i, 1)
   }
   if (!graph) return
-  const sorted = [...(graph.tasks || [])].sort((a, b) => a.seq - b.seq)
-  for (const t of sorted) {
+  for (const t of (graph.tasks || [])) {
     if (t.status === 'awaiting_confirm') {
       list.push({ kind: 'hil', task: t, id: 'hil:' + t.id, role: 'assistant' })
     } else if (t.status === 'failed') {

@@ -66,6 +66,40 @@ def is_zombie(task: Task, now: float, timeout_s: int) -> bool:
     return (now - task.updated_at) > timeout_s
 
 
+def topological_order(tasks: list[Task]) -> list[Task]:
+    """按 dependencies 拓扑排序：Kahn 分层，同层按 created_at 升序再 id 兜底（稳定）。
+
+    顺序语义的唯一真相源在 dependencies；此函数把图拍平成展示序列。无环不变量由
+    validate_steps（deps 只能引用前置索引）在入库前保证，本函数不重复检测。
+    tasks 内引用了不在列表中的 dep id 时，该边忽略。
+    """
+    by_id = {t.id: t for t in tasks}
+    indeg: dict[str, int] = {t.id: 0 for t in tasks}
+    children: dict[str, list[str]] = {t.id: [] for t in tasks}
+    for t in tasks:
+        for dep_id in (d for d in t.dependencies if d in by_id):
+            indeg[t.id] += 1
+            children[dep_id].append(t.id)
+    ordered: list[Task] = []
+    remaining = set(indeg)
+    while remaining:
+        ready = sorted(
+            (tid for tid in remaining if indeg[tid] == 0),
+            key=lambda i: (by_id[i].created_at, i),
+        )
+        for tid in ready:
+            ordered.append(by_id[tid])
+            remaining.discard(tid)
+            _decrement_indeg(children[tid], indeg)
+    return ordered
+
+
+def _decrement_indeg(targets: list[str], indeg: dict[str, int]) -> None:
+    """批量削减后继节点入度（topological_order 内部用）。"""
+    for tid in targets:
+        indeg[tid] -= 1
+
+
 def select_display_pipeline(
     active: list[Task], finished: list[Task]
 ) -> list[Task]:

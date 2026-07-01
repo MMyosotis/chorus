@@ -96,7 +96,7 @@ def _setup():
 
 def _mk_task(task_repo, agent_type="idea", status="running", deps=None):
     t = Task(
-        id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type, seq=1,
+        id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
         status=status, invoke_message="骨架：主题=测试", dependencies=deps or [],
         created_at=0.0, updated_at=0.0,
     )

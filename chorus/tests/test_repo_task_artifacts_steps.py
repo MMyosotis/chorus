@@ -17,7 +17,7 @@ def _setup():
     conn = fresh_conn()
     seed_session(conn)  # tasks 外键引用 sessions（foreign_keys=ON），须先建父行
     TaskRepository(conn).insert(Task(
-        id="t1", session_id="s1", pipeline_id="p1", agent_type="idea", seq=1,
+        id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", invoke_message="x", dependencies=[],
         created_at=0.0, updated_at=0.0,
     ))
@@ -41,7 +41,7 @@ def test_artifacts_upsert_load():
 def test_artifacts_load_many():
     conn = _setup()
     TaskRepository(conn).insert(Task(
-        id="t2", session_id="s1", pipeline_id="p1", agent_type="script", seq=2,
+        id="t2", session_id="s1", pipeline_id="p1", agent_type="script",
         status="pending", invoke_message="y", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))

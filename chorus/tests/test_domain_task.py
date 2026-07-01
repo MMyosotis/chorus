@@ -33,13 +33,14 @@ from chorus.domain.task import (
     parse_sections,
     render_invoke_message,
     select_display_pipeline,
+    topological_order,
     validate_steps,
 )
 
 
 def _mk(status, deps=None, **kw):
     base = dict(
-        id="t", session_id="s", pipeline_id="p", agent_type="idea", seq=1,
+        id="t", session_id="s", pipeline_id="p", agent_type="idea",
         status=status, invoke_message="x", dependencies=deps or [],
         created_at=0.0, updated_at=0.0,
     )
@@ -191,7 +192,6 @@ def test_expand_pipeline():
     assert tasks[1].dependencies == [tasks[0].id]
     assert all(t.pipeline_id == tasks[0].pipeline_id for t in tasks)
     assert "夏日晚风" in tasks[0].invoke_message
-    assert tasks[1].seq == 2
 
 
 def test_render_invoke_message_injects_deps_and_feedback():
@@ -254,6 +254,48 @@ def test_parse_output_finalize_postcard():
 def test_parse_output_missing_section():
     with pytest.raises(ValidationError):
         parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>", "idea")  # 缺 NARRATIVE
+
+
+# —— topological_order：顺序语义唯一真相源在 dependencies ——
+
+def _task(tid, deps=None, created_at=0.0):
+    return Task(
+        id=tid, session_id="s", pipeline_id="p", agent_type="idea",
+        status="pending", invoke_message="x", dependencies=deps or [],
+        created_at=created_at, updated_at=0.0,
+    )
+
+
+def test_topological_order_linear_chain():
+    """线性链：a→b→c 拓扑序即 a, b, c。"""
+    a, b, c = _task("a"), _task("b", ["a"]), _task("c", ["b"])
+    assert [t.id for t in topological_order([c, b, a])] == ["a", "b", "c"]
+
+
+def test_topological_order_parallel_branches():
+    """并行分支：a→{b,c}→d，b/c 同层，d 在最后。"""
+    a = _task("a")
+    b = _task("b", ["a"], created_at=1.0)
+    c = _task("c", ["a"], created_at=2.0)
+    d = _task("d", ["b", "c"])
+    out = [t.id for t in topological_order([d, c, b, a])]
+    assert out[0] == "a"
+    assert out[-1] == "d"
+    assert set(out[1:3]) == {"b", "c"}
+
+
+def test_topological_order_same_layer_tiebreak():
+    """同层按 created_at 升序再 id 兜底，稳定。"""
+    a = _task("a")
+    b = _task("b", ["a"], created_at=5.0)
+    c = _task("c", ["a"], created_at=2.0)
+    assert [t.id for t in topological_order([a, b, c])] == ["a", "c", "b"]
+
+
+def test_topological_order_ignores_external_dep():
+    """dep id 不在列表内（跨 pipeline）忽略，不阻塞排序。"""
+    a = _task("a", ["外部id"])
+    assert [t.id for t in topological_order([a])] == ["a"]
 
 
 def main():

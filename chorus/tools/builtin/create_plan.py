@@ -116,7 +116,7 @@ class CreatePlanTool(Tool):
         except Exception as e:
             return Reply(f"建图落库失败，请重试: {e}")
 
-        roles = ", ".join(f"{task.agent_type}#{task.seq}" for task in tasks)
+        roles = ", ".join(f"{task.agent_type}#{i}" for i, task in enumerate(tasks, 1))
         return Terminal(
             f"已创建创作任务图：pipeline={tasks[0].pipeline_id}，"
             f"{len(tasks)} 个任务 [{roles}]，调度器将自动执行"

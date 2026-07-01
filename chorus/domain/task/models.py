@@ -36,7 +36,6 @@ class Task:
     session_id: str
     pipeline_id: str
     agent_type: str
-    seq: int
     status: str
     invoke_message: str
     created_at: float

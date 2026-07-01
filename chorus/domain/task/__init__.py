@@ -44,6 +44,7 @@ from chorus.domain.task.state import (
     is_legal_transition,
     is_zombie,
     select_display_pipeline,
+    topological_order,
 )
 
 __all__ = [
@@ -76,6 +77,7 @@ __all__ = [
     "is_legal_transition",
     "is_zombie",
     "select_display_pipeline",
+    "topological_order",
     "expand_pipeline",
     "parse_output",
     "parse_sections",
