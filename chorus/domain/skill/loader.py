@@ -1,7 +1,6 @@
-"""Skill 加载器：发现、解析 skill markdown，无状态现扫现解析。
+"""Skill 加载器：发现并解析 skill markdown，每次现扫现解析、不缓存。
 
-skills 数量少、文件小、读取低频（supervisor 每轮对话一次），重扫成本可忽略，
-故不做内存缓存——每次调用现扫 ``*/SKILL.md`` 现解析。开发期改 skill 立即生效。
+读取低频，重扫成本可忽略；开发期改技能即时生效。
 """
 
 from __future__ import annotations
@@ -16,8 +15,7 @@ SKILLS_DIR = Path(__file__).resolve().parents[2] / "resources" / "skills"
 
 
 class SkillLoader:
-    """发现、解析 skill markdown：扫描 skills_dir 下 */SKILL.md，解析 frontmatter
-    （name / description），提供摘要（注入 system prompt）与完整内容（load_skill 工具）。"""
+    """发现并解析技能文件，提供摘要与完整内容。"""
 
     def __init__(self, skills_dir: Path = SKILLS_DIR):
         self._dir = Path(skills_dir)

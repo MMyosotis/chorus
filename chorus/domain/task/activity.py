@@ -1,13 +1,6 @@
-# chorus/domain/task/activity.py
-"""Activity 翻译层：把 subagent ReAct 事件翻译成用户态 ActivityDraft。
+"""把子 agent 事件翻译成用户可见的活动卡片。
 
-纯函数，不碰 DB。围绕 task 活动展示单一概念内聚：工具活动策略（started 台词 +
-done 翻译）集中在本模块两张注册表；角色入场台词仍属角色档案（profiles.enter_line）。
-工具结构化产物经 activity_meta（来自 DispatchResult.activity_meta，由
-ToolRunResult 透传）传入，不从格式化文本反解析。
-
-布局：公开入口（各 *_activity，按生命周期顺序）在上，私有实现（工具策略注册表
-+ 翻译器 + 辅助）集中在下。
+纯函数，不碰数据库，按角色与工具查模板生成。
 """
 from __future__ import annotations
 
@@ -17,10 +10,10 @@ from typing import Callable, Optional
 from chorus.domain.task.models import Narrative
 from chorus.domain.task.profiles import AGENT_PROFILES
 
-# 用户可见工具（写 tool_started/tool_done activity）；load_skill 等隐藏
+# 用户可见工具
 _VISIBLE_TOOLS = {"baidu_search", "generate_image", "output_plan"}
 
-# 通用态文案（非角色非工具，翻译逻辑的一部分）
+# 通用态文案
 _FAILED_LINE = "这步出了点问题"
 _RETRYING_LINE = "刚才的格式不太对，我重新整理一下"
 
@@ -107,12 +100,12 @@ def _enter(agent_type: str) -> str:
 
 
 def _static_started(line: str) -> Callable[[dict], str]:
-    """静态 started 台词：忽略 arguments，恒返 line。"""
+    """生成固定台词，忽略入参。"""
     return lambda _args: line
 
 
 def _search_started(args: dict) -> str:
-    """baidu_search：拼 query 前 30 字，无 query 走兜底。"""
+    """搜索类工具的台词，截取查询词前缀，无词走兜底。"""
     q = (args.get("query") or "").strip()
     return f"正在搜索：{q[:30]}" if q else "正在联网搜索"
 
@@ -184,11 +177,7 @@ _DONE_TRANSLATORS: dict[str, Callable[..., ActivityDraft]] = {
 def image_progress_preview(
     total: Optional[int], done_images: list[str],
 ) -> tuple[Optional[dict], dict]:
-    """返 (progress_json, artifact_preview_json)。
-
-    - total 缺失 → progress_json=None（不显示 current/total，避免假仪表盘）。
-    - artifact_preview_json 始终列出已生成图。
-    """
+    """生成配图进度与预览。总数未知时不显示进度，避免假仪表盘。"""
     items = [{"url": u, "caption": ""} for u in done_images]
     preview = {"type": "images", "items": items}
     if total:

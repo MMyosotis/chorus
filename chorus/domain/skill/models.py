@@ -1,8 +1,4 @@
-"""Skill 领域模型。
-
-SkillSummary：注入 system prompt 的摘要。
-SkillContent：load_skill 工具返回的完整内容，from_markdown 解析 frontmatter。
-"""
+"""Skill 领域模型：摘要与完整内容。"""
 
 from __future__ import annotations
 
@@ -11,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SkillSummary:
-    """注入 system prompt 的摘要。"""
+    """技能摘要。"""
 
     name: str
     description: str
@@ -19,7 +15,7 @@ class SkillSummary:
 
 @dataclass(frozen=True)
 class SkillContent:
-    """load_skill 工具返回的完整内容。"""
+    """技能完整内容。"""
 
     name: str
     description: str
@@ -27,7 +23,7 @@ class SkillContent:
 
     @classmethod
     def from_markdown(cls, text: str, fallback_name: str) -> "SkillContent":
-        """从 skill markdown 文本构造：解析 frontmatter（name/description），full_content 为原文。"""
+        """从 markdown 文本构造，解析头部元信息，正文为原文。"""
         name, description = fallback_name, ""
         parts = text.split("---", 2) if text.startswith("---") else []
         if len(parts) >= 3:

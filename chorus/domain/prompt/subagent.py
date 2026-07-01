@@ -1,8 +1,6 @@
-# kitty/domain/prompt/subagent.py
-"""子 Agent system prompt 模板：idea/script/image/finalize 四角色。
+"""subagent system prompt 模板：角色各自的提示词。
 
-纯字符串 + 槽位填充，不 import repos/services/hooks/tools/agents。
-每个 prompt 含：角色职责 + 产出协议（分隔符切段 + JSON 段）+ 禁 emoji 指令。
+纯模板填充，不依赖外部层。每条含角色职责、产出格式与要求。
 """
 from __future__ import annotations
 
@@ -49,7 +47,7 @@ _GUIDANCE = {
 
 
 def build_subagent_system_prompt(agent_type: str) -> str:
-    """按 agent_type 返回子 Agent system prompt。用 artifacts_schema 作键（finalize→postcard）。"""
+    """按角色返回对应的 system prompt。"""
     p = AGENT_PROFILES[agent_type]
     return _BASE.format(
         role_name=p.display_name,

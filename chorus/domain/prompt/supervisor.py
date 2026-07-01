@@ -1,8 +1,6 @@
-# kitty/domain/prompt/supervisor.py
-"""supervisor system prompt 装配：base 文案 + AGENT_PROFILES 角色档案 + 典型流程建议。
+"""supervisor system prompt 模版：基础文案 + 角色档案 + 流程参考。
 
-PromptContext 是扩展点：新增运行时多方信息只需加字段 + 加一段拼接，签名稳定。
-supervisor 不固定 pipeline——只列角色档案与参考流程，模型按用户实际自主编排 steps。
+不固定创作流程，由模型按用户实际编排步骤。
 """
 from __future__ import annotations
 

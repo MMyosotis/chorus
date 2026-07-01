@@ -1,11 +1,6 @@
-# kitty/domain/task/models.py
-"""任务图领域模型：Task / TaskStatus / AgentType / CreationIntent / StepSpec /
-TaskArtifacts / TaskStep。
+"""任务图领域模型：任务、步骤、产物等数据形状。
 
-纯 Pydantic 模型，不 import repos/services/hooks/tools/agents。状态语义与转移
-规则不在此（见 state.py），这里只承载数据形状。
-
-pydantic dataclass 走位置参数 __init__，无默认值字段必须排在有默认值字段之前。
+纯数据模型，不含状态转移规则。无默认值字段须排在有默认值字段之前。
 """
 from __future__ import annotations
 
@@ -40,14 +35,14 @@ class Task:
     id: str
     session_id: str
     pipeline_id: str
-    agent_type: str  # AgentType 值
+    agent_type: str
     seq: int
-    status: str  # TaskStatus 值
+    status: str
     invoke_message: str
     created_at: float
     updated_at: float
-    dependencies: list[str] = Field(default_factory=list)  # 前置 task_id 列表
-    feedback: Optional[dict] = None  # retry 时注入的用户反馈
+    dependencies: list[str] = Field(default_factory=list)
+    feedback: Optional[dict] = None
     error: Optional[str] = None
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
@@ -56,32 +51,25 @@ class Task:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskArtifacts:
-    """task_artifacts 表一行的领域模型（1:1 关联 tasks，大 JSON 产物）。
+    """任务产物行：结构化产物与角色话术。
 
-    artifacts 既是前端渲染用的结构化产物，也作下游注入数据——二者同源同值，
-    故只存一列（曾分 step_output/artifacts 两列，物理冗余已合并）。
+    产物同时供前端渲染与下游步骤注入，同源同值只存一列。
     """
 
     task_id: str
-    artifacts: Optional[Any] = None  # 结构化产物：前端渲染用 + 下游注入用（同值）
-    narrative: Optional[dict] = None  # 角色话术（Narrative 校验后 asdict 入库）
+    artifacts: Optional[Any] = None
+    narrative: Optional[dict] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class Narrative:
-    """subagent 产出的角色话术——parse 期强校验值对象，校验后 asdict 回 dict 入库。
-
-    awaiting_line: HIL 等待确认引导语（awaiting_confirm 态展示）；
-    done_line: 完成总结一句话（finished 态展示）。执行完一次性产出。
-    """
+    """角色话术：等待确认与完成总结两句，执行完一次性产出。"""
 
     awaiting_line: str
     done_line: str
 
 
-# ---- artifacts 内容模型（parse 期强校验值对象，校验后 asdict 回 dict 入库）----
-# 与 Narrative 同层：存储行模型 TaskArtifacts.artifacts 仍是松 Any（落 JSON blob），
-# 这里的模型只在 parse_output 校验时一次性构造，验完即 asdict。finalize 复用 PostCard。
+# ---- 产物内容模型：解析期强校验，验完即转回字典入库 ----
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class IdeaCandidate:
@@ -93,7 +81,7 @@ class IdeaCandidate:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class IdeaArtifacts:
-    """idea 角色产物：候选选题列表 + 选中索引（selected 由 HIL 确认后写入，parse 期可空）。"""
+    """选题产物：候选列表，选中项待确认后写入。"""
 
     candidates: list[IdeaCandidate]
     selected: Optional[int] = None
@@ -101,7 +89,7 @@ class IdeaArtifacts:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ScriptBlock:
-    kind: str  # heading/paragraph/list 等（中间产物，不强制 Literal，留弹性）
+    kind: str
     text: str
 
 
@@ -134,16 +122,13 @@ class PostImage:
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class PostSection:
     kind: Literal["paragraph", "heading", "list", "quote", "image"]
-    text: str = ""  # paragraph/heading/quote 文本; list 用 \n 分条
-    image: Optional[PostImage] = None  # kind=image 时必填
+    text: str = ""
+    image: Optional[PostImage] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class PostCard:
-    """finalize 角色产物（= 成品契约）：博文卡片树，前端 PostCard.vue 拿到即渲染。
-
-    kind 枚举固定有界，前端按 kind 套样式，不猜内容格式。
-    """
+    """成品卡片：博文结构树，前端按节点类型渲染。"""
 
     title: str
     sections: list[PostSection]
@@ -158,7 +143,7 @@ class TaskStep:
 
     id: str
     task_id: str
-    iteration: int  # 1-based
+    iteration: int
     created_at: float
     thinking: Optional[str] = None
     text: Optional[str] = None
@@ -169,11 +154,7 @@ class TaskStep:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskActivity:
-    """task_activities 表一行的领域模型（1:N，用户态活动流，按事件粒度 append）。
-
-    summary_json/progress_json/artifact_preview_json 在 Row 层已反序列化为 dict；
-    序列化给前端用 TypeAdapter.dump_python（pydantic dataclass 无 model_dump）。
-    """
+    """活动流一行：按事件粒度追加的用户态活动。"""
 
     id: str
     task_id: str
@@ -194,7 +175,7 @@ class TaskActivity:
 
 @dataclass
 class CreationIntent:
-    """supervisor 从 create_plan 工具参数解析的创作意图。"""
+    """从建图工具参数解析的创作意图。"""
 
     topic: str
     style: str = ""
@@ -204,8 +185,8 @@ class CreationIntent:
 
 @dataclass
 class StepSpec:
-    """模型自主编排的单步规格（建图前形态，落库前 deps 是索引，落库后解析为 task_id）。"""
+    """建图前的单步规格，落库后依赖由索引解析为任务标识。"""
 
-    agent_type: str  # AgentType 值
-    deps: list[int]  # 引用 steps 内前置步骤索引（0-based）
+    agent_type: str
+    deps: list[int]
     focus: str

@@ -1,13 +1,12 @@
-# kitty/domain/task/errors.py
-"""任务图领域异常：steps 校验失败 / 产物解析失败共用。
+"""任务领域异常：编排或产物有误时抛出。
 
-带 correction 字段，喂回 ReAct loop 供模型自纠（撞步数上限才判死）。
+携带修正提示回灌给模型自纠。
 """
 from __future__ import annotations
 
 
 class ValidationError(Exception):
-    """steps 编排非法 / 产物段缺失或字段错。correction 是给模型的修正提示。"""
+    """编排非法或产物有误，附给模型的修正提示。"""
 
     def __init__(self, message: str, correction: str = "") -> None:
         super().__init__(message)
