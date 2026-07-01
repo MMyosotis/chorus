@@ -138,7 +138,7 @@ def _mk_image_task(task_repo, started_at=100.0, status="running", agent_type="im
         id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
         status=status, invoke_message="骨架", dependencies=[],
         created_at=0.0, updated_at=0.0, started_at=started_at,
-        metadata={"goal": "生成 3 张配图", "progress_total": 3, "progress_unit": "张图"},
+        progress_total=3,
     )
     task_repo.insert(t)
     return t

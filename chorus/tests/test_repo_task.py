@@ -128,13 +128,13 @@ def test_cas_update_started_and_finished_at():
     assert repo.get("t1").finished_at == 200.0
 
 
-def test_metadata_persists_via_insert_not_cas():
-    """metadata 走 insert，不进 _CAS_FIELDS（cas_update 带 metadata 须报错）。"""
+def test_progress_total_persists_via_insert_not_cas():
+    """progress_total 走 insert，不进 _CAS_FIELDS（cas_update 带 progress_total 须报错）。"""
     repo, _ = _repo()
-    repo.insert(_mk("t1", metadata={"progress_total": 3}))
-    assert repo.get("t1").metadata == {"progress_total": 3}
+    repo.insert(_mk("t1", progress_total=3))
+    assert repo.get("t1").progress_total == 3
     with pytest.raises(ValueError):
-        repo.cas_update("t1", "pending", "running", metadata={"x": 1})
+        repo.cas_update("t1", "pending", "running", progress_total=5)
 
 
 def main():

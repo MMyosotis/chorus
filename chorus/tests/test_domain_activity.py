@@ -47,11 +47,10 @@ def test_tool_done_activity_baidu_search_summary():
     assert d.progress_json is None  # 搜索不写 progress
 
 
-def test_tool_done_activity_generate_image_progress_with_metadata():
+def test_tool_done_activity_generate_image_progress_with_total():
     meta = {"url": "https://img/2.jpg"}
     done = ["https://img/1.jpg"]  # 已有 1 张，本次第 2 张
-    d = tool_done_activity("image", "generate_image", meta,
-                           {"progress_total": 3, "progress_unit": "张图"}, done)
+    d = tool_done_activity("image", "generate_image", meta, 3, done)
     assert d is not None
     # done_images 传入时尚未追加本次 url，progress current = len(done)+1 = 2
     assert d.progress_json["current"] == 2
@@ -60,7 +59,7 @@ def test_tool_done_activity_generate_image_progress_with_metadata():
     assert len(d.artifact_preview_json["items"]) == 2  # 含本次
 
 
-def test_tool_done_activity_generate_image_no_metadata_only_count():
+def test_tool_done_activity_generate_image_no_total_only_count():
     meta = {"url": "https://img/1.jpg"}
     d = tool_done_activity("image", "generate_image", meta, None, [])
     assert d is not None

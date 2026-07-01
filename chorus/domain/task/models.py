@@ -45,7 +45,7 @@ class Task:
     error: Optional[str] = None
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
-    metadata: Optional[dict] = None
+    progress_total: Optional[int] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))

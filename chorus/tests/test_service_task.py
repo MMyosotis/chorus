@@ -148,7 +148,7 @@ def _conn_of(task_repo):
 
 
 def test_get_graph_includes_current_activity_and_timestamps():
-    """get_graph 每个 task 含 updated_at/started_at/finished_at/metadata/current_activity。"""
+    """get_graph 每个 task 含 updated_at/started_at/finished_at/current_activity。"""
     from chorus.repo.task_activities import TaskActivitiesRepository
     from chorus.domain.task import Task
     conn = fresh_conn()
@@ -164,14 +164,13 @@ def test_get_graph_includes_current_activity_and_timestamps():
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", invoke_message="x", dependencies=[],
         created_at=0.0, updated_at=10.0, started_at=5.0,
-        metadata={"progress_total": 3},
+        progress_total=3,
     ))
     act_repo.append("t1", "started", "出图中")
     graph = svc.get_graph("s1")
     t = graph["tasks"][0]
     assert t["started_at"] == 5.0
     assert t["updated_at"] == 10.0
-    assert t["metadata"] == {"progress_total": 3}
     assert t["current_activity"] is not None
     assert t["current_activity"]["role_line"] == "出图中"
     assert t["current_activity"]["event_type"] == "started"

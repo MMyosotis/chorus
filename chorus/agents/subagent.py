@@ -236,7 +236,7 @@ class SubAgentService:
             if is_user_visible_tool(call.name):
                 meta = getattr(d, "activity_meta", None)
                 td = tool_done_activity(
-                    task.agent_type, call.name, meta, task.metadata, done_images,
+                    task.agent_type, call.name, meta, task.progress_total, done_images,
                 )
                 # 先用 done_images（不含当前 url）算进度，再 append 供下一轮累计——
                 # 对齐 _image_done 的 all_images = done_images + [url] 契约，避免双计。

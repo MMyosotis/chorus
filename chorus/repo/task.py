@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at     REAL NOT NULL,
     started_at     REAL,
     finished_at    REAL,
-    metadata       TEXT,
+    progress_total INTEGER,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -40,6 +40,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 
 # cas_update 允许顺带更新的字段（白名单，防 SQL 注入与误写）
 _CAS_FIELDS = {"error", "feedback", "updated_at", "started_at", "finished_at"}
+# 注：progress_total 建图期 insert 一次性写入，不进 CAS（运行期不可变）
 
 
 class TaskRow(BaseModel):
@@ -63,7 +64,7 @@ class TaskRow(BaseModel):
     updated_at: float
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
-    metadata: Optional[str] = None
+    progress_total: Optional[int] = None
 
     def to_domain(self) -> Task:
         try:
@@ -81,7 +82,7 @@ class TaskRow(BaseModel):
             feedback=feedback, error=self.error,
             created_at=self.created_at, updated_at=self.updated_at,
             started_at=self.started_at, finished_at=self.finished_at,
-            metadata=json.loads(self.metadata) if self.metadata else None,
+            progress_total=self.progress_total,
         )
 
     @classmethod
@@ -94,7 +95,7 @@ class TaskRow(BaseModel):
             feedback=json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
             error=task.error, created_at=task.created_at, updated_at=task.updated_at,
             started_at=task.started_at, finished_at=task.finished_at,
-            metadata=json.dumps(task.metadata, ensure_ascii=False) if task.metadata is not None else None,
+            progress_total=task.progress_total,
         )
 
 
@@ -109,7 +110,7 @@ class TaskRepository:
         self._ensure_columns()
 
     def _ensure_columns(self) -> None:
-        """幂等加列（无迁移框架，CREATE TABLE IF NOT EXISTS 不覆盖已存在的旧表）。"""
+        """幂等加列/迁列（无迁移框架，CREATE TABLE IF NOT EXISTS 不覆盖已存在的旧表）。"""
         cols = {
             row["name"]
             for row in self._conn.get().execute("PRAGMA table_info(tasks)").fetchall()
@@ -118,8 +119,22 @@ class TaskRepository:
             self._conn.get().execute("ALTER TABLE tasks ADD COLUMN started_at REAL")
         if "finished_at" not in cols:
             self._conn.get().execute("ALTER TABLE tasks ADD COLUMN finished_at REAL")
-        if "metadata" not in cols:
-            self._conn.get().execute("ALTER TABLE tasks ADD COLUMN metadata TEXT")
+        if "progress_total" not in cols:
+            if "metadata" in cols:
+                # 旧 metadata 列存 JSON {"progress_total":N}：新建 INTEGER 列拷值，再丢弃旧列
+                #（rename 会保留 TEXT affinity 导致 int 被强转成文本，故走 add+drop）
+                self._conn.get().execute(
+                    "ALTER TABLE tasks ADD COLUMN progress_total INTEGER"
+                )
+                self._conn.get().execute(
+                    "UPDATE tasks SET progress_total = json_extract(metadata, '$.progress_total') "
+                    "WHERE metadata IS NOT NULL"
+                )
+                self._conn.get().execute("ALTER TABLE tasks DROP COLUMN metadata")
+            else:
+                self._conn.get().execute(
+                    "ALTER TABLE tasks ADD COLUMN progress_total INTEGER"
+                )
 
     def insert(self, task: Task) -> None:
         row = TaskRow.from_domain(task)

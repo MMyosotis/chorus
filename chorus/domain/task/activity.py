@@ -55,13 +55,13 @@ def tool_started_activity(
 
 def tool_done_activity(
     agent_type: str, tool_name: str,
-    activity_meta: Optional[dict], task_metadata: Optional[dict],
+    activity_meta: Optional[dict], progress_total: Optional[int],
     done_images: list[str],
 ) -> Optional[ActivityDraft]:
     if not is_user_visible_tool(tool_name):
         return None
     fn = _DONE_TRANSLATORS.get(tool_name)
-    return fn(activity_meta, task_metadata, done_images) if fn else None
+    return fn(activity_meta, progress_total, done_images) if fn else None
 
 
 def awaiting_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
@@ -123,7 +123,7 @@ def _tool_started_line(tool_name: str, arguments: dict) -> str:
 
 
 def _baidu_done(
-    activity_meta: Optional[dict], _task_metadata: Optional[dict], _done_images: list[str],
+    activity_meta: Optional[dict], _progress_total: Optional[int], _done_images: list[str],
 ) -> ActivityDraft:
     refs = (activity_meta or {}).get("refs") or []
     total = len(refs)
@@ -140,15 +140,12 @@ def _baidu_done(
 
 
 def _image_done(
-    activity_meta: Optional[dict], task_metadata: Optional[dict],
+    activity_meta: Optional[dict], progress_total: Optional[int],
     done_images: list[str],
 ) -> ActivityDraft:
     url = (activity_meta or {}).get("url") or ""
     all_images = done_images + ([url] if url else [])
-    progress_json, preview_json = image_progress_preview(
-        (task_metadata or {}).get("progress_total"),
-        all_images,
-    )
+    progress_json, preview_json = image_progress_preview(progress_total, all_images)
     n = len(all_images)
     role_line = f"已生成 {n} 张配图" if n else "配图生成完成"
     return ActivityDraft(
@@ -159,7 +156,7 @@ def _image_done(
 
 
 def _output_plan_done(
-    _activity_meta: Optional[dict], _task_metadata: Optional[dict], _done_images: list[str],
+    _activity_meta: Optional[dict], _progress_total: Optional[int], _done_images: list[str],
 ) -> ActivityDraft:
     return ActivityDraft(
         event_type="tool_done",
