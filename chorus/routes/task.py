@@ -37,17 +37,14 @@ def get_task_graph(
 def get_task_activities(
     task_id: str,
     limit: int = 50,
-    after_seq: Optional[int] = None,
     task: TaskService = Depends(provide_task_service),
 ):
     if limit < 1 or limit > 100:
         raise HTTPException(status_code=422, detail="limit 须在 1..100")
-    if after_seq is not None and after_seq < 0:
-        raise HTTPException(status_code=422, detail="after_seq 不可为负")
     try:
         return {
             "task_id": task_id,
-            "activities": task.get_activities(task_id, limit=limit, after_seq=after_seq),
+            "activities": task.get_activities(task_id, limit=limit),
         }
     except KeyError:
         raise HTTPException(status_code=404, detail="task not found")

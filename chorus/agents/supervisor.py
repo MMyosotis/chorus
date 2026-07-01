@@ -11,8 +11,9 @@ isinstance(outcome, ...) 分流，不认识工具名、不认 Terminal 载荷类
 from __future__ import annotations
 
 import json
-import uuid
 from typing import Iterator, Optional
+
+import uuid6
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import (
@@ -79,7 +80,7 @@ class SupervisorService:
             self._session.touch(session_id)
             while True:
                 ctx.turn.reset()
-                ctx.turn.message_id = uuid.uuid4().hex
+                ctx.turn.message_id = str(uuid6.uuid7())
                 yield MessageStartEvent(id=ctx.turn.message_id)
                 prompt = build_system_prompt(PromptContext(
                     skill_hints=self._skill.format_hints(),

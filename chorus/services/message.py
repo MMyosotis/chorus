@@ -9,8 +9,9 @@ TraceService.batch_aggregate。
 from __future__ import annotations
 
 import time
-import uuid
-from typing import Optional, TypeVar
+from typing import Optional
+
+import uuid6
 
 from chorus.domain.message import (
     AssistantMessage,
@@ -24,12 +25,6 @@ from chorus.domain.message import build_history_view, build_provider_messages
 from chorus.repo.message import MessageRepository
 from chorus.services.trace import TraceService
 
-# _append_with_seq 透传具体消息类型（model_copy 返回同型），保持调用方返回类型精确
-_M = TypeVar("_M", bound=Message)
-
-# 落库前占位：真实 seq（≥1）由 _append_with_seq 经 next_seq 分配后注入；负值在物理上不可能出现
-_UNASSIGNED_SEQ = -1
-
 
 class MessageService:
     def __init__(self, msg_repo: MessageRepository, trace_service: TraceService):
@@ -41,13 +36,13 @@ class MessageService:
 
     def append_user_message(self, session_id: str, content: str) -> UserMessage:
         msg = UserMessage(
-            id=uuid.uuid4().hex,
+            id=str(uuid6.uuid7()),
             session_id=session_id,
-            seq=_UNASSIGNED_SEQ,
             created_at=time.time(),
             content=content,
         )
-        return self._append_with_seq(msg)
+        self._msg_repo.append(msg)
+        return msg
 
     def append_assistant_message(
         self, session_id: str, *, message_id: str, content: Optional[str], tool_calls: list[ToolCallSpec],
@@ -55,38 +50,26 @@ class MessageService:
         msg = AssistantMessage(
             id=message_id,
             session_id=session_id,
-            seq=_UNASSIGNED_SEQ,
             created_at=time.time(),
             content=content,
             tool_calls=tool_calls,
         )
-        return self._append_with_seq(msg)
+        self._msg_repo.append(msg)
+        return msg
 
     def append_tool_message(
         self, session_id: str, *, tool_call_id: str, name: str, content: str,
     ) -> ToolMessage:
         msg = ToolMessage(
-            id=uuid.uuid4().hex,
+            id=str(uuid6.uuid7()),
             session_id=session_id,
-            seq=_UNASSIGNED_SEQ,
             created_at=time.time(),
             tool_call_id=tool_call_id,
             name=name,
             content=content,
         )
-        return self._append_with_seq(msg)
-
-    def _append_with_seq(self, msg: _M) -> _M:
-        """分配 seq + 落库。next_seq(读 MAX+1) 与 INSERT 非原子，但同 session 的
-        messages 写入经会话锁串行（supervisor 单流 + ErrorFinalizer 同流同步），
-        无并发抢槽；IntegrityError 直接上抛，由调用方视为主流程错误。
-
-        seq 在入库前由 model_copy 注入——Message frozen 不可变，占位 _UNASSIGNED_SEQ
-        仅在分配前存在，落库即纠正为真实序号。
-        """
-        persisted = msg.model_copy(update={"seq": self._msg_repo.next_seq(msg.session_id)})
-        self._msg_repo.append(persisted)
-        return persisted
+        self._msg_repo.append(msg)
+        return msg
 
     def history_view(self, session_id: str) -> list[MessageView]:
         """前端视图：过滤 tool/system，assistant 挂回 thinking/tools（从 trace 聚合）。
@@ -101,5 +84,5 @@ class MessageService:
 
     # provider_messages 唯一构建点
     def build_provider_messages(self, session_id: str, system_prompt: str) -> list[dict]:
-        """构建发给 LLM 的消息序列：[system] + 该会话全部历史消息（按 seq）。"""
+        """构建发给 LLM 的消息序列：[system] + 该会话全部历史消息（按 id 升序）。"""
         return build_provider_messages(system_prompt, self._msg_repo.list_by_session(session_id))

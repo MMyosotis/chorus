@@ -9,27 +9,19 @@ const props = defineProps({
 
 const activities = ref([])
 const expanded = ref(false)
-const afterSeq = ref(0)
 const loading = ref(false)
 let timer = null
 
-async function loadMore(initial = false) {
+async function loadMore() {
   if (!props.task) return
   const tid = props.task.id
   // running 才轮询；非 running 拉一次全量
   const isRunning = props.task.status === 'running'
-  if (!initial && !isRunning) return
+  if (!isRunning && timer) return
   loading.value = true
   try {
-    const data = await getTaskActivities(tid, { limit: 100, afterSeq: initial ? null : afterSeq.value })
-    if (initial) {
-      activities.value = data.activities
-    } else {
-      activities.value.push(...data.activities)
-    }
-    if (data.activities.length) {
-      afterSeq.value = data.activities[data.activities.length - 1].seq
-    }
+    const data = await getTaskActivities(tid, { limit: 100 })
+    activities.value = data.activities
   } catch {
     // 忽略，下轮重试
   } finally {
@@ -43,16 +35,16 @@ function stop() {
 
 function start() {
   stop()
-  loadMore(true)
-  // running 时轮询增量；非 running 不起 timer
+  loadMore()
+  // running 时轮询全量；非 running 不起 timer
   if (props.task && props.task.status === 'running') {
-    timer = setInterval(() => loadMore(false), 1500)
+    timer = setInterval(() => loadMore(), 1500)
   }
 }
 
-watch(() => props.task?.id, () => { afterSeq.value = 0; activities.value = []; expanded.value = false; start() }, { immediate: true })
+watch(() => props.task?.id, () => { activities.value = []; expanded.value = false; start() }, { immediate: true })
 watch(() => props.task?.status, (s) => {
-  if (s !== 'running') { stop(); loadMore(true) }
+  if (s !== 'running') { stop(); loadMore() }
   else if (!timer) { start() }
 })
 
@@ -96,7 +88,7 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
     </div>
 
     <div v-if="shownActivities.length" class="ap-list">
-      <div v-for="a in shownActivities" :key="a.seq" class="ap-item" :class="a.status">
+      <div v-for="a in shownActivities" :key="a.id" class="ap-item" :class="a.status">
         <span class="ap-dot" :class="a.status" />
         <span class="ap-recent-line">{{ a.role_line }}</span>
       </div>

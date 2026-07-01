@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import uuid6
+
 from chorus.repo.message import MessageRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
@@ -20,7 +22,9 @@ def _setup():
 def test_three_role_roundtrip():
     svc = _setup()
     svc.append_user_message("s1", "hi")
-    svc.append_assistant_message("s1", message_id="m1", content="yo", tool_calls=[])
+    # assistant 的 message_id 由调用方预生成（生产由 supervisor 调 uuid6.uuid7()），
+    # 须用 uuid7 才能与 user/tool 的 id 同处趋势递增序，ORDER BY id 才正确
+    svc.append_assistant_message("s1", message_id=str(uuid6.uuid7()), content="yo", tool_calls=[])
     svc.append_tool_message("s1", tool_call_id="c1", name="search", content="r")
     msgs = svc.list_messages("s1")
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]

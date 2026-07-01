@@ -112,14 +112,12 @@ class TaskService:
         display = select_display_pipeline([], same_pipeline)  # active 空，返 finished 子集
         return self._graph_dict(latest.pipeline_id, display, False)
 
-    def get_activities(
-        self, task_id: str, *, limit: int = 50, after_seq: Optional[int] = None,
-    ) -> list[dict]:
-        """该 task 的用户态活动（按 seq 升序），供 Dock 活动流。"""
+    def get_activities(self, task_id: str, *, limit: int = 50) -> list[dict]:
+        """该 task 的用户态活动（按 id 升序，即发生顺序），供 Dock 活动流。"""
         if self._task_repo.get(task_id) is None:
             raise KeyError(task_id)
         limit = max(1, min(100, limit))
-        rows = self._activities_repo.list_by_task(task_id, limit=limit, after_seq=after_seq)
+        rows = self._activities_repo.list_by_task(task_id, limit=limit)
         return [_dump_activity(a) for a in rows]
 
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:

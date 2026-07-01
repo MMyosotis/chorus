@@ -28,16 +28,15 @@ _DDL = """
 CREATE TABLE IF NOT EXISTS messages (
     id              TEXT PRIMARY KEY,
     session_id      TEXT NOT NULL,
-    seq             INTEGER NOT NULL,
     role            TEXT NOT NULL,
     content         TEXT,
     tool_calls_json TEXT,
     tool_call_id    TEXT,
     tool_name       TEXT,
     created_at      REAL NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    UNIQUE (session_id, seq)
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
+CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
 """
 
 
@@ -48,7 +47,6 @@ class MessageRow(BaseModel):
 
     id: str
     session_id: str
-    seq: int
     role: str
     content: Optional[str] = None
     tool_calls_json: Optional[str] = None
@@ -58,14 +56,14 @@ class MessageRow(BaseModel):
 
     def to_domain(self) -> Message:
         if self.role == "user":
-            return UserMessage(id=self.id, session_id=self.session_id, seq=self.seq,
+            return UserMessage(id=self.id, session_id=self.session_id,
                                created_at=self.created_at, content=self.content or "")
         if self.role == "assistant":
-            return AssistantMessage(id=self.id, session_id=self.session_id, seq=self.seq,
+            return AssistantMessage(id=self.id, session_id=self.session_id,
                                     created_at=self.created_at, content=self.content,
                                     tool_calls=self._parse_tool_calls(self.tool_calls_json))
         if self.role == "tool":
-            return ToolMessage(id=self.id, session_id=self.session_id, seq=self.seq,
+            return ToolMessage(id=self.id, session_id=self.session_id,
                                created_at=self.created_at,
                                tool_call_id=self.tool_call_id or "",
                                name=self.tool_name or "",
@@ -75,15 +73,15 @@ class MessageRow(BaseModel):
     @classmethod
     def from_domain(cls, msg: Message) -> "MessageRow":
         if isinstance(msg, UserMessage):
-            return cls(id=msg.id, session_id=msg.session_id, seq=msg.seq,
+            return cls(id=msg.id, session_id=msg.session_id,
                        role="user", content=msg.content, created_at=msg.created_at)
         if isinstance(msg, AssistantMessage):
-            return cls(id=msg.id, session_id=msg.session_id, seq=msg.seq,
+            return cls(id=msg.id, session_id=msg.session_id,
                        role="assistant", content=msg.content,
                        tool_calls_json=cls._dump_tool_calls(msg.tool_calls),
                        created_at=msg.created_at)
         if isinstance(msg, ToolMessage):
-            return cls(id=msg.id, session_id=msg.session_id, seq=msg.seq,
+            return cls(id=msg.id, session_id=msg.session_id,
                        role="tool", content=msg.content,
                        tool_call_id=msg.tool_call_id, tool_name=msg.name,
                        created_at=msg.created_at)
@@ -124,9 +122,9 @@ class MessageRepository:
         )
 
     def list_by_session(self, session_id: str) -> list[Message]:
-        """按 seq 升序返回该会话全部消息。"""
+        """按 id 升序返回该会话全部消息（id 为 uuid7 趋势递增，即写入顺序）。"""
         rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM messages WHERE session_id=? ORDER BY seq",
+            f"SELECT {_COLS} FROM messages WHERE session_id=? ORDER BY id",
             (session_id,),
         ).fetchall()
         return [MessageRow(**dict(r)).to_domain() for r in rows]
@@ -137,11 +135,3 @@ class MessageRepository:
             (message_id,),
         ).fetchone()
         return MessageRow(**dict(row)).to_domain() if row else None
-
-    def next_seq(self, session_id: str) -> int:
-        """返回下一个 seq。同 session 写入经会话锁串行，无并发抢槽（见 MessageService）。"""
-        row = self._conn.get().execute(
-            "SELECT COALESCE(MAX(seq), -1) + 1 FROM messages WHERE session_id=?",
-            (session_id,),
-        ).fetchone()
-        return int(row[0]) if row else 0

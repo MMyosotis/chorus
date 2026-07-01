@@ -140,9 +140,8 @@ class PostCard:
 class TaskActivity:
     """活动流一行：按事件粒度追加的用户态活动。"""
 
-    id: str
+    id: int
     task_id: str
-    seq: int
     event_type: str
     role_line: str
     status: str

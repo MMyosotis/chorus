@@ -5,13 +5,13 @@
 
 映射归框架（命名绑定 + model_fields 派生列名），形状转换（3×json）集中在
 TaskActivityRow.from_values / to_domain。append 收原语（签名不变），内部生成
-id/seq/created_at，故用 from_values 而非 from_domain。
+id/created_at（id 为 uuid7 趋势递增，ORDER BY id 即活动顺序），故用 from_values
+而非 from_domain。id 在 from_values 内由 uuid6.uuid7() 生成（持久化关注点，不外露）。
 """
 from __future__ import annotations
 
 import json
 import time
-import uuid
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -21,9 +21,8 @@ from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS task_activities (
-    id                    TEXT PRIMARY KEY,
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id               TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    seq                   INTEGER NOT NULL,
     event_type            TEXT NOT NULL,
     tool_name             TEXT,
     tool_call_id          TEXT,
@@ -34,24 +33,26 @@ CREATE TABLE IF NOT EXISTS task_activities (
     artifact_preview_json TEXT,
     status                TEXT NOT NULL,
     created_at            REAL NOT NULL,
-    updated_at            REAL NOT NULL,
-    UNIQUE(task_id, seq)
+    updated_at            REAL NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_task_activities_task_seq
-ON task_activities(task_id, seq);
+CREATE INDEX IF NOT EXISTS idx_task_activities_task_id
+ON task_activities(task_id, id);
 CREATE INDEX IF NOT EXISTS idx_task_activities_task_updated
 ON task_activities(task_id, updated_at);
 """
 
 
 class TaskActivityRow(BaseModel):
-    """task_activities 表持久化形状（1:1 贴列）。映射归框架，转换归 from_values/to_domain。"""
+    """task_activities 表持久化形状（1:1 贴列）。映射归框架，转换归 from_values/to_domain。
+
+    id 为 SQLite 自增主键：INSERT 时不写该列（_INSERT_COLS 排除 id），由库分配，
+    lastrowid 回读后注入 Row 再 to_domain。回读路径（list/latest）从行直接装配，id 已在列中。
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    id: str
+    id: Optional[int] = None
     task_id: str
-    seq: int
     event_type: str
     tool_name: Optional[str] = None
     tool_call_id: Optional[str] = None
@@ -66,7 +67,7 @@ class TaskActivityRow(BaseModel):
 
     def to_domain(self) -> TaskActivity:
         return TaskActivity(
-            id=self.id, task_id=self.task_id, seq=self.seq,
+            id=self.id, task_id=self.task_id,
             event_type=self.event_type,
             tool_name=self.tool_name, tool_call_id=self.tool_call_id,
             role_line=self.role_line, detail_md=self.detail_md,
@@ -78,7 +79,7 @@ class TaskActivityRow(BaseModel):
 
     @classmethod
     def from_values(
-        cls, task_id: str, seq: int, event_type: str,
+        cls, task_id: str, event_type: str,
         role_line: str, status: str, now: float,
         *, tool_name: Optional[str] = None,
         tool_call_id: Optional[str] = None,
@@ -87,7 +88,7 @@ class TaskActivityRow(BaseModel):
         updated_at: Optional[float] = None,
     ) -> "TaskActivityRow":
         return cls(
-            id=uuid.uuid4().hex, task_id=task_id, seq=seq,
+            id=None, task_id=task_id,
             event_type=event_type, tool_name=tool_name,
             tool_call_id=tool_call_id, role_line=role_line,
             detail_md=detail_md,
@@ -102,21 +103,16 @@ def _loads(raw: Optional[str]) -> Any:
     return json.loads(raw) if raw else None
 
 
-_COLS = ", ".join(TaskActivityRow.model_fields)
-_PH = ", ".join(f":{k}" for k in TaskActivityRow.model_fields)
+# INSERT 排除自增主键 id（由库分配，lastrowid 回读）
+_INSERT_COLS = ", ".join(k for k in TaskActivityRow.model_fields if k != "id")
+_INSERT_PH = ", ".join(f":{k}" for k in TaskActivityRow.model_fields if k != "id")
+_SELECT_COLS = ", ".join(TaskActivityRow.model_fields)
 
 
 class TaskActivitiesRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
-
-    def next_seq(self, task_id: str) -> int:
-        row = self._conn.get().execute(
-            "SELECT COALESCE(MAX(seq), 0) + 1 FROM task_activities WHERE task_id=?",
-            (task_id,),
-        ).fetchone()
-        return int(row[0]) if row else 1
 
     def append(
         self, task_id: str, event_type: str, role_line: str,
@@ -127,40 +123,32 @@ class TaskActivitiesRepository:
         artifact_preview_json: Any = None, updated_at: Optional[float] = None,
     ) -> TaskActivity:
         now = updated_at if updated_at is not None else time.time()
-        seq = self.next_seq(task_id)
         row = TaskActivityRow.from_values(
-            task_id, seq, event_type, role_line, status, now,
+            task_id, event_type, role_line, status, now,
             tool_name=tool_name, tool_call_id=tool_call_id,
             detail_md=detail_md, summary_json=summary_json,
             progress_json=progress_json, artifact_preview_json=artifact_preview_json,
             updated_at=updated_at,
         )
-        self._conn.get().execute(
-            f"INSERT INTO task_activities({_COLS}) VALUES ({_PH})", row.model_dump()
+        cur = self._conn.get().execute(
+            f"INSERT INTO task_activities({_INSERT_COLS}) VALUES ({_INSERT_PH})",
+            row.model_dump(exclude={"id"}),
         )
-        return row.to_domain()
+        # 自增主键由库分配，lastrowid 回读注入 Row 再 to_domain
+        return row.model_copy(update={"id": int(cur.lastrowid)}).to_domain()
 
-    def list_by_task(
-        self, task_id: str, *, limit: int = 50, after_seq: Optional[int] = None,
-    ) -> list[TaskActivity]:
-        if after_seq is not None:
-            rows = self._conn.get().execute(
-                f"SELECT {_COLS} FROM task_activities "
-                "WHERE task_id=? AND seq>? ORDER BY seq LIMIT ?",
-                (task_id, after_seq, limit),
-            ).fetchall()
-        else:
-            rows = self._conn.get().execute(
-                f"SELECT {_COLS} FROM task_activities "
-                "WHERE task_id=? ORDER BY seq LIMIT ?",
-                (task_id, limit),
-            ).fetchall()
+    def list_by_task(self, task_id: str, *, limit: int = 50) -> list[TaskActivity]:
+        rows = self._conn.get().execute(
+            f"SELECT {_SELECT_COLS} FROM task_activities "
+            "WHERE task_id=? ORDER BY id LIMIT ?",
+            (task_id, limit),
+        ).fetchall()
         return [TaskActivityRow(**dict(r)).to_domain() for r in rows]
 
     def latest_by_task(self, task_id: str) -> Optional[TaskActivity]:
         rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM task_activities "
-            "WHERE task_id=? ORDER BY seq DESC LIMIT 1",
+            f"SELECT {_SELECT_COLS} FROM task_activities "
+            "WHERE task_id=? ORDER BY id DESC LIMIT 1",
             (task_id,),
         ).fetchall()
         return TaskActivityRow(**dict(rows[0])).to_domain() if rows else None
@@ -170,11 +158,10 @@ class TaskActivitiesRepository:
             return {}
         placeholders = ",".join("?" * len(task_ids))
         rows = self._conn.get().execute(
-            f"SELECT a.* FROM task_activities a JOIN ("
-            f"SELECT task_id, MAX(seq) AS max_seq FROM task_activities "
+            f"SELECT {_SELECT_COLS} FROM task_activities a JOIN ("
+            f"SELECT task_id AS t_id, MAX(id) AS max_id FROM task_activities "
             f"WHERE task_id IN ({placeholders}) GROUP BY task_id"
-            f") x ON a.task_id = x.task_id AND a.seq = x.max_seq",
+            f") x ON a.task_id = x.t_id AND a.id = x.max_id",
             tuple(task_ids),
         ).fetchall()
         return {r["task_id"]: TaskActivityRow(**dict(r)).to_domain() for r in rows}
-

@@ -53,7 +53,7 @@ class FakeTaskService:
     def get_graph(self, session_id):
         return self._call("get_graph", session_id)
 
-    def get_activities(self, task_id, *, limit=50, after_seq=None):
+    def get_activities(self, task_id, *, limit=50):
         return self._call("get_activities", task_id)
 
     def confirm(self, task_id, selected):
@@ -194,10 +194,10 @@ def test_get_activities_not_found():
 
 def test_get_activities_ok():
     task = FakeTaskService()
-    task.set("get_activities", "t1", [{"seq": 1, "event_type": "started"}])
+    task.set("get_activities", "t1", [{"id": "x1", "event_type": "started"}])
     r = _client(FakeSessionService({"s1"}), task).get("/api/tasks/t1/activities", params={"limit": 10})
     assert r.status_code == 200
-    assert r.json() == {"task_id": "t1", "activities": [{"seq": 1, "event_type": "started"}]}
+    assert r.json() == {"task_id": "t1", "activities": [{"id": "x1", "event_type": "started"}]}
 
 
 def test_get_activities_limit_out_of_range():

@@ -1,11 +1,9 @@
 # kitty/tests/test_repo_task_activities.py
-"""TaskActivitiesRepository 的 smoke test：append/seq/latest/批量 latest。
+"""TaskActivitiesRepository 的 smoke test：append/id 递增/latest/批量 latest。
 
 运行：``.venv/bin/python -m chorus.tests.test_repo_task_activities``
 """
 from __future__ import annotations
-
-import time
 
 import pytest
 
@@ -31,26 +29,25 @@ def _repo():
     return TaskActivitiesRepository(conn), conn
 
 
-def test_append_assigns_seq_and_id():
+def test_append_assigns_increasing_id():
     repo, conn = _repo()
     tid = _seed_task(conn)
     a1 = repo.append(tid, "started", "接单啦")
     a2 = repo.append(tid, "tool_done", "搜完了")
-    assert a1.seq == 1 and a2.seq == 2
     assert a1.id != a2.id
+    assert a1.id < a2.id  # uuid7 趋势递增
     assert a1.event_type == "started" and a1.status == "running"
 
 
-def test_list_by_task_orders_by_seq_and_respects_after_seq():
+def test_list_by_task_orders_by_id():
     repo, conn = _repo()
     tid = _seed_task(conn)
     repo.append(tid, "started", "a")
     repo.append(tid, "tool_done", "b")
     repo.append(tid, "done", "c")
     all_rows = repo.list_by_task(tid)
-    assert [r.seq for r in all_rows] == [1, 2, 3]
-    tail = repo.list_by_task(tid, after_seq=1)
-    assert [r.seq for r in tail] == [2, 3]
+    assert [r.role_line for r in all_rows] == ["a", "b", "c"]
+    assert all(all_rows[i].id < all_rows[i + 1].id for i in range(len(all_rows) - 1))
 
 
 def test_latest_by_task_and_latest_by_tasks():

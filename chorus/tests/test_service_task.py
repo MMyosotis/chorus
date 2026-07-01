@@ -175,7 +175,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
 
 
 def test_get_activities_returns_serialized_list():
-    """get_activities 返 dict 列表（TypeAdapter 序列化），按 seq 升序。"""
+    """get_activities 返 dict 列表（TypeAdapter 序列化），按 id 升序。"""
     from chorus.repo.task_activities import TaskActivitiesRepository
     from chorus.domain.task import Task
     conn = fresh_conn()
@@ -195,14 +195,11 @@ def test_get_activities_returns_serialized_list():
     act_repo.append("t1", "done", "b", status="done",
                     summary_json={"type": "search_results", "total": 1})
     acts = svc.get_activities("t1")
-    assert [a["seq"] for a in acts] == [1, 2]
+    assert [a["role_line"] for a in acts] == ["a", "b"]
     assert acts[1]["summary_json"]["total"] == 1
     # TypeAdapter dump_python 产出的 dict 可 JSON 序列化
     import json as _json
     _json.dumps(acts)
-    # after_seq 增量
-    tail = svc.get_activities("t1", after_seq=1)
-    assert [a["seq"] for a in tail] == [2]
 
 
 def main():
