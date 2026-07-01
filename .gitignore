@@ -1,9 +1,16 @@
 .idea
-.env
+
+# python
 .venv
-__pycache__
+
+# node
 node_modules
 dist
-.vite
+
+# agent
+/.claude/
+/.superpowers/
+
+# chorus
 /data/
-.DS_Store
+.env
