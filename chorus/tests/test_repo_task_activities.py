@@ -1,5 +1,5 @@
 # kitty/tests/test_repo_task_activities.py
-"""TaskActivitiesRepository 的 smoke test：append/seq/latest/update/批量 latest。
+"""TaskActivitiesRepository 的 smoke test：append/seq/latest/批量 latest。
 
 运行：``.venv/bin/python -m chorus.tests.test_repo_task_activities``
 """
@@ -34,8 +34,8 @@ def _repo():
 def test_append_assigns_seq_and_id():
     repo, conn = _repo()
     tid = _seed_task(conn)
-    a1 = repo.append(tid, "started", "planning", "接单啦")
-    a2 = repo.append(tid, "tool_done", "researching", "搜完了")
+    a1 = repo.append(tid, "started", "接单啦")
+    a2 = repo.append(tid, "tool_done", "搜完了")
     assert a1.seq == 1 and a2.seq == 2
     assert a1.id != a2.id
     assert a1.event_type == "started" and a1.status == "running"
@@ -44,9 +44,9 @@ def test_append_assigns_seq_and_id():
 def test_list_by_task_orders_by_seq_and_respects_after_seq():
     repo, conn = _repo()
     tid = _seed_task(conn)
-    repo.append(tid, "started", "planning", "a")
-    repo.append(tid, "tool_done", "researching", "b")
-    repo.append(tid, "done", "summarizing", "c")
+    repo.append(tid, "started", "a")
+    repo.append(tid, "tool_done", "b")
+    repo.append(tid, "done", "c")
     all_rows = repo.list_by_task(tid)
     assert [r.seq for r in all_rows] == [1, 2, 3]
     tail = repo.list_by_task(tid, after_seq=1)
@@ -56,14 +56,14 @@ def test_list_by_task_orders_by_seq_and_respects_after_seq():
 def test_latest_by_task_and_latest_by_tasks():
     repo, conn = _repo()
     tid = _seed_task(conn)
-    repo.append(tid, "started", "planning", "a")
-    repo.append(tid, "done", "summarizing", "b", status="done")
+    repo.append(tid, "started", "a")
+    repo.append(tid, "done", "b", status="done")
     assert repo.latest_by_task(tid).role_line == "b"
     # 空 task 返 None
     assert repo.latest_by_task("nope") is None
     # 批量
     _seed_task(conn, "t2")
-    repo.append("t2", "started", "planning", "c")
+    repo.append("t2", "started", "c")
     m = repo.latest_by_tasks(["t1", "t2", "t3"])
     assert set(m.keys()) == {"t1", "t2"}
     assert m["t1"].role_line == "b"
@@ -72,24 +72,11 @@ def test_latest_by_task_and_latest_by_tasks():
     assert repo.latest_by_tasks([]) == {}
 
 
-def test_update_latest_if_same_action_only_when_same_running():
-    repo, conn = _repo()
-    tid = _seed_task(conn)
-    repo.append(tid, "tool_started", "researching", "搜1")
-    # 同 action 且 running → update（不新增行）
-    updated = repo.update_latest_if_same_action(tid, "researching", role_line="搜2")
-    assert updated is not None and updated.role_line == "搜2"
-    assert len(repo.list_by_task(tid)) == 1
-    # 不同 action → 返 None，调用方应 append
-    miss = repo.update_latest_if_same_action(tid, "writing", role_line="写")
-    assert miss is None
-
-
 def test_json_fields_roundtrip():
     repo, conn = _repo()
     tid = _seed_task(conn)
     repo.append(
-        tid, "tool_done", "researching", "搜完了",
+        tid, "tool_done", "搜完了",
         summary_json={"type": "search_results", "total": 3},
         progress_json={"type": "steps", "current": 1, "total": 3},
     )

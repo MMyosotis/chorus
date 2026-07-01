@@ -166,7 +166,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
         created_at=0.0, updated_at=10.0, started_at=5.0,
         metadata={"progress_total": 3},
     ))
-    act_repo.append("t1", "started", "generating_image", "出图中")
+    act_repo.append("t1", "started", "出图中")
     graph = svc.get_graph("s1")
     t = graph["tasks"][0]
     assert t["started_at"] == 5.0
@@ -195,8 +195,8 @@ def test_get_activities_returns_serialized_list():
         status="running", invoke_message="x", dependencies=[],
         created_at=0.0, updated_at=0.0, started_at=1.0,
     ))
-    act_repo.append("t1", "started", "planning", "a")
-    act_repo.append("t1", "done", "summarizing", "b", status="done",
+    act_repo.append("t1", "started", "a")
+    act_repo.append("t1", "done", "b", status="done",
                     summary_json={"type": "search_results", "total": 1})
     acts = svc.get_activities("t1")
     assert [a["seq"] for a in acts] == [1, 2]

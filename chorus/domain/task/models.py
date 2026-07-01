@@ -179,7 +179,6 @@ class TaskActivity:
     task_id: str
     seq: int
     event_type: str
-    action_type: str
     role_line: str
     status: str
     created_at: float
@@ -187,7 +186,6 @@ class TaskActivity:
     iteration: Optional[int] = None
     tool_name: Optional[str] = None
     tool_call_id: Optional[str] = None
-    title: Optional[str] = None
     detail_md: Optional[str] = None
     summary_json: Optional[dict] = None
     progress_json: Optional[dict] = None

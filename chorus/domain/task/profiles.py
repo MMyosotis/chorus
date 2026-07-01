@@ -5,6 +5,9 @@ artifacts_schema/expected_sections/artifacts_model）。
 工具能力边界（白名单）不在此——见 config.TOOL_WHITELISTS，由各 agent 查表取名字
 再交 tools 包筛 schema。加角色只加一条 AgentProfile（含挂 artifacts_model）。
 全部文案纯文本禁 emoji。
+
+展示文案资产：角色入场台词（enter_line）属角色档案留此；工具活动台词与翻译
+逻辑（含动态拼 query）归 activity 翻译层，不在此。
 """
 from __future__ import annotations
 
@@ -68,3 +71,4 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_model=PostCard,
     ),
 }
+

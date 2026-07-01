@@ -178,10 +178,10 @@ class SubAgentService:
         try:
             self._activities.append(
                 task.id,
-                event_type=draft.event_type, action_type=draft.action_type,
+                event_type=draft.event_type,
                 role_line=draft.role_line, status=draft.status,
                 iteration=iteration, tool_name=tool_name, tool_call_id=tool_call_id,
-                title=draft.title, detail_md=draft.detail_md,
+                detail_md=draft.detail_md,
                 summary_json=draft.summary_json, progress_json=draft.progress_json,
                 artifact_preview_json=draft.artifact_preview_json,
             )
@@ -228,7 +228,7 @@ class SubAgentService:
             ))
             # tool_started activity（仅 visible 工具）
             if is_user_visible_tool(call.name):
-                draft = tool_started_activity(task.agent_type, call.name, call.arguments, task.metadata)
+                draft = tool_started_activity(task.agent_type, call.name, call.arguments)
                 if draft is not None:
                     self._write_activity(task, draft, tool_call_id=call.id, tool_name=call.name)
             d = self._tools.dispatch(call, tool_ctx)
@@ -236,7 +236,7 @@ class SubAgentService:
             if is_user_visible_tool(call.name):
                 meta = getattr(d, "activity_meta", None)
                 td = tool_done_activity(
-                    task.agent_type, call.name, call.arguments, meta, task.metadata, done_images,
+                    task.agent_type, call.name, meta, task.metadata, done_images,
                 )
                 # 先用 done_images（不含当前 url）算进度，再 append 供下一轮累计——
                 # 对齐 _image_done 的 all_images = done_images + [url] 契约，避免双计。

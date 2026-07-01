@@ -34,13 +34,13 @@ def test_is_user_visible_tool():
 
 def test_tool_started_activity_hidden_tool_returns_none():
     # load_skill 不可见 → None（不写 tool activity）
-    assert tool_started_activity("idea", "load_skill", {}, None) is None
+    assert tool_started_activity("idea", "load_skill", {}) is None
 
 
 def test_tool_done_activity_baidu_search_summary():
     meta = {"refs": [{"title": "t1", "url": "u1", "snippet": "s1"},
                      {"title": "t2", "url": "u2", "snippet": "s2"}]}
-    d = tool_done_activity("idea", "baidu_search", {"query": "q"}, meta, None, [])
+    d = tool_done_activity("idea", "baidu_search", meta, None, [])
     assert d is not None
     assert d.summary_json["type"] == "search_results"
     assert d.summary_json["total"] == 2
@@ -50,7 +50,7 @@ def test_tool_done_activity_baidu_search_summary():
 def test_tool_done_activity_generate_image_progress_with_metadata():
     meta = {"url": "https://img/2.jpg"}
     done = ["https://img/1.jpg"]  # 已有 1 张，本次第 2 张
-    d = tool_done_activity("image", "generate_image", {"prompt": "p"}, meta,
+    d = tool_done_activity("image", "generate_image", meta,
                            {"progress_total": 3, "progress_unit": "张图"}, done)
     assert d is not None
     # done_images 传入时尚未追加本次 url，progress current = len(done)+1 = 2
@@ -62,7 +62,7 @@ def test_tool_done_activity_generate_image_progress_with_metadata():
 
 def test_tool_done_activity_generate_image_no_metadata_only_count():
     meta = {"url": "https://img/1.jpg"}
-    d = tool_done_activity("image", "generate_image", {"prompt": "p"}, meta, None, [])
+    d = tool_done_activity("image", "generate_image", meta, None, [])
     assert d is not None
     # 无 progress_total → 不显示 current/total，只显示已生成数量
     assert d.progress_json is None

@@ -27,10 +27,8 @@ CREATE TABLE IF NOT EXISTS task_activities (
     seq                   INTEGER NOT NULL,
     iteration             INTEGER,
     event_type            TEXT NOT NULL,
-    action_type           TEXT NOT NULL,
     tool_name             TEXT,
     tool_call_id          TEXT,
-    title                 TEXT,
     role_line             TEXT NOT NULL,
     detail_md             TEXT,
     summary_json          TEXT,
@@ -58,10 +56,8 @@ class TaskActivityRow(BaseModel):
     seq: int
     iteration: Optional[int] = None
     event_type: str
-    action_type: str
     tool_name: Optional[str] = None
     tool_call_id: Optional[str] = None
-    title: Optional[str] = None
     role_line: str
     detail_md: Optional[str] = None
     summary_json: Optional[str] = None
@@ -74,9 +70,9 @@ class TaskActivityRow(BaseModel):
     def to_domain(self) -> TaskActivity:
         return TaskActivity(
             id=self.id, task_id=self.task_id, seq=self.seq, iteration=self.iteration,
-            event_type=self.event_type, action_type=self.action_type,
+            event_type=self.event_type,
             tool_name=self.tool_name, tool_call_id=self.tool_call_id,
-            title=self.title, role_line=self.role_line, detail_md=self.detail_md,
+            role_line=self.role_line, detail_md=self.detail_md,
             summary_json=_loads(self.summary_json),
             progress_json=_loads(self.progress_json),
             artifact_preview_json=_loads(self.artifact_preview_json),
@@ -85,18 +81,18 @@ class TaskActivityRow(BaseModel):
 
     @classmethod
     def from_values(
-        cls, task_id: str, seq: int, event_type: str, action_type: str,
+        cls, task_id: str, seq: int, event_type: str,
         role_line: str, status: str, now: float,
         *, iteration: Optional[int] = None, tool_name: Optional[str] = None,
-        tool_call_id: Optional[str] = None, title: Optional[str] = None,
+        tool_call_id: Optional[str] = None,
         detail_md: Optional[str] = None, summary_json: Any = None,
         progress_json: Any = None, artifact_preview_json: Any = None,
         updated_at: Optional[float] = None,
     ) -> "TaskActivityRow":
         return cls(
             id=uuid.uuid4().hex, task_id=task_id, seq=seq, iteration=iteration,
-            event_type=event_type, action_type=action_type, tool_name=tool_name,
-            tool_call_id=tool_call_id, title=title, role_line=role_line,
+            event_type=event_type, tool_name=tool_name,
+            tool_call_id=tool_call_id, role_line=role_line,
             detail_md=detail_md,
             summary_json=json.dumps(summary_json, ensure_ascii=False) if summary_json is not None else None,
             progress_json=json.dumps(progress_json, ensure_ascii=False) if progress_json is not None else None,
@@ -126,19 +122,19 @@ class TaskActivitiesRepository:
         return int(row[0]) if row else 1
 
     def append(
-        self, task_id: str, event_type: str, action_type: str, role_line: str,
+        self, task_id: str, event_type: str, role_line: str,
         status: str = "running", *, iteration: Optional[int] = None,
         tool_name: Optional[str] = None, tool_call_id: Optional[str] = None,
-        title: Optional[str] = None, detail_md: Optional[str] = None,
+        detail_md: Optional[str] = None,
         summary_json: Any = None, progress_json: Any = None,
         artifact_preview_json: Any = None, updated_at: Optional[float] = None,
     ) -> TaskActivity:
         now = updated_at if updated_at is not None else time.time()
         seq = self.next_seq(task_id)
         row = TaskActivityRow.from_values(
-            task_id, seq, event_type, action_type, role_line, status, now,
+            task_id, seq, event_type, role_line, status, now,
             iteration=iteration, tool_name=tool_name, tool_call_id=tool_call_id,
-            title=title, detail_md=detail_md, summary_json=summary_json,
+            detail_md=detail_md, summary_json=summary_json,
             progress_json=progress_json, artifact_preview_json=artifact_preview_json,
             updated_at=updated_at,
         )
@@ -185,37 +181,3 @@ class TaskActivitiesRepository:
         ).fetchall()
         return {r["task_id"]: TaskActivityRow(**dict(r)).to_domain() for r in rows}
 
-    def update_latest_if_same_action(
-        self, task_id: str, action_type: str, *, role_line: Optional[str] = None,
-        detail_md: Optional[str] = None, summary_json: Any = None,
-        progress_json: Any = None, artifact_preview_json: Any = None,
-        status: Optional[str] = None,
-    ) -> Optional[TaskActivity]:
-        """仅当 latest 的 action_type 相同且仍 running 时 update；否则返 None（调用方 append）。"""
-        latest = self.latest_by_task(task_id)
-        if latest is None or latest.action_type != action_type or latest.status != "running":
-            return None
-        sets: list[str] = []
-        params: list[Any] = []
-        if role_line is not None:
-            sets.append("role_line=?"); params.append(role_line)
-        if detail_md is not None:
-            sets.append("detail_md=?"); params.append(detail_md)
-        if summary_json is not None:
-            sets.append("summary_json=?"); params.append(json.dumps(summary_json, ensure_ascii=False))
-        if progress_json is not None:
-            sets.append("progress_json=?"); params.append(json.dumps(progress_json, ensure_ascii=False))
-        if artifact_preview_json is not None:
-            sets.append("artifact_preview_json=?"); params.append(json.dumps(artifact_preview_json, ensure_ascii=False))
-        if status is not None:
-            sets.append("status=?"); params.append(status)
-        if not sets:
-            return latest
-        sets.append("updated_at=?"); params.append(time.time())
-        params.extend([task_id, latest.seq])
-        self._conn.get().execute(
-            f"UPDATE task_activities SET {', '.join(sets)} "
-            "WHERE task_id=? AND seq=?",
-            params,
-        )
-        return self.latest_by_task(task_id)

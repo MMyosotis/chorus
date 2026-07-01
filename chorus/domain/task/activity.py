@@ -1,14 +1,18 @@
 # chorus/domain/task/activity.py
 """Activity 翻译层：把 subagent ReAct 事件翻译成用户态 ActivityDraft。
 
-纯函数，不碰 DB。围绕 task 活动展示单一概念内聚。模板按 agent_type + tool_name +
-event_type 查表生成，文案禁 emoji。工具结构化产物经 activity_meta（来自
-DispatchResult.activity_meta，由 ToolRunResult 透传）传入，不从格式化文本反解析。
+纯函数，不碰 DB。围绕 task 活动展示单一概念内聚：工具活动策略（started 台词 +
+done 翻译）集中在本模块两张注册表；角色入场台词仍属角色档案（profiles.enter_line）。
+工具结构化产物经 activity_meta（来自 DispatchResult.activity_meta，由
+ToolRunResult 透传）传入，不从格式化文本反解析。
+
+布局：公开入口（各 *_activity，按生命周期顺序）在上，私有实现（工具策略注册表
++ 翻译器 + 辅助）集中在下。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from chorus.domain.task.models import Narrative
 from chorus.domain.task.profiles import AGENT_PROFILES
@@ -16,14 +20,16 @@ from chorus.domain.task.profiles import AGENT_PROFILES
 # 用户可见工具（写 tool_started/tool_done activity）；load_skill 等隐藏
 _VISIBLE_TOOLS = {"baidu_search", "generate_image", "output_plan"}
 
+# 通用态文案（非角色非工具，翻译逻辑的一部分）
+_FAILED_LINE = "这步出了点问题"
+_RETRYING_LINE = "刚才的格式不太对，我重新整理一下"
+
 
 @dataclass(frozen=True)
 class ActivityDraft:
     event_type: str
-    action_type: str
     role_line: str
     status: str = "running"
-    title: Optional[str] = None
     detail_md: Optional[str] = None
     summary_json: Optional[dict] = None
     progress_json: Optional[dict] = None
@@ -34,82 +40,98 @@ def is_user_visible_tool(tool_name: str) -> bool:
     return tool_name in _VISIBLE_TOOLS
 
 
-def _enter(agent_type: str) -> str:
-    return AGENT_PROFILES[agent_type].enter_line
-
-
 def started_activity(agent_type: str) -> ActivityDraft:
     return ActivityDraft(
         event_type="started",
-        action_type=_started_action(agent_type),
         role_line=_enter(agent_type),
         status="running",
     )
 
 
-def _started_action(agent_type: str) -> str:
-    return {
-        "idea": "researching",
-        "script": "writing",
-        "image": "generating_image",
-        "finalize": "organizing",
-    }.get(agent_type, "planning")
-
-
 def tool_started_activity(
-    agent_type: str, tool_name: str, arguments: dict, task_metadata: Optional[dict],
+    agent_type: str, tool_name: str, arguments: dict,
 ) -> Optional[ActivityDraft]:
     if not is_user_visible_tool(tool_name):
         return None
     return ActivityDraft(
         event_type="tool_started",
-        action_type=_tool_action(tool_name, agent_type),
         role_line=_tool_started_line(tool_name, arguments),
         status="running",
     )
 
 
-def _tool_action(tool_name: str, agent_type: str) -> str:
-    if tool_name == "baidu_search":
-        return "researching"
-    if tool_name == "generate_image":
-        return "generating_image"
-    if tool_name == "output_plan":
-        return "planning"
-    return "validating"
-
-
-def _tool_started_line(tool_name: str, arguments: dict) -> str:
-    if tool_name == "baidu_search":
-        q = (arguments.get("query") or "").strip()
-        return f"正在搜索：{q[:30]}" if q else "正在联网搜索"
-    if tool_name == "generate_image":
-        return "正在生成配图"
-    if tool_name == "output_plan":
-        return "正在整理计划"
-    return "工具调用中"
-
-
 def tool_done_activity(
-    agent_type: str, tool_name: str, arguments: dict,
+    agent_type: str, tool_name: str,
     activity_meta: Optional[dict], task_metadata: Optional[dict],
     done_images: list[str],
 ) -> Optional[ActivityDraft]:
     if not is_user_visible_tool(tool_name):
         return None
-    if tool_name == "baidu_search":
-        return _baidu_done(activity_meta)
-    if tool_name == "generate_image":
-        return _image_done(activity_meta, task_metadata, done_images)
-    if tool_name == "output_plan":
-        return ActivityDraft(
-            event_type="tool_done", action_type="planning",
-            role_line="计划已整理", status="running",
-        )
-    return None
+    fn = _DONE_TRANSLATORS.get(tool_name)
+    return fn(activity_meta, task_metadata, done_images) if fn else None
 
 
-def _baidu_done(activity_meta: Optional[dict]) -> ActivityDraft:
+def awaiting_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
+    line = (narrative.awaiting_line if narrative else None) or "产出待你确认"
+    return ActivityDraft(
+        event_type="awaiting_confirm",
+        role_line=line, status="running",
+    )
+
+
+def done_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
+    line = (narrative.done_line if narrative else None) or "本步完成"
+    return ActivityDraft(
+        event_type="done",
+        role_line=line, status="done",
+    )
+
+
+def failed_activity(agent_type: str, error: str) -> ActivityDraft:
+    return ActivityDraft(
+        event_type="failed",
+        role_line=_FAILED_LINE, status="failed",
+        detail_md=error,
+    )
+
+
+def retrying_activity(agent_type: str) -> ActivityDraft:
+    return ActivityDraft(
+        event_type="retrying",
+        role_line=_RETRYING_LINE, status="warning",
+    )
+
+
+def _enter(agent_type: str) -> str:
+    return AGENT_PROFILES[agent_type].enter_line
+
+
+def _static_started(line: str) -> Callable[[dict], str]:
+    """静态 started 台词：忽略 arguments，恒返 line。"""
+    return lambda _args: line
+
+
+def _search_started(args: dict) -> str:
+    """baidu_search：拼 query 前 30 字，无 query 走兜底。"""
+    q = (args.get("query") or "").strip()
+    return f"正在搜索：{q[:30]}" if q else "正在联网搜索"
+
+
+_STARTED_LINES: dict[str, Callable[[dict], str]] = {
+    "baidu_search": _search_started,
+    "generate_image": _static_started("正在生成配图"),
+    "output_plan": _static_started("正在整理计划"),
+}
+
+
+def _tool_started_line(tool_name: str, arguments: dict) -> str:
+    fn = _STARTED_LINES.get(tool_name)
+    return fn(arguments) if fn else "工具调用中"
+
+
+def _baidu_done(
+    activity_meta: Optional[dict], _task_metadata: Optional[dict], _done_images: list[str],
+) -> ActivityDraft:
     refs = (activity_meta or {}).get("refs") or []
     total = len(refs)
     bullets = [
@@ -118,7 +140,7 @@ def _baidu_done(activity_meta: Optional[dict]) -> ActivityDraft:
     ]
     role_line = f"找到 {total} 条参考资料" if total else "没有搜到相关结果"
     return ActivityDraft(
-        event_type="tool_done", action_type="researching",
+        event_type="tool_done",
         role_line=role_line, status="running",
         summary_json={"type": "search_results", "total": total, "bullets": bullets},
     )
@@ -137,14 +159,30 @@ def _image_done(
     n = len(all_images)
     role_line = f"已生成 {n} 张配图" if n else "配图生成完成"
     return ActivityDraft(
-        event_type="tool_done", action_type="generating_image",
+        event_type="tool_done",
         role_line=role_line, status="running",
         progress_json=progress_json, artifact_preview_json=preview_json,
     )
 
 
+def _output_plan_done(
+    _activity_meta: Optional[dict], _task_metadata: Optional[dict], _done_images: list[str],
+) -> ActivityDraft:
+    return ActivityDraft(
+        event_type="tool_done",
+        role_line="计划已整理", status="running",
+    )
+
+
+_DONE_TRANSLATORS: dict[str, Callable[..., ActivityDraft]] = {
+    "baidu_search": _baidu_done,
+    "generate_image": _image_done,
+    "output_plan": _output_plan_done,
+}
+
+
 def image_progress_preview(
-    total: Optional[int], done_images: list[str], running_label: Optional[str] = None,
+    total: Optional[int], done_images: list[str],
 ) -> tuple[Optional[dict], dict]:
     """返 (progress_json, artifact_preview_json)。
 
@@ -154,42 +192,6 @@ def image_progress_preview(
     items = [{"url": u, "caption": ""} for u in done_images]
     preview = {"type": "images", "items": items}
     if total:
-        prog = {
-            "type": "steps",
-            "current": len(done_images),
-            "total": total,
-            "unit": "张图",
-        }
+        prog = {"type": "steps", "current": len(done_images), "total": total, "unit": "张图"}
         return prog, preview
     return None, preview
-
-
-def awaiting_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
-    line = (narrative.awaiting_line if narrative else None) or "产出待你确认"
-    return ActivityDraft(
-        event_type="awaiting_confirm", action_type="waiting_user",
-        role_line=line, status="running",
-    )
-
-
-def done_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
-    line = (narrative.done_line if narrative else None) or "本步完成"
-    return ActivityDraft(
-        event_type="done", action_type="summarizing",
-        role_line=line, status="done",
-    )
-
-
-def failed_activity(agent_type: str, error: str) -> ActivityDraft:
-    return ActivityDraft(
-        event_type="failed", action_type="recovering",
-        role_line="这步出了点问题", status="failed",
-        detail_md=error,
-    )
-
-
-def retrying_activity(agent_type: str) -> ActivityDraft:
-    return ActivityDraft(
-        event_type="retrying", action_type="validating",
-        role_line="刚才的格式不太对，我重新整理一下", status="warning",
-    )
