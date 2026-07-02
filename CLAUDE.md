@@ -53,14 +53,14 @@ cd web && npm run build                # 构建生产版本
 |------|------|
 | `config.py` | 从 `.env` 读取配置常量（含 `DATA_DIR`、三张模型表、调度参数），纯静态值；`SKILLS_DIR` 在 `domain/skill/loader.py`（围绕 skill 概念，SkillLoader 默认扫描目录） |
 | `app.py` | FastAPI 应用工厂 `create_app()`：内联装配所有 Repository / Service / Tool / Hook / 三 Agent / Scheduler（构造器注入，中间对象为局部变量），HTTP 需要的 service 挂 `app.state`；CORS、注册路由、副作用经 `_build_lifespan` |
-| `startup.py` | `run_startup(skill_loader, settings_service, session_service, scheduler)`：装配后的启动副作用——技能扫描、设置回灌、会话元数据加载、scheduler.start() |
-| `domain/` | 领域层，**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作 + 围绕该概念的基础设施型 service：`session`/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`，支持 `progress`/`plan` 等 subtype)/`trace`(多来源：supervisor/subagent/scheduler，靠 `message_id` 与 `task_id` 关联)/`skill`/`events`(SSE sealed 联合，含 `TaskPlanCreatedEvent`)/`title`/`stream`(`consume_stream` supervisor 用 / `drain_stream` subagent 用 + `StreamResult`)/`prompt`(`supervisor` SYSTEM_PROMPT + `PromptContext`/`build_system_prompt`；`subagent` 各角色 prompt)/`task`(`models` Task/StepSpec/CreationIntent + `state_machine` LEGAL_TRANSITIONS/CAS 规则 + `pipeline` validate_steps/expand_pipeline/render_invoke_message/parse_output + `profiles` AGENT_PROFILES + `post` PostCard 成品契约 + `errors`，单一概念内聚为包) |
-| `tools/` | 工具子系统（领域模型 + 框架，但因规模大而独立成顶层包）：`models` 纯模型 ToolSchema/ToolCall/ToolResult + `framework` select_schemas_by_names 与 Tool/ToolContext/ToolRegistry 框架 + `builtin/`(4 工具：load_skill / output_plan / generate_image / baidu_search) + `clients/`(ark_image / baidu_search 外部依赖封装)。**这些工具的 schema 暴露给 subagent ReAct**；supervisor 用自己内联的 `create_plan` schema（不经 registry）。依赖 `domain/skill` 与 `services`（如生图模型选择查 SettingsService），单向，不反向被依赖 |
+| `startup.py` | `run_startup(session_service, scheduler)`：装配后的启动副作用——会话元数据加载、scheduler.start()（技能扫描在 `SkillLoader` 构造时完成，设置回灌在 `SettingsService` 构造时完成） |
+| `domain/` | 领域层，**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作 + 围绕该概念的基础设施型 service：`session`/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`，支持 `progress`/`plan` 等 subtype)/`trace`(多来源：supervisor/subagent/scheduler，靠 `message_id` 与 `task_id` 关联)/`skill`/`events`(SSE sealed 联合，含 `TaskPlanCreatedEvent`)/`title`/`stream`(`consume_stream` supervisor 用 / `drain_stream` subagent 用 + `StreamResult`)/`prompt`(`supervisor` SYSTEM_PROMPT + `PromptContext`/`build_system_prompt`；`subagent` 各角色 prompt)/`task`(`models` Task/StepSpec/CreationIntent + PostCard 成品契约 + `state` LEGAL_TRANSITIONS/CAS 规则 + `pipeline` validate_steps/expand_pipeline/render_invoke_message/parse_output + `profiles` AGENT_PROFILES + `activity` 子 agent 事件→用户可见活动卡片翻译 + `errors`，单一概念内聚为包) |
+| `tools/` | 工具子系统（领域模型 + 框架，但因规模大而独立成顶层包）：`models` 纯模型 ToolSchema/ToolCall/ToolResult + `framework` select_schemas_by_names 与 Tool/ToolContext/ToolDispatch（登记+查 schema+派发） + `builtin/`(5 工具：load_skill / output_plan / generate_image / baidu_search / create_plan) + `clients/`(ark_image / baidu_search 外部依赖封装)。**所有工具（含 create_plan）经 `ToolDispatch` 统一登记/派发**，schema 按 `config.TOOL_WHITELISTS` 白名单暴露给各 agent。依赖 `domain/skill` 与 `services`（如生图模型选择查 SettingsService），单向，不反向被依赖 |
 | `agents/` | **三 loop 编排层**（取数据→调 domain/LLM/工具→存数据 + agent loop 流程控制）：`supervisor`(SupervisorService SSE 流式，建图/only_reply 路由，原 ChatService 迁入改造)、`subagent`(SubAgentService 后台线程 ReAct，写库不连 SSE)、`scheduler`(TaskScheduler 守护线程轮询派发 + zombie 回收，BoundedSemaphore 限流)、`runtime`(AgentContext/TurnState/LoopOutcome 运行时脚手架，三 loop 共享)。`__init__.py` 用 PEP 562 `__getattr__` 懒加载打破循环 import |
 | `repo/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验、不开事务、不硬编码业务状态集合）：`connection`(线程局部 sqlite)、`session`/`message`/`trace`/`settings`/`task`/`task_artifacts`/`task_activities` |
-| `services/` | 应用 / HIL 编排层（取数据→调 domain→存数据）：`session`(锁 + 三 repo)、`message`(消息/trace 编排 + `build_provider_messages` 唯一构建点)、`settings`、`task`(HIL confirm/retry/cancel_pipeline + get_graph/get_activities)。**无 agent loop**——loop 已下沉到 `agents/`；纯领域逻辑在 `domain/`，单概念 infra service（skill/title）在 `domain/`，工具在 `tools/` |
+| `services/` | 应用 / HIL 编排层（取数据→调 domain→存数据）：`session`(锁 + 三 repo)、`message`(消息/trace 编排 + `build_provider_messages` 唯一构建点)、`trace`(TraceService 编排 TraceRepository)、`settings`、`task`(HIL confirm/retry/cancel_pipeline + get_graph/get_activities)。**无 agent loop**——loop 已下沉到 `agents/`；纯领域逻辑在 `domain/`，单概念 infra service（skill/title）在 `domain/`，工具在 `tools/` |
 | `hooks/` | CC 式扁平注册表：`registry`(HookRegistry `event → list[callable]` + `trigger` fail-open 分发，6 个事件点 BeforeModelRequest/AfterModelResponse/PreToolUse/PostToolUse/Stop/Error) + 3 个 handler（`trace` TraceEmitter 观测 / `title` TitlePostProcessor 收尾 / `error_finalizer` ErrorFinalizer 异常收尾）。**无 Hook ABC / HookBundle / HookManager 胶水** |
-| `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`(CRUD + messages/traces 视图)、`chat`(SSE 流式)、`task`(任务图查询 + HIL 写 + ReAct 过程)、`settings`(/api/debug/test-mode + /api/settings 模型选项) |
+| `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`(CRUD + messages/traces 视图)、`chat`(SSE 流式)、`task`(任务图查询 + HIL 写 + ReAct 过程)、`agents`(/api/agents/profiles 角色档案视图)、`settings`(/api/debug/test-mode + /api/settings 模型选项) |
 | `resources/skills/` | 技能 markdown（frontmatter: name/description/tags） |
 | `tests/` | 自动化测试（前缀分组：`test_domain_*`/`test_repo_*`/`test_service_*`/`test_agent_*`/`test_tools_*`/`test_route_*`/`test_integration_*`，共 29 模块 183 用例），共享工具 `_helpers.py`，一键入口 `__main__.py` |
 | `scripts/debug_cli.py` | 手动调试 CLI（直接调 `SupervisorService.stream`，不经 HTTP），非自动化测试 |
@@ -74,14 +74,14 @@ cd web && npm run build                # 构建生产版本
 `stream(session_id, user_message, *, model, image_model, web_search) -> Iterator[SseEvent]` —— 用户对话入口，单轮决策：普通对话走原生 content 流式（only_reply）；创作请求经 `create_plan` 工具建任务图。loop 按 `isinstance(outcome, Reply|Terminal)` 分流，**不认识工具名、不认 Terminal 载荷类型**——工具副作用在工具内收口，主流程只管终止。
 
 1. append user 消息 → `while True` 每轮：`ctx.turn.reset(i)` + 分配 message_id → yield `message_start` → `build_system_prompt` + `MessageService.build_provider_messages` 写 `ctx.turn.provider_messages` → `trigger("BeforeModelRequest")`
-2. 调 OpenAI 流式 API（挂 `SUPERVISOR_TOOLS` schema），`consume_stream()` yield reasoning/token 事件、累积 text_parts / tool_calls
+2. 调 OpenAI 流式 API（挂 `TOOL_WHITELISTS["supervisor"]` 选出的 schema），`consume_stream()` yield reasoning/token 事件、累积 text_parts / tool_calls
 3. `trigger("AfterModelResponse")` → 无 tool_call → **only_reply**：append assistant 文本消息 → yield done → `trigger("Stop")`（标题生成）→ 结束
 4. 有 tool_call → `_dispatch_tools`：collect-then-persist 成对落库（一条 assistant(tool_calls=[全部]) + N tool(result)）→ 全 Reply 则回传模型继续 loop；首个 Terminal → `_handle_terminal`（只 yield done + `trigger("Stop")`，不认载荷）→ 结束。建图全过程（`validate_steps` → `expand_pipeline` → 事务批量 insert tasks）在 `create_plan` 工具 `run` 内，校验/落库失败返 `Reply(correction)` 由模型自纠
 5. 异常 → `except` 记 `ctx.outcome.exception` → `trigger("Error")`（`ErrorFinalizer` append `[Error]` 消息关闭本轮）→ yield `ErrorEvent`
 
 #### 2. SubAgentService.run (`agents/subagent.py`，后台线程，写库不连 SSE)
 
-scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load task → `render_invoke_message` → 循环 ReAct（heartbeat 更新 → `drain_stream` 消费 → 执行工具经 `ToolRegistry.dispatch` → 无 tool_call 则 `parse_output` + 写 artifacts/narrative + CAS running→awaiting_confirm|finished → return）→ 异常 CAS running→failed。**与 supervisor 共享纯件**（drain_stream / dispatch / render_invoke_message / parse_output / 状态机），但不抽共用 ReAct 基类（决策模式不同）。横切经扁平 hook，ctx 带 `source=subagent + task_id`；hook 事件用 `list()` 消费丢弃（subagent 不连 SSE，trace 已在 hook 内写库）。subagent 历史只在内存 + `task_activities` 表，**不进 messages**；ReAct 轮次号仅内存计数（撞 `_MAX_STEPS` 用），不落库不喂 trace。
+scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load task → `render_invoke_message` → 循环 ReAct（heartbeat 更新 → `drain_stream` 消费 → 执行工具经 `ToolDispatch.dispatch` → 无 tool_call 则 `parse_output` + 写 artifacts/narrative + CAS running→awaiting_confirm|finished → return）→ 异常 CAS running→failed。**与 supervisor 共享纯件**（drain_stream / dispatch / render_invoke_message / parse_output / 状态机），但不抽共用 ReAct 基类（决策模式不同）。横切经扁平 hook，ctx 带 `source=subagent + task_id`；hook 事件用 `list()` 消费丢弃（subagent 不连 SSE，trace 已在 hook 内写库）。subagent 历史只在内存 + `task_activities` 表，**不进 messages**；ReAct 轮次号仅内存计数（撞 `_MAX_STEPS` 用），不落库不喂 trace。
 
 关键设计：
 - **协作式取消**：每轮迭代复查任务态，状态漂移（如已 cancelled）立即早退，不残留孤儿产物。
@@ -102,7 +102,7 @@ scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load 
 ### 存储层
 
 - `ConnectionFactory`：线程局部 sqlite 连接，WAL + NORMAL 同步 + 外键约束开启 + busy_timeout。
-- 各 repo 是各自表的唯一 SQL 入口，返回 Pydantic 模型，**不开事务、不硬编码业务状态集合**（状态集合由 service 从 domain 传入，如 `cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES)`）：`SessionRepository` / `MessageRepository` / `TraceRepository` / `SettingsRepository` / `TaskRepository`(CAS `cas_update` + `cancel_pipeline` + `find_by_session_statuses` + `count_by_session_statuses`) / `TaskArtifactsRepository` / `TaskStepsRepository`。
+- 各 repo 是各自表的唯一 SQL 入口，返回 Pydantic 模型，**不开事务、不硬编码业务状态集合**（状态集合由 service 从 domain 传入，如 `cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES)`）：`SessionRepository` / `MessageRepository` / `TraceRepository` / `SettingsRepository` / `TaskRepository`(CAS `cas_update` + `cancel_pipeline` + `find_by_session_statuses` + `count_by_session_statuses`) / `TaskArtifactsRepository` / `TaskActivitiesRepository`。
 - `messages` 表按消息粒度（user/assistant/tool）逐条 `append` 入库，支持 `progress`/`plan` 等 subtype；`traces` 表靠 `message_id` 与 `task_id` 双键关联，多来源（supervisor/subagent/scheduler）。
 - `tasks` 表是三 loop 通信媒介：CAS 状态转换是协调核心；`task_artifacts` 存产物/selected，`task_activities` 存用户态活动流（按事件粒度 append）。ReAct 原始过程由 `traces` 表（model_request/model_response/tool_call/tool_result）覆盖，无独立 steps 表。
 - `SessionService` 编排 session repo + 锁；删除会话经 `SessionService.delete`（带 CASCADE，不绕开锁）。
@@ -116,10 +116,10 @@ scheduler CAS pending→running 后 submit 到线程池。`run(task_id)`：load 
 
 ### Tool 框架
 
-- `Tool` ABC（`tools/framework.py`）：类属性 `name`/`description`/`parameters`，`run(arguments, ctx) -> str`；`ToolRegistry.dispatch()` 统一执行/计时/包错，`format_display()` 返回单行人类可读描述（前端 chip）。
-- `ToolRegistry` 注册 4 工具（load_skill / output_plan / generate_image / baidu_search），其 `schemas_openai()` 暴露给 **subagent ReAct**（supervisor 不用 registry）。
-- supervisor 的 `create_plan` 是**内联 schema**（`agents/supervisor.py` 顶部 `CREATE_PLAN_TOOL_SCHEMA`），不经 registry、tool_call 不落库——它是建图路由信号，非持久工具调用。
-- 内置工具与 client 同处 `tools/`：`builtin/`(load_skill / output_plan / generate_image / baidu_search) + `clients/`(ark_image / baidu_search urllib 封装)。
+- `Tool` ABC（`tools/framework.py`）：类属性 `name`/`description`/`parameters`，`run(arguments, ctx) -> str`；`ToolDispatch.dispatch()` 统一执行/计时/包错，`format_display()` 返回单行人类可读描述（前端 chip）。
+- `ToolDispatch`（`tools/framework.py`，由 `tools/registry.py` 的 `build_tool_dispatch` 装配）注册 5 工具（load_skill / output_plan / generate_image / baidu_search / create_plan），`select_schemas(names)` 按 `config.TOOL_WHITELISTS` 白名单为各 agent 选 schema：supervisor 与 subagent 都从同一 registry 取，仅白名单不同。
+- `create_plan` 是**注册型 builtin 工具**（`tools/builtin/create_plan.py`，对模型是普通工具：有 schema、被 dispatch、有 trace、tool_call 落库），建图全过程（`validate_steps` → `expand_pipeline` → 事务批量 insert tasks）在工具 `run` 内收口，校验/落库失败返 `Reply(correction)` 由模型自纠；supervisor 主流程只据 `Terminal` 终止本轮、不认载荷类型。
+- 内置工具与 client 同处 `tools/`：`builtin/`(load_skill / output_plan / generate_image / baidu_search / create_plan) + `clients/`(ark_image / baidu_search urllib 封装)。
 - `GenerateImageTool` 依赖 `SettingsService.get_image_test_mode`（测试模式返回写死 URL）、`ArkImageClient` 与注入的默认模型 id；`BaiduSearchTool` 依赖 `BaiduSearchClient`。
 
 ### 前端 (web/src/)
@@ -242,11 +242,10 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 - **主流程单文件可读全**：每个 agent loop 的主流程（supervisor: append user → build messages → call model → 路由 only_reply/new_plan → 建图落库 → finalize；subagent: load task → ReAct 循环 → 写 artifacts/steps → CAS finalize）**必须在各自 `SupervisorService.stream()` / `SubAgentService.run()` 一个文件内顺序可读**，核心业务提交（落库、构建 prompt、执行工具、SSE 核心事件 yield）在 loop 内，不进 hook。
 - **hook 是挂在稳定 loop 上的扩展点，不是主业务承载点**（遵循「挂在循环上，不写进循环里」）：loop 自己做主流程真身，hook 只做"前后织入 + 策略判断"。hook 收缩为扩展能力——观测（trace/日志/埋点）、收尾（title/summary）、异常收尾（`ErrorFinalizer`）；策略（权限拦截/上下文补充）、增强（输入注入/输出检查）为文档化的未来扩展点，**现不承载**。
 - **机制是 CC 式扁平注册表**：`event → list[callable]` 字典 + `trigger(event, ctx, *args) -> Iterator[SseEvent]`，loop 只调 `trigger`。**不引入** `Hook` ABC + `HookBundle` 命名字段 + `HookManager` 转发方法这类 1:1 退化的三层胶水。当前 `trigger` 观测-only（只 yield 事件，fail-open 吞异常记日志）；引入策略/拦截类 hook 时，`trigger` 加 verdict 返回 + loop 在对应事件加 `if blocked` 分支（演进路径，现不写死代码分支）。
-- **异常分级**：**核心步骤 fail-closed**（append user / 构建 prompt / 落 assistant 消息——失败即上抛到外层 except，绝不静默继续，否则产生"消息没落库但循环继续"的静默数据不一致）；**工具失败按可预料性分级**——工具内可预料失败（参数缺失 / 校验错 / 落库失败等业务失败）由工具自身收口返 `Reply(correction)` 让模型重试（落库类副作用经事务原子性兜底，不残留半张图），仅无法预料的意外异常由 `ToolRegistry.dispatch` fail-open 兜底转错误 `Reply`（不掺业务走向）；**扩展 hook fail-open**（经 `trigger`，失败只记日志，不阻断主流程）。分级由"是否经 trigger / 是否可预料"自然落地，无需显式配置。异常时 `ErrorFinalizer` 经 `trigger("Error")` append 一条 `[Error]` 消息关闭本轮（失败轮 assistant 本就未入库，库内干净，不截断历史），loop 再 yield `ErrorEvent`。
+- **异常分级**：**核心步骤 fail-closed**（append user / 构建 prompt / 落 assistant 消息——失败即上抛到外层 except，绝不静默继续，否则产生"消息没落库但循环继续"的静默数据不一致）；**工具失败按可预料性分级**——工具内可预料失败（参数缺失 / 校验错 / 落库失败等业务失败）由工具自身收口返 `Reply(correction)` 让模型重试（落库类副作用经事务原子性兜底，不残留半张图），仅无法预料的意外异常由 `ToolDispatch.dispatch` fail-open 兜底转错误 `Reply`（不掺业务走向）；**扩展 hook fail-open**（经 `trigger`，失败只记日志，不阻断主流程）。分级由"是否经 trigger / 是否可预料"自然落地，无需显式配置。异常时 `ErrorFinalizer` 经 `trigger("Error")` append 一条 `[Error]` 消息关闭本轮（失败轮 assistant 本就未入库，库内干净，不截断历史），loop 再 yield `ErrorEvent`。
 - **顺序契约可测**：agent loop 重度依赖调用顺序与 `ctx.turn` 字段的读写时机，这类隐式契约**必须有用例锚定**（断言"给定输入 → 事件序列 + 入库消息序列"），改动主流程前先有安全网。
 
 ### Domain 内聚判据（红线）
 
 - **单概念内聚留 domain，跨概念协调出 domain**：判别看**被操作的状态**而非 import 的类型——一段逻辑若只围绕单一概念操作其状态（哪怕要扫文件 / 调 OpenAI / 持锁，如 `SkillLoader` 只为 skill、`TitleGenerationService` 只为 title），归 `domain/`；若**同时操作两个以上领域概念的状态**（跨多 repo 事务、协调多 service），归编排层（`services/`）。
-- **不引入 `application` / `infrastructure` / `interfaces` 等 Clean Architecture 目录名**：本项目按业务概念扁平组织，`routes` 已是 HTTP 适配、`repo` 已是基础设施入口，换名不解决实际问题、只增导航成本。
 - **防 domain 杂项化滑坡**：domain 里的 infra service（loader / 调外部 API 的概念内 service）必须**单一概念内聚**；一旦某对象长出跨概念协调，迁往 `services/`（编排层本就是跨概念协调的归宿），不新建目录。
