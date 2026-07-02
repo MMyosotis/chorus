@@ -37,7 +37,6 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 
 # 状态翻转时允许顺带更新的字段白名单
 _CAS_FIELDS = {"error", "feedback", "updated_at", "started_at", "finished_at"}
-# 配图总数建图期一次写入，运行期不可变，不进翻转
 
 
 class TaskRow(BaseModel):

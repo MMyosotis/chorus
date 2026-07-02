@@ -14,10 +14,10 @@ class SettingsService:
         self._repo = repo
 
     def get_image_test_mode(self) -> bool:
-        return bool(self._repo.get("image_test_mode", False))
+        return self._repo.get("image_test_mode", "false") == "true"
 
     def set_image_test_mode(self, enabled: bool) -> None:
-        self._repo.set("image_test_mode", bool(enabled))
+        self._repo.set("image_test_mode", "true" if enabled else "false")
 
     def get_chat_model(self) -> str:
         return self._repo.get("chat_model") or CHAT_MODELS[0]["model_name"]
@@ -32,7 +32,7 @@ class SettingsService:
         self._repo.set("image_model", value)
 
     def get_web_search(self) -> bool:
-        return bool(self._repo.get("web_search", True))
+        return self._repo.get("web_search", "true") == "true"
 
     def set_web_search(self, enabled: bool) -> None:
-        self._repo.set("web_search", bool(enabled))
+        self._repo.set("web_search", "true" if enabled else "false")
