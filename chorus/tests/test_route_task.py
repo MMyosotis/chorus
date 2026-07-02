@@ -86,10 +86,12 @@ def test_get_tasks_session_not_found():
 
 
 def test_get_tasks_ok():
-    """session 存在 → 200 + get_graph 返回体原样透出。"""
+    """session 存在 → 200 + get_graph 经 dump_task_graph 序列化透出。"""
+    from chorus.domain.task import TaskGraph, build_task_graph
+
     session = FakeSessionService(known={"s1"})
     task = FakeTaskService()
-    task.set("get_graph", "s1", {"pipeline_id": "p1", "active": True, "tasks": []})
+    task.set("get_graph", "s1", build_task_graph("p1", [], {}, {}, {}, True))
     r = _client(session, task).get("/api/tasks", params={"session_id": "s1"})
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "active": True, "tasks": []}

@@ -5,6 +5,12 @@
 from __future__ import annotations
 
 from chorus.domain.task.errors import ValidationError
+from chorus.domain.task.graph import (
+    TaskGraph,
+    TaskNodeView,
+    build_task_graph,
+    dump_task_graph,
+)
 from chorus.domain.task.models import (
     AgentType,
     Task,
@@ -70,6 +76,8 @@ __all__ = [
     "TaskActivity",
     "TaskArtifacts",
     "TaskContent",
+    "TaskGraph",
+    "TaskNodeView",
     "TaskStatus",
     "PostCard",
     "PostImage",
@@ -87,5 +95,7 @@ __all__ = [
     "validate_steps",
     "PAYLOAD_TYPES",
     "build_payload",
+    "build_task_graph",
     "dump_activity",
+    "dump_task_graph",
 ]

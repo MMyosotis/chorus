@@ -144,8 +144,8 @@ def test_get_graph_active():
     _mk(task_repo, content_repo, "a", status="running")
     _mk(task_repo, content_repo, "b", status="pending")
     graph = svc.get_graph("s1")
-    assert graph["active"] is True
-    assert {t["id"] for t in graph["tasks"]} == {"a", "b"}
+    assert graph.active is True
+    assert {t.id for t in graph.nodes} == {"a", "b"}
 
 
 def test_get_graph_recent_finished():
@@ -153,8 +153,8 @@ def test_get_graph_recent_finished():
     _mk(task_repo, content_repo, "old", status="finished", pipeline_id="p1", updated_at=1.0)
     _mk(task_repo, content_repo, "new", status="finished", pipeline_id="p2", updated_at=2.0)
     graph = svc.get_graph("s1")
-    assert graph["active"] is False
-    assert {t["id"] for t in graph["tasks"]} == {"new"}  # 最近 finished pipeline
+    assert graph.active is False
+    assert {t.id for t in graph.nodes} == {"new"}  # 最近 finished pipeline
 
 
 def _conn_of(task_repo):
@@ -180,13 +180,13 @@ def test_get_graph_includes_current_activity_and_timestamps():
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", progress_total=3))
     act_repo.append("t1", ActivityDraft(event_type="started", role_line="出图中"))
     graph = svc.get_graph("s1")
-    t = graph["tasks"][0]
-    assert t["updated_at"] == 10.0
-    assert t["current_activity"] is not None
-    assert t["current_activity"]["role_line"] == "出图中"
-    assert t["current_activity"]["event_type"] == "started"
+    t = graph.nodes[0]
+    assert t.updated_at == 10.0
+    assert t.current_activity is not None
+    assert t.current_activity.role_line == "出图中"
+    assert t.current_activity.event_type == "started"
     # error 字段取自 task_content（此处未写 → None）
-    assert t["error"] is None
+    assert t.error is None
 
 
 def test_get_graph_error_from_content():
@@ -206,7 +206,7 @@ def test_get_graph_error_from_content():
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", error="boom"))
     graph = svc.get_graph("s1")
-    assert graph["tasks"][0]["error"] == "boom"
+    assert graph.nodes[0].error == "boom"
 
 
 def test_get_activities_returns_serialized_list():

@@ -13,10 +13,11 @@ from chorus.domain.task import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
+    TaskGraph,
     TaskStatus,
+    build_task_graph,
     dump_activity,
     select_display_pipeline,
-    topological_order,
 )
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
@@ -78,25 +79,25 @@ class TaskService:
         n = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
         return {"pipeline_id": pipeline_id, "cancelled": n}
 
-    def get_graph(self, session_id: str) -> dict:
+    def get_graph(self, session_id: str) -> TaskGraph:
         """任务图视图：进行中流水线优先，无则取最近已完成。"""
         active_tasks = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         if active_tasks:
             # 渲染整图含已完成前序，否则成员会随完成逐个消失
             pipeline_id = active_tasks[0].pipeline_id
             all_tasks = self._task_repo.find_by_pipeline(pipeline_id)
-            return self._graph_dict(pipeline_id, all_tasks, True)
+            return self._build_graph(pipeline_id, all_tasks, True)
 
         # 无进行中：取该会话终态任务，按流水线分组取最近完成
         terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
         if not terminal:
-            return {"pipeline_id": None, "active": False, "tasks": []}
+            return build_task_graph(None, [], {}, {}, {}, False)
 
         # 取最近更新的流水线
         latest = max(terminal, key=lambda t: t.updated_at)
         same_pipeline = [t for t in terminal if t.pipeline_id == latest.pipeline_id]
         display = select_display_pipeline([], same_pipeline)
-        return self._graph_dict(latest.pipeline_id, display, False)
+        return self._build_graph(latest.pipeline_id, display, False)
 
     def get_activities(self, task_id: str, *, limit: int = 50) -> list[dict]:
         """返回该任务的用户态活动，按发生顺序。"""
@@ -116,28 +117,14 @@ class TaskService:
             task_id, agent_type, artifacts=idea, narrative=art.narrative,
         )
 
-    def _graph_dict(self, pipeline_id: str, tasks: list, active: bool) -> dict:
-        ordered = topological_order(tasks)
-        ids = [t.id for t in ordered]
-        arts = self._artifacts_repo.load_many(ids)
-        latest = self._activities_repo.latest_by_tasks(ids)
-        contents = self._content_repo.load_many(ids)
-        return {
-            "pipeline_id": pipeline_id,
-            "active": active,
-            "tasks": [
-                {
-                    "id": t.id, "agent_type": t.agent_type, "status": t.status,
-                    "updated_at": t.updated_at,
-                    "current_activity": dump_activity(latest[t.id]) if t.id in latest else None,
-                    "artifacts": (
-                        dataclasses.asdict(arts[t.id].artifacts) if t.id in arts else None
-                    ),
-                    "narrative": (
-                        dataclasses.asdict(arts[t.id].narrative) if t.id in arts else None
-                    ),
-                    "error": contents[t.id].error,
-                }
-                for t in ordered
-            ],
-        }
+    def _build_graph(self, pipeline_id: str, tasks: list, active: bool) -> TaskGraph:
+        """取本图所需产物/活动/内容，交领域聚合。拓扑序在领域内。"""
+        ids = [t.id for t in tasks]
+        return build_task_graph(
+            pipeline_id,
+            tasks,
+            self._artifacts_repo.load_many(ids),
+            self._activities_repo.latest_by_tasks(ids),
+            self._content_repo.load_many(ids),
+            active,
+        )

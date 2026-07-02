@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.services.session import SessionService
 from chorus.services.task import ConflictError, TaskService
+from chorus.domain.task import dump_task_graph
 
 router = APIRouter(prefix="/api")
 
@@ -29,7 +30,7 @@ def get_task_graph(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return task.get_graph(session_id)
+    return dump_task_graph(task.get_graph(session_id))
 
 
 @router.get("/tasks/{task_id}/activities")
