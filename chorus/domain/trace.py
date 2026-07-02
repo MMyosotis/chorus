@@ -22,13 +22,12 @@ class TracePhase(str, Enum):
 
 
 class ThinkingSegment(BaseModel):
-    """一段连续的思考过程，序号与工具调用共享以还原真实顺序。"""
+    """一段连续的思考过程。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     text: str
     duration_ms: int
-    seq: int = 0
 
 
 class ToolInvocation(BaseModel):
@@ -42,7 +41,6 @@ class ToolInvocation(BaseModel):
     display: str
     duration_ms: int
     content: str
-    seq: int = 0
 
 
 class TraceEntry(BaseModel):

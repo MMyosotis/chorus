@@ -203,7 +203,7 @@ class SubAgentService:
         views: list[dict] = []
         for _, tc in sorted(result.tool_calls.items()):
             call = ToolCall(id=tc.id, name=tc.name, arguments=_parse_args(tc.arguments))
-            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments, "seq": tc.seq}
+            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
             list(self._hooks.trigger(
                 "PreToolUse", ctx, call_view,
                 self._tools.format_display(call.name, call.arguments),

@@ -9,11 +9,11 @@ const props = defineProps({
   showCursor: { type: Boolean, default: false },
   thinking: {
     type: Object,
-    default: () => ({ state: 'idle', items: [], expanded: false }),
+    default: () => ({ state: 'idle' }),
   },
   tools: {
     type: Object,
-    default: () => ({ state: 'idle', items: [], expanded: false }),
+    default: () => ({ state: 'idle', items: [] }),
   },
 })
 
@@ -31,19 +31,11 @@ const formattedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
+// 状态条仅在进行时显示，结束即消失
 const activityState = computed(() => {
   if (props.thinking.state === 'running') return 'thinking'
   if (props.tools.state === 'running') return 'tools'
-  if (props.thinking.items.length || props.tools.items.length) return 'completed'
   return 'idle'
-})
-
-const activityExpanded = computed({
-  get: () => props.thinking.expanded || props.tools.expanded,
-  set: (v) => {
-    props.thinking.expanded = v
-    props.tools.expanded = v
-  },
 })
 
 const runningTool = computed(() => {
@@ -55,62 +47,12 @@ const runningTool = computed(() => {
 })
 
 const activityLabel = computed(() => {
-  const tn = props.thinking.items.length
-  const mn = props.tools.items.length
-  if (activityState.value === 'thinking') {
-    return tn > 1 ? `思考中 · 第 ${tn} 段` : '思考中'
-  }
+  if (activityState.value === 'thinking') return '思考中'
   if (activityState.value === 'tools') {
-    const verb = runningTool.value?.running_label || '工具调用中'
-    return mn > 1 ? `${verb} · 第 ${mn} 步` : verb
+    return runningTool.value?.running_label || '工具调用中'
   }
-  const parts = []
-  if (tn > 0) parts.push(`思考 ${tn} 段`)
-  if (mn > 0) parts.push(`调用 ${mn} 次工具`)
-  return parts.join(' · ')
+  return ''
 })
-
-const totalActivityMs = computed(() => {
-  const sum =
-    props.thinking.items.reduce((s, x) => s + (x.duration_ms || 0), 0) +
-    props.tools.items.reduce((s, x) => s + (x.duration_ms || 0), 0)
-  return sum > 0 ? sum : null
-})
-
-const mergedItems = computed(() => {
-  const arr = [
-    ...props.thinking.items.map((x) => ({ ...x, kind: 'thinking' })),
-    ...props.tools.items.map((x) => ({ ...x, kind: 'tool' })),
-  ]
-  arr.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
-  return arr
-})
-
-function formatDur(ms) {
-  if (ms == null) return ''
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(2)}s`
-}
-
-const TOOL_NAME_ZH = {
-  bash: '命令行',
-  read_file: '读取文件',
-  write_file: '写入文件',
-  edit_file: '编辑文件',
-  glob_search: '查找文件',
-  load_skill: '加载技能',
-  generate_image: '生成图像',
-  output_plan: '制定计划',
-}
-
-function toolDisplayName(name) {
-  if (!name) return ''
-  return TOOL_NAME_ZH[name] || name
-}
-
-function toggleActivity() {
-  activityExpanded.value = !activityExpanded.value
-}
 
 // generate_image 工具的图片占位/渲染：图片严格归属于产生它的本气泡。
 const imageItems = computed(() =>
@@ -179,57 +121,19 @@ function closePreview() {
 <template>
   <div :class="['bubble-row', role]">
     <div :class="['bubble', role]">
-      <!-- 合并状态条：思考 / 工具调用 -->
+      <!-- 进行中状态条：思考 / 工具调用（结束即消失）-->
       <div
         v-if="activityState !== 'idle'"
         class="status-card"
         :class="activityState"
-        @click="toggleActivity"
       >
         <div class="status-header">
           <span class="status-text">{{ activityLabel }}</span>
-          <span
-            v-if="activityState === 'thinking' || activityState === 'tools'"
-            class="dots"
-            aria-hidden="true"
-          >
+          <span class="dots" aria-hidden="true">
             <span class="dot"></span>
             <span class="dot"></span>
             <span class="dot"></span>
           </span>
-          <span v-if="activityState === 'completed' && totalActivityMs != null" class="dur header-dur">{{ formatDur(totalActivityMs) }}</span>
-          <span
-            v-if="activityState !== 'thinking' && activityState !== 'tools'"
-            class="caret"
-            :class="{ open: activityExpanded }"
-            aria-hidden="true"
-          >
-            <svg viewBox="0 0 12 12" width="10" height="10">
-              <path d="M3 4.5 L6 7.5 L9 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </span>
-        </div>
-        <div class="status-body-wrap" :class="{ open: activityExpanded }">
-          <div class="status-body-inner">
-            <div class="status-body" @click.stop>
-              <div v-for="item in mergedItems" :key="`${item.kind}-${item.seq}`" class="step">
-                <template v-if="item.kind === 'thinking'">
-                  <div class="step-meta">
-                    <span class="step-num">思考</span>
-                    <span v-if="item.duration_ms != null" class="dur">{{ formatDur(item.duration_ms) }}</span>
-                  </div>
-                  <pre class="step-text">{{ item.text }}</pre>
-                </template>
-                <template v-else>
-                  <div class="step-meta">
-                    <span class="step-num">工具</span>
-                    <span v-if="item.duration_ms != null" class="dur">{{ formatDur(item.duration_ms) }}</span>
-                  </div>
-                  <div class="step-display">{{ item.display || toolDisplayName(item.name) }}</div>
-                </template>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -414,7 +318,6 @@ function closePreview() {
 .status-card {
   margin: 0 0 14px;
   font-size: 13px;
-  cursor: pointer;
   user-select: none;
   background: transparent;
   border-radius: 0;
@@ -444,128 +347,7 @@ function closePreview() {
   line-height: 1;
 }
 
-.caret {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  line-height: 0;
-  opacity: 0.7;
-  flex-shrink: 0;
-  transform: rotate(-90deg);
-  transition: transform 0.25s ease, opacity 0.15s;
-}
-.caret.open {
-  transform: rotate(0deg);
-}
-.caret svg {
-  display: block;
-}
-.status-card:hover .caret {
-  opacity: 1;
-}
-
-.status-body-wrap {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.25s ease;
-}
-.status-body-wrap.open {
-  grid-template-rows: 1fr;
-}
-.status-body-inner {
-  overflow: hidden;
-  min-height: 0;
-}
-
-.header-dur {
-  font-size: 11px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-}
-
-.status-body {
-  margin: 10px 0 2px;
-  padding: 4px 0 2px 10px;
-  border-left: 2px solid rgba(15, 23, 42, 0.08);
-  cursor: default;
-  color: #1e293b;
-}
-
-.step {
-  margin-top: 8px;
-}
-
-.step:first-child {
-  margin-top: 0;
-}
-
-.step-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  margin-bottom: 4px;
-  color: #475569;
-  line-height: 1;
-}
-
-.step-num {
-  font-weight: 600;
-  line-height: 1;
-}
-
-.tool-name {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-family: 'SF Mono', Menlo, Consolas, monospace;
-  font-size: 12px;
-  color: #1e293b;
-}
-
-.dur {
-  font-size: 11px;
-  color: #94a3b8;
-  font-variant-numeric: tabular-nums;
-  display: inline-flex;
-  align-items: center;
-  line-height: 1;
-}
-
-.step-text {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  font-family: inherit;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #475569;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 320px;
-  overflow: auto;
-}
-
-.step-display {
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #475569;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* 配色：运行中保留主题色 + 完成态统一灰化 */
+/* 配色：运行中保留主题色 */
 .status-card.thinking {
   color: #6366f1;
   animation: pulseRow 1.6s ease-in-out infinite;
@@ -573,9 +355,6 @@ function closePreview() {
 .status-card.tools {
   color: #6366f1;
   animation: pulseRow 1.6s ease-in-out infinite;
-}
-.status-card.completed {
-  color: #64748b;
 }
 
 @keyframes pulseRow {

@@ -50,73 +50,41 @@ function makeEmptyAssistant() {
   return {
     role: 'assistant',
     content: '',
-    thinking: { state: 'idle', items: [], expanded: false },
-    tools: { state: 'idle', items: [], expanded: false },
-    _seq: 0,
+    thinking: { state: 'idle' },
+    tools: { state: 'idle', items: [] },
   }
 }
 
 function normalizeAssistant(msg) {
-  const thinkingItems = Array.isArray(msg.thinking) ? msg.thinking : []
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
-  // 透传后端 seq（thinking 段与 tool 段共享同一时序），让前端按真实发生顺序交错展示；
-  // 旧数据无 seq 时兜底按"先 thinking 后 tool"编号，保持兼容。
-  const hasSeq = [...thinkingItems, ...toolItems].some((it) => it.seq != null)
-  let fallback = 0
-  const nextSeq = (it) => (hasSeq ? (it.seq ?? 0) : ++fallback)
   return {
     role: 'assistant',
     content: msg.content || '',
-    thinking: {
-      state: thinkingItems.length > 0 ? 'completed' : 'idle',
-      items: thinkingItems.map((it) => ({
-        text: it.text || '',
-        duration_ms: it.duration_ms ?? null,
-        seq: nextSeq(it),
-      })),
-      expanded: false,
-    },
+    thinking: { state: 'idle' },
     tools: {
-      state: toolItems.length > 0 ? 'completed' : 'idle',
+      state: 'idle',
       items: toolItems.map((it) => ({
         name: it.name,
         arguments: it.arguments || {},
         duration_ms: it.duration_ms ?? null,
         content: it.content || '',
         display: it.display || it.name,
-        seq: nextSeq(it),
       })),
-      expanded: false,
     },
   }
 }
 
 function mergeAssistantHistory(raw) {
   const result = []
-  let pendingThinking = []
   let pendingTools = []
 
-  // 把 pending（无正文 assistant 累积下来的 thinking/tools）合并到 result 中最近一条 assistant。
+  // 把 pending（无正文 assistant 累积下来的 tools）合并到 result 中最近一条 assistant。
   // 没有可合并目标时才落成独立空壳 bubble（兜底，避免信息全丢）。
   const flushPending = () => {
-    if (!pendingThinking.length && !pendingTools.length) return
+    if (!pendingTools.length) return
     for (let i = result.length - 1; i >= 0; i--) {
       if (result[i].role === 'assistant') {
         const target = result[i]
-        // 透传 pending 项的原 seq（保留跨轮合并的真实顺序）；无 seq 时续号兜底。
-        const hasSeq = [...pendingThinking, ...pendingTools].some((t) => t.seq != null)
-        let s = 0
-        if (!hasSeq) {
-          for (const x of target.thinking.items) if ((x.seq || 0) > s) s = x.seq
-          for (const x of target.tools.items) if ((x.seq || 0) > s) s = x.seq
-        }
-        for (const t of pendingThinking) {
-          target.thinking.items.push({
-            text: t.text || '',
-            duration_ms: t.duration_ms ?? null,
-            seq: hasSeq ? (t.seq ?? 0) : ++s,
-          })
-        }
         for (const t of pendingTools) {
           target.tools.items.push({
             name: t.name,
@@ -124,12 +92,8 @@ function mergeAssistantHistory(raw) {
             duration_ms: t.duration_ms ?? null,
             content: t.content || '',
             display: t.display || t.name,
-            seq: hasSeq ? (t.seq ?? 0) : ++s,
           })
         }
-        if (target.thinking.items.length) target.thinking.state = 'completed'
-        if (target.tools.items.length) target.tools.state = 'completed'
-        pendingThinking = []
         pendingTools = []
         return
       }
@@ -138,11 +102,9 @@ function mergeAssistantHistory(raw) {
       normalizeAssistant({
         role: 'assistant',
         content: '',
-        thinking: pendingThinking,
         tools: pendingTools,
       })
     )
-    pendingThinking = []
     pendingTools = []
   }
 
@@ -152,11 +114,9 @@ function mergeAssistantHistory(raw) {
       result.push({ role: m.role, content: m.content })
       continue
     }
-    const t = Array.isArray(m.thinking) ? m.thinking : []
     const ts = Array.isArray(m.tools) ? m.tools : []
     const hasContent = !!(m.content && m.content.trim())
     if (!hasContent) {
-      pendingThinking.push(...t)
       pendingTools.push(...ts)
       continue
     }
@@ -164,11 +124,9 @@ function mergeAssistantHistory(raw) {
       normalizeAssistant({
         role: 'assistant',
         content: m.content,
-        thinking: [...pendingThinking, ...t],
         tools: [...pendingTools, ...ts],
       })
     )
-    pendingThinking = []
     pendingTools = []
   }
   flushPending()
@@ -346,17 +304,19 @@ async function onSend(text) {
   function finalizeCurrent() {
     const c = cur()
     if (!c) return
-    if (c.thinking.state === 'running') c.thinking.state = 'completed'
-    if (c.tools.state === 'running') c.tools.state = 'completed'
+    // 状态条仅在进行时显示，结束即消失
+    if (c.thinking.state === 'running') c.thinking.state = 'idle'
+    if (c.tools.state === 'running') c.tools.state = 'idle'
   }
 
-  // 合并尾部"只有 thinking/tools、没有正文"的 assistant 气泡到前一个 assistant 上。
+  // 合并尾部"只有 tools、没有正文"的 assistant 气泡到前一个 assistant 上。
   // 用于 agent loop 末尾模型按工具约束保持沉默时，避免出现幽灵气泡。
   function mergeTrailingEmptyBubble() {
     if (list.length < 2) return
     const last = list[list.length - 1]
     if (last.role !== 'assistant') return
     if (last.content && last.content.trim()) return
+    if (!last.tools.items.length) return
     let prev = null
     for (let i = list.length - 2; i >= 0; i--) {
       if (list[i].role === 'assistant') {
@@ -365,35 +325,16 @@ async function onSend(text) {
       }
     }
     if (!prev) return
-    let s = 0
-    for (const x of prev.thinking.items) if ((x.seq || 0) > s) s = x.seq
-    for (const x of prev.tools.items) if ((x.seq || 0) > s) s = x.seq
-    const merged = [
-      ...last.thinking.items.map((x) => ({ ...x, kind: 'thinking' })),
-      ...last.tools.items.map((x) => ({ ...x, kind: 'tool' })),
-    ]
-    merged.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
-    for (const it of merged) {
-      if (it.kind === 'thinking') {
-        prev.thinking.items.push({
-          text: it.text,
-          duration_ms: it.duration_ms ?? null,
-          seq: ++s,
-        })
-      } else {
-        prev.tools.items.push({
-          id: it.id,
-          name: it.name,
-          arguments: it.arguments,
-          duration_ms: it.duration_ms ?? null,
-          content: it.content,
-          display: it.display,
-          seq: ++s,
-        })
-      }
+    for (const it of last.tools.items) {
+      prev.tools.items.push({
+        id: it.id,
+        name: it.name,
+        arguments: it.arguments,
+        duration_ms: it.duration_ms ?? null,
+        content: it.content,
+        display: it.display,
+      })
     }
-    if (prev.thinking.items.length) prev.thinking.state = 'completed'
-    if (prev.tools.items.length) prev.tools.state = 'completed'
     list.splice(list.length - 1, 1)
     assistantIdx = list.length - 1
   }
@@ -411,27 +352,18 @@ async function onSend(text) {
       if (!c || c.content) startNewAssistant()
     } else if (payload.type === 'reasoning') {
       const c = ensureAssistant()
-      const t = c.thinking
-      if (t.state !== 'running') {
-        t.state = 'running'
-        c._seq = (c._seq || 0) + 1
-        t.items.push({ text: '', duration_ms: null, seq: c._seq })
-      }
-      const last = t.items[t.items.length - 1]
-      last.text += payload.content
+      if (c.thinking.state !== 'running') c.thinking.state = 'running'
     } else if (payload.type === 'reasoning_done') {
       const c = cur()
       if (!c) return
-      c.thinking.state = 'completed'
-      const last = c.thinking.items[c.thinking.items.length - 1]
-      if (last) last.duration_ms = payload.duration_ms
+      // 思考结束即消失状态条
+      if (c.thinking.state === 'running') c.thinking.state = 'idle'
     } else if (payload.type === 'token') {
       ensureAssistant().content += payload.content
     } else if (payload.type === 'tool_call') {
       const c = ensureAssistant()
       const tools = c.tools
       tools.state = 'running'
-      c._seq = (c._seq || 0) + 1
       tools.items.push({
         id: payload.id,
         name: payload.name,
@@ -440,7 +372,6 @@ async function onSend(text) {
         content: '',
         display: payload.display || payload.name,
         running_label: payload.running_label || null,
-        seq: c._seq,
       })
     } else if (payload.type === 'tool_result') {
       const c = cur()

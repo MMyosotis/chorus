@@ -25,7 +25,6 @@ class ToolCallAccumulator:
     id: str = ""
     name: str = ""
     arguments: str = ""
-    seq: int = 0
 
 
 @dataclass
@@ -44,7 +43,6 @@ def _accumulate(stream) -> Iterator[SseEvent]:
     text_parts: list[str] = []
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = []
-    seq_counter = 0  # 思考段与工具调用共享的时序序号
 
     cur_parts: list[str] = []
     started_at: Optional[float] = None
@@ -56,7 +54,7 @@ def _accumulate(stream) -> Iterator[SseEvent]:
         if choice.finish_reason is not None:
             finish_reason = choice.finish_reason
 
-        reasoning = getattr(delta, "reasoning_content", None)
+        reasoning: Optional[str] = getattr(delta, "reasoning_content", None)
         if reasoning:
             if not in_progress:
                 started_at = perf_counter()
@@ -64,9 +62,9 @@ def _accumulate(stream) -> Iterator[SseEvent]:
             cur_parts.append(reasoning)
             yield ReasoningEvent(content=reasoning)
 
+        # 思考结束出现正文
         if in_progress and (delta.content or delta.tool_calls):
-            seq_counter += 1
-            duration = _close_thinking(cur_parts, started_at, thinking_segments, seq_counter)
+            duration = _close_thinking(cur_parts, started_at, thinking_segments)
             yield ReasoningDoneEvent(duration_ms=duration)
             in_progress = False
 
@@ -76,11 +74,11 @@ def _accumulate(stream) -> Iterator[SseEvent]:
 
         if delta.tool_calls:
             for tc in delta.tool_calls:
-                seq_counter = _merge_tool_call(accumulated, tc, seq_counter)
+                _merge_tool_call(accumulated, tc)
 
+    # 处理只有思考没有正文场景
     if in_progress:
-        seq_counter += 1
-        duration = _close_thinking(cur_parts, started_at, thinking_segments, seq_counter)
+        duration = _close_thinking(cur_parts, started_at, thinking_segments)
         yield ReasoningDoneEvent(duration_ms=duration)
 
     return StreamResult(
@@ -107,24 +105,23 @@ def drain_stream(stream) -> StreamResult:
 
 
 def _close_thinking(
-    parts: list[str], started_at: Optional[float], segments: list[ThinkingSegment], seq: int
+    parts: list[str], started_at: Optional[float], segments: list[ThinkingSegment]
 ) -> int:
     if started_at is None:
         duration = 0
     else:
         duration = int((perf_counter() - started_at) * 1000)
-    segments.append(ThinkingSegment(text="".join(parts), duration_ms=duration, seq=seq))
+    segments.append(ThinkingSegment(text="".join(parts), duration_ms=duration))
     parts.clear()
     return duration
 
 
-def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta, seq_counter: int) -> int:
-    """合并工具调用分片，首次见到某序号时分配时序号。"""
+def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta) -> None:
+    """合并工具调用分片，按 index 归拢拼装。"""
     idx = tc_delta.index
     entry = accumulated.get(idx)
     if entry is None:
-        seq_counter += 1
-        entry = ToolCallAccumulator(seq=seq_counter)
+        entry = ToolCallAccumulator()
         accumulated[idx] = entry
     if tc_delta.id:
         entry.id = tc_delta.id
@@ -133,4 +130,3 @@ def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta, seq_
             entry.name = tc_delta.function.name
         if tc_delta.function.arguments:
             entry.arguments += tc_delta.function.arguments
-    return seq_counter

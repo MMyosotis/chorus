@@ -188,7 +188,6 @@ class TraceRepository:
             "display": payload.get("display", ""),
             "duration_ms": 0,
             "content": "",
-            "seq": payload.get("seq", 0),
         }
 
     @staticmethod
@@ -205,7 +204,6 @@ class TraceRepository:
                 "display": "",
                 "duration_ms": 0,
                 "content": "",
-                "seq": 0,
             },
         )
         tool["duration_ms"] = payload.get("duration_ms", 0)

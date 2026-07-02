@@ -25,9 +25,9 @@ watch(
       return (
         m.content +
         '|' +
-        (m.thinking?.items?.length ?? 0) +
-        ':' +
-        (m.thinking?.items?.[m.thinking.items.length - 1]?.text?.length ?? 0) +
+        (m.thinking?.state ?? 'idle') +
+        '|' +
+        (m.tools?.state ?? 'idle') +
         '|' +
         tItems.length +
         '|' +
