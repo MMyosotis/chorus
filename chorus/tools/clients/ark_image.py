@@ -1,7 +1,4 @@
-"""火山方舟 doubao-seedream 图像生成 HTTP 客户端。
-
-test 模式的短路返回在 Tool 层判断，本类只负责真实 API 调用。
-"""
+"""火山方舟图像生成客户端，只负责真实接口调用，测试模式短路在工具层。"""
 
 from __future__ import annotations
 

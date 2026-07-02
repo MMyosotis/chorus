@@ -1,8 +1,6 @@
-"""generate_image 工具：火山方舟 doubao-seedream 图像生成。
+"""生图工具与生图模型提供者。
 
-含本工具的生图模型 provider——按 config 条目的 ``provider`` 字段 dispatch 到对应 builder
-（模块级注册表），settings 经 SettingsService 查询。初始化时按 config 全量构建所有 entry，
-读路径无锁。当前仅 ark 一种 provider。
+按配置条目的厂商字段派发到对应构造器，设置经设置服务查询。初始化时全量构建，读路径无锁。
 """
 
 from __future__ import annotations
@@ -16,7 +14,7 @@ from chorus.services.settings import SettingsService
 from chorus.tools.clients.ark_image import ArkImageClient
 from chorus.tools.framework import Reply, Tool, ToolContext, ToolRunResult
 
-# 测试模式短路返回的固定 URL（不调真实 API，验证全链路渲染用）。
+# 测试模式短路返回的固定地址，不调真实接口
 _FAKE_URL = "https://gips2.baidu.com/it/u=195724436,3554684702&fm=3028&app=3028&f=JPEG&fmt=auto?w=1280&h=960"
 
 

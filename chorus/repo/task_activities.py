@@ -1,12 +1,6 @@
-# kitty/repo/task_activities.py
-"""task_activities 表的唯一 SQL 入口（用户态活动流，1:N 关联 tasks）。
+"""活动流表的唯一 SQL 入口，按事件粒度追加，哑查询不开事务。
 
-用户可见活动：按事件粒度 append 递进。哑查询，永不开事务。
-
-映射归框架（命名绑定 + model_fields 派生列名），形状转换（3×json）集中在
-TaskActivityRow.from_values / to_domain。append 收原语（签名不变），内部生成
-id/created_at（id 为 uuid7 趋势递增，ORDER BY id 即活动顺序），故用 from_values
-而非 from_domain。id 在 from_values 内由 uuid6.uuid7() 生成（持久化关注点，不外露）。
+映射归框架，多个 JSON 列的转换集中在行模型。追加收原语，标识与时间在内部生成。
 """
 from __future__ import annotations
 
@@ -43,11 +37,7 @@ ON task_activities(task_id, updated_at);
 
 
 class TaskActivityRow(BaseModel):
-    """task_activities 表持久化形状（1:1 贴列）。映射归框架，转换归 from_values/to_domain。
-
-    id 为 SQLite 自增主键：INSERT 时不写该列（_INSERT_COLS 排除 id），由库分配，
-    lastrowid 回读后注入 Row 再 to_domain。回读路径（list/latest）从行直接装配，id 已在列中。
-    """
+    """活动流表持久化形状，与列一一对应。主键自增，插入后回读。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -103,7 +93,7 @@ def _loads(raw: Optional[str]) -> Any:
     return json.loads(raw) if raw else None
 
 
-# INSERT 排除自增主键 id（由库分配，lastrowid 回读）
+# 插入排除自增主键，由库分配后回读
 _INSERT_COLS = ", ".join(k for k in TaskActivityRow.model_fields if k != "id")
 _INSERT_PH = ", ".join(f":{k}" for k in TaskActivityRow.model_fields if k != "id")
 _SELECT_COLS = ", ".join(TaskActivityRow.model_fields)
@@ -134,7 +124,7 @@ class TaskActivitiesRepository:
             f"INSERT INTO task_activities({_INSERT_COLS}) VALUES ({_INSERT_PH})",
             row.model_dump(exclude={"id"}),
         )
-        # 自增主键由库分配，lastrowid 回读注入 Row 再 to_domain
+        # 自增主键由库分配，回读注入行模型
         return row.model_copy(update={"id": int(cur.lastrowid)}).to_domain()
 
     def list_by_task(self, task_id: str, *, limit: int = 50) -> list[TaskActivity]:

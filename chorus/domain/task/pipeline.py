@@ -1,7 +1,6 @@
-# kitty/domain/task/pipeline.py
-"""任务图 pipeline 纯函数：steps 校验 / 整图展开 / 调用消息渲染 / 产物解析。
+"""任务图纯函数：步骤校验、整图展开、调用消息渲染、产物解析。
 
-纯领域逻辑，不碰 DB、不 import repos/services/hooks/tools/agents。
+纯领域逻辑，不碰数据库。
 """
 from __future__ import annotations
 
@@ -19,7 +18,7 @@ _MAX_STEPS = 20
 
 
 def validate_steps(steps: list[StepSpec]) -> None:
-    """校验模型自主编排的 steps。非法抛 ValidationError 带 correction。"""
+    """校验模型编排的步骤，非法抛异常并附修正提示。"""
     if not steps:
         raise ValidationError("steps 为空", "请至少编排一个创作步骤，末步须为 finalize 汇总")
     if len(steps) > _MAX_STEPS:
@@ -50,10 +49,7 @@ def validate_steps(steps: list[StepSpec]) -> None:
 def expand_pipeline(
     intent: CreationIntent, steps: list[StepSpec], session_id: str, now: float,
 ) -> list[Task]:
-    """按 steps 一次性成型整图（全 pending，可直接落库）。
-
-    纯函数：session_id/now 由编排层传入。调用前应先 validate_steps。
-    """
+    """按步骤一次性生成整图，初始全待执行，可直接落库。调用前应先校验。"""
     pipeline_id = uuid.uuid4().hex
     ids = [uuid.uuid4().hex for _ in steps]
     tasks: list[Task] = []
@@ -89,12 +85,7 @@ def render_invoke_message(
     self_prior: Optional[Any],
     feedback: Optional[dict],
 ) -> str:
-    """拼首轮 user 消息：invoke_message + deps 产物 +（重跑）self_prior/feedback。
-
-    - deps_outputs: {task_id: 该 dep 的 artifacts}
-    - self_prior: 本 task 上轮产物（retry 时非空），指示定向改进
-    - feedback: 用户复核反馈（retry 时注入）
-    """
+    """拼首轮调用消息：基础骨架，按需附前置产物、上轮产物、用户反馈。"""
     parts = [task.invoke_message]
     if deps_outputs:
         parts.append("前置步骤产物：")
@@ -110,7 +101,7 @@ def render_invoke_message(
 
 
 def parse_sections(content: str) -> dict[str, str]:
-    """按 <<<TAG:fmt>>>...<<<TAG_END>>> 切段。容忍段外杂文，只取标签段；重复标签后写覆盖。"""
+    """按分隔符切段，容忍段外杂文，重复标签后者覆盖。"""
     result: dict[str, str] = {}
     i = 0
     n = len(content)
@@ -137,7 +128,7 @@ def parse_sections(content: str) -> dict[str, str]:
 
 
 def parse_output(content: str, agent_type: str) -> tuple[Any, Narrative]:
-    """切段→解析→按 profile 模型校验。失败抛 ValidationError 带 correction（缺段/字段错精确定位）。"""
+    """切段、解析、按角色模型校验。失败抛异常并精确定位缺段或字段错。"""
     profile = AGENT_PROFILES[agent_type]
     sections = parse_sections(content)
     if "artifacts" not in sections:
@@ -152,7 +143,7 @@ def parse_output(content: str, agent_type: str) -> tuple[Any, Narrative]:
 
 
 def _validate_narrative(data: Any) -> Narrative:
-    """构造即校验，失败转 ValidationError 带 correction。"""
+    """构造即校验，失败转异常并附修正提示。"""
     try:
         return Narrative(**data)
     except PydValidationError as e:
@@ -170,7 +161,7 @@ def _parse_json(raw: str, tag: str) -> Any:
 
 
 def _validate_artifacts(artifacts: Any, profile: AgentProfile) -> Any:
-    """用 profile.artifacts_model 构造即校验。不认识具体角色——新增 profile 零改动（开闭）。"""
+    """用角色对应的模型构造即校验，新增角色无需改本函数。"""
     try:
         return profile.artifacts_model(**artifacts)
     except PydValidationError as e:

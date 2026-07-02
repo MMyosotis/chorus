@@ -1,7 +1,6 @@
-"""FastAPI 应用工厂：create_app 内联装配所有 Service / Agent / Tool / Hook / Scheduler。
+"""FastAPI 应用工厂：内联装配所有服务、agent、工具、钩子与调度器。
 
-create_app 只装配（new + 注入），不含启动副作用——副作用经 lifespan 在服务启动时
-跑一次。HTTP 需要的 service 挂 app.state，路由经 Depends 取用。
+只装配不启副作用，副作用经生命周期在启动时跑一次。HTTP 需要的服务挂应用状态。
 """
 from __future__ import annotations
 
@@ -63,7 +62,7 @@ def create_app() -> FastAPI:
     message_service = MessageService(msg_repo, trace_service)
 
     chat_models = ChatModelProvider(settings_service)
-    # 标题生成固定用默认模型（不随用户当前对话设置变动）
+    # 标题生成固定用默认模型，不随用户当前设置变动
     title_entry = chat_models.title_entry()
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
 

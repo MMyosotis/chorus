@@ -1,8 +1,6 @@
-"""工具登记装配：build_tool_dispatch 把工具子系统装配成 ToolDispatch 实例。
+"""工具登记装配：把工具子系统装配成调度器实例。
 
-registry 是组合根——位于 framework / builtin / clients 之上，往下单向 import，
-不被任何一方反向依赖。image_models / baidu_client 等中间件内化于此，不泄露到
-app 作用域。ToolDispatch 类本身（登记+查 schema+派发）在 tools/framework.py。
+组合根，位于框架与内置工具之上，往下单向依赖不被反依赖。工具内部胶水内化于此。
 """
 
 from __future__ import annotations
@@ -29,11 +27,7 @@ def build_tool_dispatch(
     conn: ConnectionFactory,
     skill_loader: SkillLoader,
 ) -> ToolDispatch:
-    """装配默认工具调度器。
-
-    image_models / baidu_client 等工具内部胶水内化于此，外界只暴露跨层依赖
-    （settings / task_repo / conn / skill_loader）。新增工具或改某工具依赖只改本函数。
-    """
+    """装配默认工具调度器。工具内部胶水内化于此，外界只暴露跨层依赖。"""
     image_models = ImageModelProvider(settings_service)
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     return ToolDispatch([

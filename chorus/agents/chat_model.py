@@ -1,8 +1,6 @@
-"""ChatModelProvider：对话模型 ChatModelEntry 的创建与管理。
+"""对话模型提供者：管理各模型的常驻客户端。
 
-消费者是 supervisor/subagent（agents/），provider 与消费者同层。chat 各家都是 OpenAI 兼容
-协议，单 builder 够用。初始化时按 config 全量构建所有 entry（每模型一个常驻客户端），读路径
-无锁、天然线程安全。
+初始化时按配置全量构建，读路径无锁天然线程安全。
 """
 from __future__ import annotations
 

@@ -1,9 +1,6 @@
-"""MessageService：消息的应用编排（编排 MessageRepository，消费 TraceService）。
+"""消息服务：消息的应用编排，逐条入库，转发领域函数构建模型输入与前端视图。
 
-消息逐条 append 入库（入库时机 = 产生时机）；build_provider_messages 是传给 LLM 的
-消息序列唯一构建函数（转发 domain.build_provider_messages）；history_view 的
-thinking/tools 由 trace 聚合重建（转发 domain.build_history_view）——trace 预取经
-TraceService.batch_aggregate。
+视图的思考与工具摘要由轨迹聚合重建，轨迹经批量预取避免逐条查询。
 """
 
 from __future__ import annotations
@@ -72,17 +69,14 @@ class MessageService:
         return msg
 
     def history_view(self, session_id: str) -> list[MessageView]:
-        """前端视图：过滤 tool/system，assistant 挂回 thinking/tools（从 trace 聚合）。
-
-        trace 批量预取经 TraceService（一次 IN 查询），避免在 domain 内逐条查（N+1）。
-        """
+        """前端视图：滤掉工具消息，助手消息挂回思考与工具摘要，轨迹批量预取。"""
         msgs = self._msg_repo.list_by_session(session_id)
         traces = self._trace.batch_aggregate(
             [m.id for m in msgs if isinstance(m, AssistantMessage)]
         )
         return build_history_view(msgs, traces)
 
-    # provider_messages 唯一构建点
+    # 模型输入消息序列唯一构建点
     def build_provider_messages(self, session_id: str, system_prompt: str) -> list[dict]:
-        """构建发给 LLM 的消息序列：[system] + 该会话全部历史消息（按 id 升序）。"""
+        """构建发给模型的消息序列：系统提示加该会话全部历史消息。"""
         return build_provider_messages(system_prompt, self._msg_repo.list_by_session(session_id))

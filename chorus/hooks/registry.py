@@ -1,8 +1,7 @@
-"""CC 式扁平 hook 注册表：event → list[callable]，loop 只调 trigger。
+"""扁平钩子注册表：事件到回调列表，循环只调触发。
 
-遵循「挂在循环上，不写进循环里」：hook 是挂在稳定 loop 上的
-扩展点，不是主业务承载点。trigger 观测-only——逐回调 try/except 记日志跳过（fail-open），
-不阻断主流程；策略/拦截类 hook（verdict 回编 loop）为未来扩展点，届时再加返回值。
+钩子是挂在循环上的扩展点，不是主业务承载点。触发只做观测，逐回调失败只记日志不阻断；
+策略拦截类钩子为未来扩展点。
 """
 
 from __future__ import annotations
@@ -15,22 +14,22 @@ from chorus.domain.events import SseEvent
 
 logger = logging.getLogger(__name__)
 
-# hook 回调：接收 (ctx, *args, **kwargs)，返回 Iterable[SseEvent] | None。
+# 钩子回调：接收上下文与参数，返回事件序列或空
 HookFn = Callable[..., Any]
 
-# agent loop 的事件点（loop 在这些节点调 trigger）。
+# agent loop 的事件点
 EVENTS = (
-    "BeforeModelRequest",  # 构造 provider_messages 之后、调 LLM 之前
-    "AfterModelResponse",  # 流式消费完、决定走文本/工具之前（两类分支共用）
+    "BeforeModelRequest",  # 调模型前
+    "AfterModelResponse",  # 流式消费完、分流前
     "PreToolUse",          # 单个工具执行前
     "PostToolUse",         # 单个工具执行后
-    "Stop",                # 文本回复落库后、yield done 前（标题生成）
-    "Error",               # 异常上抛后、yield error 前（异常收尾）
+    "Stop",                # 文本回复落库后、收尾前
+    "Error",               # 异常上抛后、发错误前
 )
 
 
 class HookRegistry:
-    """event → list[HookFn] 的扁平注册表 + trigger 分发（fail-open）。"""
+    """事件到回调列表的扁平注册表，触发分发时失败不阻断。"""
 
     def __init__(self) -> None:
         self._hooks: dict[str, list[HookFn]] = {e: [] for e in EVENTS}
@@ -41,7 +40,7 @@ class HookRegistry:
         self._hooks[event].append(fn)
 
     def trigger(self, event: str, ctx: AgentContext, *args: Any, **kwargs: Any) -> Iterator[SseEvent]:
-        """按注册顺序调用该事件的所有 hook，yield 其返回的事件；单 hook 抛错只记日志、跳过。"""
+        """按注册顺序调用该事件的所有回调，产出其事件；单回调抛错只记日志跳过。"""
         for fn in self._hooks.get(event, ()):
             try:
                 result = fn(ctx, *args, **kwargs)

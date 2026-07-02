@@ -1,7 +1,6 @@
-"""消息：sealed 联合模型（按 role 区分 user / assistant / tool）+ 消息序列构造纯操作。
+"""消息模型：按角色区分用户、助手、工具三类，及消息序列构造的纯操作。
 
-System message 不存库（每次由 prompt.build_system_prompt 现拼），故不在联合内；
-frozen + extra=forbid 使消息不可变，改历史只能 append 新行。
+系统提示不入库，每次现拼；消息不可变，改历史只能新增行。
 """
 
 from __future__ import annotations
@@ -75,7 +74,7 @@ Message = Annotated[
 
 
 class MessageView(BaseModel):
-    """前端视图：过滤 system / tool 噪音，挂回 assistant 的 thinking + tools 元数据。"""
+    """前端视图：滤掉工具噪音，挂回助手的思考与工具元数据。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -87,11 +86,7 @@ class MessageView(BaseModel):
 
 
 def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> list[dict]:
-    """构建发给 LLM 的消息序列：[system] + 历史消息（各角色自行 to_provider_dict）。
-
-    不自行排序——按传入顺序透传；调用方须保证 messages 已按 id 升序（由
-    MessageRepository.list_by_session 的 ORDER BY id 保证，id 为 uuid7 趋势递增）。
-    """
+    """构建发给模型的消息序列：系统提示在前，历史消息按传入顺序透传。"""
     result: list[dict] = [{"role": "system", "content": system_prompt}]
     result.extend(m.to_provider_dict() for m in messages)
     return result
@@ -101,10 +96,9 @@ def build_history_view(
     messages: Iterable[Message],
     traces: dict[str, MessageTrace],
 ) -> list[MessageView]:
-    """前端视图：过滤 tool，assistant 挂回 thinking/tools（从预取的 traces 字典按 message_id 取）。
+    """前端视图：滤掉工具消息，助手消息挂回思考与工具摘要。
 
-    traces 由调用方（service）预取聚合好注入，避免在 domain 内逐条查 trace（N+1）。
-    缺失的 message_id 退化为空 thinking/tools。
+    轨迹由调用方预取注入，避免逐条查询。缺失轨迹退化为空。
     """
     result: list[MessageView] = []
     for msg in messages:

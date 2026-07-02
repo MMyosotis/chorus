@@ -1,8 +1,4 @@
-"""sessions 表的唯一 SQL 入口。
-
-映射归框架（命名绑定 + model_fields 派生列名），形状转换（title_generated int↔bool）
-集中在 SessionRow.to_domain / from_domain。
-"""
+"""会话表的唯一 SQL 入口。映射归框架，布尔与整型的转换集中在行模型。"""
 
 from __future__ import annotations
 
@@ -26,10 +22,7 @@ CREATE INDEX IF NOT EXISTS idx_session_updated ON sessions(updated_at DESC);
 
 
 class SessionRow(BaseModel):
-    """sessions 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。
-
-    title_generated 物理列是 INTEGER，Row 诚实贴 int，to_domain 里 bool()。
-    """
+    """会话表持久化形状，与列一一对应。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -114,7 +107,7 @@ class SessionRepository:
         )
 
     def delete(self, session_id: str) -> None:
-        """CASCADE 自动带走 messages / traces。"""
+        """级联删除关联消息与轨迹。"""
         self._conn.get().execute("DELETE FROM sessions WHERE id=?", (session_id,))
 
     def count(self) -> int:

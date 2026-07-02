@@ -1,4 +1,4 @@
-"""会话 CRUD + 消息/trace 视图路由（Depends 注入 SessionService + MessageService）。"""
+"""会话增删改查与消息、轨迹视图路由。"""
 
 from __future__ import annotations
 

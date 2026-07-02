@@ -1,8 +1,6 @@
-# kitty/domain/task/__init__.py
-"""任务图核心领域包：模型 + 状态机 + pipeline + profiles + PostCard 成品契约。
+"""任务图核心领域包：模型、状态机、流水线、角色档案、成品契约。
 
-按业务概念扁平组织，单一概念内聚：task 图的数据形状、纯状态机规则、pipeline 展开、
-角色档案、成品契约同住此包。不 import repos/services/hooks/tools/agents。
+按业务概念扁平组织，单一概念内聚，不依赖外部层。
 """
 from __future__ import annotations
 

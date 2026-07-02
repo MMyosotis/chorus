@@ -1,8 +1,4 @@
-"""调试 / 设置路由。
-
-- `/api/debug/test-mode`：图像测试模式开关（Depends 注入 SettingsService）。
-- `/api/settings/*`：输入框下方模型选项栏的可用列表与当前选择。
-"""
+"""调试与设置路由：图像测试模式开关、模型选项列表与当前选择。"""
 
 from __future__ import annotations
 
@@ -64,7 +60,7 @@ class OptionsPatch(BaseModel):
 
 @settings_router.get("/models", response_model=ModelListsView)
 def get_model_lists():
-    # 仅暴露 id（展示名 + 存储键）；base_url/api_key_env/model_id 是连接细节，不外露
+    # 仅暴露展示名，连接细节不外露
     chat_models = [ModelItem(id=m["model_name"]) for m in CHAT_MODELS]
     image_models = [ModelItem(id=m["model_name"]) for m in IMAGE_MODELS]
     return ModelListsView(chat_models=chat_models, image_models=image_models)

@@ -1,8 +1,4 @@
-"""千帆 ai_search 检索客户端（纯搜索模式）。
-
-参数规整与结果渲染在 Tool 层，本类只负责真实 API 调用。成功返原始 references，
-失败返错误文本（str），由 Tool 用 isinstance 区分。
-"""
+"""百度搜索客户端，只负责真实接口调用。成功返原始结果，失败返错误文本由工具层区分。"""
 
 from __future__ import annotations
 

@@ -1,9 +1,6 @@
-"""流式响应消费：把 OpenAI 流式 chunk 的增量翻译成领域状态 + SSE 事件。
+"""流式响应消费：把流式增量累积成领域状态并发出事件。
 
-纯函数式变换（零 IO、零副作用），与 domain/message.build_provider_messages 同层——
-把"流式协议增量"累积成"text_parts / tool_calls / thinking_segments / finish_reason"。
-consume_stream 既 yield 思考/正文事件，又通过 return 值回传累积结果（沿用生成器
-返回值捕获：`result = yield from consume_stream(stream)`）。
+纯变换，零副作用。边发出思考与正文事件，边通过返回值回传累积结果。
 """
 
 from __future__ import annotations
@@ -23,10 +20,7 @@ from chorus.domain.trace import ThinkingSegment
 
 @dataclass
 class ToolCallAccumulator:
-    """流式 tool_call 分片的累积盒：分片跨 chunk 到达，按 index 归拢后拼装。
-
-    可变（流式期间反复 mutate）；id/name 首个非空分片即定、arguments 逐片拼接。
-    """
+    """工具调用分片累积盒，跨分片按序归拢拼装。"""
 
     id: str = ""
     name: str = ""
@@ -36,22 +30,21 @@ class ToolCallAccumulator:
 
 @dataclass
 class StreamResult:
-    """一次流式响应的累积结果，由 TurnState.apply_stream 写入回合状态。"""
+    """一次流式响应的累积结果。"""
 
     text_parts: list[str] = field(default_factory=list)
-    # index → ToolCallAccumulator（按流式分片顺序合并的完整工具调用）
     tool_calls: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
 
 
 def _accumulate(stream) -> Iterator[SseEvent]:
-    """逐 chunk 累积：yield 思考/正文事件，return StreamResult（供 yield from 捕获返回值）。"""
+    """逐块累积，发出思考与正文事件，返回累积结果。"""
     accumulated: dict[int, ToolCallAccumulator] = {}
     text_parts: list[str] = []
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = []
-    seq_counter = 0  # thinking 段与 tool_call 共享的全局时序序号
+    seq_counter = 0  # 思考段与工具调用共享的时序序号
 
     cur_parts: list[str] = []
     started_at: Optional[float] = None
@@ -99,20 +92,12 @@ def _accumulate(stream) -> Iterator[SseEvent]:
 
 
 def consume_stream(stream) -> Iterator[SseEvent]:
-    """消费流式响应：yield 思考/正文事件，return StreamResult（supervisor SSE 用）。
-
-    yield from 透传 _accumulate 的事件；其生成器返回值经 yield from 表达式的值回传给
-    调用方（`result = yield from consume_stream(stream)` 捕获 StreamResult）。
-    """
+    """消费流式响应，发出思考与正文事件，返回累积结果。"""
     return (yield from _accumulate(stream))
 
 
 def drain_stream(stream) -> StreamResult:
-    """消费流式响应但丢弃 SSE 事件，仅返回 StreamResult（subagent 用，不连 SSE）。
-
-    与 consume_stream 共用 _accumulate（同累积逻辑），但不把 reasoning/token 推前端——
-    subagent 后台线程只取最终结果。
-    """
+    """消费流式响应但丢弃事件，仅返回累积结果。供不连事件流的调用方使用。"""
     gen = _accumulate(stream)
     try:
         while True:
@@ -134,7 +119,7 @@ def _close_thinking(
 
 
 def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta, seq_counter: int) -> int:
-    """合并流式 tool_call 分片。首次见到某 idx 时分配 seq（递增计数器回传），后续分片沿用。"""
+    """合并工具调用分片，首次见到某序号时分配时序号。"""
     idx = tc_delta.index
     entry = accumulated.get(idx)
     if entry is None:

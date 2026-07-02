@@ -1,5 +1,4 @@
-# kitty/routes/task.py
-"""task 资源路由：任务图查询 + HIL 写操作（confirm/retry/cancel）+ ReAct 过程。"""
+"""任务资源路由：任务图查询、人工确认写操作与活动流。"""
 from __future__ import annotations
 
 from typing import Optional

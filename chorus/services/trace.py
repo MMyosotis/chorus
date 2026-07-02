@@ -1,7 +1,6 @@
-"""TraceService：trace 行的应用编排（编排 TraceRepository）。
+"""轨迹服务：轨迹行的应用编排。
 
-trace 横跨 message 与 task 两个概念（靠 message_id / task_id 关联），独立成 service，
-不寄生在 MessageService。
+轨迹横跨消息与任务两个概念，独立成服务，不寄生在消息服务。
 """
 
 from __future__ import annotations
@@ -20,10 +19,7 @@ class TraceService:
     def add_trace(self, *, session_id: str, phase: TracePhase, payload: dict,
                   message_id: Optional[str] = None, task_id: Optional[str] = None,
                   source: str = "supervisor") -> float:
-        """落一条 trace 行。ts 由 service 统一打戳，调用方只给业务字段。
-
-        返回 ts，供调用方（如 hook）给 SSE 事件复用同一时间戳，保证落库行与推送事件对齐。
-        """
+        """落一条轨迹行，时间由本层打戳。返回时间戳供调用方事件复用以对齐。"""
         ts = time.time()
         self._trace_repo.add(TraceEntry(
             id=None, session_id=session_id, message_id=message_id, task_id=task_id,
@@ -35,5 +31,5 @@ class TraceService:
         return self._trace_repo.list_by_session(session_id)
 
     def batch_aggregate(self, message_ids) -> dict:
-        """批量聚合多条 message 的 trace（供 history_view 预取，避免 N+1）。"""
+        """批量聚合多条消息的轨迹，避免逐条查询。"""
         return self._trace_repo.batch_aggregate(message_ids)

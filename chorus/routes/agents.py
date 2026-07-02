@@ -1,7 +1,6 @@
-"""角色档案路由。
+"""角色档案路由，暴露前端展示用字段，后端档案是唯一来源。
 
-暴露 AGENT_PROFILES 的前端可见部分（display_name / enter_line）给流水线渲染。
-enter_line 是静态文案，后端 AGENT_PROFILES 是唯一来源，前端启动拉一次缓存。
+静态文案前端启动拉一次缓存。
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ class ProfileView(BaseModel):
 
 @router.get("/profiles", response_model=dict[str, ProfileView])
 def get_profiles():
-    # 仅暴露前端展示用字段；role_desc / artifacts_model / artifacts_schema 是后端内部细节，不外露
+    # 仅暴露前端展示用字段，内部细节不外露
     return {
         agent_type: ProfileView(
             display_name=p.display_name,

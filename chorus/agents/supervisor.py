@@ -1,12 +1,8 @@
-# kitty/agents/supervisor.py
-"""SupervisorService：supervisor SSE 流式 loop（沟通入口/出口 + 建图路由）。
+"""主调度 agent：流式对话入口，普通对话直接回复，创作请求经建图工具路由。
 
-主流程单文件可读全：append user → 每轮 build messages → 调模型 → consume_stream →
-按 outcome 分流：无 tool_call → only_reply 文本；有 tool_call → 统一 dispatch →
-Reply 回传继续 loop / Terminal 触发 handle_terminal done 收尾。loop 按
-isinstance(outcome, ...) 分流，不认识工具名、不认 Terminal 载荷类型——工具副作用
-在工具内收口，主流程只管终止。会话级创作准入：有活跃任务 yield BusyEvent 拒绝
-（纵深防御，前端已挡但不可信）。横切（trace/title/异常收尾）挂扁平 hook。
+主流程：追加用户消息 → 每轮拼消息调模型 → 按是否有工具调用分流——无则文本回复收尾，
+有则统一派发工具，据返回是回复还是终止决定继续或结束。主流程不识工具名与终止载荷，
+工具副作用在工具内收口。有活跃创作任务时拒绝新请求。横切经扁平钩子。
 """
 from __future__ import annotations
 
@@ -64,8 +60,7 @@ class SupervisorService:
         if not self._session.exists(session_id):
             yield ErrorEvent(content="session not found")
             return
-        # 会话级创作准入：有活跃任务则拒绝（纵深防御，前端已挡但不可信）。
-        # fail-closed 不回传模型——并发冲突模型纠正不了，user 消息不入库、模型不参与。
+        # 会话级创作准入：有活跃任务则拒绝，不回传模型
         if self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES) > 0:
             yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
             return
@@ -96,7 +91,7 @@ class SupervisorService:
                 yield from self._hooks.trigger("AfterModelResponse", ctx)
 
                 if not ctx.turn.accumulated_tool_calls:
-                    # only_reply：文本回复落库 + done
+                    # 纯文本回复：落库并收尾
                     content = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
                     self._message.append_assistant_message(
                         session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
@@ -105,10 +100,10 @@ class SupervisorService:
                     yield DoneEvent()
                     yield from self._hooks.trigger("Stop", ctx)
                     return
-                # 工具调用分支：统一 dispatch 所有 tool_call，按 outcome 分流
+                # 工具调用分支：统一派发，据是否命中终止决定结束或继续
                 got_terminal = yield from self._dispatch_tools(session_id, ctx, schemas)
                 if got_terminal:
-                    return  # Terminal 已结束本轮
+                    return  # 终止已结束本轮
         except Exception as e:
             ctx.outcome.exception = e
             yield from self._hooks.trigger("Error", ctx)
@@ -117,17 +112,12 @@ class SupervisorService:
     def _dispatch_tools(
         self, session_id: str, ctx: AgentContext, schemas: list[dict],
     ) -> Iterator[SseEvent]:
-        """一轮内 dispatch 所有 tool_call，收集后成对落库（一条 assistant + N tool），
-        再按是否命中 Terminal 决定结束本轮或继续。
-
-        generator：yield SSE 事件，return bool（是否命中 Terminal 结束本轮）。
-        收集全部 (call, dispatch_result) 后落**一条** assistant(tool_calls=[全部]) + N 条
-        tool(result)——OpenAI 多 tool_call 配对的真实结构，根除多 Reply tool_call 复用
-        message_id 撞 messages PK 的回归。首个 Terminal 即结束本轮。
+        """一轮内派发所有工具调用，成对落库（一条助手消息带全部调用 + N 条工具结果），
+        再据是否命中终止决定结束本轮或继续。
         """
         tool_ctx = ToolContext(session_id=session_id)
-        pairs = []          # [(call, dispatch_result)] 按索引顺序
-        terminal = None     # 首个 Terminal 的 (call, d)
+        pairs = []          # 调用与结果按索引顺序
+        terminal = None     # 首个终止结果
         for _, tc in sorted(ctx.turn.accumulated_tool_calls.items()):
             call = ToolCall(id=tc.id, name=tc.name, arguments=_parse_args(tc.arguments))
             call_view = {"id": call.id, "name": call.name, "arguments": call.arguments, "seq": tc.seq}
@@ -141,7 +131,7 @@ class SupervisorService:
             pairs.append((call, d))
             if isinstance(d.outcome, Terminal) and terminal is None:
                 terminal = (call, d)
-        # 一条 assistant(tool_calls=[全部]) + N tool(result) 成对落库——OpenAI 配对真实结构
+        # 一条助手消息带全部调用 + N 条工具结果，成对落库
         self._message.append_assistant_message(
             session_id, message_id=ctx.turn.message_id,
             content=self._turn_content(ctx, terminal),
@@ -159,18 +149,14 @@ class SupervisorService:
         return False
 
     def _turn_content(self, ctx: AgentContext, terminal) -> Optional[str]:
-        """assistant 内容：Terminal 轮用 friendly_reply（流程节拍气泡）；全 Reply 轮用模型文本。"""
+        """助手内容：终止轮用工具带的友好回复，纯回复轮用模型文本。"""
         if terminal is not None:
             call, _ = terminal
             return call.arguments.get("friendly_reply") or "好的，开始为你创作"
         return "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
 
     def _handle_terminal(self, session_id: str, ctx: AgentContext, call: ToolCall, d) -> Iterator[SseEvent]:
-        """Terminal 分支：工具已在自身内完成副作用，主流程只做 done 收尾 + Stop hook。
-
-        成对落库（assistant tool_calls + tool result）已在 _dispatch_tools 完成；
-        Terminal 载荷由工具自洽，主流程不按载荷类型分流——只管终止本轮。
-        """
+        """终止分支：工具副作用已在工具内完成，主流程只做收尾。"""
         self._session.touch(session_id)
         yield DoneEvent()
         yield from self._hooks.trigger("Stop", ctx)

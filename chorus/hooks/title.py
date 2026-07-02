@@ -1,8 +1,6 @@
-"""收尾 hook：首轮 assistant 文本回复后生成短标题 + yield title_update。
+"""收尾钩子：首轮回复后生成短标题并发出更新事件。
 
-原 TitleHook 逻辑去掉 Hook ABC。失败 fail-open（经 trigger）：标题生成/落库失败
-只记日志，不影响主流程 done。读历史消息走 MessageService，落标题走 SessionService。
-is_title_set 短路已定名会话——避免第 2 轮起重复调 LLM 生成标题。
+失败只记日志不阻断主流程。已定名会话短路，避免重复生成。
 """
 
 from __future__ import annotations
@@ -29,7 +27,7 @@ class TitlePostProcessor:
         self._title = title_service
 
     def on_stop(self, ctx: AgentContext) -> Iterable[SseEvent]:
-        # 先短路：标题已定名则不调 LLM、不遍历历史（第 2 轮起零开销）。
+        # 已定名则短路，不调模型不遍历历史
         if self._session.is_title_set(ctx.session_id):
             return None
         first_user, first_assistant = self._first_pair(ctx.session_id)

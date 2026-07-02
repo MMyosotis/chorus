@@ -1,9 +1,4 @@
-"""观测 hook：在 LLM 调用前后 / 工具执行前后写 trace 行并 yield TraceEvent。
-
-原 TraceHook 逻辑去掉 Hook ABC，方法对齐 HookRegistry 事件点。各方法返回
-Iterable[SseEvent] | None；经 trigger 调用时由 trigger 负责 fail-open。
-payload 各 phase schema 见 repo/trace.py 头注释。
-"""
+"""观测钩子：在模型调用与工具执行前后写轨迹并发出事件。"""
 
 from __future__ import annotations
 

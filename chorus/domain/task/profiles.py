@@ -1,13 +1,6 @@
-# kitty/domain/task/profiles.py
-"""AgentProfile 角色注册表：四子角色档案（display_name/role_desc/enter_line/
-artifacts_schema/expected_sections/artifacts_model）。
+"""角色档案注册表：四子角色的展示名、职责、入场台词与产物模型。
 
-工具能力边界（白名单）不在此——见 config.TOOL_WHITELISTS，由各 agent 查表取名字
-再交 tools 包筛 schema。加角色只加一条 AgentProfile（含挂 artifacts_model）。
-全部文案纯文本禁 emoji。
-
-展示文案资产：角色入场台词（enter_line）属角色档案留此；工具活动台词与翻译
-逻辑（含动态拼 query）归 activity 翻译层，不在此。
+新增角色只需加一条档案。文案纯文本禁 emoji。
 """
 from __future__ import annotations
 
@@ -28,9 +21,9 @@ class AgentProfile:
     display_name: str
     role_desc: str
     enter_line: str
-    artifacts_schema: str  # prompt 模板查表键（_SHAPES），与校验模型独立
+    artifacts_schema: str
     expected_sections: tuple[str, ...]
-    artifacts_model: Type[Any]  # parse 期强校验模型（pydantic dataclass，构造即校验）
+    artifacts_model: Type[Any]
 
 
 AGENT_PROFILES: dict[str, AgentProfile] = {

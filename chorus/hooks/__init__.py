@@ -1,7 +1,6 @@
-"""hook 子系统：CC 式扁平注册表（event → list[callable]）+ 三个扩展 handler。
+"""钩子系统：扁平注册表加三个处理器——观测、标题收尾、异常收尾。
 
-观测（TraceEmitter）/ 收尾（TitlePostProcessor）/ 异常收尾（ErrorFinalizer）；
-经 HookRegistry.trigger 调用，fail-open。主流程在 SupervisorService.stream()，不在此处。
+经注册表触发调用，失败不阻断主流程。主流程在各 agent loop 内，不在此处。
 """
 
 from __future__ import annotations

@@ -1,11 +1,6 @@
-"""task_artifacts 表的唯一 SQL 入口（1:1 关联 tasks，大 JSON 产物）。
+"""任务产物表的唯一 SQL 入口，存产物与角色话术两个 JSON 列，哑查询不开事务。
 
-artifacts（前端渲染用 + 下游注入用，同源同值）/ narrative（角色话术）两个 JSON 列。
-哑查询，永不开事务（与 cas_update 同事务由 service 拼）。
-
-映射归框架（命名绑定 + model_fields 派生列名），形状转换（2×json）集中在
-TaskArtifactsRow.from_values / to_domain。upsert 收原语（签名不变），不收领域对象，
-故用 from_values 而非 from_domain。
+映射归框架，转换集中在行模型。upsert 收原语不收领域对象。
 """
 from __future__ import annotations
 
@@ -29,7 +24,7 @@ CREATE TABLE IF NOT EXISTS task_artifacts (
 
 
 class TaskArtifactsRow(BaseModel):
-    """task_artifacts 表持久化形状（1:1 贴列）。映射归框架，转换归 from_values/to_domain。"""
+    """任务产物表持久化形状，与列一一对应。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -49,7 +44,7 @@ class TaskArtifactsRow(BaseModel):
     def from_values(
         cls, task_id: str, artifacts: Any, narrative: Any, updated_at: Optional[float] = None,
     ) -> "TaskArtifactsRow":
-        """原语 → Row（签名与 upsert 对齐，不收领域对象）。narrative 允许 None。"""
+        """原语转行模型，话术允许为空。"""
         return cls(
             task_id=task_id,
             artifacts=json.dumps(artifacts, ensure_ascii=False) if artifacts is not None else None,
@@ -69,7 +64,7 @@ class TaskArtifactsRepository:
         self._ensure_columns()
 
     def _ensure_columns(self) -> None:
-        """幂等加列（无迁移框架，CREATE TABLE IF NOT EXISTS 不覆盖已存在的旧表）。"""
+        """幂等加列，建表语句不覆盖旧表。"""
         cols = {
             row["name"]
             for row in self._conn.get().execute("PRAGMA table_info(task_artifacts)").fetchall()

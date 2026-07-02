@@ -1,7 +1,4 @@
-"""FastAPI 依赖注入入口：从 app.state 取 Service。
-
-路由端点用 `Depends(provide_xxx)` 拿到 Service，不 import 模块级单例。
-"""
+"""依赖注入入口：从应用状态取服务，路由端点用 Depends 拿到，不引模块级单例。"""
 
 from __future__ import annotations
 

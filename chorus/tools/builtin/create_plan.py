@@ -1,10 +1,7 @@
-# kitty/tools/builtin/create_plan.py
-"""create_plan 工具：建图副作用单元——解析+校验+整图成型+事务落库，全在工具内收口。
+"""建图工具：解析、校验、整图成型与事务落库全在工具内收口。
 
-对模型是普通工具（有 schema、被 dispatch、有 trace）；建图全过程（expand + insert）
-归本工具，主流程只据 Terminal 终止本轮、不认载荷类型。可预料失败（参数缺失/校验错/
-落库失败）返 Reply(correction) 由模型自纠；仅无法预料的意外异常才由 dispatch 兜底
-（fail-open 转错误 Reply），对齐「工具可预料失败内部收口」约定。
+对模型是普通工具，主流程只据终止信号结束本轮。可预料失败返回传由模型自纠，
+仅意外异常由派发层兜底。
 """
 from __future__ import annotations
 

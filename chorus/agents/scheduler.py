@@ -1,10 +1,7 @@
-# kitty/agents/scheduler.py
-"""TaskScheduler：同进程后台调度器线程，轮询数据库派发可执行 task + 回收 zombie。
+"""任务调度器：后台线程轮询数据库派发可执行任务，并回收僵死任务。
 
-无 LLM loop、无事件点可挂 hook——schedule 事件（dispatch/cas_conflict/zombie_reclaim）
-直接内联 trace.add 写库。用 BoundedSemaphore(POOL_SIZE) 限流：try acquire 非阻塞，
-失败则跳过该 task（仍 pending 未 CAS），下轮再试；成功则 CAS pending→running + submit
-subagent.run（worker 完成时 release）。
+无模型循环、无钩子事件点，调度事件直接内联写轨迹。用信号量限流：非阻塞获取，满则
+跳过该任务下轮再试；成功则翻转状态为运行中并提交子 agent 执行。
 """
 from __future__ import annotations
 
@@ -27,9 +24,9 @@ class TaskScheduler:
     def __init__(
         self,
         task_repo: TaskRepository,
-        trace_service: TraceService,        # trace 经 add_trace 统一落库（ts 由 service 打戳）
-        subagent_run,                       # callable(task_id) -> None
-        session_service: SessionService,    # 预留：未来 session 级协调（app.py 装配时传入）
+        trace_service: TraceService,
+        subagent_run,
+        session_service: SessionService,
         interval: float = SCHEDULER_INTERVAL,
         zombie_timeout: int = ZOMBIE_TIMEOUT,
         pool_size: int = POOL_SIZE,
@@ -45,7 +42,7 @@ class TaskScheduler:
         self._stop = threading.Event()
 
     def start(self) -> None:
-        """启动后台线程（先 zombie 回收，再周期 _tick）。幂等。"""
+        """启动后台线程，先回收僵死再周期轮询。幂等。"""
         if self._thread is not None:
             return
         self._stop.clear()
@@ -69,7 +66,7 @@ class TaskScheduler:
             self._stop.wait(self._interval)
 
     def _tick(self) -> None:
-        """一轮：扫描 pending task，可调度则 CAS+submit；回收 zombie。"""
+        """一轮：扫描待执行任务，可调度则翻转并提交，再回收僵死。"""
         for task, deps in self._task_repo.find_pending_with_deps():
             self._try_schedule_one(task, deps)
         self._reclaim_zombies()
@@ -77,11 +74,10 @@ class TaskScheduler:
     def _try_schedule_one(self, task, deps) -> None:
         if not can_schedule(task, deps):
             return
-        # 限流：非阻塞 acquire，满则跳过（task 仍 pending，下轮再试）
+        # 限流：非阻塞获取，满则跳过下轮再试
         if not self._semaphore.acquire(blocking=False):
             return
-        # CAS pending→running 顺带写 started_at（subagent 运行租约锚点）；不写 finished_at。
-        # scheduler 不注入 TaskActivitiesRepository、不写 activity（纯粹性）。
+        # 翻转为运行中并写启动时间作为租约锚点
         now = time.time()
         ok = self._task_repo.cas_update(
             task.id, TaskStatus.PENDING.value, TaskStatus.RUNNING.value,
@@ -93,13 +89,13 @@ class TaskScheduler:
                                  "CAS 失败（状态已漂移）")
             return
         self._trace_schedule(task.id, "dispatch", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, "")
-        # submit 到独立线程跑 subagent，完成时 release semaphore
+        # 提交独立线程跑子 agent，完成时释放槽位
         try:
             threading.Thread(
                 target=self._run_worker, args=(task.id,), name=f"subagent-{task.id}", daemon=True,
             ).start()
         except Exception:
-            # start 失败（OS 线程耗尽等）：回滚 CAS + 释放槽位，下轮重试，保 acquire/release 平衡
+            # 启动失败：回滚状态并释放槽位，下轮重试
             self._semaphore.release()
             self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
             logger.exception("scheduler failed to spawn worker for %s", task.id)
@@ -113,7 +109,7 @@ class TaskScheduler:
             self._semaphore.release()
 
     def _reclaim_zombies(self) -> None:
-        """回收 running 且心跳超时的 task：CAS running→pending。"""
+        """回收运行且心跳超时的任务，翻回待执行。"""
         now = time.time()
         for task in self._task_repo.find_running_before(now - self._zombie_timeout):
             ok = self._task_repo.cas_update(
@@ -125,7 +121,7 @@ class TaskScheduler:
                                      f"心跳超时 {self._zombie_timeout}s")
 
     def _trace_schedule(self, task_id: str, event: str, from_status: str, to_status: str, detail: str) -> None:
-        """内联写 schedule trace（scheduler 无 LLM loop，不挂 hook）。fail-open。"""
+        """内联写调度轨迹，失败只记日志。"""
         try:
             task = self._task_repo.get(task_id)
             if task is None:

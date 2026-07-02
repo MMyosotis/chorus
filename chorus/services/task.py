@@ -1,10 +1,8 @@
-# kitty/services/task.py
-"""TaskService：HIL（confirm/retry/cancel）编排 + get_graph 任务图视图。
+"""任务服务：人工确认编排与任务图视图。
 
-编排层：取数据→调 domain→存数据。CAS 合法性由 domain LEGAL_TRANSITIONS 保证（service
-结构性只做一条合法翻转）；repo cas_update 仅原子原语。confirm/retry 先查存在性再 CAS，
-rowcount=0 抛 ConflictError（route 转 409）。get_graph 选 active pipeline，无 active
-选最近 finished（cancelled 不算）。
+编排层取数据调领域再存数据。状态翻转合法性由领域保证，仓储只做原子翻转；
+确认与重跑先查存在再翻转，翻转失败抛冲突错由路由转 409。任务图优先展示进行中流水线，
+无则取最近已完成。
 """
 from __future__ import annotations
 
@@ -31,12 +29,12 @@ _TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
 
 
 def _dump_activity(a: TaskActivity) -> dict:
-    """pydantic dataclass 无 model_dump，用 TypeAdapter 序列化（不用 dataclasses.asdict）。"""
+    """序列化活动，用类型适配器替代模型导出。"""
     return _TASK_ACTIVITY_ADAPTER.dump_python(a)
 
 
 class ConflictError(Exception):
-    """CAS 冲突（状态已漂移）或前置条件不满足（如 idea 缺 selected）。"""
+    """状态冲突或前置条件不满足。"""
 
 
 class TaskService:
@@ -53,7 +51,7 @@ class TaskService:
         self._session = session_service
 
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
-        """确认推进：CAS awaiting_confirm→finished。idea 校验 selected 并写 artifacts.selected。"""
+        """确认推进：翻转待确认态为完成。选题角色校验选中项并写回产物。"""
         task = self._task_repo.get(task_id)
         if task is None:
             raise KeyError(task_id)
@@ -72,7 +70,7 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.FINISHED.value}
 
     def retry(self, task_id: str, feedback: dict) -> dict:
-        """带反馈重跑本步：写 feedback + CAS awaiting_confirm→pending（或 failed→pending）。"""
+        """带反馈重跑本步：写回反馈并翻转回待执行。"""
         task = self._task_repo.get(task_id)
         if task is None:
             raise KeyError(task_id)
@@ -87,7 +85,7 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.PENDING.value}
 
     def cancel_pipeline(self, session_id: str) -> dict:
-        """放弃整条 pipeline：找该 session active pipeline_id，事务批量 CAS 非终态→cancelled。"""
+        """放弃整条流水线：找进行中流水线，事务内批量取消非终态任务。"""
         pipeline_id = self._active_pipeline_id(session_id)
         if pipeline_id is None:
             raise ConflictError("该会话无进行中的创作任务")
@@ -95,25 +93,25 @@ class TaskService:
         return {"pipeline_id": pipeline_id, "cancelled": n}
 
     def get_graph(self, session_id: str) -> dict:
-        """任务图视图：active pipeline 优先，无 active 选最近 finished。"""
+        """任务图视图：进行中流水线优先，无则取最近已完成。"""
         active_tasks = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         if active_tasks:
-            # 渲染整图（含已 finished 的前序 task），否则团队成员会随完成逐个消失
+            # 渲染整图含已完成前序，否则成员会随完成逐个消失
             pipeline_id = active_tasks[0].pipeline_id
             all_tasks = self._task_repo.find_by_pipeline(pipeline_id)
             return self._graph_dict(pipeline_id, all_tasks, True)
-        # 无 active：找该 session 所有终态 task，按 pipeline 分组取最近 finished
+        # 无进行中：取该会话终态任务，按流水线分组取最近完成
         terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
         if not terminal:
             return {"pipeline_id": None, "active": False, "tasks": []}
-        # 选最近 updated 的 pipeline
+        # 取最近更新的流水线
         latest = max(terminal, key=lambda t: t.updated_at)
         same_pipeline = [t for t in terminal if t.pipeline_id == latest.pipeline_id]
-        display = select_display_pipeline([], same_pipeline)  # active 空，返 finished 子集
+        display = select_display_pipeline([], same_pipeline)
         return self._graph_dict(latest.pipeline_id, display, False)
 
     def get_activities(self, task_id: str, *, limit: int = 50) -> list[dict]:
-        """该 task 的用户态活动（按 id 升序，即发生顺序），供 Dock 活动流。"""
+        """返回该任务的用户态活动，按发生顺序。"""
         if self._task_repo.get(task_id) is None:
             raise KeyError(task_id)
         limit = max(1, min(100, limit))

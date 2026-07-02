@@ -1,18 +1,7 @@
-"""traces 表的唯一 SQL 入口。
+"""轨迹表的唯一 SQL 入口。
 
-表结构：traces(id, session_id, message_id, task_id, source, phase, ts, payload_json)，
-索引 idx_traces_session_ts / idx_traces_message / idx_traces_task。trace 与 message 物理解耦，
-仅靠 message_id 关联。
-
-payload 各 phase 的 schema（写入方约定，聚合方依赖）：
-    model_request : {model, messages, tools, max_tokens}
-    model_response: {content, finish_reason, tool_calls[], thinking_segments[]}
-    tool_call     : {id, name, arguments, display, running_label}
-    tool_result   : {tool_call_id, name, content, duration_ms}
-
-映射归框架（sqlite3.Row 命名访问 + pydantic 装配 + model_fields 派生列名），
-形状转换（phase str↔enum / payload_json↔dict / source 默认值）集中在
-TraceRow.to_domain / from_domain。聚合逻辑 _aggregate 不动。
+轨迹与消息物理解耦，仅靠消息标识关联。各阶段载荷结构由写入方约定、聚合方依赖。
+映射归框架，转换集中在行模型，聚合逻辑重建思考与工具摘要。
 """
 
 from __future__ import annotations
@@ -50,7 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, ts);
 
 
 class TraceRow(BaseModel):
-    """traces 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。"""
+    """轨迹表持久化形状，与列一一对应。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -124,7 +113,7 @@ class TraceRepository:
         return [TraceRow(**dict(r)).to_domain() for r in rows]
 
     def list_by_task(self, task_id: str) -> list[TraceEntry]:
-        """按 task 取该 subagent/scheduler 的全部 trace（调试单 task 用）。"""
+        """按任务取其全部轨迹，调试单任务用。"""
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM traces WHERE task_id=? ORDER BY ts ASC, id ASC",
             (task_id,),
@@ -132,14 +121,11 @@ class TraceRepository:
         return [TraceRow(**dict(r)).to_domain() for r in rows]
 
     def aggregate_message_trace(self, message_id: str) -> MessageTrace:
-        """从该 message 的若干 trace 行重建 thinking + tools。"""
+        """从该消息的若干轨迹行重建思考与工具摘要。"""
         return self._aggregate(message_id, self.list_by_message(message_id))
 
     def batch_aggregate(self, message_ids) -> dict[str, MessageTrace]:
-        """一次 IN 查询批量聚合多条 message 的 trace（供 history_view 预取，避免 N+1）。
-
-        返回 {message_id: MessageTrace}；无 trace 行的 message_id 不在结果中（调用方按缺失处理）。
-        """
+        """一次查询批量聚合多条消息的轨迹，避免逐条查询。无轨迹的消息不在结果中。"""
         ids = list(message_ids)
         if not ids:
             return {}
@@ -157,7 +143,7 @@ class TraceRepository:
         return {mid: self._aggregate(mid, entries) for mid, entries in grouped.items()}
 
     def _aggregate(self, message_id: str, entries: list[TraceEntry]) -> MessageTrace:
-        """从若干 trace 行重建 thinking + tools（单条与批量共用）。"""
+        """从若干轨迹行重建思考与工具摘要，单条与批量共用。"""
         thinking: list[ThinkingSegment] = []
         tools: dict[str, dict] = {}
         for entry in entries:

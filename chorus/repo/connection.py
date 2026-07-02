@@ -1,7 +1,6 @@
-"""SQLite 连接工厂：线程局部连接，统一 PRAGMA 配置。
+"""SQLite 连接工厂：线程局部连接，统一启 WAL、外键与超时。
 
-每个线程一条连接（threading.local），WAL + NORMAL 同步 + 外键约束 + busy_timeout。
-transaction() 上下文管理器供 service/agents 开事务（repo 永不开）。
+事务上下文管理器供编排层开事务，仓储层永不开。
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ class ConnectionFactory:
         conn = getattr(self._tls, "conn", None)
         if conn is None:
             conn = sqlite3.connect(self.db_path, isolation_level=None)
-            conn.row_factory = sqlite3.Row  # 行按列名访问，repo 侧靠命名装配 Row（见各 repo）
+            conn.row_factory = sqlite3.Row  # 行按列名访问
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA foreign_keys=ON")
@@ -37,7 +36,7 @@ class ConnectionFactory:
 
     @contextmanager
     def transaction(self):
-        """显式事务：BEGIN; yield; COMMIT; except ROLLBACK。不可嵌套（sqlite 不支持裸 BEGIN 嵌套）。"""
+        """显式事务，不可嵌套。"""
         conn = self.get()
         if getattr(self._tls, "in_txn", False):
             raise RuntimeError("transaction 不可嵌套")

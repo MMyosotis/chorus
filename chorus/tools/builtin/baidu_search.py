@@ -1,7 +1,6 @@
-"""baidu_search 工具：百度 AI 搜索检索。
+"""搜索工具：百度 AI 搜索检索。
 
-参数规整（query strip / top_k clamp）与 references 渲染在本 Tool 层，
-client 只负责真实 API 调用（成功返原始 list[dict]，失败返错误 str）。
+参数规整与结果渲染在本工具层，客户端只负责真实接口调用。
 """
 
 from __future__ import annotations

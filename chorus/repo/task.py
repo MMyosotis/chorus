@@ -1,9 +1,6 @@
-# kitty/repo/task.py
-"""tasks 表的唯一 SQL 入口（哑查询，永不开事务，无业务规则）。
+"""任务表的唯一 SQL 入口，哑查询不开事务。
 
-表结构见 spec 3.1。CAS 合法性分工：domain 出 LEGAL_TRANSITIONS 规则表；service 方法
-结构性只做一条合法翻转；repo cas_update 仅原子原语（WHERE status=from 看 rowcount），
-不管翻转合不合法。状态集合由 service 从 domain 传入（WHERE status IN ?），repo 不硬编码。
+状态翻转合法性由领域规则与编排层把关，仓储只做原子原语；状态集合由编排层传入，不在本层硬编码。
 """
 from __future__ import annotations
 
@@ -38,16 +35,13 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 """
 
-# cas_update 允许顺带更新的字段（白名单，防 SQL 注入与误写）
+# 状态翻转时允许顺带更新的字段白名单
 _CAS_FIELDS = {"error", "feedback", "updated_at", "started_at", "finished_at"}
-# 注：progress_total 建图期 insert 一次性写入，不进 CAS（运行期不可变）
+# 配图总数建图期一次写入，运行期不可变，不进翻转
 
 
 class TaskRow(BaseModel):
-    """tasks 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。
-
-    dependencies/feedback 是 JSON 列；agent_type/status 在领域即 str（存 enum 值），无转换。
-    """
+    """任务表持久化形状，与列一一对应。依赖与反馈为 JSON 列。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -110,7 +104,7 @@ class TaskRepository:
         self._ensure_columns()
 
     def _ensure_columns(self) -> None:
-        """幂等加列/迁列（无迁移框架，CREATE TABLE IF NOT EXISTS 不覆盖已存在的旧表）。"""
+        """幂等加列与迁列，建表语句不覆盖旧表。"""
         cols = {
             row["name"]
             for row in self._conn.get().execute("PRAGMA table_info(tasks)").fetchall()
@@ -121,8 +115,7 @@ class TaskRepository:
             self._conn.get().execute("ALTER TABLE tasks ADD COLUMN finished_at REAL")
         if "progress_total" not in cols:
             if "metadata" in cols:
-                # 旧 metadata 列存 JSON {"progress_total":N}：新建 INTEGER 列拷值，再丢弃旧列
-                #（rename 会保留 TEXT affinity 导致 int 被强转成文本，故走 add+drop）
+                # 旧 metadata 列存 JSON，新建整型列拷值再丢弃旧列，避免类型亲和问题
                 self._conn.get().execute(
                     "ALTER TABLE tasks ADD COLUMN progress_total INTEGER"
                 )
@@ -152,10 +145,7 @@ class TaskRepository:
     def cas_update(
         self, task_id: str, from_status: str, to_status: str, **fields
     ) -> bool:
-        """原子原语：UPDATE ... WHERE id=? AND status=from_status，看 rowcount。
-        **fields 仅允许 error/feedback/updated_at/started_at/finished_at。
-        error/feedback 走 JSON；started_at/finished_at 是裸 float。
-        """
+        """原子翻转：据原状态匹配更新，看影响行数。附加字段须在白名单内。"""
         bad = set(fields) - _CAS_FIELDS
         if bad:
             raise ValueError(f"cas_update 不允许字段: {bad}")
@@ -168,7 +158,7 @@ class TaskRepository:
             val = fields["feedback"]
             sets.append("feedback=?")
             params.append(json.dumps(val, ensure_ascii=False) if val is not None else None)
-        # 裸 float 列
+        # 浮点列
         for f in ("started_at", "finished_at"):
             if f in fields:
                 sets.append(f"{f}=?"); params.append(fields[f])
@@ -179,16 +169,13 @@ class TaskRepository:
         return cur.rowcount > 0
 
     def touch_updated_at(self, task_id: str) -> None:
-        """心跳：直接更新 updated_at（不走 CAS、不校验状态）。供 subagent 每轮防 zombie 误杀。"""
+        """心跳：直接更新时间，不走翻转不校验状态，防僵死误杀。"""
         self._conn.get().execute(
             "UPDATE tasks SET updated_at=? WHERE id=?", (time.time(), task_id)
         )
 
     def cancel_pipeline(self, pipeline_id: str, statuses: Iterable[str]) -> int:
-        """事务内批量 CAS 非终态 task→cancelled。返受影响行数。
-
-        状态集合由 service 从 domain CANCELLABLE_STATUSES 传入（repo 不硬编码业务规则）。
-        """
+        """事务内批量取消非终态任务，返回受影响行数。状态集合由编排层传入。"""
         statuses = list(statuses)
         if not statuses:
             return 0
@@ -203,7 +190,7 @@ class TaskRepository:
             return cur.rowcount
 
     def find_pending_with_deps(self) -> list[tuple[Task, list[Task]]]:
-        """返所有 pending task + 其 deps 行（哑查询，调度判定交 domain can_schedule）。"""
+        """返回所有待执行任务及其依赖，调度判定交领域。"""
         pending_rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM tasks WHERE status='pending'"
         ).fetchall()
@@ -237,7 +224,7 @@ class TaskRepository:
         return [TaskRow(**dict(r)).to_domain() for r in rows]
 
     def find_by_pipeline(self, pipeline_id: str) -> list[Task]:
-        """该 pipeline 全部 task（按 created_at 升序，含终态）。哑查询；展示用拓扑序由 service 排。"""
+        """返回流水线全部任务按创建升序，展示用拓扑序由编排层排。"""
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM tasks WHERE pipeline_id=? ORDER BY created_at, id",
             (pipeline_id,),

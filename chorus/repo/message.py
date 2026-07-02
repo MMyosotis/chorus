@@ -1,11 +1,6 @@
-"""messages 表的唯一 SQL 入口。
+"""消息表的唯一 SQL 入口，按消息粒度逐行存储。
 
-按消息粒度逐行存储（user / assistant / tool）。assistant 的 thinking/tools 展示
-元数据存在 traces 表，靠 message_id 关联，由 TraceRepository 聚合。
-
-映射归框架（sqlite3.Row 命名访问 + pydantic 装配 + model_fields 派生列名），
-形状转换（role discriminator / tool_calls_json↔list / tool_name↔name）集中在
-MessageRow.to_domain / from_domain。Row 诚实贴物理列类型（strict=True）。
+助手消息的展示元数据存轨迹表，靠消息标识关联聚合。映射归框架，形状转换集中在行模型。
 """
 
 from __future__ import annotations
@@ -41,7 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
 
 
 class MessageRow(BaseModel):
-    """messages 表持久化形状（1:1 贴列）。映射归框架，转换归 to_domain/from_domain。"""
+    """消息表持久化形状，与列一一对应。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -89,7 +84,7 @@ class MessageRow(BaseModel):
 
     @staticmethod
     def _parse_tool_calls(raw: Optional[str]) -> list[ToolCallSpec]:
-        """tool_calls_json → list[ToolCallSpec]，脏数据退化为空（容错集中在转换层）。"""
+        """解析工具调用 JSON，脏数据退化为空。"""
         if not raw:
             return []
         try:
@@ -104,7 +99,7 @@ class MessageRow(BaseModel):
         return json.dumps([t.model_dump() for t in tool_calls], ensure_ascii=False)
 
 
-# 列名 / 占位均由 Row 字段唯一派生，消除 DDL / _COLS / 映射四处人工对齐
+# 列名与占位由行字段派生，避免多处人工对齐
 _COLS = ", ".join(MessageRow.model_fields)
 _PH = ", ".join(f":{k}" for k in MessageRow.model_fields)
 
@@ -122,7 +117,7 @@ class MessageRepository:
         )
 
     def list_by_session(self, session_id: str) -> list[Message]:
-        """按 id 升序返回该会话全部消息（id 为 uuid7 趋势递增，即写入顺序）。"""
+        """按标识升序返回该会话全部消息，即写入顺序。"""
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM messages WHERE session_id=? ORDER BY id",
             (session_id,),

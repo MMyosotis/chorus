@@ -1,9 +1,4 @@
-# kitty/domain/prompt/__init__.py
-"""prompt 装配包：supervisor + subagent prompt 同住一处。
-
-子 Agent prompt 不进 task 包，与 supervisor prompt 聚于此；prompt 包不 import task
-的运行时逻辑（只 import task 的纯模型 profiles——单向，无环）。
-"""
+"""提示词装配包：主调度与子角色的提示词同住一处。"""
 from __future__ import annotations
 
 from chorus.domain.prompt.subagent import build_subagent_system_prompt

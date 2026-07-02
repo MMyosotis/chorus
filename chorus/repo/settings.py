@@ -1,7 +1,4 @@
-"""settings 表的唯一 SQL 入口（与 sessions/messages/traces/tasks 同库）。
-
-存储进程级 KV 配置（如 image_test_mode）。value 以 JSON 编码。
-"""
+"""设置表的唯一 SQL 入口，存进程级键值配置，值以 JSON 编码。"""
 
 from __future__ import annotations
 

@@ -1,9 +1,6 @@
-# kitty/agents/runtime.py
-"""agent loop 运行时脚手架：AgentContext / TurnState / LoopOutcome。
+"""agent loop 运行时脚手架：上下文、单轮状态与退出结果。
 
-从 domain/agent.py 迁入——它们是 loop 的可变运行时状态，非业务概念（domain 无 Agent
-表/无 Agent 业务规则），留 domain 踩「防 domain 杂项化滑坡」红线。与 supervisor/subagent
-同包共享。多智能体扩展字段：task_id（subagent 用）、source（hook 区分来源）。
+可变运行时状态，非业务概念，故不归领域层。多智能体扩展字段标识来源与任务。
 """
 from __future__ import annotations
 
@@ -19,7 +16,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class TurnState:
-    """单轮迭代可变累积状态，每轮开始 reset。"""
+    """单轮可变累积状态，每轮开始重置。"""
 
     message_id: str = ""
     text_parts: list[str] = field(default_factory=list)
@@ -50,14 +47,14 @@ class LoopOutcome:
 
 @dataclass
 class AgentContext:
-    # 回合级固定输入（整回合不变）
+    # 回合级固定输入
     session_id: str
     user_message: str = ""
     tool_schemas: list[dict] = field(default_factory=list)
     chat_model: Optional[str] = None
-    # 多智能体扩展（hook 据此区分来源 + trace 关联）
-    source: str = "supervisor"        # 'supervisor' | 'subagent'
-    task_id: Optional[str] = None     # subagent 填；supervisor 空
+    # 多智能体扩展，钩子据此区分来源
+    source: str = "supervisor"
+    task_id: Optional[str] = None
 
     turn: TurnState = field(default_factory=TurnState)
     outcome: LoopOutcome = field(default_factory=LoopOutcome)

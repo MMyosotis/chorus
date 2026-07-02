@@ -1,7 +1,4 @@
-"""SSE 事件模型：sealed 联合（discriminator='type'）。
-
-后端内部以 Pydantic 实例流转，路由层调 model_dump_json() 序列化给前端。
-"""
+"""SSE 事件模型：按类型区分的封闭联合，序列化后推给前端。"""
 
 from __future__ import annotations
 

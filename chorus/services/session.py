@@ -1,8 +1,6 @@
-"""SessionService：会话元数据编排（元数据 CRUD + per-session 锁 + 内存缓存）。
+"""会话服务：会话元数据的增删改查，加会话级锁与内存缓存。
 
-收窄后只管会话概念本身：create/list/get/delete/rename/is_title_set/set_title/get_lock。
-消息 / trace 的写入与读取归 MessageService；session 的 updated_at 刷新由编排层
-（ChatService）在消息落库后调 touch() 触发——跨概念协调归编排，不在此处。
+只管会话概念本身，消息与轨迹的读写归消息服务；会话时间刷新由编排层在消息落库后触发。
 """
 
 from __future__ import annotations
@@ -80,7 +78,7 @@ class SessionService:
         self._session_repo.delete(session_id)  # CASCADE 带走 messages / traces
 
     def rename(self, session_id: str, title: str) -> Session:
-        # 用户手改：严格校验，空/超长都拒绝；只 strip 不截断，故不用会截断的 normalize_title。
+        # 用户手改：严格校验，空或超长都拒绝，只去空白不截断
         title = (title or "").strip()
         if not title:
             raise ValueError("title 不能为空")
@@ -99,19 +97,11 @@ class SessionService:
         return updated
 
     def is_title_set(self, session_id: str) -> bool:
-        """标题是否已正式确定（自动生成或用户手改）。
-
-        供调用方在昂贵操作（如调 LLM 生成标题）前短路。注意：这是读缓存快照，
-        非锁内权威判断——落库仍以 set_title 的锁内复检为准。
-        """
+        """标题是否已确定，供调用方在昂贵操作前短路。读缓存快照，落库以锁内复检为准。"""
         return self.get(session_id).title_generated
 
     def set_title(self, session_id: str, title: str) -> bool:
-        """落自动标题：宽容归一化（空→跳过，超长→截断），不打扰用户。
-
-        锁内复检 title_generated：防 done 释放锁后 rename 抢先定名导致的覆盖。
-        未落返回 False（已定名 / 归一为空）。
-        """
+        """落自动标题：宽容归一化，空则跳过超长则截断。锁内复检防抢先定名覆盖。"""
         title = normalize_title(title)
         if not title:
             return False
@@ -130,7 +120,7 @@ class SessionService:
         return True
 
     def touch(self, session_id: str) -> None:
-        """刷新会话 updated_at（列表排序依据）。由编排层在消息落库后调用。"""
+        """刷新会话更新时间，列表排序依据，由编排层在消息落库后调用。"""
         now = self._clock()
         self._session_repo.update_meta(session_id, updated_at=now)
         with self._global_lock:
@@ -140,7 +130,7 @@ class SessionService:
 
     # 锁
     def get_lock(self, session_id: str) -> threading.Lock:
-        """返回该会话的锁对象（routes SSE 端点用 acquire(blocking=False) 探测并发）。"""
+        """返回该会话的锁对象，路由端点用非阻塞获取探测并发。"""
         with self._global_lock:
             lock = self._session_locks.get(session_id)
             if lock is None:

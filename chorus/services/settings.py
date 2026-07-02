@@ -1,8 +1,4 @@
-"""SettingsService：进程级动态配置（如 image_test_mode / 模型选择 / 联网搜索）。
-
-直接读写 settings 表，无内存缓存——读多写少场景下 DB 往返可接受，换来无需维护
-cache 与持久化的一致性。值的校验/默认在此层完成，repo 只做 KV 存取。
-"""
+"""设置服务：进程级动态配置，直接读写设置表无缓存，值校验与默认在本层完成。"""
 
 from __future__ import annotations
 

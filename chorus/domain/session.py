@@ -1,6 +1,4 @@
-"""会话元数据模型。仅描述 session 本身，不含消息与 trace ——
-消息见 message.py，trace 见 trace.py，三者按 session_id / message_id 关联。
-"""
+"""会话元数据模型。仅描述会话本身，消息与轨迹另见它处。"""
 
 from __future__ import annotations
 
@@ -20,7 +18,7 @@ class Session(BaseModel):
 
 
 class SessionSummary(BaseModel):
-    """list 接口返回的精简视图，省略 title_generated 等内部字段。"""
+    """列表接口的精简视图。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

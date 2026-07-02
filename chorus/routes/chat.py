@@ -1,4 +1,4 @@
-"""SSE 流式聊天路由（Depends 注入 SupervisorService + SessionService）。"""
+"""流式聊天路由，会话级锁防并发。"""
 from __future__ import annotations
 
 import json
