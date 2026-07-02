@@ -80,26 +80,18 @@ class SessionRepository:
         ).fetchall()
         return [SessionRow(**dict(r)).to_domain() for r in rows]
 
-    def update_meta(
-        self, session_id: str, *, title: Optional[str] = None, title_generated: Optional[bool] = None,
-        updated_at: Optional[float] = None,
-    ) -> None:
-        sets: list[str] = []
-        params: list[object] = []
-        if title is not None:
-            sets.append("title=?")
-            params.append(title)
-        if title_generated is not None:
-            sets.append("title_generated=?")
-            params.append(1 if title_generated else 0)
-        if updated_at is not None:
-            sets.append("updated_at=?")
-            params.append(updated_at)
-        if not sets:
-            return
-        params.append(session_id)
+    def touch(self, session_id: str, updated_at: float) -> None:
+        """刷新会话更新时间。"""
         self._conn.get().execute(
-            f"UPDATE sessions SET {', '.join(sets)} WHERE id=?", params
+            "UPDATE sessions SET updated_at=? WHERE id=?", (updated_at, session_id)
+        )
+
+    def set_title(
+        self, session_id: str, *, title: str, title_generated: bool, updated_at: float
+    ) -> None:
+        self._conn.get().execute(
+            "UPDATE sessions SET title=?, title_generated=?, updated_at=? WHERE id=?",
+            (title, 1 if title_generated else 0, updated_at, session_id),
         )
 
     def delete(self, session_id: str) -> None:

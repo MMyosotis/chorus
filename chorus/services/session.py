@@ -90,7 +90,7 @@ class SessionService:
             updated = session.model_copy(
                 update={"title": title, "title_generated": True, "updated_at": now}
             )
-            self._session_repo.update_meta(
+            self._session_repo.set_title(
                 session_id, title=title, title_generated=True, updated_at=now
             )
         self._replace_cache(updated)
@@ -113,7 +113,7 @@ class SessionService:
             updated = session.model_copy(
                 update={"title": title, "title_generated": True, "updated_at": now}
             )
-            self._session_repo.update_meta(
+            self._session_repo.set_title(
                 session_id, title=title, title_generated=True, updated_at=now
             )
         self._replace_cache(updated)
@@ -122,7 +122,7 @@ class SessionService:
     def touch(self, session_id: str) -> None:
         """刷新会话更新时间，列表排序依据，由编排层在消息落库后调用。"""
         now = self._clock()
-        self._session_repo.update_meta(session_id, updated_at=now)
+        self._session_repo.touch(session_id, now)
         with self._global_lock:
             session = self._meta_cache.get(session_id)
         if session is not None:
