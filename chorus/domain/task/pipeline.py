@@ -1,21 +1,41 @@
 """任务图纯函数：步骤校验、整图展开、调用消息渲染、产物解析。
 
-纯领域逻辑，不碰数据库。
+纯领域逻辑，不碰数据库。建图前的规格类型（CreationIntent/StepSpec）随本概念内聚。
 """
 from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from pydantic import ValidationError as PydValidationError
 
-from chorus.domain.task import StepSpec, CreationIntent, Task, TaskContent
+from chorus.domain.task.artifacts import Narrative
 from chorus.domain.task.errors import ValidationError
-from chorus.domain.task.models import CreationIntent, Narrative, StepSpec, Task, TaskContent, TaskStatus
+from chorus.domain.task.models import Task, TaskContent, TaskStatus
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 
 _MAX_STEPS = 20
+
+
+@dataclass
+class CreationIntent:
+    """从建图工具参数解析的创作意图。"""
+
+    topic: str
+    style: str = ""
+    image_count: int = 3
+    extra: dict = field(default_factory=dict)
+
+
+@dataclass
+class StepSpec:
+    """建图前的单步规格，落库后依赖由索引解析为任务标识。"""
+
+    agent_type: str
+    deps: list[int]
+    focus: str
 
 
 def validate_steps(steps: list[StepSpec]) -> None:

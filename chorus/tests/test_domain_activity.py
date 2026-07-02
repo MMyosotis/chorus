@@ -16,7 +16,7 @@ from chorus.domain.task.activity import (
     tool_done_activity,
     tool_started_activity,
 )
-from chorus.domain.task.models import (
+from chorus.domain.task.activity import (
     FailedPayload,
     ImageProgressPayload,
     SearchResultsPayload,

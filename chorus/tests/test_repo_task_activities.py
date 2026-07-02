@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from chorus.domain.task import Task
-from chorus.domain.task.models import SearchResultsPayload
+from chorus.domain.task.activity import SearchResultsPayload
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.tests._helpers import fresh_conn, seed_session

@@ -211,7 +211,7 @@ def test_get_graph_error_from_content():
 
 def test_get_activities_returns_serialized_list():
     """get_activities 返 dict 列表（TypeAdapter 序列化），按 id 升序，payload 多态保留。"""
-    from chorus.domain.task.models import SearchResultsPayload
+    from chorus.domain.task.activity import SearchResultsPayload
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
     conn = fresh_conn()

@@ -1,4 +1,4 @@
-"""把子 agent 事件翻译成用户可见的活动卡片。
+"""task_activities 表领域层：活动行模型 + 载荷多态 + 事件→卡片翻译。
 
 纯函数，不碰数据库，按角色与工具查模板生成。
 """
@@ -7,17 +7,55 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
-from chorus.domain.task.models import (
-    FailedPayload,
-    ImageProgressPayload,
-    Narrative,
-    SearchResultsPayload,
-)
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass as pydataclass
+
+from chorus.domain.task.artifacts import Narrative
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 # 通用态文案
 _FAILED_LINE = "这步出了点问题"
 _RETRYING_LINE = "刚才的格式不太对，我重新整理一下"
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class SearchResultsPayload:
+    """tool_done(baidu_search) 的载荷：搜索结果摘要。"""
+
+    total: int
+    bullets: list[dict]
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ImageProgressPayload:
+    """tool_done(generate_image) 的载荷：配图进度与预览。"""
+
+    current: int
+    items: list[dict]
+    total: Optional[int] = None
+    unit: str = "张图"
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class FailedPayload:
+    """failed 事件的载荷：失败详情。"""
+
+    detail_md: str
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class TaskActivity:
+    """活动流一行：核心字段 + tool_name + 多态 payload。"""
+
+    id: int
+    task_id: str
+    event_type: str
+    role_line: str
+    status: str
+    created_at: float
+    tool_name: Optional[str] = None
+    payload: Optional[Union["SearchResultsPayload", "ImageProgressPayload", "FailedPayload"]] = None
+
 
 # 活动业务载荷判别联合，按 event_type 取对应类型
 ActivityPayload = Union[SearchResultsPayload, ImageProgressPayload, FailedPayload]

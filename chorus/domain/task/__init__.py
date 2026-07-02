@@ -7,36 +7,41 @@ from __future__ import annotations
 from chorus.domain.task.errors import ValidationError
 from chorus.domain.task.models import (
     AgentType,
-    CreationIntent,
-    FailedPayload,
+    Task,
+    TaskContent,
+    TaskStatus,
+)
+from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     IdeaCandidate,
     ImageArtifacts,
     ImageItem,
-    ImageProgressPayload,
     Narrative,
     PostCard,
     PostImage,
     PostSection,
     ScriptArtifacts,
     ScriptBlock,
-    SearchResultsPayload,
-    StepSpec,
-    Task,
-    TaskActivity,
     TaskArtifacts,
-    TaskContent,
-    TaskStatus,
 )
-from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
+from chorus.domain.task.activity import (
+    FailedPayload,
+    ImageProgressPayload,
+    PAYLOAD_TYPES,
+    SearchResultsPayload,
+    TaskActivity,
+    build_payload,
+)
 from chorus.domain.task.pipeline import (
+    CreationIntent,
+    StepSpec,
     expand_pipeline,
     parse_output,
     parse_sections,
     render_invoke_message,
     validate_steps,
 )
-from chorus.domain.task.activity import PAYLOAD_TYPES, build_payload
+from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.state import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,

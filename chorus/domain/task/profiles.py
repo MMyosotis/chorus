@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Type
 
-from chorus.domain.task.models import (
+from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     ImageArtifacts,
     PostCard,

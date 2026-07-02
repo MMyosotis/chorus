@@ -11,7 +11,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import TaskArtifacts
-from chorus.domain.task.models import Narrative
+from chorus.domain.task.artifacts import Narrative
 from chorus.domain.task.profiles import AGENT_PROFILES
 from chorus.repo.connection import ConnectionFactory
 
