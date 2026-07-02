@@ -155,8 +155,8 @@ def test_subagent_idea_awaiting_confirm():
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
     art = art_repo.load("t1")
-    assert art.artifacts["candidates"][0]["title"] == "t"
-    assert art.narrative["done_line"] == "定了"
+    assert art.artifacts.candidates[0].title == "t"
+    assert art.narrative.done_line == "定了"
     mrs = _model_responses(trace_svc)
     assert len(mrs) == 1 and mrs[0]["finish_reason"] == "stop"
 
@@ -177,7 +177,7 @@ def test_subagent_finalize_finished():
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FINISHED.value
-    assert art_repo.load("t1").artifacts["title"] == "夏日晚风"
+    assert art_repo.load("t1").artifacts.title == "夏日晚风"
 
 
 def test_subagent_react_with_tool():
@@ -245,7 +245,7 @@ def test_subagent_self_corrects_on_bad_output():
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
     art = art_repo.load("t1")
-    assert art.artifacts["candidates"][0]["title"] == "t"
+    assert art.artifacts.candidates[0].title == "t"
     # 两轮 model_response trace（第 1 轮自纠 + 第 2 轮成功）
     assert len(_model_responses(trace_svc)) == 2
 

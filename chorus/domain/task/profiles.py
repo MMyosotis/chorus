@@ -25,6 +25,10 @@ class AgentProfile:
     expected_sections: tuple[str, ...]
     artifacts_model: Type[Any]
 
+    def build_artifacts(self, raw: Any) -> Any:
+        """把原始数据按本角色的产物形状还原成对象。"""
+        return self.artifacts_model(**raw)
+
 
 AGENT_PROFILES: dict[str, AgentProfile] = {
     "idea": AgentProfile(

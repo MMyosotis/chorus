@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -49,14 +49,11 @@ class Task:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskArtifacts:
-    """任务产物行：结构化产物与角色话术。
-
-    产物同时供前端渲染与下游步骤注入，同源同值只存一列。
-    """
+    """任务产物行：结构化产物与角色话术。"""
 
     task_id: str
-    artifacts: Optional[Any] = None
-    narrative: Optional[dict] = None
+    artifacts: Optional[Union["IdeaArtifacts", "ScriptArtifacts", "ImageArtifacts", "PostCard"]] = None
+    narrative: Optional["Narrative"] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -66,8 +63,6 @@ class Narrative:
     awaiting_line: str
     done_line: str
 
-
-# ---- 产物内容模型：解析期强校验，验完即转回字典入库 ----
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class IdeaCandidate:

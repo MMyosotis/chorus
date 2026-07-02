@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Optional
 
 from pydantic import TypeAdapter
@@ -59,7 +60,7 @@ class TaskService:
         if task.agent_type == "idea":
             if selected is None:
                 raise ConflictError("idea 步骤需提供 selected 候选索引")
-            self._set_selected(task_id, selected)
+            self._set_selected(task_id, task.agent_type, selected)
         ok = self._task_repo.cas_update(
             task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value,
         )
@@ -120,14 +121,14 @@ class TaskService:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         return active[0].pipeline_id if active else None
 
-    def _set_selected(self, task_id: str, selected: int) -> None:
+    def _set_selected(self, task_id: str, agent_type: str, selected: int) -> None:
+        """把选中候选写回 idea 产物。产物缺则视作状态不一致，抛冲突。"""
         art = self._artifacts_repo.load(task_id)
-        artifacts = art.artifacts if art else {}
-        artifacts = dict(artifacts)
-        artifacts["selected"] = selected
+        if art is None or art.artifacts is None:
+            raise ConflictError("idea 产物缺失，无法写 selected")
+        idea = dataclasses.replace(art.artifacts, selected=selected)
         self._artifacts_repo.upsert(
-            task_id, artifacts=artifacts,
-            narrative=art.narrative if art else None,
+            task_id, agent_type, artifacts=idea, narrative=art.narrative,
         )
 
     def _graph_dict(self, pipeline_id: str, tasks: list, active: bool) -> dict:
@@ -142,8 +143,14 @@ class TaskService:
                     "id": t.id, "agent_type": t.agent_type, "status": t.status,
                     "updated_at": t.updated_at,
                     "current_activity": _dump_activity(latest[t.id]) if t.id in latest else None,
-                    "artifacts": (arts[t.id].artifacts if t.id in arts else None),
-                    "narrative": (arts[t.id].narrative if t.id in arts else None),
+                    "artifacts": (
+                        dataclasses.asdict(arts[t.id].artifacts)
+                        if t.id in arts and arts[t.id].artifacts else None
+                    ),
+                    "narrative": (
+                        dataclasses.asdict(arts[t.id].narrative)
+                        if t.id in arts and arts[t.id].narrative else None
+                    ),
                     "error": t.error,
                 }
                 for t in ordered

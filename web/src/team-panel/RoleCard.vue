@@ -36,7 +36,7 @@ function onClick() {
     <div class="role-head" @click="onClick">
       <span class="role-avatar">{{ roleName.slice(0, 1) }}</span>
       <div class="role-info">
-        <span class="role-name">{{ narrative.role_name || roleName }}</span>
+        <span class="role-name">{{ roleName }}</span>
         <span class="role-badge" :class="badge.cls">{{ badge.label }}</span>
       </div>
     </div>

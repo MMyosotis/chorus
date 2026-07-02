@@ -1,9 +1,9 @@
-"""任务产物表的唯一 SQL 入口，存产物与角色话术两个 JSON 列，哑查询不开事务。
-
-映射归框架，转换集中在行模型。upsert 收原语不收领域对象。
+"""任务产物表的唯一 SQL 入口：存产物和角色话术两列 JSON，读写都经行模型在裸数据和
+领域对象间互转。每行自带角色，读回时按角色还原成对应的产物对象。
 """
 from __future__ import annotations
 
+import dataclasses
 import json
 import time
 from typing import Any, Optional
@@ -11,11 +11,14 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import TaskArtifacts
+from chorus.domain.task.models import Narrative
+from chorus.domain.task.profiles import AGENT_PROFILES
 from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS task_artifacts (
     task_id     TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+    agent_type  TEXT NOT NULL,
     artifacts   TEXT,
     narrative   TEXT,
     updated_at  REAL
@@ -29,26 +32,33 @@ class TaskArtifactsRow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     task_id: str
+    agent_type: str
     artifacts: Optional[str] = None
     narrative: Optional[str] = None
     updated_at: Optional[float] = None
 
     def to_domain(self) -> TaskArtifacts:
-        return TaskArtifacts(
-            task_id=self.task_id,
-            artifacts=json.loads(self.artifacts) if self.artifacts else None,
-            narrative=json.loads(self.narrative) if self.narrative else None,
+        """按本行 agent_type 用注册表里的模型把 JSON 还原成强类型产物。"""
+        artifacts = (
+            AGENT_PROFILES[self.agent_type].build_artifacts(json.loads(self.artifacts))
+            if self.artifacts else None
         )
+        narrative = (
+            Narrative(**json.loads(self.narrative))
+            if self.narrative else None
+        )
+        return TaskArtifacts(task_id=self.task_id, artifacts=artifacts, narrative=narrative)
 
     @classmethod
-    def from_values(
-        cls, task_id: str, artifacts: Any, narrative: Any, updated_at: Optional[float] = None,
+    def from_domain(
+        cls, task_id: str, agent_type: str,
+        artifacts: Any, narrative: Any, updated_at: Optional[float] = None,
     ) -> "TaskArtifactsRow":
-        """原语转行模型，话术允许为空。"""
+        """领域对象转行模型，话术允许为空。"""
         return cls(
-            task_id=task_id,
-            artifacts=json.dumps(artifacts, ensure_ascii=False) if artifacts is not None else None,
-            narrative=json.dumps(narrative, ensure_ascii=False) if narrative is not None else None,
+            task_id=task_id, agent_type=agent_type,
+            artifacts=json.dumps(dataclasses.asdict(artifacts), ensure_ascii=False) if artifacts is not None else None,
+            narrative=json.dumps(dataclasses.asdict(narrative), ensure_ascii=False) if narrative is not None else None,
             updated_at=updated_at,
         )
 
@@ -61,24 +71,15 @@ class TaskArtifactsRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
-        self._ensure_columns()
-
-    def _ensure_columns(self) -> None:
-        """幂等加列，建表语句不覆盖旧表。"""
-        cols = {
-            row["name"]
-            for row in self._conn.get().execute("PRAGMA table_info(task_artifacts)").fetchall()
-        }
-        if "updated_at" not in cols:
-            self._conn.get().execute("ALTER TABLE task_artifacts ADD COLUMN updated_at REAL")
 
     def upsert(
-        self, task_id: str, artifacts: Any, narrative: Any
+        self, task_id: str, agent_type: str, artifacts: Any, narrative: Any,
     ) -> None:
-        row = TaskArtifactsRow.from_values(task_id, artifacts, narrative, time.time())
+        row = TaskArtifactsRow.from_domain(task_id, agent_type, artifacts, narrative, time.time())
         self._conn.get().execute(
             f"INSERT INTO task_artifacts({_COLS}) VALUES ({_PH}) "
             "ON CONFLICT(task_id) DO UPDATE SET "
+            "agent_type=excluded.agent_type, "
             "artifacts=excluded.artifacts, narrative=excluded.narrative, updated_at=excluded.updated_at",
             row.model_dump(),
         )

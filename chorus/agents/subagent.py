@@ -176,10 +176,10 @@ class SubAgentService:
         for dep_id in task.dependencies:
             dep_art = self._artifacts_repo.load(dep_id)
             if dep_art is not None:
-                deps_outputs[dep_id] = dep_art.artifacts
+                deps_outputs[dep_id] = dataclasses.asdict(dep_art.artifacts)
         return render_invoke_message(
             task, deps_outputs,
-            prior.artifacts if prior else None, task.feedback,
+            dataclasses.asdict(prior.artifacts) if prior else None, task.feedback,
         )
 
     def _call_model(self, entry, system_prompt, history, tools, ctx) -> StreamResult:
@@ -252,10 +252,8 @@ class SubAgentService:
         with self._conn.transaction():
             ok = self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, to_status)
             if ok:
-                artifacts_dict = dataclasses.asdict(artifacts)
                 self._artifacts_repo.upsert(
-                    task.id, artifacts=artifacts_dict,
-                    narrative=dataclasses.asdict(narrative),
+                    task.id, task.agent_type, artifacts=artifacts, narrative=narrative,
                 )
         if not ok:
             logger.warning("subagent finalize CAS failed (status drifted) for task %s", task.id)
