@@ -16,13 +16,12 @@ from chorus.domain.trace import (
     ModelRequest,
     ModelResponse,
     Schedule,
-    ThinkingSegment,
-    ToolInvocation,
     TraceEntry,
     TracePhase,
     TracePayload,
     TraceToolCall,
     TraceToolResult,
+    aggregate_trace,
 )
 from chorus.repo.connection import ConnectionFactory
 
@@ -44,7 +43,7 @@ CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, created_at);
 """
 
 # phase → payload 模型注册表，读回按 phase 还原强类型载荷。
-_PAYLOAD_BY_PHASE: dict[TracePhase, type[BaseModel]] = {
+_PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
     TracePhase.MODEL_REQUEST: ModelRequest,
     TracePhase.MODEL_RESPONSE: ModelResponse,
     TracePhase.TOOL_CALL: TraceToolCall,
@@ -69,9 +68,7 @@ class TraceRow(BaseModel):
 
     def to_domain(self) -> TraceEntry:
         phase = TracePhase(self.phase)
-        payload: TracePayload = _PAYLOAD_BY_PHASE[phase](
-            **json.loads(self.payload_json),
-        )
+        payload: TracePayload = _PAYLOAD_BY_PHASE[phase](**json.loads(self.payload_json))
         return TraceEntry(
             id=self.id,
             session_id=self.session_id,
@@ -137,7 +134,7 @@ class TraceRepository:
 
     def aggregate_message_trace(self, message_id: str) -> MessageTrace:
         """从该消息的若干轨迹行重建思考与工具摘要。"""
-        return self._aggregate(message_id, self.list_by_message(message_id))
+        return aggregate_trace(message_id, self.list_by_message(message_id))
 
     def batch_aggregate(self, message_ids) -> dict[str, MessageTrace]:
         """一次查询批量聚合多条消息的轨迹，避免逐条查询。无轨迹的消息不在结果中。"""
@@ -147,46 +144,14 @@ class TraceRepository:
         placeholders = ",".join("?" * len(ids))
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM traces "
-            f"WHERE message_id IN ({placeholders}) ORDER BY created_at ASC, id ASC",
+            f"WHERE message_id IN ({placeholders}) ORDER BY created_at, id",
             ids,
         ).fetchall()
         grouped: dict[str, list[TraceEntry]] = {}
         for row in rows:
             entry = TraceRow(**dict(row)).to_domain()
-            if entry.message_id:
-                grouped.setdefault(entry.message_id, []).append(entry)
-        return {mid: self._aggregate(mid, entries) for mid, entries in grouped.items()}
-
-    def _aggregate(self, message_id: str, entries: list[TraceEntry]) -> MessageTrace:
-        """从若干轨迹行重建思考与工具摘要，单条与批量共用。"""
-        thinking: list[ThinkingSegment] = []
-        tools: dict[str, ToolInvocation] = {}
-        for entry in entries:
-            payload = entry.payload
-            if isinstance(payload, ModelResponse):
-                thinking.extend(payload.thinking_segments)
-            elif isinstance(payload, TraceToolCall):
-                tools[payload.tool_call_id] = ToolInvocation(
-                    tool_call_id=payload.tool_call_id, name=payload.name,
-                    arguments=payload.arguments, display=payload.display,
-                    duration_ms=0, content="",
-                )
-            elif isinstance(payload, TraceToolResult):
-                tool = tools.setdefault(
-                    payload.tool_call_id,
-                    ToolInvocation(
-                        tool_call_id=payload.tool_call_id, name=payload.name,
-                        arguments={}, display="", duration_ms=0, content="",
-                    ),
-                )
-                tools[payload.tool_call_id] = tool.model_copy(
-                    update={"duration_ms": payload.duration_ms, "content": payload.content},
-                )
-        return MessageTrace(
-            message_id=message_id,
-            thinking=thinking,
-            tools=list(tools.values()),
-        )
+            grouped.setdefault(entry.message_id, []).append(entry)
+        return {mid: aggregate_trace(mid, entries) for mid, entries in grouped.items()}
 
     def delete_by_session(self, session_id: str) -> None:
         self._conn.get().execute("DELETE FROM traces WHERE session_id=?", (session_id,))
