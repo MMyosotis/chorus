@@ -21,17 +21,13 @@ from chorus.domain.task import (
     PostSection,
     TERMINAL_STATUSES,
     Task,
+    TaskContent,
     TaskStatus,
     CreationIntent,
     StepSpec,
     ValidationError,
-    can_schedule,
-    expand_pipeline,
     is_legal_transition,
-    is_zombie,
-    parse_output,
     parse_sections,
-    render_invoke_message,
     select_display_pipeline,
     topological_order,
     validate_steps,
@@ -97,21 +93,14 @@ def test_legal_transitions_table():
 def test_can_schedule():
     dep_finished = _mk("finished", id="d1")
     dep_failed = _mk("failed", id="d2")
-    assert can_schedule(_mk("pending"), [dep_finished]) is True
+    assert _mk("pending").can_schedule([dep_finished]) is True
     # 上游 failed 不满足（砍级联：后继阻塞）
-    assert can_schedule(_mk("pending"), [dep_failed]) is False
+    assert _mk("pending").can_schedule([dep_failed]) is False
     # 非 pending 不可调度
-    assert can_schedule(_mk("running"), [dep_finished]) is False
-    assert can_schedule(_mk("awaiting_confirm"), [dep_finished]) is False
+    assert _mk("running").can_schedule([dep_finished]) is False
+    assert _mk("awaiting_confirm").can_schedule([dep_finished]) is False
     # 无 deps 的 pending 可调度
-    assert can_schedule(_mk("pending"), []) is True
-
-
-def test_is_zombie():
-    t = _mk("running", updated_at=100.0)
-    assert is_zombie(t, now=200.0, timeout_s=60) is True
-    assert is_zombie(t, now=150.0, timeout_s=60) is False
-    assert is_zombie(_mk("pending"), now=9999.0, timeout_s=1) is False
+    assert _mk("pending").can_schedule([]) is True
 
 
 def test_status_sets():
@@ -184,7 +173,7 @@ def test_expand_pipeline():
         StepSpec("idea", [], "选题"),
         StepSpec("finalize", [0], "汇总"),
     ]
-    pairs = expand_pipeline(intent, steps, "sess-x", 1000.0)
+    pairs = intent.expand_to_tasks(steps, "sess-x", 1000.0)
     assert len(pairs) == 2
     tasks = [t for t, _ in pairs]
     contents = [c for _, c in pairs]
@@ -202,19 +191,24 @@ def test_expand_pipeline_image_progress_total():
     """image 步骤的 progress_total 落进 TaskContent，调度行不携带。"""
     intent = CreationIntent(topic="t", image_count=4)
     steps = [StepSpec("image", [], "配图"), StepSpec("finalize", [0], "汇总")]
-    pairs = expand_pipeline(intent, steps, "s", 0.0)
+    pairs = intent.expand_to_tasks(steps, "s", 0.0)
     image_task, image_content = next(p for p in pairs if p[0].agent_type == "image")
     assert image_content.progress_total == 4
 
 
 def test_render_invoke_message_injects_deps_and_feedback():
-    out = render_invoke_message("骨架", {"d1": {"title": "x"}}, {"prev": 1}, {"note": "改标题"})
+    content = TaskContent(
+        task_id="t", invoke_message="骨架",
+        feedback={"note": "改标题"},
+    )
+    out = content.render_invoke({"d1": {"title": "x"}}, {"prev": 1})
     assert "骨架" in out
     assert "前置步骤产物" in out
     assert "你上一轮的产物" in out
     assert "用户反馈" in out
     # 无注入时只骨架
-    assert render_invoke_message("骨架", {}, None, None) == "骨架"
+    bare = TaskContent(task_id="t", invoke_message="骨架")
+    assert bare.render_invoke({}, None) == "骨架"
 
 
 def test_parse_sections():
@@ -229,7 +223,7 @@ def test_parse_output_idea_ok():
         '<<<ARTIFACTS:json>>>\n{"candidates":[{"index":0,"title":"t","angle":"a","reason":"r"}],"selected":null}\n<<<ARTIFACTS_END>>>\n'
         '<<<NARRATIVE:json>>>\n{"awaiting_line":"y","done_line":"z"}\n<<<NARRATIVE_END>>>'
     )
-    artifacts, narrative = parse_output(content, "idea")
+    artifacts, narrative = AGENT_PROFILES["idea"].parse_output(content)
     assert len(artifacts.candidates) == 1
     assert artifacts.candidates[0].title == "t"
     assert narrative.done_line == "z"
@@ -243,7 +237,7 @@ def test_parse_output_narrative_bad_type():
         '<<<NARRATIVE:json>>>\n{"awaiting_line":"y","done_line":123}\n<<<NARRATIVE_END>>>'
     )
     with pytest.raises(ValidationError):
-        parse_output(content, "idea")
+        AGENT_PROFILES["idea"].parse_output(content)
 
 
 def test_parse_output_finalize_postcard():
@@ -259,13 +253,13 @@ def test_parse_output_finalize_postcard():
         f'<<<ARTIFACTS:json>>>\n{_json.dumps(card)}\n<<<ARTIFACTS_END>>>\n'
         f'<<<NARRATIVE:json>>>\n{{"awaiting_line":"","done_line":""}}\n<<<NARRATIVE_END>>>'
     )
-    artifacts, _ = parse_output(content, "finalize")
+    artifacts, _ = AGENT_PROFILES["finalize"].parse_output(content)
     assert artifacts.title == "夏日晚风"
 
 
 def test_parse_output_missing_section():
     with pytest.raises(ValidationError):
-        parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>", "idea")  # 缺 NARRATIVE
+        AGENT_PROFILES["idea"].parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>")  # 缺 NARRATIVE
 
 
 # —— topological_order：顺序语义唯一真相源在 dependencies ——

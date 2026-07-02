@@ -1,11 +1,14 @@
 """tasks / task_content 核心行模型 + 任务图共享词汇表（状态/角色枚举）。
 
-纯数据模型，不含状态转移规则。其余表模型见 artifacts.py / activity.py，建图规格见 pipeline.py。
+数据模型带只读行为（对齐 Message.to_provider_dict 约定）：Task 持状态机判定
+（can_schedule/is_zombie），TaskContent 持调用消息渲染（render_invoke）。
+状态转移规则表见 state.py，建图规格见 pipeline.py。
 """
 from __future__ import annotations
 
+import json
 from enum import Enum
-from typing import Optional
+from typing import Any, Iterable, Optional
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -41,6 +44,12 @@ class Task:
     dependencies: list[str] = Field(default_factory=list)
     owner_id: Optional[float] = None
 
+    def can_schedule(self, deps: Iterable["Task"]) -> bool:
+        """可调度：待执行且所有依赖均已完成。失败的上游会阻塞后继。"""
+        if self.status != TaskStatus.PENDING.value:
+            return False
+        return all(d.status == TaskStatus.FINISHED.value for d in deps)
+
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskContent:
@@ -51,3 +60,23 @@ class TaskContent:
     progress_total: Optional[int] = None
     error: Optional[str] = None
     feedback: Optional[dict] = None
+
+    def render_invoke(
+        self, deps_outputs: dict[str, Any], self_prior: Optional[Any],
+    ) -> str:
+        """拼首轮调用消息：基础骨架，按需附前置产物、上轮产物、用户反馈。"""
+        parts = [self.invoke_message]
+        if deps_outputs:
+            parts.append("前置步骤产物：")
+            for dep_id, out in deps_outputs.items():
+                parts.append(f"--- {dep_id} ---\n{json.dumps(out, ensure_ascii=False, indent=2)}")
+
+        if self_prior is not None:
+            parts.append("你上一轮的产物（据此定向改进，不要简单重复）：")
+            parts.append(json.dumps(self_prior, ensure_ascii=False, indent=2))
+
+        if self.feedback:
+            parts.append("用户反馈（请据此改进）：")
+            parts.append(json.dumps(self.feedback, ensure_ascii=False, indent=2))
+
+        return "\n\n".join(parts)

@@ -34,7 +34,7 @@ from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
-from chorus.domain.task import ACTIVE_STATUSES, TaskStatus, can_schedule
+from chorus.domain.task import ACTIVE_STATUSES, TaskStatus
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
@@ -218,14 +218,14 @@ def test_end_to_end_pipeline():
     assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM.value
 
     # confirm 前：finalize 仍被 dep 阻塞（idea awaiting_confirm ≠ finished）
-    assert not can_schedule(finalize, [task_repo.get(idea.id)])
+    assert not finalize.can_schedule([task_repo.get(idea.id)])
 
     # —— 链路 3：confirm idea → finished ——
     task_service.confirm(idea.id, selected=0)
     assert task_repo.get(idea.id).status == TaskStatus.FINISHED.value
 
     # —— 链路 4：scheduler 派发 finalize（dep 已解除）——
-    assert can_schedule(finalize, [task_repo.get(idea.id)])  # 现在可调度
+    assert finalize.can_schedule([task_repo.get(idea.id)])  # 现在可调度
     scheduler._tick()  # CAS pending→running + spawn worker 线程跑 subagent.run(finalize)
 
     # finalize 由 worker 线程异步跑；轮询等其离开 pending/running（WAL 跨线程可见）。

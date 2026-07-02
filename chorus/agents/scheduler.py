@@ -11,7 +11,7 @@ import time
 from typing import Optional
 
 from chorus.config import POOL_SIZE, SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
-from chorus.domain.task import TaskStatus, can_schedule
+from chorus.domain.task import TaskStatus
 from chorus.domain.trace import Schedule, TracePhase
 from chorus.repo.task import TaskRepository
 from chorus.services.session import SessionService
@@ -72,7 +72,7 @@ class TaskScheduler:
         self._reclaim_zombies()
 
     def _try_schedule_one(self, task, deps) -> None:
-        if not can_schedule(task, deps):
+        if not task.can_schedule(deps):
             return
         # 限流：非阻塞获取，满则跳过下轮再试
         if not self._semaphore.acquire(blocking=False):

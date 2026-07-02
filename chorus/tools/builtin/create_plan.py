@@ -12,7 +12,6 @@ from chorus.domain.task import (
     CreationIntent,
     StepSpec,
     ValidationError,
-    expand_pipeline,
     validate_steps,
 )
 from chorus.repo.connection import ConnectionFactory
@@ -103,7 +102,7 @@ class CreatePlanTool(Tool):
             validate_steps(steps)
 
             now = self._clock()
-            pairs = expand_pipeline(intent, steps, ctx.session_id, now)
+            pairs = intent.expand_to_tasks(steps, ctx.session_id, now)
         except (KeyError, TypeError) as e:
             return Reply(f"create_plan 参数缺失或格式错: {e}")
         except ValidationError as e:

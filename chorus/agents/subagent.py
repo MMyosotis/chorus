@@ -18,8 +18,6 @@ from chorus.domain.task import (
     AGENT_PROFILES,
     TaskStatus,
     ValidationError,
-    parse_output,
-    render_invoke_message,
 )
 from chorus.domain.task.activity import (
     ActivityDraft,
@@ -165,13 +163,7 @@ class SubAgentService:
     def _write_activity(self, task, draft: ActivityDraft) -> None:
         """写活动，失败只记日志不影响主流程。"""
         try:
-            self._activities.append(
-                task.id,
-                event_type=draft.event_type,
-                role_line=draft.role_line, status=draft.status,
-                tool_name=draft.tool_name,
-                payload=draft.payload,
-            )
+            self._activities.append(task.id, draft)
         except Exception:  # noqa: BLE001 — activity fail-open
             logger.warning("activity write failed task=%s", task.id, exc_info=True)
 
@@ -182,10 +174,9 @@ class SubAgentService:
             dep_art = self._artifacts_repo.load(dep_id)
             if dep_art is not None:
                 deps_outputs[dep_id] = dataclasses.asdict(dep_art.artifacts)
-        return render_invoke_message(
-            content.invoke_message, deps_outputs,
+        return content.render_invoke(
+            deps_outputs,
             dataclasses.asdict(prior.artifacts) if prior else None,
-            content.feedback,
         )
 
     def _call_model(self, entry, system_prompt, history, tools, ctx) -> StreamResult:
@@ -242,7 +233,7 @@ class SubAgentService:
         调用方喂回模型自纠。完成台词随产物落库，由前端查图渲染，不进消息表。
         """
         content = "".join(result.text_parts)
-        artifacts, narrative = parse_output(content, task.agent_type)
+        artifacts, narrative = profile.parse_output(content)
         if not self._lease_valid(task.id, my_owner_id):
             logger.info("subagent finalize lease expired for task %s, abort", task.id)
             return

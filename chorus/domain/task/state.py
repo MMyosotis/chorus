@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from typing import Iterable
+from dataclasses import dataclass
 
 from chorus.domain.task.models import Task, TaskStatus
 
@@ -47,50 +47,58 @@ def is_legal_transition(from_status: str, to_status: str) -> bool:
     return (from_status, to_status) in LEGAL_TRANSITIONS
 
 
-def can_schedule(task: Task, deps: Iterable[Task]) -> bool:
-    """可调度：待执行且所有依赖均已完成。失败的上游会阻塞后继。"""
-    if task.status != TaskStatus.PENDING.value:
-        return False
-    return all(d.status == TaskStatus.FINISHED.value for d in deps)
-
-
-def is_zombie(task: Task, now: float, timeout_s: int) -> bool:
-    """是否僵死：运行中且心跳超时。"""
-    if task.status != TaskStatus.RUNNING.value:
-        return False
-    return (now - task.updated_at) > timeout_s
-
-
 def topological_order(tasks: list[Task]) -> list[Task]:
     """按依赖拓扑排序，同层按创建时间再标识兜底，把图拍平为展示序列。
 
     无环由入库前校验保证，本函数不重复检测。引用列表外依赖时该边忽略。
     """
-    by_id = {t.id: t for t in tasks}
-    indeg: dict[str, int] = {t.id: 0 for t in tasks}
-    children: dict[str, list[str]] = {t.id: [] for t in tasks}
-    for t in tasks:
-        for dep_id in (d for d in t.dependencies if d in by_id):
-            indeg[t.id] += 1
-            children[dep_id].append(t.id)
+    graph = _DegreeGraph(
+        task_by_id={task.id: task for task in tasks},
+        in_degree={task.id: 0 for task in tasks},
+        dependents={task.id: [] for task in tasks},
+    )
+
+    for task in tasks:
+        _link_task_dependencies(graph, task)
+
     ordered: list[Task] = []
-    remaining = set(indeg)
+    remaining = set(graph.in_degree)
     while remaining:
-        ready = sorted(
-            (tid for tid in remaining if indeg[tid] == 0),
-            key=lambda i: (by_id[i].created_at, i),
-        )
-        for tid in ready:
-            ordered.append(by_id[tid])
-            remaining.discard(tid)
-            _decrement_indeg(children[tid], indeg)
+        ready = [task_id for task_id in remaining if graph.in_degree[task_id] == 0]
+        ready.sort(key=lambda task_id: (graph.task_by_id[task_id].created_at, task_id))
+        _drain_ready_layer(graph, ordered, ready, remaining)
+
     return ordered
 
 
-def _decrement_indeg(targets: list[str], indeg: dict[str, int]) -> None:
+@dataclass(frozen=True)
+class _DegreeGraph:
+    """拓扑排序用的图三件套：节点索引 + 入度表 + 反向邻接表。"""
+
+    task_by_id: dict[str, Task]
+    in_degree: dict[str, int]
+    dependents: dict[str, list[str]]
+
+
+def _drain_ready_layer(
+    graph: _DegreeGraph, ordered: list[Task], ready: list[str], remaining: set[str]
+) -> None:
+    for task_id in ready:
+        ordered.append(graph.task_by_id[task_id])
+        remaining.discard(task_id)
+        _decrement_in_degree(graph.dependents[task_id], graph.in_degree)
+
+
+def _link_task_dependencies(graph: _DegreeGraph, task: Task) -> None:
+    for dep_id in (dep for dep in task.dependencies if dep in graph.task_by_id):
+        graph.in_degree[task.id] += 1
+        graph.dependents[dep_id].append(task.id)
+
+
+def _decrement_in_degree(targets: list[str], in_degree: dict[str, int]) -> None:
     """批量削减后继节点入度。"""
-    for tid in targets:
-        indeg[tid] -= 1
+    for task_id in targets:
+        in_degree[task_id] -= 1
 
 
 def select_display_pipeline(

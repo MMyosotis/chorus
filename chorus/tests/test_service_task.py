@@ -11,6 +11,7 @@ import pytest
 
 from chorus.domain.session import Session
 from chorus.domain.task import (
+    ActivityDraft,
     IdeaArtifacts,
     IdeaCandidate,
     Narrative,
@@ -178,7 +179,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
         created_at=0.0, updated_at=10.0,
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", progress_total=3))
-    act_repo.append("t1", "started", "出图中")
+    act_repo.append("t1", ActivityDraft(event_type="started", role_line="出图中"))
     graph = svc.get_graph("s1")
     t = graph["tasks"][0]
     assert t["updated_at"] == 10.0
@@ -211,7 +212,7 @@ def test_get_graph_error_from_content():
 
 def test_get_activities_returns_serialized_list():
     """get_activities 返 dict 列表（TypeAdapter 序列化），按 id 升序，payload 多态保留。"""
-    from chorus.domain.task.activity import SearchResultsPayload
+    from chorus.domain.task.activity import ActivityDraft, SearchResultsPayload
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
     conn = fresh_conn()
@@ -226,9 +227,11 @@ def test_get_activities_returns_serialized_list():
         status="running", dependencies=[], created_at=0.0, updated_at=0.0,
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x"))
-    act_repo.append("t1", "started", "a")
-    act_repo.append("t1", "tool_done", "b", status="running", tool_name="baidu_search",
-                    payload=SearchResultsPayload(total=1, bullets=[{"title": "t", "url": "u"}]))
+    act_repo.append("t1", ActivityDraft(event_type="started", role_line="a"))
+    act_repo.append("t1", ActivityDraft(
+        event_type="tool_done", role_line="b", status="running", tool_name="baidu_search",
+        payload=SearchResultsPayload(total=1, bullets=[{"title": "t", "url": "u"}]),
+    ))
     acts = svc.get_activities("t1")
     assert [a["role_line"] for a in acts] == ["a", "b"]
     assert acts[1]["payload"]["total"] == 1

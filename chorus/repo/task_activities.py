@@ -7,11 +7,11 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from chorus.domain.task import TaskActivity, build_payload
+from chorus.domain.task import ActivityDraft, TaskActivity, build_payload
 from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
@@ -56,16 +56,16 @@ class TaskActivityRow(BaseModel):
 
     @classmethod
     def from_domain(
-        cls, task_id: str, event_type: str, role_line: str,
-        status: str, tool_name: Optional[str], payload: Any,
-        created_at: float,
+        cls, task_id: str, draft: ActivityDraft, created_at: float,
     ) -> "TaskActivityRow":
-        """领域散件转行模型，payload dataclass 经 JSON 序列化。"""
+        """领域 ActivityDraft 转行模型，payload dataclass 经 JSON 序列化。"""
         return cls(
-            id=None, task_id=task_id, event_type=event_type,
-            role_line=role_line, status=status, created_at=created_at,
-            tool_name=tool_name,
-            payload=json.dumps(asdict(payload), ensure_ascii=False) if payload is not None else None,
+            id=None, task_id=task_id,
+            event_type=draft.event_type, role_line=draft.role_line,
+            status=draft.status, created_at=created_at,
+            tool_name=draft.tool_name,
+            payload=json.dumps(asdict(draft.payload), ensure_ascii=False)
+            if draft.payload is not None else None,
         )
 
 
@@ -80,15 +80,8 @@ class TaskActivitiesRepository:
         self._conn = conn
         self._conn.ensure_schema(_DDL)
 
-    def append(
-        self, task_id: str, event_type: str, role_line: str,
-        status: str = "running", *, tool_name: Optional[str] = None,
-        payload: Any = None,
-    ) -> TaskActivity:
-        row = TaskActivityRow.from_domain(
-            task_id, event_type, role_line, status, tool_name,
-            payload, time.time(),
-        )
+    def append(self, task_id: str, draft: ActivityDraft) -> TaskActivity:
+        row = TaskActivityRow.from_domain(task_id, draft, time.time())
         cur = self._conn.get().execute(
             f"INSERT INTO task_activities({_INSERT_COLS}) VALUES ({_INSERT_PH})",
             row.model_dump(exclude={"id"}),

@@ -25,6 +25,7 @@ from chorus.domain.task.artifacts import (
     TaskArtifacts,
 )
 from chorus.domain.task.activity import (
+    ActivityDraft,
     FailedPayload,
     ImageProgressPayload,
     PAYLOAD_TYPES,
@@ -35,27 +36,22 @@ from chorus.domain.task.activity import (
 from chorus.domain.task.pipeline import (
     CreationIntent,
     StepSpec,
-    expand_pipeline,
-    parse_output,
-    parse_sections,
-    render_invoke_message,
     validate_steps,
 )
-from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
+from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile, parse_sections
 from chorus.domain.task.state import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     LEGAL_TRANSITIONS,
     TERMINAL_STATUSES,
-    can_schedule,
     is_legal_transition,
-    is_zombie,
     select_display_pipeline,
     topological_order,
 )
 
 __all__ = [
     "ValidationError",
+    "ActivityDraft",
     "AgentType",
     "CreationIntent",
     "FailedPayload",
@@ -83,15 +79,10 @@ __all__ = [
     "CANCELLABLE_STATUSES",
     "LEGAL_TRANSITIONS",
     "TERMINAL_STATUSES",
-    "can_schedule",
     "is_legal_transition",
-    "is_zombie",
     "select_display_pipeline",
     "topological_order",
-    "expand_pipeline",
-    "parse_output",
     "parse_sections",
-    "render_invoke_message",
     "validate_steps",
     "PAYLOAD_TYPES",
     "build_payload",
