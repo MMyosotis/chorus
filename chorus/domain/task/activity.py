@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Optional, Union
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, TypeAdapter
 from pydantic.dataclasses import dataclass as pydataclass
 
 from chorus.domain.task.artifacts import Narrative
@@ -55,6 +55,15 @@ class TaskActivity:
     created_at: float
     tool_name: Optional[str] = None
     payload: Optional[Union["SearchResultsPayload", "ImageProgressPayload", "FailedPayload"]] = None
+
+
+# TaskActivity 序列化适配器：保留多态 payload 的类型还原。
+_TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
+
+
+def dump_activity(a: TaskActivity) -> dict:
+    """把活动行序列化为可 JSON 化的 dict。"""
+    return _TASK_ACTIVITY_ADAPTER.dump_python(a)
 
 
 # 活动业务载荷判别联合，按 event_type 取对应类型

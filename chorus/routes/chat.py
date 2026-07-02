@@ -1,4 +1,4 @@
-"""流式聊天路由，会话级锁防并发。"""
+"""流式聊天路由。"""
 from __future__ import annotations
 
 import json
@@ -31,26 +31,9 @@ def chat_endpoint(
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
 
-    lock = session.get_lock(session_id)
-    if not lock.acquire(blocking=False):
-        raise HTTPException(status_code=409, detail="session is busy")
-
     def event_generator():
-        released = False
-
-        def _release():
-            nonlocal released
-            if not released:
-                released = True
-                lock.release()
-
-        try:
-            for event in supervisor.stream(session_id, req.message):
-                yield f"data: {json.dumps(event.model_dump(mode='json'), ensure_ascii=False)}\n\n"
-                if event.type in ("done", "error"):
-                    _release()
-        finally:
-            _release()
+        for event in supervisor.stream(session_id, req.message):
+            yield f"data: {json.dumps(event.model_dump(mode='json'), ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),

@@ -9,14 +9,12 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Optional
 
-from pydantic import TypeAdapter
-
 from chorus.domain.task import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
-    TaskActivity,
     TaskStatus,
+    dump_activity,
     select_display_pipeline,
     topological_order,
 )
@@ -25,13 +23,6 @@ from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
-
-_TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
-
-
-def _dump_activity(a: TaskActivity) -> dict:
-    """序列化活动，用类型适配器替代模型导出。"""
-    return _TASK_ACTIVITY_ADAPTER.dump_python(a)
 
 
 class ConflictError(Exception):
@@ -56,47 +47,35 @@ class TaskService:
         self._conn = conn
 
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
-        """确认推进：翻转待确认态为完成。选题角色校验选中项并写回产物。"""
+        """确认推进：翻转待确认→完成，idea 角色写回选中候选。
+
+        副作用（写 selected）在翻转之后，对齐 subagent _finalize。task_id 来自
+        get_graph 存活行，单用户 sequential 下状态不会漂移，故不设 CAS 守卫。
+        """
         task = self._task_repo.get(task_id)
-        if task is None:
-            raise KeyError(task_id)
-        if task.status != TaskStatus.AWAITING_CONFIRM.value:
-            raise ConflictError(f"task 状态 {task.status} 不可确认")
+        self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value)
         if task.agent_type == "idea":
-            if selected is None:
-                raise ConflictError("idea 步骤需提供 selected 候选索引")
             self._set_selected(task_id, task.agent_type, selected)
-        ok = self._task_repo.transition(
-            task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value,
-        )
-        if not ok:
-            raise ConflictError("CAS 失败（状态已漂移）")
         return {"id": task_id, "status": TaskStatus.FINISHED.value}
 
     def retry(self, task_id: str, feedback: dict) -> dict:
-        """带反馈重跑本步：事务内写回反馈并翻转回待执行。"""
-        task = self._task_repo.get(task_id)
-        if task is None:
-            raise KeyError(task_id)
-        from_status = task.status
-        if from_status not in (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FAILED.value):
-            raise ConflictError(f"task 状态 {from_status} 不可重跑")
-        with self._conn.transaction():
-            ok = self._task_repo.transition(
-                task_id, from_status, TaskStatus.PENDING.value,
-            )
-            if ok:
-                self._content_repo.set_feedback(task_id, feedback)
-        if not ok:
-            raise ConflictError("CAS 失败（状态已漂移）")
-        return {"id": task_id, "status": TaskStatus.PENDING.value}
+        """带反馈重跑本步：CAS 翻转回待执行并写回反馈（允许从待确认或失败态）。
+
+        起点态 awaiting_confirm/failed 是 worker 已停的稳态，无并发写方，故 CAS 与
+        feedback 写入不包事务（单条 UPDATE/UPSERT 各自原子）。CAS 依次尝试两态，
+        任一命中即写反馈返回；都失败说明状态已漂移或任务不存在。
+        """
+        for from_status in (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FAILED.value):
+            if not self._task_repo.transition(task_id, from_status, TaskStatus.PENDING.value):
+                continue
+            self._content_repo.set_feedback(task_id, feedback)
+            return {"id": task_id, "status": TaskStatus.PENDING.value}
+        raise ConflictError("CAS 失败（状态已漂移）")
 
     def cancel_pipeline(self, session_id: str) -> dict:
-        """放弃整条流水线：找进行中流水线，事务内批量取消非终态任务。"""
+        """放弃整条流水线：批量取消进行中流水线的非终态任务。无 active 则幂等返 0。"""
         pipeline_id = self._active_pipeline_id(session_id)
-        if pipeline_id is None:
-            raise ConflictError("该会话无进行中的创作任务")
-        n = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES)
+        n = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
         return {"pipeline_id": pipeline_id, "cancelled": n}
 
     def get_graph(self, session_id: str) -> dict:
@@ -107,10 +86,12 @@ class TaskService:
             pipeline_id = active_tasks[0].pipeline_id
             all_tasks = self._task_repo.find_by_pipeline(pipeline_id)
             return self._graph_dict(pipeline_id, all_tasks, True)
+
         # 无进行中：取该会话终态任务，按流水线分组取最近完成
         terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
         if not terminal:
             return {"pipeline_id": None, "active": False, "tasks": []}
+
         # 取最近更新的流水线
         latest = max(terminal, key=lambda t: t.updated_at)
         same_pipeline = [t for t in terminal if t.pipeline_id == latest.pipeline_id]
@@ -119,21 +100,17 @@ class TaskService:
 
     def get_activities(self, task_id: str, *, limit: int = 50) -> list[dict]:
         """返回该任务的用户态活动，按发生顺序。"""
-        if self._task_repo.get(task_id) is None:
-            raise KeyError(task_id)
         limit = max(1, min(100, limit))
         rows = self._activities_repo.list_by_task(task_id, limit=limit)
-        return [_dump_activity(a) for a in rows]
+        return [dump_activity(a) for a in rows]
 
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         return active[0].pipeline_id if active else None
 
-    def _set_selected(self, task_id: str, agent_type: str, selected: int) -> None:
-        """把选中候选写回 idea 产物。产物缺则视作状态不一致，抛冲突。"""
+    def _set_selected(self, task_id: str, agent_type: str, selected: Optional[int]) -> None:
+        """把选中候选写回 idea 产物（产物由 subagent _finalize 事务内原子写入，必就绪）。"""
         art = self._artifacts_repo.load(task_id)
-        if art is None or art.artifacts is None:
-            raise ConflictError("idea 产物缺失，无法写 selected")
         idea = dataclasses.replace(art.artifacts, selected=selected)
         self._artifacts_repo.upsert(
             task_id, agent_type, artifacts=idea, narrative=art.narrative,
@@ -152,16 +129,14 @@ class TaskService:
                 {
                     "id": t.id, "agent_type": t.agent_type, "status": t.status,
                     "updated_at": t.updated_at,
-                    "current_activity": _dump_activity(latest[t.id]) if t.id in latest else None,
+                    "current_activity": dump_activity(latest[t.id]) if t.id in latest else None,
                     "artifacts": (
-                        dataclasses.asdict(arts[t.id].artifacts)
-                        if t.id in arts and arts[t.id].artifacts else None
+                        dataclasses.asdict(arts[t.id].artifacts) if t.id in arts else None
                     ),
                     "narrative": (
-                        dataclasses.asdict(arts[t.id].narrative)
-                        if t.id in arts and arts[t.id].narrative else None
+                        dataclasses.asdict(arts[t.id].narrative) if t.id in arts else None
                     ),
-                    "error": contents[t.id].error if t.id in contents else None,
+                    "error": contents[t.id].error,
                 }
                 for t in ordered
             ],

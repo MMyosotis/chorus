@@ -102,7 +102,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Chorus",
         version="0.3.0",
-        lifespan=_build_lifespan(settings_service, session_service, scheduler),
+        lifespan=_build_lifespan(settings_service, scheduler),
     )
     app.state.session_service = session_service
     app.state.message_service = message_service
@@ -126,10 +126,10 @@ def create_app() -> FastAPI:
     return app
 
 
-def _build_lifespan(settings_service, session_service, scheduler):
+def _build_lifespan(settings_service, scheduler):
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
-        run_startup(session_service, scheduler)
+        run_startup(scheduler)
         yield
         scheduler.stop()
     return _lifespan

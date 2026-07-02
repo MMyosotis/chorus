@@ -16,9 +16,10 @@ class TraceService:
     def __init__(self, trace_repo: TraceRepository):
         self._trace_repo = trace_repo
 
-    def add_trace(self, *, session_id: str, phase: TracePhase, payload: TracePayload,
-                  message_id: Optional[str] = None, task_id: Optional[str] = None,
-                  source: str = "supervisor") -> float:
+    def add_trace(
+            self, *, session_id: str, phase: TracePhase, payload: TracePayload,
+            message_id: Optional[str] = None, task_id: Optional[str] = None, source: str = "supervisor"
+    ) -> float:
         """落一条轨迹行，时间由本层打戳。返回时间戳供调用方事件复用以对齐。"""
         created_at = time.time()
         self._trace_repo.add(TraceEntry(

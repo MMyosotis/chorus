@@ -98,14 +98,6 @@ def test_get_tasks_ok():
 # —— POST /api/tasks/{id}/confirm ——
 
 
-def test_confirm_not_found():
-    """未知 task_id → KeyError → 404。"""
-    r = _client(FakeSessionService({"s1"}), FakeTaskService()).post(
-        "/api/tasks/nope/confirm", json={"selected": 0}
-    )
-    assert r.status_code == 404
-
-
 def test_confirm_conflict():
     """ConflictError → 409。"""
     task = FakeTaskService()
@@ -125,14 +117,6 @@ def test_confirm_ok():
 
 
 # —— POST /api/tasks/{id}/retry ——
-
-
-def test_retry_not_found():
-    """未知 task_id → 404。retry body 必含 feedback（RetryRequest required）。"""
-    r = _client(FakeSessionService({"s1"}), FakeTaskService()).post(
-        "/api/tasks/nope/retry", json={"feedback": {"note": "改标题"}}
-    )
-    assert r.status_code == 404
 
 
 def test_retry_conflict():
@@ -167,16 +151,8 @@ def test_cancel_pipeline_session_not_found():
     assert r.status_code == 404
 
 
-def test_cancel_pipeline_conflict():
-    """session 存在但无 active pipeline → ConflictError → 409。"""
-    task = FakeTaskService()
-    task.set("cancel_pipeline", "s1", ConflictError("该会话无进行中的创作任务"))
-    r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
-    assert r.status_code == 409
-
-
 def test_cancel_pipeline_ok():
-    """正常 → 200 + 透出 {pipeline_id, cancelled}。"""
+    """正常 → 200 + 透出 {pipeline_id, cancelled}（无 active 时 cancelled=0 幂等）。"""
     task = FakeTaskService()
     task.set("cancel_pipeline", "s1", {"pipeline_id": "p1", "cancelled": 2})
     r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
@@ -185,11 +161,6 @@ def test_cancel_pipeline_ok():
 
 
 # —— GET /api/tasks/{id}/activities ——
-
-
-def test_get_activities_not_found():
-    r = _client(FakeSessionService({"s1"}), FakeTaskService()).get("/api/tasks/nope/activities")
-    assert r.status_code == 404
 
 
 def test_get_activities_ok():

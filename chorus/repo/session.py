@@ -94,6 +94,17 @@ class SessionRepository:
             (title, 1 if title_generated else 0, updated_at, session_id),
         )
 
+    def set_title_if_unset(
+        self, session_id: str, *, title: str, updated_at: float
+    ) -> bool:
+        """仅在未定名时落自动标题；单条 UPDATE 原子完成复检+写入。成功返回 True。"""
+        cur = self._conn.get().execute(
+            "UPDATE sessions SET title=?, title_generated=1, updated_at=? "
+            "WHERE id=? AND title_generated=0",
+            (title, updated_at, session_id),
+        )
+        return cur.rowcount == 1
+
     def delete(self, session_id: str) -> None:
         """级联删除关联消息与轨迹。"""
         self._conn.get().execute("DELETE FROM sessions WHERE id=?", (session_id,))

@@ -40,13 +40,10 @@ def get_task_activities(
 ):
     if limit < 1 or limit > 100:
         raise HTTPException(status_code=422, detail="limit 须在 1..100")
-    try:
-        return {
-            "task_id": task_id,
-            "activities": task.get_activities(task_id, limit=limit),
-        }
-    except KeyError:
-        raise HTTPException(status_code=404, detail="task not found")
+    return {
+        "task_id": task_id,
+        "activities": task.get_activities(task_id, limit=limit),
+    }
 
 
 @router.post("/tasks/{task_id}/confirm")
@@ -57,8 +54,6 @@ def confirm_task(
 ):
     try:
         return task.confirm(task_id, req.selected)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="task not found")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -71,8 +66,6 @@ def retry_task(
 ):
     try:
         return task.retry(task_id, req.feedback)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="task not found")
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -85,7 +78,4 @@ def cancel_pipeline(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    try:
-        return task.cancel_pipeline(session_id)
-    except ConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    return task.cancel_pipeline(session_id)

@@ -32,6 +32,7 @@ from chorus.domain.task.activity import (
     SearchResultsPayload,
     TaskActivity,
     build_payload,
+    dump_activity,
 )
 from chorus.domain.task.pipeline import (
     CreationIntent,
@@ -86,4 +87,5 @@ __all__ = [
     "validate_steps",
     "PAYLOAD_TYPES",
     "build_payload",
+    "dump_activity",
 ]

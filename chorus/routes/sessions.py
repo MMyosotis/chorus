@@ -45,10 +45,7 @@ def create_session(req: CreateRequest, session: SessionService = Depends(provide
 
 @router.delete("/{session_id}")
 def delete_session(session_id: str, session: SessionService = Depends(provide_session_service)):
-    try:
-        session.delete(session_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="session not found")
+    session.delete(session_id)  # 幂等：删 0 行也返 ok
     return {"status": "ok"}
 
 

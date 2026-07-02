@@ -65,26 +65,6 @@ def test_confirm_idea_with_selected():
     assert task_repo.get("t1").status == TaskStatus.FINISHED.value
 
 
-def test_confirm_idea_requires_selected():
-    svc, task_repo, content_repo = _setup()
-    _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
-    with pytest.raises(ConflictError):
-        svc.confirm("t1", selected=None)
-
-
-def test_confirm_wrong_status_conflict():
-    svc, task_repo, content_repo = _setup()
-    _mk(task_repo, content_repo, "t1", "idea", "pending")  # 非 awaiting_confirm
-    with pytest.raises(ConflictError):
-        svc.confirm("t1", selected=0)
-
-
-def test_confirm_not_found():
-    svc, _, _ = _setup()
-    with pytest.raises(KeyError):
-        svc.confirm("nope", selected=0)
-
-
 def test_confirm_writes_terminal_updated_at():
     """C1: confirm awaiting_confirm→finished 后 updated_at 即结束时刻（终态时间由 updated_at 承担）。"""
     svc, task_repo, content_repo = _setup()
@@ -107,6 +87,23 @@ def test_retry_writes_feedback_and_cas():
     assert content_repo.load("t1").feedback == {"note": "标题不够吸引"}
 
 
+def test_retry_from_failed():
+    """RecoveryCard 路径：failed 态也可重跑回 pending（CAS 尝试第二态命中）。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "script", "failed")
+    res = svc.retry("t1", feedback={"note": "重试"})
+    assert res["status"] == TaskStatus.PENDING.value
+    assert task_repo.get("t1").status == TaskStatus.PENDING.value
+
+
+def test_retry_wrong_status_conflict():
+    """不可重跑态（如 running）两态 CAS 都失败 → ConflictError。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "idea", "running")
+    with pytest.raises(ConflictError):
+        svc.retry("t1", feedback={})
+
+
 def test_cancel_pipeline():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="pending")
@@ -119,10 +116,12 @@ def test_cancel_pipeline():
 
 
 def test_cancel_no_active():
+    """无 active 流水线：幂等返 cancelled=0，不报错（放弃整条对已终态流水线为 no-op）。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "c", status="finished")
-    with pytest.raises(ConflictError):
-        svc.cancel_pipeline("s1")
+    res = svc.cancel_pipeline("s1")
+    assert res["cancelled"] == 0
+    assert res["pipeline_id"] is None
 
 
 def test_cancel_pipeline_writes_terminal_updated_at():

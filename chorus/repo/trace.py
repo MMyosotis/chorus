@@ -139,14 +139,12 @@ class TraceRepository:
     def batch_aggregate(self, message_ids) -> dict[str, MessageTrace]:
         """一次查询批量聚合多条消息的轨迹，避免逐条查询。无轨迹的消息不在结果中。"""
         ids = list(message_ids)
-        if not ids:
-            return {}
         placeholders = ",".join("?" * len(ids))
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM traces "
-            f"WHERE message_id IN ({placeholders}) ORDER BY created_at, id",
-            ids,
+            f"WHERE message_id IN ({placeholders}) ORDER BY created_at, id", ids,
         ).fetchall()
+
         grouped: dict[str, list[TraceEntry]] = {}
         for row in rows:
             entry = TraceRow(**dict(row)).to_domain()

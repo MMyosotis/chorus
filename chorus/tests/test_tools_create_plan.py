@@ -31,7 +31,7 @@ def _build():
     seed_session(conn, sid="s1")
     repo = TaskRepository(conn)
     content_repo = TaskContentRepository(conn)
-    tool = CreatePlanTool(repo, content_repo, conn, clock=lambda: 1.0)
+    tool = CreatePlanTool(repo, content_repo, conn)
     ctx = ToolContext(session_id="s1")
     return conn, repo, content_repo, tool, ctx
 
@@ -47,7 +47,7 @@ def test_success_returns_terminal_and_persists_tasks():
     tasks = repo.find_by_session_statuses("s1", ACTIVE_STATUSES)
     assert {t.agent_type for t in tasks} == {"idea", "finalize"}
     assert all(t.session_id == "s1" for t in tasks)
-    assert all(t.created_at == 1.0 for t in tasks)  # clock 注入生效
+    assert all(t.created_at > 0 for t in tasks)  # 时间戳由 time.time 落库
     # 内容行同落：每条 task 对应一条 task_content
     contents = content_repo.load_many([t.id for t in tasks])
     assert set(contents.keys()) == {t.id for t in tasks}

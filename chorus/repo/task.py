@@ -117,8 +117,6 @@ class TaskRepository:
     def cancel_pipeline(self, pipeline_id: str, statuses: Iterable[str]) -> int:
         """事务内批量取消非终态任务，返回受影响行数。状态集合由编排层传入。"""
         statuses = list(statuses)
-        if not statuses:
-            return 0
         placeholders = ",".join("?" * len(statuses))
         now = time.time()
         with self._conn.transaction():
@@ -153,8 +151,6 @@ class TaskRepository:
         self, session_id: str, statuses: Iterable[str]
     ) -> list[Task]:
         statuses = list(statuses)
-        if not statuses:
-            return []
         placeholders = ",".join("?" * len(statuses))
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM tasks "
@@ -175,8 +171,6 @@ class TaskRepository:
         self, session_id: str, statuses: Iterable[str]
     ) -> int:
         statuses = list(statuses)
-        if not statuses:
-            return 0
         placeholders = ",".join("?" * len(statuses))
         row = self._conn.get().execute(
             f"SELECT COUNT(*) FROM tasks WHERE session_id=? AND status IN ({placeholders})",

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import time
-from typing import Callable
 
 from chorus.domain.task import (
     CreationIntent,
@@ -74,12 +73,10 @@ class CreatePlanTool(Tool):
         task_repo: TaskRepository,
         content_repo: TaskContentRepository,
         conn: ConnectionFactory,
-        clock: Callable[[], float] = time.time,
     ):
         self._task_repo = task_repo
         self._content_repo = content_repo
         self._conn = conn
-        self._clock = clock
 
     def display(self, arguments: dict) -> str:
         topic = (arguments.get("intent", {}) or {}).get("topic", "")
@@ -101,7 +98,7 @@ class CreatePlanTool(Tool):
             ]
             validate_steps(steps)
 
-            now = self._clock()
+            now = time.time()
             pairs = intent.expand_to_tasks(steps, ctx.session_id, now)
         except (KeyError, TypeError) as e:
             return Reply(f"create_plan 参数缺失或格式错: {e}")
