@@ -113,19 +113,17 @@ def test_touch_updated_at():
     repo.touch_updated_at("nope")
 
 
-def test_cas_update_started_and_finished_at():
-    """started_at/finished_at 经 cas_update 写入（裸 float，进 _CAS_FIELDS）。"""
+def test_cas_update_owner_id():
+    """owner_id 经 cas_update 写入（裸 float，进 _CAS_FIELDS），充当运行租约 token。"""
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
-    assert repo.cas_update("t1", "pending", "running", started_at=100.0) is True
+    assert repo.cas_update("t1", "pending", "running", owner_id=100.0) is True
     t = repo.get("t1")
-    assert t.status == "running" and t.started_at == 100.0
-    # running -> awaiting_confirm 不写 finished_at（HIL 阻塞态非 terminal）
+    assert t.status == "running" and t.owner_id == 100.0
+    # running -> awaiting_confirm 不再写结束时间（终态时间由 updated_at 承担）
     assert repo.cas_update("t1", "running", "awaiting_confirm") is True
-    assert repo.get("t1").finished_at is None
-    # awaiting_confirm -> finished 才写 finished_at
-    assert repo.cas_update("t1", "awaiting_confirm", "finished", finished_at=200.0) is True
-    assert repo.get("t1").finished_at == 200.0
+    assert repo.cas_update("t1", "awaiting_confirm", "finished") is True
+    assert repo.get("t1").status == "finished"
 
 
 def test_progress_total_persists_via_insert_not_cas():

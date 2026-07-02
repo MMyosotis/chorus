@@ -6,7 +6,6 @@
 """
 from __future__ import annotations
 
-import time
 from typing import Any, Optional
 
 from pydantic import TypeAdapter
@@ -63,7 +62,6 @@ class TaskService:
             self._set_selected(task_id, selected)
         ok = self._task_repo.cas_update(
             task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value,
-            finished_at=time.time(),
         )
         if not ok:
             raise ConflictError("CAS 失败（状态已漂移）")
@@ -142,8 +140,7 @@ class TaskService:
             "tasks": [
                 {
                     "id": t.id, "agent_type": t.agent_type, "status": t.status,
-                    "updated_at": t.updated_at, "started_at": t.started_at,
-                    "finished_at": t.finished_at,
+                    "updated_at": t.updated_at,
                     "current_activity": _dump_activity(latest[t.id]) if t.id in latest else None,
                     "artifacts": (arts[t.id].artifacts if t.id in arts else None),
                     "narrative": (arts[t.id].narrative if t.id in arts else None),

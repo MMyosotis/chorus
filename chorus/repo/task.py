@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     error          TEXT,
     created_at     REAL NOT NULL,
     updated_at     REAL NOT NULL,
-    started_at     REAL,
-    finished_at    REAL,
+    owner_id       REAL,
     progress_total INTEGER,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
@@ -36,7 +35,7 @@ CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 """
 
 # 状态翻转时允许顺带更新的字段白名单
-_CAS_FIELDS = {"error", "feedback", "updated_at", "started_at", "finished_at"}
+_CAS_FIELDS = {"error", "feedback", "updated_at", "owner_id"}
 
 
 class TaskRow(BaseModel):
@@ -55,8 +54,7 @@ class TaskRow(BaseModel):
     error: Optional[str] = None
     created_at: float
     updated_at: float
-    started_at: Optional[float] = None
-    finished_at: Optional[float] = None
+    owner_id: Optional[float] = None
     progress_total: Optional[int] = None
 
     def to_domain(self) -> Task:
@@ -74,7 +72,7 @@ class TaskRow(BaseModel):
             invoke_message=self.invoke_message, dependencies=deps,
             feedback=feedback, error=self.error,
             created_at=self.created_at, updated_at=self.updated_at,
-            started_at=self.started_at, finished_at=self.finished_at,
+            owner_id=self.owner_id,
             progress_total=self.progress_total,
         )
 
@@ -87,7 +85,7 @@ class TaskRow(BaseModel):
             dependencies=json.dumps(task.dependencies, ensure_ascii=False),
             feedback=json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
             error=task.error, created_at=task.created_at, updated_at=task.updated_at,
-            started_at=task.started_at, finished_at=task.finished_at,
+            owner_id=task.owner_id,
             progress_total=task.progress_total,
         )
 
@@ -100,33 +98,6 @@ class TaskRepository:
     def __init__(self, conn: ConnectionFactory):
         self._conn = conn
         self._conn.ensure_schema(_DDL)
-        self._ensure_columns()
-
-    def _ensure_columns(self) -> None:
-        """幂等加列与迁列，建表语句不覆盖旧表。"""
-        cols = {
-            row["name"]
-            for row in self._conn.get().execute("PRAGMA table_info(tasks)").fetchall()
-        }
-        if "started_at" not in cols:
-            self._conn.get().execute("ALTER TABLE tasks ADD COLUMN started_at REAL")
-        if "finished_at" not in cols:
-            self._conn.get().execute("ALTER TABLE tasks ADD COLUMN finished_at REAL")
-        if "progress_total" not in cols:
-            if "metadata" in cols:
-                # 旧 metadata 列存 JSON，新建整型列拷值再丢弃旧列，避免类型亲和问题
-                self._conn.get().execute(
-                    "ALTER TABLE tasks ADD COLUMN progress_total INTEGER"
-                )
-                self._conn.get().execute(
-                    "UPDATE tasks SET progress_total = json_extract(metadata, '$.progress_total') "
-                    "WHERE metadata IS NOT NULL"
-                )
-                self._conn.get().execute("ALTER TABLE tasks DROP COLUMN metadata")
-            else:
-                self._conn.get().execute(
-                    "ALTER TABLE tasks ADD COLUMN progress_total INTEGER"
-                )
 
     def insert(self, task: Task) -> None:
         row = TaskRow.from_domain(task)
@@ -158,7 +129,7 @@ class TaskRepository:
             sets.append("feedback=?")
             params.append(json.dumps(val, ensure_ascii=False) if val is not None else None)
         # 浮点列
-        for f in ("started_at", "finished_at"):
+        for f in ("owner_id",):
             if f in fields:
                 sets.append(f"{f}=?"); params.append(fields[f])
         params.extend([task_id, from_status])
@@ -182,9 +153,9 @@ class TaskRepository:
         now = time.time()
         with self._conn.transaction():
             cur = self._conn.get().execute(
-                f"UPDATE tasks SET status='cancelled', updated_at=?, finished_at=? "
+                f"UPDATE tasks SET status='cancelled', updated_at=? "
                 f"WHERE pipeline_id=? AND status IN ({placeholders})",
-                (now, now, pipeline_id, *statuses),
+                (now, pipeline_id, *statuses),
             )
             return cur.rowcount
 

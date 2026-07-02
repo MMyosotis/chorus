@@ -71,14 +71,14 @@ def test_confirm_not_found():
         svc.confirm("nope", selected=0)
 
 
-def test_confirm_writes_finished_at():
-    """C1: confirm awaiting_confirm→finished 写 finished_at（Global Constraint #15 终态口径）。"""
+def test_confirm_writes_terminal_updated_at():
+    """C1: confirm awaiting_confirm→finished 后 updated_at 即结束时刻（终态时间由 updated_at 承担）。"""
     svc, task_repo = _setup()
-    _mk(task_repo, "t1", "script", "awaiting_confirm")
+    _mk(task_repo, "t1", "script", "awaiting_confirm", updated_at=0.0)
     svc.confirm("t1", selected=None)
     got = task_repo.get("t1")
     assert got.status == TaskStatus.FINISHED.value
-    assert got.finished_at is not None
+    assert got.updated_at > 0.0
 
 
 def test_retry_writes_feedback_and_cas():
@@ -109,19 +109,19 @@ def test_cancel_no_active():
         svc.cancel_pipeline("s1")
 
 
-def test_cancel_pipeline_writes_finished_at():
-    """C2: cancel_pipeline 批量→cancelled 写 finished_at（Global Constraint #15 终态口径）。"""
+def test_cancel_pipeline_writes_terminal_updated_at():
+    """C2: cancel_pipeline 批量→cancelled 后 updated_at 即结束时刻（终态时间由 updated_at 承担）。"""
     svc, task_repo = _setup()
-    _mk(task_repo, "a", status="pending")
-    _mk(task_repo, "b", status="running")
+    _mk(task_repo, "a", status="pending", updated_at=0.0)
+    _mk(task_repo, "b", status="running", updated_at=0.0)
     _mk(task_repo, "c", status="finished")
     svc.cancel_pipeline("s1")
     a = task_repo.get("a")
     b = task_repo.get("b")
     assert a.status == TaskStatus.CANCELLED.value
     assert b.status == TaskStatus.CANCELLED.value
-    assert a.finished_at is not None
-    assert b.finished_at is not None
+    assert a.updated_at > 0.0
+    assert b.updated_at > 0.0
 
 
 def test_get_graph_active():
@@ -147,7 +147,7 @@ def _conn_of(task_repo):
 
 
 def test_get_graph_includes_current_activity_and_timestamps():
-    """get_graph 每个 task 含 updated_at/started_at/finished_at/current_activity。"""
+    """get_graph 每个 task 含 updated_at/current_activity。"""
     from chorus.repo.task_activities import TaskActivitiesRepository
     from chorus.domain.task import Task
     conn = fresh_conn()
@@ -161,13 +161,12 @@ def test_get_graph_includes_current_activity_and_timestamps():
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", invoke_message="x", dependencies=[],
-        created_at=0.0, updated_at=10.0, started_at=5.0,
+        created_at=0.0, updated_at=10.0,
         progress_total=3,
     ))
     act_repo.append("t1", "started", "出图中")
     graph = svc.get_graph("s1")
     t = graph["tasks"][0]
-    assert t["started_at"] == 5.0
     assert t["updated_at"] == 10.0
     assert t["current_activity"] is not None
     assert t["current_activity"]["role_line"] == "出图中"
@@ -189,7 +188,7 @@ def test_get_activities_returns_serialized_list():
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", invoke_message="x", dependencies=[],
-        created_at=0.0, updated_at=0.0, started_at=1.0,
+        created_at=0.0, updated_at=0.0,
     ))
     act_repo.append("t1", "started", "a")
     act_repo.append("t1", "done", "b", status="done",

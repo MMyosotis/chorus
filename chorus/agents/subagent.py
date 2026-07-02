@@ -9,7 +9,6 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-import time
 from typing import Optional
 
 from chorus.agents.runtime import AgentContext
@@ -79,25 +78,25 @@ class SubAgentService:
         if task is None:
             logger.warning("subagent: task %s not found", task_id)
             return
-        run_started_at = task.started_at
+        my_owner_id = task.owner_id
         try:
-            self._run_loop(task, run_started_at)
+            self._run_loop(task, my_owner_id)
         except Exception as e:
             logger.exception("subagent task %s failed", task_id)
             # 租约校验：被回收重抢则不动新 worker 的任务
-            if not self._lease_valid(task_id, run_started_at):
+            if not self._lease_valid(task_id, my_owner_id):
                 logger.info("subagent task %s lease expired on failure, skip failed CAS", task_id)
                 return
             self._task_repo.cas_update(
                 task_id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value,
-                error=str(e), finished_at=time.time(),
+                error=str(e),
             )
             self._write_activity(task, failed_activity(task.agent_type, str(e)))
 
-    def _run_loop(self, task, run_started_at: Optional[float]) -> None:
+    def _run_loop(self, task, my_owner_id: Optional[float]) -> None:
         task_id = task.id
         # 入口租约校验，被回收重抢则放弃
-        if not self._lease_valid(task_id, run_started_at):
+        if not self._lease_valid(task_id, my_owner_id):
             logger.info("subagent task %s lease expired on enter, abort", task_id)
             return
         # 写开始活动
@@ -127,7 +126,7 @@ class SubAgentService:
             tool_results = self._exec_tools(result, task, ctx, done_images) if result.tool_calls else []
             if not result.tool_calls:
                 try:
-                    self._finalize(task, result, profile, run_started_at)
+                    self._finalize(task, result, profile, my_owner_id)
                     return
                 except ValidationError as e:
                     # 纠错提示喂回模型继续自纠，撞上限才判失败
@@ -141,19 +140,19 @@ class SubAgentService:
             history.extend(_tool_msg_views(tool_results))
             iteration += 1
         # 超过最大步数仍未结束则判失败，租约内才落库
-        if self._lease_valid(task_id, run_started_at):
+        if self._lease_valid(task_id, my_owner_id):
             self._task_repo.cas_update(
                 task_id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value,
-                error=f"超过最大 ReAct 步数 {_MAX_STEPS}", finished_at=time.time(),
+                error=f"超过最大 ReAct 步数 {_MAX_STEPS}",
             )
             self._write_activity(task, failed_activity(task.agent_type, "超过最大步数"))
 
-    def _lease_valid(self, task_id: str, run_started_at: Optional[float]) -> bool:
-        """租约校验：任务仍运行且启动时间未变（未被回收重抢）。"""
+    def _lease_valid(self, task_id: str, my_owner_id: Optional[float]) -> bool:
+        """租约校验：任务仍运行且 owner_id 未变（未被回收重抢）。"""
         latest = self._task_repo.get(task_id)
         if latest is None or latest.status != TaskStatus.RUNNING.value:
             return False
-        return latest.started_at == run_started_at
+        return latest.owner_id == my_owner_id
 
     def _write_activity(self, task, draft: ActivityDraft, *,
                         tool_call_id: Optional[str] = None, tool_name: Optional[str] = None) -> None:
@@ -233,7 +232,7 @@ class SubAgentService:
             })
         return views
 
-    def _finalize(self, task, result, profile, run_started_at: Optional[float]) -> None:
+    def _finalize(self, task, result, profile, my_owner_id: Optional[float]) -> None:
         """解析产物，先翻转状态再落产物，最后写活动。
 
         事务内先 CAS 翻转状态，持有才落产物，避免漂移产生孤儿产物。解析失败上抛由
@@ -241,7 +240,7 @@ class SubAgentService:
         """
         content = "".join(result.text_parts)
         artifacts, narrative = parse_output(content, task.agent_type)
-        if not self._lease_valid(task.id, run_started_at):
+        if not self._lease_valid(task.id, my_owner_id):
             logger.info("subagent finalize lease expired for task %s, abort", task.id)
             return
         to_status = (
@@ -249,10 +248,9 @@ class SubAgentService:
             else TaskStatus.AWAITING_CONFIRM.value
         )
         is_terminal = to_status == TaskStatus.FINISHED.value
-        cas_fields = {"finished_at": time.time()} if is_terminal else {}
         # 事务内先 CAS 再落产物，状态与产物原子可见，漂移则两者皆不落
         with self._conn.transaction():
-            ok = self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, to_status, **cas_fields)
+            ok = self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, to_status)
             if ok:
                 artifacts_dict = dataclasses.asdict(artifacts)
                 self._artifacts_repo.upsert(

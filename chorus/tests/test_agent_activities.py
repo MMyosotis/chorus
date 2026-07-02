@@ -8,8 +8,8 @@
    done_images 不含当前 url）——brief 字面顺序会双计，得 [2,3,4] 而 brief 测试断言 [1,2,3]。
    实现改为 **先调 tool_done_activity 再 append**（对齐 Task B 契约 + 命中 [1,2,3]）。
 2. 租约早退测试：brief 的 test_lease_expired_worker_writes_no_activity 在 sub.run **前**
-   把 started_at 重 CAS 成 999，期望 entry 租约校验触发早退。但 _run_loop 进入时重新 load
-   task（started_at=999），捕获 run_started_at=999，entry _lease_valid 重读也是 999 → 有效
+   把 owner_id 重 CAS 成 999，期望 entry 租约校验触发早退。但 _run_loop 进入时重新 load
+   task（owner_id=999），捕获 my_owner_id=999，entry _lease_valid 重读也是 999 → 有效
    → 仍写 started。entry 校验是多线程竞态护栏（entry-load 与 lease-check 相邻同读一份 DB，
    单线程无法插入漂移），故改为测 max-steps 路径的租约早退——同样验证"漂移即不写终态活动"。
 """
@@ -65,7 +65,7 @@ class FakeClient:
 class _SideClient(FakeClient):
     """FakeClient 变体：每次 create 先跑 side_effect(可空) 再返对应 stream。
 
-    供租约/漂移用例——在 _call_model 内改任务态/started_at，模拟中途抢占。
+    供租约/漂移用例——在 _call_model 内改任务态/owner_id，模拟中途抢占。
     """
 
     def __init__(self, pairs):
@@ -130,12 +130,12 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, tool
     )
 
 
-def _mk_image_task(task_repo, started_at=100.0, status="running", agent_type="image"):
+def _mk_image_task(task_repo, owner_id=100.0, status="running", agent_type="image"):
     from chorus.domain.task import Task
     t = Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
         status=status, invoke_message="骨架", dependencies=[],
-        created_at=0.0, updated_at=0.0, started_at=started_at,
+        created_at=0.0, updated_at=0.0, owner_id=owner_id,
         progress_total=3,
     )
     task_repo.insert(t)
@@ -163,7 +163,7 @@ def test_started_and_awaiting_activities_written():
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", invoke_message="x", dependencies=[],
-        created_at=0.0, updated_at=0.0, started_at=100.0,
+        created_at=0.0, updated_at=0.0, owner_id=100.0,
     ))
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "定了"}
@@ -214,7 +214,7 @@ def test_generate_image_writes_progressive_tool_done_activities():
 
 
 def test_lease_drift_at_max_steps_skips_failed_activity():
-    """运行租约（max-steps 路径）：撞 _MAX_STEPS 前任务被新 worker 抢占（started_at 漂移），
+    """运行租约（max-steps 路径）：撞 _MAX_STEPS 前任务被新 worker 抢占（owner_id 漂移），
     旧 worker 的 max-steps 路径租约校验失败 → 不 CAS failed、不写 failed activity。
 
     entry 租约校验是多线程竞态护栏（entry-load 与 lease-check 相邻同读一份 DB，单线程
@@ -222,13 +222,13 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
     """
     from chorus.agents.subagent import _MAX_STEPS
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, started_at=100.0, agent_type="idea")
+    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
     bad = "乱七八糟没有段"
 
     def _takeover():
-        # 模拟新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, started_at=999)
+        # 模拟新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
         task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, started_at=999.0)
+        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, owner_id=999.0)
 
     # 第 1 轮触发抢占 + 坏产出；后续坏产出撞 max-steps
     pairs = [(_takeover, FakeStream([({"content": bad}, "stop")]))]
@@ -246,21 +246,21 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
 
 def test_lease_takeover_prevents_stale_finalize():
     """运行租约（_finalize 路径，核心场景）：产出轮 _call_model 中途任务被新 worker 抢占
-    （zombie 回收 + 重派，status 仍 running 但 started_at 漂移到 999）。旧 worker 的
+    （zombie 回收 + 重派，status 仍 running 但 owner_id 漂移到 999）。旧 worker 的
     _finalize 租约校验失败 → 不 CAS awaiting、不 upsert 产物、不写 awaiting activity。
 
     这是租约存在的核心理由——CAS 单独会成功（status 仍 running），从而偷走新 worker 的
-    task；租约用 started_at 区分新旧 worker，旧 worker 早退不污染。
+    task；租约用 owner_id 区分新旧 worker，旧 worker 早退不污染。
     """
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, started_at=100.0, agent_type="idea")
+    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "定了"}
 
     def _takeover():
-        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, started_at=999)
+        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
         task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, started_at=999.0)
+        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, owner_id=999.0)
 
     client = _SideClient([
         (_takeover, FakeStream([({"content": _content(artifacts, narrative)}, "stop")])),
@@ -279,20 +279,20 @@ def test_lease_takeover_prevents_stale_finalize():
 
 def test_lease_takeover_prevents_stale_failed_on_exception():
     """运行租约（run-except 路径）：_call_model 抛异常时任务已被新 worker 抢占
-    （zombie 回收 + 重派，status 仍 running 但 started_at 漂移到 999）。旧 worker 的
+    （zombie 回收 + 重派，status 仍 running 但 owner_id 漂移到 999）。旧 worker 的
     run-except 租约校验失败 → 不 CAS failed、不写 failed activity。
 
     run-except 是 subagent 终态 CAS 唯一未租约门控的位点——CAS 单独会成功（status 仍
     running），从而偷走新 worker 的 task 到 failed 并写伪 failed activity；租约用
-    started_at 区分新旧 worker，旧 worker 早退不污染。与 _finalize 路径对称。
+    owner_id 区分新旧 worker，旧 worker 早退不污染。与 _finalize 路径对称。
     """
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, started_at=100.0, agent_type="idea")
+    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
 
     def _takeover_and_boom():
-        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, started_at=999)
+        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
         task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, started_at=999.0)
+        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, owner_id=999.0)
         # 旧 worker 的网络调用随后抛异常（触发 run 的 except）
         raise RuntimeError("model boom")
 
@@ -312,13 +312,13 @@ def test_finalize_drift_writes_no_done_activity():
     """CAS 漂移（被 cancel）→ 不写 done/awaiting activity（与现有 I-2 一致）。"""
     from chorus.domain.task import Task
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, started_at=100.0, agent_type="idea")
+    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "DONE_MARKER"}
     # 单轮：副作用取消任务 + 合法产出流；_finalize CAS 必失败
     task_repo.cas_update("t1", "running", "cancelled")
     # cancelled→pending 不合法（CAS 返 False 不动），用直接 SQL 重置为 running 以便 _run_loop 进入
-    conn.get().execute("UPDATE tasks SET status='running', started_at=100.0 WHERE id='t1'")
+    conn.get().execute("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'")
 
     def _cancel():
         task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value)

@@ -77,11 +77,11 @@ class TaskScheduler:
         # 限流：非阻塞获取，满则跳过下轮再试
         if not self._semaphore.acquire(blocking=False):
             return
-        # 翻转为运行中并写启动时间作为租约锚点
+        # 翻转为运行中并写 owner_id 作为租约归属 token
         now = time.time()
         ok = self._task_repo.cas_update(
             task.id, TaskStatus.PENDING.value, TaskStatus.RUNNING.value,
-            started_at=now, updated_at=now,
+            owner_id=now, updated_at=now,
         )
         if not ok:
             self._semaphore.release()

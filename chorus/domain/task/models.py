@@ -43,8 +43,7 @@ class Task:
     dependencies: list[str] = Field(default_factory=list)
     feedback: Optional[dict] = None
     error: Optional[str] = None
-    started_at: Optional[float] = None
-    finished_at: Optional[float] = None
+    owner_id: Optional[float] = None
     progress_total: Optional[int] = None
 
 
