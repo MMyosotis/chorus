@@ -276,7 +276,7 @@ function renderMessageContent(m) {
               </div>
               <div class="kv">
                 <span class="k">id</span>
-                <span class="v mono dim">{{ it.payload?.id }}</span>
+                <span class="v mono dim">{{ it.payload?.tool_call_id }}</span>
               </div>
               <pre class="text-block">{{ shortJson(it.payload?.arguments) }}</pre>
             </template>

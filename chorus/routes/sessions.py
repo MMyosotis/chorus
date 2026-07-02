@@ -101,5 +101,5 @@ def _trace_to_dict(t: TraceEntry) -> dict:
         "task_id": t.task_id,
         "source": t.source,
         "created_at": t.created_at,
-        "payload": t.payload,
+        "payload": t.payload.model_dump(),
     }

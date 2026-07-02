@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Optional
 
-from chorus.domain.trace import TraceEntry, TracePhase
+from chorus.domain.trace import TraceEntry, TracePhase, TracePayload
 from chorus.repo.trace import TraceRepository
 
 
@@ -16,7 +16,7 @@ class TraceService:
     def __init__(self, trace_repo: TraceRepository):
         self._trace_repo = trace_repo
 
-    def add_trace(self, *, session_id: str, phase: TracePhase, payload: dict,
+    def add_trace(self, *, session_id: str, phase: TracePhase, payload: TracePayload,
                   message_id: Optional[str] = None, task_id: Optional[str] = None,
                   source: str = "supervisor") -> float:
         """落一条轨迹行，时间由本层打戳。返回时间戳供调用方事件复用以对齐。"""

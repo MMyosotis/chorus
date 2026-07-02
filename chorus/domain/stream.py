@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Iterator, Optional
@@ -35,6 +36,20 @@ class StreamResult:
     tool_calls: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
+
+
+def parse_tool_arguments(raw: str) -> dict:
+    """把 ToolCallAccumulator.arguments 累积的 JSON 字符串解析为 dict。
+
+    流式分片拼出的是字符串，空串或非法 JSON 降级为空 dict，供 ToolCall.arguments 与
+    trace 摘要复用。
+    """
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
 
 
 def _accumulate(stream) -> Iterator[SseEvent]:

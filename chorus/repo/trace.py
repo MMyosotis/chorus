@@ -1,7 +1,7 @@
 """轨迹表的唯一 SQL 入口。
 
-轨迹与消息物理解耦，仅靠消息标识关联。各阶段载荷结构由写入方约定、聚合方依赖。
-映射归框架，转换集中在行模型，聚合逻辑重建思考与工具摘要。
+轨迹与消息物理解耦，仅靠消息标识关联。载荷结构由领域模型强类型约束，
+读回时按 phase 经注册表还原成对应 payload 模型，聚合逻辑重建思考与工具摘要。
 """
 
 from __future__ import annotations
@@ -13,10 +13,16 @@ from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.trace import (
     MessageTrace,
+    ModelRequest,
+    ModelResponse,
+    Schedule,
     ThinkingSegment,
     ToolInvocation,
     TraceEntry,
     TracePhase,
+    TracePayload,
+    TraceToolCall,
+    TraceToolResult,
 )
 from chorus.repo.connection import ConnectionFactory
 
@@ -37,6 +43,15 @@ CREATE INDEX IF NOT EXISTS idx_traces_message ON traces(message_id);
 CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, created_at);
 """
 
+# phase → payload 模型注册表，读回按 phase 还原强类型载荷。
+_PAYLOAD_BY_PHASE: dict[TracePhase, type[BaseModel]] = {
+    TracePhase.MODEL_REQUEST: ModelRequest,
+    TracePhase.MODEL_RESPONSE: ModelResponse,
+    TracePhase.TOOL_CALL: TraceToolCall,
+    TracePhase.TOOL_RESULT: TraceToolResult,
+    TracePhase.SCHEDULE: Schedule,
+}
+
 
 class TraceRow(BaseModel):
     """轨迹表持久化形状，与列一一对应。"""
@@ -53,17 +68,17 @@ class TraceRow(BaseModel):
     payload_json: str
 
     def to_domain(self) -> TraceEntry:
-        try:
-            payload = json.loads(self.payload_json) if self.payload_json else {}
-        except json.JSONDecodeError:
-            payload = {}
+        phase = TracePhase(self.phase)
+        payload: TracePayload = _PAYLOAD_BY_PHASE[phase](
+            **json.loads(self.payload_json),
+        )
         return TraceEntry(
             id=self.id,
             session_id=self.session_id,
             message_id=self.message_id,
             task_id=self.task_id,
             source=self.source or "supervisor",
-            phase=TracePhase(self.phase),
+            phase=phase,
             created_at=self.created_at,
             payload=payload,
         )
@@ -78,7 +93,7 @@ class TraceRow(BaseModel):
             source=entry.source,
             phase=entry.phase.value,
             created_at=entry.created_at,
-            payload_json=json.dumps(entry.payload, ensure_ascii=False),
+            payload_json=json.dumps(entry.payload.model_dump(), ensure_ascii=False),
         )
 
 
@@ -145,18 +160,32 @@ class TraceRepository:
     def _aggregate(self, message_id: str, entries: list[TraceEntry]) -> MessageTrace:
         """从若干轨迹行重建思考与工具摘要，单条与批量共用。"""
         thinking: list[ThinkingSegment] = []
-        tools: dict[str, dict] = {}
+        tools: dict[str, ToolInvocation] = {}
         for entry in entries:
-            if entry.phase is TracePhase.MODEL_RESPONSE:
-                thinking.extend(self._extract_thinking(entry.payload))
-            elif entry.phase is TracePhase.TOOL_CALL:
-                self._merge_tool_call(tools, entry.payload)
-            elif entry.phase is TracePhase.TOOL_RESULT:
-                self._merge_tool_result(tools, entry.payload)
+            payload = entry.payload
+            if isinstance(payload, ModelResponse):
+                thinking.extend(payload.thinking_segments)
+            elif isinstance(payload, TraceToolCall):
+                tools[payload.tool_call_id] = ToolInvocation(
+                    tool_call_id=payload.tool_call_id, name=payload.name,
+                    arguments=payload.arguments, display=payload.display,
+                    duration_ms=0, content="",
+                )
+            elif isinstance(payload, TraceToolResult):
+                tool = tools.setdefault(
+                    payload.tool_call_id,
+                    ToolInvocation(
+                        tool_call_id=payload.tool_call_id, name=payload.name,
+                        arguments={}, display="", duration_ms=0, content="",
+                    ),
+                )
+                tools[payload.tool_call_id] = tool.model_copy(
+                    update={"duration_ms": payload.duration_ms, "content": payload.content},
+                )
         return MessageTrace(
             message_id=message_id,
             thinking=thinking,
-            tools=[ToolInvocation(**v) for v in tools.values()],
+            tools=list(tools.values()),
         )
 
     def delete_by_session(self, session_id: str) -> None:
@@ -164,47 +193,3 @@ class TraceRepository:
 
     def delete_by_message(self, message_id: str) -> None:
         self._conn.get().execute("DELETE FROM traces WHERE message_id=?", (message_id,))
-
-    @staticmethod
-    def _extract_thinking(payload: dict) -> list[ThinkingSegment]:
-        segments = payload.get("thinking_segments") or []
-        result: list[ThinkingSegment] = []
-        for seg in segments:
-            try:
-                result.append(ThinkingSegment(**seg))
-            except Exception:
-                continue
-        return result
-
-    @staticmethod
-    def _merge_tool_call(tools: dict, payload: dict) -> None:
-        tid = payload.get("id")
-        if not tid:
-            return
-        tools[tid] = {
-            "tool_call_id": tid,
-            "name": payload.get("name", ""),
-            "arguments": payload.get("arguments", {}),
-            "display": payload.get("display", ""),
-            "duration_ms": 0,
-            "content": "",
-        }
-
-    @staticmethod
-    def _merge_tool_result(tools: dict, payload: dict) -> None:
-        tid = payload.get("tool_call_id")
-        if not tid:
-            return
-        tool = tools.setdefault(
-            tid,
-            {
-                "tool_call_id": tid,
-                "name": payload.get("name", ""),
-                "arguments": {},
-                "display": "",
-                "duration_ms": 0,
-                "content": "",
-            },
-        )
-        tool["duration_ms"] = payload.get("duration_ms", 0)
-        tool["content"] = payload.get("content", "")

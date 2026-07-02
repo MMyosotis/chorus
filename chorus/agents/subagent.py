@@ -7,13 +7,12 @@
 from __future__ import annotations
 
 import dataclasses
-import json
 import logging
 from typing import Optional
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.prompt import build_subagent_system_prompt
-from chorus.domain.stream import StreamResult, drain_stream
+from chorus.domain.stream import StreamResult, drain_stream, parse_tool_arguments
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
@@ -208,7 +207,7 @@ class SubAgentService:
         tool_ctx = ToolContext(session_id=task.session_id)
         views: list[dict] = []
         for _, tc in sorted(result.tool_calls.items()):
-            call = ToolCall(id=tc.id, name=tc.name, arguments=_parse_args(tc.arguments))
+            call = ToolCall(id=tc.id, name=tc.name, arguments=parse_tool_arguments(tc.arguments))
             call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
             list(self._hooks.trigger(
                 "PreToolUse", ctx, call_view,
@@ -267,13 +266,6 @@ class SubAgentService:
             self._write_activity(task, done_activity(narrative))
         else:
             self._write_activity(task, awaiting_activity(narrative))
-
-
-def _parse_args(raw: str) -> dict:
-    try:
-        return json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        return {}
 
 
 def _assistant_view(result: StreamResult) -> dict:

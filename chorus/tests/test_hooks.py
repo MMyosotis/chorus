@@ -101,6 +101,7 @@ def test_trace_default_supervisor_when_ctx_unset():
     msg_svc, trace_svc, _ = _setup()
     emitter = TraceEmitter(trace_svc, max_tokens=256)
     ctx = AgentContext(session_id="s1")               # 默认 source="supervisor", task_id=None
+    ctx.chat_model = "fake-model"
 
     list(emitter.before_model_request(ctx))
 

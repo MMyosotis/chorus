@@ -1,10 +1,20 @@
-"""TraceRepository 多来源扩展的 smoke test：source/task_id 写入、按 session/task 聚合。
+"""TraceRepository 多来源扩展的 smoke test：source/task_id 写入、按 session/task 聚合，
+以及五种 phase 载荷的 round-trip 还原契约。
 
-运行：``.venv/bin/python -m kitty.tests.test_repo_trace``
+运行：``.venv/bin/python -m chorus.tests.test_repo_trace``
 """
 from __future__ import annotations
 
-from chorus.domain.trace import TraceEntry, TracePhase
+from chorus.domain.trace import (
+    ModelRequest,
+    ModelResponse,
+    Schedule,
+    ThinkingSegment,
+    TraceEntry,
+    TracePhase,
+    TraceToolCall,
+    TraceToolResult,
+)
 from chorus.repo.trace import TraceRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
@@ -15,17 +25,25 @@ def _setup():
     return conn
 
 
+def _request() -> ModelRequest:
+    return ModelRequest(model="m", messages=[{"role": "user"}], tools=[{"name": "t"}], max_tokens=8)
+
+
 def test_add_with_source_and_task_id():
     conn = _setup()
     repo = TraceRepository(conn)
     # supervisor trace（默认 source）
-    rid = repo.add(TraceEntry(session_id="s1", message_id="m1", phase=TracePhase.MODEL_REQUEST, created_at=1.0, payload={}))
+    repo.add(TraceEntry(session_id="s1", message_id="m1", phase=TracePhase.MODEL_REQUEST,
+                        created_at=1.0, payload=_request()))
     # subagent trace
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="subagent",
-                        phase=TracePhase.MODEL_RESPONSE, created_at=2.0, payload={}))
+                        phase=TracePhase.MODEL_RESPONSE, created_at=2.0,
+                        payload=ModelResponse(content="ok", finish_reason="stop")))
     # scheduler trace
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="scheduler",
-                        phase=TracePhase.SCHEDULE, created_at=3.0, payload={"event": "dispatch"}))
+                        phase=TracePhase.SCHEDULE, created_at=3.0,
+                        payload=Schedule(event="dispatch", task_id="t1",
+                                         from_status="pending", to_status="running", detail="")))
     by_session = repo.list_by_session("s1")
     assert len(by_session) == 3
     sources = [e.source for e in by_session]
@@ -41,10 +59,12 @@ def test_schedule_phase():
     repo = TraceRepository(conn)
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="scheduler",
                         phase=TracePhase.SCHEDULE, created_at=1.0,
-                        payload={"event": "zombie_reclaim", "task_id": "t1", "detail": "x"}))
+                        payload=Schedule(event="zombie_reclaim", task_id="t1",
+                                         from_status="running", to_status="pending", detail="x")))
     e = repo.list_by_task("t1")[0]
     assert e.phase is TracePhase.SCHEDULE
-    assert e.payload["event"] == "zombie_reclaim"
+    assert isinstance(e.payload, Schedule)
+    assert e.payload.event == "zombie_reclaim"
 
 
 def test_batch_aggregate_groups_by_message():
@@ -54,13 +74,17 @@ def test_batch_aggregate_groups_by_message():
     # m1: 一段思考 + 一次工具调用 + 结果
     repo.add(TraceEntry(session_id="s1", message_id="m1",
                         phase=TracePhase.MODEL_RESPONSE, created_at=1.0,
-                        payload={"thinking_segments": [{"text": "想", "duration_ms": 5}]}))
+                        payload=ModelResponse(
+                            content="", finish_reason="tool_calls",
+                            thinking_segments=[ThinkingSegment(text="想", duration_ms=5)])))
     repo.add(TraceEntry(session_id="s1", message_id="m1",
                         phase=TracePhase.TOOL_CALL, created_at=2.0,
-                        payload={"id": "c1", "name": "search", "arguments": {}, "display": "搜"}))
+                        payload=TraceToolCall(tool_call_id="c1", name="search",
+                                              arguments={}, display="搜")))
     repo.add(TraceEntry(session_id="s1", message_id="m1",
                         phase=TracePhase.TOOL_RESULT, created_at=3.0,
-                        payload={"tool_call_id": "c1", "name": "search", "content": "r", "duration_ms": 10}))
+                        payload=TraceToolResult(tool_call_id="c1", name="search",
+                                                content="r", duration_ms=10)))
     # m2: 无 trace
     out = repo.batch_aggregate(["m1", "m2"])
     assert set(out.keys()) == {"m1"}  # m2 缺失不在结果
@@ -68,14 +92,42 @@ def test_batch_aggregate_groups_by_message():
     assert t.thinking[0].text == "想"
     assert t.tools[0].name == "search"
     assert t.tools[0].content == "r"
+    assert t.tools[0].tool_call_id == "c1"
     # 空入参
     assert repo.batch_aggregate([]) == {}
+
+
+def test_payload_round_trip_all_phases():
+    """五种 phase 的 payload 入库后读回，类型与字段全保留。"""
+    conn = _setup()
+    repo = TraceRepository(conn)
+    cases = [
+        (TracePhase.MODEL_REQUEST, _request()),
+        (TracePhase.MODEL_RESPONSE, ModelResponse(
+            content="hi", finish_reason="stop",
+            tool_calls=[], thinking_segments=[ThinkingSegment(text="t", duration_ms=1)])),
+        (TracePhase.TOOL_CALL, TraceToolCall(tool_call_id="c", name="n", arguments={"a": 1},
+                                             display="d", running_label="跑")),
+        (TracePhase.TOOL_RESULT, TraceToolResult(tool_call_id="c", name="n",
+                                                 content="r", duration_ms=7)),
+        (TracePhase.SCHEDULE, Schedule(event="dispatch", task_id="t", from_status="pending",
+                                       to_status="running", detail="")),
+    ]
+    for i, (phase, payload) in enumerate(cases):
+        repo.add(TraceEntry(session_id="s1", phase=phase, created_at=float(i), payload=payload))
+    entries = repo.list_by_session("s1")
+    assert len(entries) == len(cases)
+    for (phase, expected), entry in zip(cases, entries):
+        assert entry.phase is phase
+        assert type(entry.payload) is type(expected)
+        assert entry.payload == expected
 
 
 def main():
     test_add_with_source_and_task_id()
     test_schedule_phase()
     test_batch_aggregate_groups_by_message()
+    test_payload_round_trip_all_phases()
     print("\n全部用例通过")
 
 

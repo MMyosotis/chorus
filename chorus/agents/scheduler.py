@@ -12,7 +12,7 @@ from typing import Optional
 
 from chorus.config import POOL_SIZE, SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
 from chorus.domain.task import TaskStatus, can_schedule
-from chorus.domain.trace import TracePhase
+from chorus.domain.trace import Schedule, TracePhase
 from chorus.repo.task import TaskRepository
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
@@ -126,8 +126,10 @@ class TaskScheduler:
             self._trace.add_trace(
                 session_id=task.session_id, task_id=task_id, source="scheduler",
                 phase=TracePhase.SCHEDULE,
-                payload={"event": event, "task_id": task_id, "from_status": from_status,
-                         "to_status": to_status, "detail": detail},
+                payload=Schedule(
+                    event=event, task_id=task_id, from_status=from_status,
+                    to_status=to_status, detail=detail,
+                ),
             )
         except Exception:  # noqa: BLE001 — trace fail-open
             logger.warning("scheduler trace 写入失败 task=%s event=%s", task_id, event)

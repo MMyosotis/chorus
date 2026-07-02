@@ -21,7 +21,7 @@ from chorus.domain.events import (
 )
 from chorus.domain.prompt import PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader
-from chorus.domain.stream import consume_stream
+from chorus.domain.stream import consume_stream, parse_tool_arguments
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
@@ -119,7 +119,7 @@ class SupervisorService:
         pairs = []          # 调用与结果按索引顺序
         terminal = None     # 首个终止结果
         for _, tc in sorted(ctx.turn.accumulated_tool_calls.items()):
-            call = ToolCall(id=tc.id, name=tc.name, arguments=_parse_args(tc.arguments))
+            call = ToolCall(id=tc.id, name=tc.name, arguments=parse_tool_arguments(tc.arguments))
             call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
             list(self._hooks.trigger(
                 "PreToolUse", ctx, call_view,
@@ -165,10 +165,3 @@ class SupervisorService:
 def _to_tool_call_spec(call: ToolCall):
     from chorus.domain.message import ToolCallSpec
     return ToolCallSpec(id=call.id, name=call.name, arguments_json=json.dumps(call.arguments, ensure_ascii=False))
-
-
-def _parse_args(raw: str) -> dict:
-    try:
-        return json.loads(raw) if raw else {}
-    except json.JSONDecodeError:
-        return {}

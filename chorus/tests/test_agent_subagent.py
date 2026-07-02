@@ -12,7 +12,7 @@ from pathlib import Path
 from chorus.agents.subagent import SubAgentService
 from chorus.domain.session import Session
 from chorus.domain.task import Task, TaskContent, TaskStatus
-from chorus.domain.trace import TracePhase
+from chorus.domain.trace import ModelResponse, TracePhase
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
@@ -139,6 +139,7 @@ def _model_responses(trace_svc, task_id="t1"):
     return [
         t.payload for t in trace_svc.list_traces("s1")
         if t.task_id == task_id and t.phase is TracePhase.MODEL_RESPONSE
+        and isinstance(t.payload, ModelResponse)
     ]
 
 
@@ -161,7 +162,7 @@ def test_subagent_idea_awaiting_confirm():
     assert art.artifacts.candidates[0].title == "t"
     assert art.narrative.done_line == "定了"
     mrs = _model_responses(trace_svc)
-    assert len(mrs) == 1 and mrs[0]["finish_reason"] == "stop"
+    assert len(mrs) == 1 and mrs[0].finish_reason == "stop"
 
 
 def test_subagent_finalize_finished():
@@ -204,8 +205,8 @@ def test_subagent_react_with_tool():
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
     mrs = _model_responses(trace_svc)
     assert len(mrs) == 2
-    assert mrs[0]["tool_calls"][0]["name"] == "baidu_search"
-    assert mrs[1]["finish_reason"] == "stop"
+    assert mrs[0].tool_calls[0].name == "baidu_search"
+    assert mrs[1].finish_reason == "stop"
 
 
 def test_subagent_failed_on_persistent_bad_output():
