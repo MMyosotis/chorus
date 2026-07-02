@@ -42,6 +42,7 @@ from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
@@ -138,6 +139,7 @@ def _build_assembly():
     trace_repo = TraceRepository(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
+    content_repo = TaskContentRepository(conn)
 
     session_svc = SessionService(session_repo)
     trace_svc = TraceService(trace_repo)
@@ -153,7 +155,7 @@ def _build_assembly():
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, conn)], _stub_settings())
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn)], _stub_settings())
 
     # supervisor：一次 create_plan tool_call 流
     sup_client = FakeClient([FakeStream([
@@ -175,12 +177,14 @@ def _build_assembly():
     ])
     subagent = SubAgentService(
         conn, msg_svc, task_repo, art_repo,
-        TaskActivitiesRepository(conn),
+        TaskActivitiesRepository(conn), content_repo,
         tool_dispatcher, hooks,
         stub_chat_model_provider(sub_client), 1024,
     )
 
-    task_service = TaskService(task_repo, art_repo, TaskActivitiesRepository(conn), session_svc)
+    task_service = TaskService(
+        task_repo, art_repo, TaskActivitiesRepository(conn), content_repo, session_svc, conn,
+    )
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999, pool_size=2,
@@ -208,8 +212,8 @@ def test_end_to_end_pipeline():
     assert idea.id in finalize.dependencies  # finalize 依赖 idea
 
     # —— 链路 2：subagent 跑 idea → awaiting_confirm ——
-    # 手动 CAS pending→running（不走 scheduler，保持链路 2/4 的时序可控）
-    assert task_repo.cas_update(idea.id, TaskStatus.PENDING.value, TaskStatus.RUNNING.value)
+    # 手动占槽 pending→running（不走 scheduler，保持链路 2/4 的时序可控）
+    assert task_repo.claim(idea.id, time.time())
     sub.run(idea.id)
     assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM.value
 

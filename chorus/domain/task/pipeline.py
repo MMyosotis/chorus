@@ -10,8 +10,9 @@ from typing import Any, Optional
 
 from pydantic import ValidationError as PydValidationError
 
+from chorus.domain.task import StepSpec, CreationIntent, Task, TaskContent
 from chorus.domain.task.errors import ValidationError
-from chorus.domain.task.models import CreationIntent, Narrative, StepSpec, Task, TaskStatus
+from chorus.domain.task.models import CreationIntent, Narrative, StepSpec, Task, TaskContent, TaskStatus
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 
 _MAX_STEPS = 20
@@ -24,46 +25,64 @@ def validate_steps(steps: list[StepSpec]) -> None:
     if len(steps) > _MAX_STEPS:
         raise ValidationError(f"steps 过多({len(steps)})", f"步骤数不超过 {_MAX_STEPS}")
 
-    for i, s in enumerate(steps):
-        if s.agent_type not in AGENT_PROFILES:
-            raise ValidationError(
-                f"步骤{i}角色非法: {s.agent_type}",
-                f"步骤{i}的 agent_type 必须是 idea/script/image/finalize 之一",
-            )
-        if i > 0 and not s.deps:
-            raise ValidationError(
-                f"步骤{i}无依赖",
-                f"步骤{i}必须依赖至少一个前置步骤（仅首步可无依赖）",
-            )
-        bad = next((d for d in s.deps if not (0 <= d < i)), None)
-        if bad is not None:
-            raise ValidationError(
-                f"步骤{i}依赖非前置步骤: {bad}",
-                f"步骤{i}的 deps 只能引用前置步骤索引(0..{i-1})",
-            )
+    for index, step in enumerate(steps):
+        validate_one_step(index, step)
 
     if steps[-1].agent_type != "finalize":
         raise ValidationError("末步非 finalize", "最后一个步骤必须是 finalize，它是唯一成品出口")
 
 
+def validate_one_step(index: int, step: StepSpec):
+    if step.agent_type not in AGENT_PROFILES:
+        raise ValidationError(
+            f"步骤{index}角色非法: {step.agent_type}",
+            f"步骤{index}的 agent_type 必须是 idea/script/image/finalize 之一",
+        )
+
+    if index > 0 and not step.deps:
+        raise ValidationError(
+            f"步骤{index}无依赖",
+            f"步骤{index}必须依赖至少一个前置步骤（仅首步可无依赖）",
+        )
+
+    bad = next((d for d in step.deps if not (0 <= d < index)), None)
+    if bad is not None:
+        raise ValidationError(
+            f"步骤{index}依赖非前置步骤: {bad}",
+            f"步骤{index}的 deps 只能引用前置步骤索引(0..{index - 1})",
+        )
+
+
 def expand_pipeline(
     intent: CreationIntent, steps: list[StepSpec], session_id: str, now: float,
-) -> list[Task]:
-    """按步骤一次性生成整图，初始全待执行，可直接落库。调用前应先校验。"""
+) -> list[tuple[Task, TaskContent]]:
+    """生成整图（调度行 + 内容行），初始全待执行，可直接落库。调用前应先校验。"""
     pipeline_id = uuid.uuid4().hex
     ids = [uuid.uuid4().hex for _ in steps]
-    tasks: list[Task] = []
-    for i, s in enumerate(steps):
-        deps_ids = [ids[dep] for dep in s.deps]
-        invoke = _render_skeleton(intent, s)
-        progress_total = intent.image_count if s.agent_type == "image" else None
-        tasks.append(Task(
-            id=ids[i], session_id=session_id, pipeline_id=pipeline_id,
-            agent_type=s.agent_type, status=TaskStatus.PENDING.value,
-            invoke_message=invoke, dependencies=deps_ids,
-            created_at=now, updated_at=now, progress_total=progress_total,
-        ))
-    return tasks
+    pairs: list[tuple[Task, TaskContent]] = []
+    for index, step in enumerate(steps):
+        appen_one_task(ids, index, intent, now, pairs, pipeline_id, session_id, step)
+    return pairs
+
+
+def appen_one_task(
+    ids: list[str], index: int, intent: CreationIntent, now: float,
+    pairs: list[tuple[Task, TaskContent]], pipeline_id: str, session_id: str, step: StepSpec
+):
+    deps_ids = [ids[dep] for dep in step.deps]
+    invoke = _render_skeleton(intent, step)
+    progress_total = intent.image_count if step.agent_type == "image" else None
+    task_id = ids[index]
+
+    task = Task(
+        id=task_id, session_id=session_id, pipeline_id=pipeline_id,
+        agent_type=step.agent_type, status=TaskStatus.PENDING.value,
+        dependencies=deps_ids, created_at=now, updated_at=now,
+    )
+    task_content = TaskContent(
+        task_id=task_id, invoke_message=invoke, progress_total=progress_total
+    )
+    pairs.append((task, task_content))
 
 
 def _render_skeleton(intent: CreationIntent, step: StepSpec) -> str:
@@ -80,51 +99,56 @@ def _render_skeleton(intent: CreationIntent, step: StepSpec) -> str:
 
 
 def render_invoke_message(
-    task: Task,
-    deps_outputs: dict[str, Any],
-    self_prior: Optional[Any],
-    feedback: Optional[dict],
+    invoke_message: str, deps_outputs: dict[str, Any], self_prior: Optional[Any], feedback: Optional[dict],
 ) -> str:
     """拼首轮调用消息：基础骨架，按需附前置产物、上轮产物、用户反馈。"""
-    parts = [task.invoke_message]
+    parts = [invoke_message]
     if deps_outputs:
         parts.append("前置步骤产物：")
         for dep_id, out in deps_outputs.items():
             parts.append(f"--- {dep_id} ---\n{json.dumps(out, ensure_ascii=False, indent=2)}")
+
     if self_prior is not None:
         parts.append("你上一轮的产物（据此定向改进，不要简单重复）：")
         parts.append(json.dumps(self_prior, ensure_ascii=False, indent=2))
+
     if feedback:
         parts.append("用户反馈（请据此改进）：")
         parts.append(json.dumps(feedback, ensure_ascii=False, indent=2))
+
     return "\n\n".join(parts)
 
 
+_SECTION_OPEN = "<<<"
+_SECTION_CLOSE = ">>>"
+
+
 def parse_sections(content: str) -> dict[str, str]:
-    """按分隔符切段，容忍段外杂文，重复标签后者覆盖。"""
-    result: dict[str, str] = {}
-    i = 0
-    n = len(content)
-    while i < n:
-        start = content.find("<<<", i)
-        if start == -1:
+    """按分隔符切段，容忍段外杂文，重复标签后者覆盖。
+
+    段格式：``<<<TAG:fmt>>>正文<<<TAG_END>>>``，``:fmt`` 可省。
+    """
+    sections: dict[str, str] = {}
+    pos = 0
+    while pos < len(content):
+        open_at = content.find(_SECTION_OPEN, pos)
+        if open_at == -1:
             break
-        header_end = content.find(">>>", start)
-        if header_end == -1:
+        header_close = content.find(_SECTION_CLOSE, open_at)
+        if header_close == -1:
             break
-        header = content[start + 3:header_end]  # e.g. "ARTIFACTS:json"
-        if ":" in header:
-            tag, _fmt = header.split(":", 1)
-        else:
-            tag = header
-        close = f"<<<{tag}_END>>>"
-        body_start = header_end + 3
-        body_end = content.find(close, body_start)
+        header = content[open_at + len(_SECTION_OPEN):header_close]
+        tag = header.split(":", 1)[0]
+
+        end_marker = f"{_SECTION_OPEN}{tag}_END{_SECTION_CLOSE}"
+        body_start = header_close + len(_SECTION_CLOSE)
+        body_end = content.find(end_marker, body_start)
         if body_end == -1:
             break
-        result[tag.strip().lower()] = content[body_start:body_end].strip()
-        i = body_end + len(close)
-    return result
+
+        sections[tag.strip().lower()] = content[body_start:body_end].strip()
+        pos = body_end + len(end_marker)
+    return sections
 
 
 def parse_output(content: str, agent_type: str) -> tuple[Any, Narrative]:

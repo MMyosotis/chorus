@@ -30,21 +30,28 @@ class AgentType(str, Enum):
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class Task:
-    """tasks 表一行的领域模型。"""
+    """tasks 表一行的领域模型：调度+身份+状态机。"""
 
     id: str
     session_id: str
     pipeline_id: str
     agent_type: str
     status: str
-    invoke_message: str
     created_at: float
     updated_at: float
     dependencies: list[str] = Field(default_factory=list)
-    feedback: Optional[dict] = None
-    error: Optional[str] = None
     owner_id: Optional[float] = None
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class TaskContent:
+    """task_content 表行。"""
+
+    task_id: str
+    invoke_message: str
     progress_total: Optional[int] = None
+    error: Optional[str] = None
+    feedback: Optional[dict] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -131,8 +138,33 @@ class PostCard:
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class SearchResultsPayload:
+    """tool_done(baidu_search) 的载荷：搜索结果摘要。"""
+
+    total: int
+    bullets: list[dict]
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ImageProgressPayload:
+    """tool_done(generate_image) 的载荷：配图进度与预览。"""
+
+    current: int
+    items: list[dict]
+    total: Optional[int] = None
+    unit: str = "张图"
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class FailedPayload:
+    """failed 事件的载荷：失败详情。"""
+
+    detail_md: str
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskActivity:
-    """活动流一行：按事件粒度追加的用户态活动。"""
+    """活动流一行：核心字段 + tool_name + 多态 payload。"""
 
     id: int
     task_id: str
@@ -140,13 +172,8 @@ class TaskActivity:
     role_line: str
     status: str
     created_at: float
-    updated_at: float
     tool_name: Optional[str] = None
-    tool_call_id: Optional[str] = None
-    detail_md: Optional[str] = None
-    summary_json: Optional[dict] = None
-    progress_json: Optional[dict] = None
-    artifact_preview_json: Optional[dict] = None
+    payload: Optional[Union["SearchResultsPayload", "ImageProgressPayload", "FailedPayload"]] = None
 
 
 @dataclass

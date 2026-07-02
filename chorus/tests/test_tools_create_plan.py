@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 from chorus.tools.builtin.create_plan import CreatePlanTool
 from chorus.tools.framework import Reply, Terminal, ToolContext
@@ -29,13 +30,14 @@ def _build():
     conn = fresh_conn()
     seed_session(conn, sid="s1")
     repo = TaskRepository(conn)
-    tool = CreatePlanTool(repo, conn, clock=lambda: 1.0)
+    content_repo = TaskContentRepository(conn)
+    tool = CreatePlanTool(repo, content_repo, conn, clock=lambda: 1.0)
     ctx = ToolContext(session_id="s1")
-    return conn, repo, tool, ctx
+    return conn, repo, content_repo, tool, ctx
 
 
 def test_success_returns_terminal_and_persists_tasks():
-    conn, repo, tool, ctx = _build()
+    conn, repo, content_repo, tool, ctx = _build()
     outcome = tool.run(_args(), ctx)
     assert isinstance(outcome, Terminal)
     assert isinstance(outcome.content, str) and outcome.content  # 如实建图摘要
@@ -46,10 +48,15 @@ def test_success_returns_terminal_and_persists_tasks():
     assert {t.agent_type for t in tasks} == {"idea", "finalize"}
     assert all(t.session_id == "s1" for t in tasks)
     assert all(t.created_at == 1.0 for t in tasks)  # clock 注入生效
+    # 内容行同落：每条 task 对应一条 task_content
+    contents = content_repo.load_many([t.id for t in tasks])
+    assert set(contents.keys()) == {t.id for t in tasks}
+    idea_id = next(t.id for t in tasks if t.agent_type == "idea")
+    assert "夏日晚风" in contents[idea_id].invoke_message
 
 
 def test_missing_intent_key_returns_reply():
-    _, _, tool, ctx = _build()
+    _, _, _, tool, ctx = _build()
     outcome = tool.run({"thought": "x", "friendly_reply": "y", "steps": []}, ctx)
     assert isinstance(outcome, Reply)
     assert "create_plan" in outcome.content or "参数" in outcome.content
@@ -57,7 +64,7 @@ def test_missing_intent_key_returns_reply():
 
 def test_bad_step_returns_reply_with_correction():
     """末步非 finalize → validate_steps 抛 ValidationError → Reply(correction)，不落库。"""
-    _, repo, tool, ctx = _build()
+    _, repo, _, tool, ctx = _build()
     bad = _args(steps=[{"agent_type": "idea", "deps": [], "focus": "选题"}])  # 末步非 finalize
     outcome = tool.run(bad, ctx)
     assert isinstance(outcome, Reply)
@@ -66,7 +73,7 @@ def test_bad_step_returns_reply_with_correction():
 
 
 def test_circular_deps_returns_reply():
-    _, repo, tool, ctx = _build()
+    _, repo, _, tool, ctx = _build()
     # 不能构造真环（deps 只能引前置），构造前向依赖错
     bad = _args(steps=[
         {"agent_type": "idea", "deps": [1], "focus": "x"},  # deps 引后续索引非法

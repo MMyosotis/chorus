@@ -17,6 +17,7 @@ from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
@@ -64,13 +65,14 @@ def _setup():
     msg_repo = MessageRepository(conn)
     trace_repo = TraceRepository(conn)
     task_repo = TaskRepository(conn)
+    content_repo = TaskContentRepository(conn)
     session_svc = SessionService(SessionRepository(conn))
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
-    return conn, session_svc, msg_svc, trace_svc, task_repo
+    return conn, session_svc, msg_svc, trace_svc, task_repo, content_repo
 
 
-def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, fake_client):
+def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, fake_client):
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     hooks = HookRegistry()
     trace = TraceEmitter(trace_svc, max_tokens=1024)
@@ -79,7 +81,7 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, fake_cli
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
 
     entry = stub_chat_model_provider(fake_client)
     return SupervisorService(
@@ -104,9 +106,9 @@ def _plan_args(topic="夏日晚风", steps=None):
 
 def test_only_reply():
     """无 tool_call → only_reply：事件 [message_start, token+, done]，落 user+assistant。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo = _setup()
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     client = FakeClient([FakeStream([({"content": "你好呀"}, "stop")])])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, client)
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "hi"))
     types_seq = [e.type for e in events]
@@ -119,13 +121,13 @@ def test_only_reply():
 
 def test_new_plan():
     """create_plan tool_call → dispatch Terminal → 建图落库 + done；assistant(tool_calls)+tool 成对落库。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo = _setup()
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, client)
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我写一篇夏日博文"))
     types_seq = [e.type for e in events]
@@ -151,7 +153,7 @@ def test_reply_outcome_pairs_and_continues():
     用真实 LoadSkillTool 加载不存在的技能名 → Reply("Error: skill '...' not found...")，
     下一轮模型回文本。终态历史须为 [user, assistant(tool_calls), tool, assistant(文本)]。
     """
-    conn, session_svc, msg_svc, trace_svc, task_repo = _setup()
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     # 第一轮：load_skill("ghost") → Reply(未命中技能错误串)
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
@@ -159,7 +161,7 @@ def test_reply_outcome_pairs_and_continues():
     # 第二轮：纯文本回复（loop 继续）
     text_stream = FakeStream([({"content": "已为你查到"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, client)
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 技能"))
     types_seq = [e.type for e in events]
@@ -185,7 +187,7 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
     结果。2× load_skill(不存在技能名) 均 Reply，下一轮模型回文本。终态历史须为
     [user, assistant(2 tool_calls), tool, tool, assistant(文本)]。
     """
-    conn, session_svc, msg_svc, trace_svc, task_repo = _setup()
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     # 第一轮：2 个 load_skill tool_call（index 0/1），均 Reply(未命中技能错误串)
     tool_stream = FakeStream([({
         "tool_calls": [
@@ -204,7 +206,7 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
     # 第二轮：纯文本回复（loop 继续）
     text_stream = FakeStream([({"content": "两个技能都没找到"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, client)
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 和 phantom 技能"))
     types_seq = [e.type for e in events]
@@ -221,16 +223,16 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
 
 def test_new_plan_blocked_by_active_task():
     """会话有 active task → stream 入口 yield BusyEvent，user 消息不入库。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo = _setup()
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, client)
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     task_repo.insert(Task(id="active1", session_id=s.id, pipeline_id="p1", agent_type="idea",
-                          status="running", invoke_message="x", dependencies=[],
+                          status="running", dependencies=[],
                           created_at=0.0, updated_at=0.0))
     events = list(sup.stream(s.id, "再帮我写一篇"))
     types_seq = [e.type for e in events]

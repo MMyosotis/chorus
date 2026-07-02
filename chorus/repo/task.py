@@ -1,6 +1,6 @@
 """任务表的唯一 SQL 入口，哑查询不开事务。
 
-状态翻转合法性由领域规则与编排层把关，仓储只做原子原语；状态集合由编排层传入，不在本层硬编码。
+只存调度+身份+状态机；内容字段见 task_content。状态集合由编排层传入，不硬编码。
 """
 from __future__ import annotations
 
@@ -20,26 +20,18 @@ CREATE TABLE IF NOT EXISTS tasks (
     pipeline_id    TEXT NOT NULL,
     agent_type     TEXT NOT NULL,
     status         TEXT NOT NULL,
-    invoke_message TEXT NOT NULL,
     dependencies   TEXT NOT NULL DEFAULT '[]',
-    feedback       TEXT,
-    error          TEXT,
     created_at     REAL NOT NULL,
     updated_at     REAL NOT NULL,
     owner_id       REAL,
-    progress_total INTEGER,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
 """
 
-# 状态翻转时允许顺带更新的字段白名单
-_CAS_FIELDS = {"error", "feedback", "updated_at", "owner_id"}
-
-
 class TaskRow(BaseModel):
-    """任务表持久化形状，与列一一对应。依赖与反馈为 JSON 列。"""
+    """任务表持久化形状，与列一一对应。依赖为 JSON 列。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -48,32 +40,22 @@ class TaskRow(BaseModel):
     pipeline_id: str
     agent_type: str
     status: str
-    invoke_message: str
     dependencies: str
-    feedback: Optional[str] = None
-    error: Optional[str] = None
     created_at: float
     updated_at: float
     owner_id: Optional[float] = None
-    progress_total: Optional[int] = None
 
     def to_domain(self) -> Task:
         try:
             deps = json.loads(self.dependencies) if self.dependencies else []
         except json.JSONDecodeError:
             deps = []
-        try:
-            feedback = json.loads(self.feedback) if self.feedback else None
-        except json.JSONDecodeError:
-            feedback = None
         return Task(
             id=self.id, session_id=self.session_id, pipeline_id=self.pipeline_id,
             agent_type=self.agent_type, status=self.status,
-            invoke_message=self.invoke_message, dependencies=deps,
-            feedback=feedback, error=self.error,
+            dependencies=deps,
             created_at=self.created_at, updated_at=self.updated_at,
             owner_id=self.owner_id,
-            progress_total=self.progress_total,
         )
 
     @classmethod
@@ -81,12 +63,9 @@ class TaskRow(BaseModel):
         return cls(
             id=task.id, session_id=task.session_id, pipeline_id=task.pipeline_id,
             agent_type=task.agent_type, status=task.status,
-            invoke_message=task.invoke_message,
             dependencies=json.dumps(task.dependencies, ensure_ascii=False),
-            feedback=json.dumps(task.feedback, ensure_ascii=False) if task.feedback is not None else None,
-            error=task.error, created_at=task.created_at, updated_at=task.updated_at,
+            created_at=task.created_at, updated_at=task.updated_at,
             owner_id=task.owner_id,
-            progress_total=task.progress_total,
         )
 
 
@@ -112,29 +91,20 @@ class TaskRepository:
         ).fetchone()
         return TaskRow(**dict(row)).to_domain() if row else None
 
-    def cas_update(
-        self, task_id: str, from_status: str, to_status: str, **fields
-    ) -> bool:
-        """原子翻转：据原状态匹配更新，看影响行数。附加字段须在白名单内。"""
-        bad = set(fields) - _CAS_FIELDS
-        if bad:
-            raise ValueError(f"cas_update 不允许字段: {bad}")
-        sets = ["status=?", "updated_at=?"]
-        params: list[object] = [to_status, fields.get("updated_at", time.time())]
-        # JSON 列
-        if "error" in fields:
-            sets.append("error=?"); params.append(fields["error"])
-        if "feedback" in fields:
-            val = fields["feedback"]
-            sets.append("feedback=?")
-            params.append(json.dumps(val, ensure_ascii=False) if val is not None else None)
-        # 浮点列
-        for f in ("owner_id",):
-            if f in fields:
-                sets.append(f"{f}=?"); params.append(fields[f])
-        params.extend([task_id, from_status])
+    def transition(self, task_id: str, from_status: str, to_status: str) -> bool:
+        """原子状态翻转：据原状态匹配更新，看影响行数。updated_at 自动刷新。"""
         cur = self._conn.get().execute(
-            f"UPDATE tasks SET {', '.join(sets)} WHERE id=? AND status=?", params
+            "UPDATE tasks SET status=?, updated_at=? WHERE id=? AND status=?",
+            (to_status, time.time(), task_id, from_status),
+        )
+        return cur.rowcount > 0
+
+    def claim(self, task_id: str, now: float) -> bool:
+        """scheduler 派发占槽：pending→running，顺带写 owner_id 与 updated_at（同戳）。"""
+        cur = self._conn.get().execute(
+            "UPDATE tasks SET status='running', owner_id=?, updated_at=? "
+            "WHERE id=? AND status='pending'",
+            (now, now, task_id),
         )
         return cur.rowcount > 0
 

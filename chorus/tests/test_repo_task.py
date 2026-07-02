@@ -4,8 +4,6 @@
 """
 from __future__ import annotations
 
-import pytest
-
 from chorus.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
 from chorus.repo.task import TaskRepository
 from chorus.tests._helpers import fresh_conn, seed_session
@@ -14,7 +12,7 @@ from chorus.tests._helpers import fresh_conn, seed_session
 def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None, **kw):
     base = dict(
         id=task_id, session_id=session_id, pipeline_id=pipeline_id,
-        agent_type="idea", status=status, invoke_message="x",
+        agent_type="idea", status=status,
         dependencies=deps or [], created_at=0.0, updated_at=0.0,
     )
     base.update(kw)
@@ -35,23 +33,29 @@ def test_insert_and_get():
     assert repo.get("nope") is None
 
 
-def test_cas_update_success_and_conflict():
+def test_transition_success_and_conflict():
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
-    assert repo.cas_update("t1", "pending", "running") is True
+    assert repo.transition("t1", "pending", "running") is True
     assert repo.get("t1").status == "running"
-    # from_status 不匹配 → False
-    assert repo.cas_update("t1", "pending", "running") is False
-    # 带字段
-    assert repo.cas_update("t1", "running", "failed", error="boom") is True
-    assert repo.get("t1").error == "boom"
+    # from_status 不匹配 → False（状态已漂移）
+    assert repo.transition("t1", "pending", "running") is False
 
 
-def test_cas_update_rejects_unknown_field():
+def test_claim_writes_owner_id():
+    """claim 占槽：pending→running 并写 owner_id（运行租约 token）。"""
     repo, _ = _repo()
-    repo.insert(_mk("t1"))
-    with pytest.raises(ValueError):
-        repo.cas_update("t1", "pending", "running", evil="x")
+    repo.insert(_mk("t1", status="pending"))
+    assert repo.claim("t1", 100.0) is True
+    t = repo.get("t1")
+    assert t.status == "running" and t.owner_id == 100.0
+    # 非 pending 状态占槽失败
+    assert repo.claim("t1", 200.0) is False
+    assert repo.get("t1").owner_id == 100.0  # 不覆盖
+    # running -> awaiting_confirm -> finished 走纯翻转，updated_at 自动刷新
+    assert repo.transition("t1", "running", "awaiting_confirm") is True
+    assert repo.transition("t1", "awaiting_confirm", "finished") is True
+    assert repo.get("t1").status == "finished"
 
 
 def test_find_pending_with_deps():
@@ -111,28 +115,6 @@ def test_touch_updated_at():
     assert got.updated_at > 10.0  # 已更新为当前时间
     # 不存在的 task 静默无操作（不抛）
     repo.touch_updated_at("nope")
-
-
-def test_cas_update_owner_id():
-    """owner_id 经 cas_update 写入（裸 float，进 _CAS_FIELDS），充当运行租约 token。"""
-    repo, _ = _repo()
-    repo.insert(_mk("t1", status="pending"))
-    assert repo.cas_update("t1", "pending", "running", owner_id=100.0) is True
-    t = repo.get("t1")
-    assert t.status == "running" and t.owner_id == 100.0
-    # running -> awaiting_confirm 不再写结束时间（终态时间由 updated_at 承担）
-    assert repo.cas_update("t1", "running", "awaiting_confirm") is True
-    assert repo.cas_update("t1", "awaiting_confirm", "finished") is True
-    assert repo.get("t1").status == "finished"
-
-
-def test_progress_total_persists_via_insert_not_cas():
-    """progress_total 走 insert，不进 _CAS_FIELDS（cas_update 带 progress_total 须报错）。"""
-    repo, _ = _repo()
-    repo.insert(_mk("t1", progress_total=3))
-    assert repo.get("t1").progress_total == 3
-    with pytest.raises(ValueError):
-        repo.cas_update("t1", "pending", "running", progress_total=5)
 
 
 def main():

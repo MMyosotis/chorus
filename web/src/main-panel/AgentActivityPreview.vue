@@ -60,7 +60,7 @@ const roleLine = computed(() => {
   if (props.task?.status === 'finished') return props.task?.narrative?.done_line || `${roleName.value}已经完成这一步。`
   return `${roleName.value || '角色'}准备接手。`
 })
-const progress = computed(() => current.value?.progress_json || null)
+const progress = computed(() => current.value?.payload?.total ? current.value.payload : null)
 const recent = computed(() => activities.value.slice(-2))
 // 展开时显示全部活动（倒序：最新在上），否则只显最近 2 条
 const shownActivities = computed(() => expanded.value ? [...activities.value].reverse() : recent.value)

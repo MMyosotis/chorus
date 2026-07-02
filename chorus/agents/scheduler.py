@@ -77,12 +77,9 @@ class TaskScheduler:
         # 限流：非阻塞获取，满则跳过下轮再试
         if not self._semaphore.acquire(blocking=False):
             return
-        # 翻转为运行中并写 owner_id 作为租约归属 token
+        # 占槽：pending→running，写 owner_id 作为租约归属 token
         now = time.time()
-        ok = self._task_repo.cas_update(
-            task.id, TaskStatus.PENDING.value, TaskStatus.RUNNING.value,
-            owner_id=now, updated_at=now,
-        )
+        ok = self._task_repo.claim(task.id, now)
         if not ok:
             self._semaphore.release()
             self._trace_schedule(task.id, "cas_conflict", TaskStatus.PENDING.value, TaskStatus.RUNNING.value,
@@ -97,7 +94,7 @@ class TaskScheduler:
         except Exception:
             # 启动失败：回滚状态并释放槽位，下轮重试
             self._semaphore.release()
-            self._task_repo.cas_update(task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+            self._task_repo.transition(task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
             logger.exception("scheduler failed to spawn worker for %s", task.id)
 
     def _run_worker(self, task_id: str) -> None:
@@ -112,7 +109,7 @@ class TaskScheduler:
         """回收运行且心跳超时的任务，翻回待执行。"""
         now = time.time()
         for task in self._task_repo.find_running_before(now - self._zombie_timeout):
-            ok = self._task_repo.cas_update(
+            ok = self._task_repo.transition(
                 task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value,
             )
             if ok:

@@ -41,7 +41,7 @@ from chorus.domain.task import (
 def _mk(status, deps=None, **kw):
     base = dict(
         id="t", session_id="s", pipeline_id="p", agent_type="idea",
-        status=status, invoke_message="x", dependencies=deps or [],
+        status=status, dependencies=deps or [],
         created_at=0.0, updated_at=0.0,
     )
     base.update(kw)
@@ -184,25 +184,37 @@ def test_expand_pipeline():
         StepSpec("idea", [], "选题"),
         StepSpec("finalize", [0], "汇总"),
     ]
-    tasks = expand_pipeline(intent, steps, "sess-x", 1000.0)
-    assert len(tasks) == 2
+    pairs = expand_pipeline(intent, steps, "sess-x", 1000.0)
+    assert len(pairs) == 2
+    tasks = [t for t, _ in pairs]
+    contents = [c for _, c in pairs]
     assert all(t.status == TaskStatus.PENDING.value for t in tasks)
     assert all(t.session_id == "sess-x" and t.created_at == 1000.0 for t in tasks)
     assert tasks[0].dependencies == []
     assert tasks[1].dependencies == [tasks[0].id]
     assert all(t.pipeline_id == tasks[0].pipeline_id for t in tasks)
-    assert "夏日晚风" in tasks[0].invoke_message
+    assert "夏日晚风" in contents[0].invoke_message
+    # 内容行 task_id 对齐调度行 id
+    assert all(c.task_id == t.id for t, c in pairs)
+
+
+def test_expand_pipeline_image_progress_total():
+    """image 步骤的 progress_total 落进 TaskContent，调度行不携带。"""
+    intent = CreationIntent(topic="t", image_count=4)
+    steps = [StepSpec("image", [], "配图"), StepSpec("finalize", [0], "汇总")]
+    pairs = expand_pipeline(intent, steps, "s", 0.0)
+    image_task, image_content = next(p for p in pairs if p[0].agent_type == "image")
+    assert image_content.progress_total == 4
 
 
 def test_render_invoke_message_injects_deps_and_feedback():
-    task = _mk("pending", id="t", invoke_message="骨架")
-    out = render_invoke_message(task, {"d1": {"title": "x"}}, {"prev": 1}, {"note": "改标题"})
+    out = render_invoke_message("骨架", {"d1": {"title": "x"}}, {"prev": 1}, {"note": "改标题"})
     assert "骨架" in out
     assert "前置步骤产物" in out
     assert "你上一轮的产物" in out
     assert "用户反馈" in out
     # 无注入时只骨架
-    assert render_invoke_message(task, {}, None, None) == "骨架"
+    assert render_invoke_message("骨架", {}, None, None) == "骨架"
 
 
 def test_parse_sections():
@@ -261,7 +273,7 @@ def test_parse_output_missing_section():
 def _task(tid, deps=None, created_at=0.0):
     return Task(
         id=tid, session_id="s", pipeline_id="p", agent_type="idea",
-        status="pending", invoke_message="x", dependencies=deps or [],
+        status="pending", dependencies=deps or [],
         created_at=created_at, updated_at=0.0,
     )
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from chorus.agents.subagent import SubAgentService
 from chorus.domain.session import Session
-from chorus.domain.task import Task, TaskStatus
+from chorus.domain.task import Task, TaskContent, TaskStatus
 from chorus.domain.trace import TracePhase
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
@@ -19,6 +19,7 @@ from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
@@ -88,18 +89,20 @@ def _setup():
     trace_repo = TraceRepository(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
+    content_repo = TaskContentRepository(conn)
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
-    return conn, msg_svc, trace_svc, task_repo, art_repo
+    return conn, msg_svc, trace_svc, task_repo, art_repo, content_repo
 
 
-def _mk_task(task_repo, agent_type="idea", status="running", deps=None):
+def _mk_task(task_repo, content_repo, agent_type="idea", status="running", deps=None):
     t = Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
-        status=status, invoke_message="骨架：主题=测试", dependencies=deps or [],
+        status=status, dependencies=deps or [],
         created_at=0.0, updated_at=0.0,
     )
     task_repo.insert(t)
+    content_repo.insert(TaskContent(task_id="t1", invoke_message="骨架：主题=测试"))
     return t
 
 
@@ -110,7 +113,7 @@ def _stub_settings():
     return _S()
 
 
-def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, fake_client):
+def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client):
     from chorus.repo.task_activities import TaskActivitiesRepository
     hooks = HookRegistry()
     trace = TraceEmitter(trace_svc, max_tokens=1024)
@@ -123,7 +126,7 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, fake_client):
     _provider = stub_chat_model_provider(fake_client)
     return SubAgentService(
         conn, msg_svc, task_repo, art_repo, TaskActivitiesRepository(conn),
-        tool_dispatcher, hooks,
+        content_repo, tool_dispatcher, hooks,
         _provider, 1024,
     )
 
@@ -141,8 +144,8 @@ def _model_responses(trace_svc, task_id="t1"):
 
 def test_subagent_idea_awaiting_confirm():
     """idea 子 Agent：无工具轮直接产出 → CAS running→awaiting_confirm + 写 artifacts。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "idea", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
     # 一轮文本回复（产出协议）
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "定了"}
@@ -151,7 +154,7 @@ def test_subagent_idea_awaiting_confirm():
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
     )
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
     art = art_repo.load("t1")
@@ -163,8 +166,8 @@ def test_subagent_idea_awaiting_confirm():
 
 def test_subagent_finalize_finished():
     """finalize 子 Agent：产出 PostCard → CAS running→finished（不走 awaiting_confirm）。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "finalize", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "finalize", "running")
     card = {"title": "夏日晚风", "cover": {"url": "http://x/a.jpg"},
             "sections": [{"kind": "paragraph", "text": "一段"}],
             "tags": ["#夏天"], "summary": "摘要"}
@@ -174,7 +177,7 @@ def test_subagent_finalize_finished():
         f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
     )
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FINISHED.value
     assert art_repo.load("t1").artifacts.title == "夏日晚风"
@@ -182,8 +185,8 @@ def test_subagent_finalize_finished():
 
 def test_subagent_react_with_tool():
     """子 Agent 先调工具再产出：两轮 ReAct，trace 留两条 model_response。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "idea", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "z"}
     content = (
@@ -196,7 +199,7 @@ def test_subagent_react_with_tool():
             index=0, id="c1", function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}, "tool_calls")]),
         FakeStream([({"content": content}, "stop")]),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
     mrs = _model_responses(trace_svc)
@@ -211,16 +214,16 @@ def test_subagent_failed_on_persistent_bad_output():
     每轮坏产出 → correction 喂回 → 模型仍坏 → 撞步数上限才判死。
     """
     from chorus.agents.subagent import _MAX_STEPS
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "idea", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
     bad = "乱七八糟没有段"
     # 每轮都坏：_MAX_STEPS 轮后仍未产出 → failed
     streams = [FakeStream([({"content": bad}, "stop")]) for _ in range(_MAX_STEPS + 1)]
     client = FakeClient(streams)
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED.value
-    assert task_repo.get("t1").error
+    assert content_repo.load("t1").error
     # 撞 _MAX_STEPS 才判死：每轮（含自纠轮）都留 model_response trace，共 _MAX_STEPS 条——
     # 旧代码首次即死只会留下 1 条，此断言锚定"运行到耗尽"而非"首轮即死"。
     assert len(_model_responses(trace_svc)) == _MAX_STEPS
@@ -228,8 +231,8 @@ def test_subagent_failed_on_persistent_bad_output():
 
 def test_subagent_self_corrects_on_bad_output():
     """首次解析错 → correction 喂回 → 模型重出正确产物 → awaiting_confirm。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "idea", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "定了"}
     good = (
@@ -241,7 +244,7 @@ def test_subagent_self_corrects_on_bad_output():
         FakeStream([({"content": "乱七八糟没有段"}, "stop")]),
         FakeStream([({"content": good}, "stop")]),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
     art = art_repo.load("t1")
@@ -262,15 +265,15 @@ def _idea_content(done_line="DONE_MARKER"):
 
 def _cancel_to(task_repo, tid, to_status="cancelled"):
     def _side():
-        task_repo.cas_update(tid, TaskStatus.RUNNING.value, to_status)
+        task_repo.transition(tid, TaskStatus.RUNNING.value, to_status)
     return _side
 
 
 def test_subagent_cooperative_cancel_between_iterations():
     """I-1：第 1 轮(工具调用)中途被 cancel_pipeline，第 2 轮迭代顶部复查到 cancelled
     即退出——不 _finalize、不 append done 气泡、不落 artifacts。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "idea", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
     tool_call_delta = {"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}
     # 第 1 轮：副作用取消任务 + 工具调用流；第 2 轮：合法产出流（不应被消费）
@@ -278,7 +281,7 @@ def test_subagent_cooperative_cancel_between_iterations():
         (_cancel_to(task_repo, "t1"), FakeStream([(tool_call_delta, "tool_calls")])),
         (None, FakeStream([({"content": _idea_content("DONE_MARKER_I1")}, "stop")])),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     # 任务仍 cancelled（_finalize 未成功 CAS 到 awaiting_confirm）
     assert task_repo.get("t1").status == TaskStatus.CANCELLED.value
@@ -294,13 +297,13 @@ def test_subagent_cooperative_cancel_between_iterations():
 def test_subagent_finalize_drift_no_orphan():
     """I-2：最终产出轮的 _call_model 中途任务被取消，_finalize 的 owning CAS
     (running→awaiting_confirm) 漂移失败——不 upsert 产物、不 append done 气泡。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo = _setup()
-    _mk_task(task_repo, "idea", "running")
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
     # 单轮：副作用取消任务 + 合法产出流；_finalize 的 CAS 必失败
     client = SideEffectClient([
         (_cancel_to(task_repo, "t1"), FakeStream([({"content": _idea_content("DONE_MARKER_I2")}, "stop")])),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, client)
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.CANCELLED.value
     # 不落产物（CAS 漂移→跳过 upsert）

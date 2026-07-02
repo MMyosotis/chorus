@@ -30,6 +30,7 @@ from chorus.repo.settings import SettingsRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     task_repo = TaskRepository(conn)
     task_artifacts_repo = TaskArtifactsRepository(conn)
     task_activities_repo = TaskActivitiesRepository(conn)
+    task_content_repo = TaskContentRepository(conn)
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
     message_service = MessageService(msg_repo, trace_service)
@@ -66,7 +68,7 @@ def create_app() -> FastAPI:
     title_entry = chat_models.title_entry()
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
 
-    tool_dispatcher = build_tool_dispatch(settings_service, task_repo, conn, skill_loader)
+    tool_dispatcher = build_tool_dispatch(settings_service, task_repo, task_content_repo, conn, skill_loader)
 
     hooks = HookRegistry()
     trace = TraceEmitter(trace_service, MAX_TOKENS)
@@ -84,13 +86,13 @@ def create_app() -> FastAPI:
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo,
-        task_activities_repo,
+        task_activities_repo, task_content_repo,
         tool_dispatcher, hooks, chat_models,
         MAX_TOKENS,
     )
     task_service = TaskService(
         task_repo, task_artifacts_repo,
-        task_activities_repo, session_service,
+        task_activities_repo, task_content_repo, session_service, conn,
     )
     scheduler = TaskScheduler(
         task_repo, trace_service, subagent_service.run, session_service,

@@ -30,7 +30,7 @@ def _setup():
 def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
     task_repo.insert(Task(
         id=tid, session_id="s1", pipeline_id="p1", agent_type="idea",
-        status=status, invoke_message="x", dependencies=deps or [],
+        status=status, dependencies=deps or [],
         created_at=0.0, updated_at=updated_at,
     ))
 

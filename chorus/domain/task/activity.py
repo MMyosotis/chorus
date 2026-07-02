@@ -5,17 +5,39 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 
-from chorus.domain.task.models import Narrative
+from chorus.domain.task.models import (
+    FailedPayload,
+    ImageProgressPayload,
+    Narrative,
+    SearchResultsPayload,
+)
 from chorus.domain.task.profiles import AGENT_PROFILES
-
-# 用户可见工具
-_VISIBLE_TOOLS = {"baidu_search", "generate_image", "output_plan"}
 
 # 通用态文案
 _FAILED_LINE = "这步出了点问题"
 _RETRYING_LINE = "刚才的格式不太对，我重新整理一下"
+
+# 活动业务载荷判别联合，按 event_type 取对应类型
+ActivityPayload = Union[SearchResultsPayload, ImageProgressPayload, FailedPayload]
+
+# 载荷类型注册表，(event_type, tool_name) → dataclass 类
+PAYLOAD_TYPES: dict[tuple[str, Optional[str]], type] = {
+    ("failed", None): FailedPayload,
+    ("tool_done", "baidu_search"): SearchResultsPayload,
+    ("tool_done", "generate_image"): ImageProgressPayload,
+}
+
+
+def build_payload(
+    event_type: str, tool_name: Optional[str], raw: Optional[dict],
+) -> Optional[ActivityPayload]:
+    """按 (event_type, tool_name) 查注册表把原始数据还原成强类型载荷。
+
+    None 原数据对应无载荷。未知组合 KeyError 上抛，由调用方兜底。
+    """
+    return None if raw is None else PAYLOAD_TYPES[(event_type, tool_name)](**raw)
 
 
 @dataclass(frozen=True)
@@ -23,14 +45,8 @@ class ActivityDraft:
     event_type: str
     role_line: str
     status: str = "running"
-    detail_md: Optional[str] = None
-    summary_json: Optional[dict] = None
-    progress_json: Optional[dict] = None
-    artifact_preview_json: Optional[dict] = None
-
-
-def is_user_visible_tool(tool_name: str) -> bool:
-    return tool_name in _VISIBLE_TOOLS
+    tool_name: Optional[str] = None
+    payload: Optional[ActivityPayload] = None
 
 
 def started_activity(agent_type: str) -> ActivityDraft:
@@ -41,30 +57,26 @@ def started_activity(agent_type: str) -> ActivityDraft:
     )
 
 
-def tool_started_activity(
-    agent_type: str, tool_name: str, arguments: dict,
-) -> Optional[ActivityDraft]:
-    if not is_user_visible_tool(tool_name):
-        return None
+def tool_started_activity(tool_name: str, arguments: dict) -> ActivityDraft:
     return ActivityDraft(
         event_type="tool_started",
         role_line=_tool_started_line(tool_name, arguments),
         status="running",
+        tool_name=tool_name,
     )
 
 
 def tool_done_activity(
-    agent_type: str, tool_name: str,
-    activity_meta: Optional[dict], progress_total: Optional[int],
+    tool_name: str,
+    activity_meta: Optional[dict],
+    progress_total: Optional[int],
     done_images: list[str],
 ) -> Optional[ActivityDraft]:
-    if not is_user_visible_tool(tool_name):
-        return None
     fn = _DONE_TRANSLATORS.get(tool_name)
     return fn(activity_meta, progress_total, done_images) if fn else None
 
 
-def awaiting_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
+def awaiting_activity(narrative: Optional[Narrative]) -> ActivityDraft:
     line = (narrative.awaiting_line if narrative else None) or "产出待你确认"
     return ActivityDraft(
         event_type="awaiting_confirm",
@@ -72,7 +84,7 @@ def awaiting_activity(agent_type: str, narrative: Optional[Narrative]) -> Activi
     )
 
 
-def done_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDraft:
+def done_activity(narrative: Optional[Narrative]) -> ActivityDraft:
     line = (narrative.done_line if narrative else None) or "本步完成"
     return ActivityDraft(
         event_type="done",
@@ -80,15 +92,15 @@ def done_activity(agent_type: str, narrative: Optional[Narrative]) -> ActivityDr
     )
 
 
-def failed_activity(agent_type: str, error: str) -> ActivityDraft:
+def failed_activity(error: str) -> ActivityDraft:
     return ActivityDraft(
         event_type="failed",
         role_line=_FAILED_LINE, status="failed",
-        detail_md=error,
+        payload=FailedPayload(detail_md=error),
     )
 
 
-def retrying_activity(agent_type: str) -> ActivityDraft:
+def retrying_activity() -> ActivityDraft:
     return ActivityDraft(
         event_type="retrying",
         role_line=_RETRYING_LINE, status="warning",
@@ -123,7 +135,8 @@ def _tool_started_line(tool_name: str, arguments: dict) -> str:
 
 
 def _baidu_done(
-    activity_meta: Optional[dict], _progress_total: Optional[int], _done_images: list[str],
+    activity_meta: Optional[dict], _progress_total: Optional[int],
+    _done_images: list[str],
 ) -> ActivityDraft:
     refs = (activity_meta or {}).get("refs") or []
     total = len(refs)
@@ -135,7 +148,8 @@ def _baidu_done(
     return ActivityDraft(
         event_type="tool_done",
         role_line=role_line, status="running",
-        summary_json={"type": "search_results", "total": total, "bullets": bullets},
+        tool_name="baidu_search",
+        payload=SearchResultsPayload(total=total, bullets=bullets),
     )
 
 
@@ -145,22 +159,26 @@ def _image_done(
 ) -> ActivityDraft:
     url = (activity_meta or {}).get("url") or ""
     all_images = done_images + ([url] if url else [])
-    progress_json, preview_json = image_progress_preview(progress_total, all_images)
+    current, total = image_progress(progress_total, all_images)
+    items = [{"url": u, "caption": ""} for u in all_images]
     n = len(all_images)
     role_line = f"已生成 {n} 张配图" if n else "配图生成完成"
     return ActivityDraft(
         event_type="tool_done",
         role_line=role_line, status="running",
-        progress_json=progress_json, artifact_preview_json=preview_json,
+        tool_name="generate_image",
+        payload=ImageProgressPayload(current=current, total=total, items=items),
     )
 
 
 def _output_plan_done(
-    _activity_meta: Optional[dict], _progress_total: Optional[int], _done_images: list[str],
+    _activity_meta: Optional[dict], _progress_total: Optional[int],
+    _done_images: list[str],
 ) -> ActivityDraft:
     return ActivityDraft(
         event_type="tool_done",
         role_line="计划已整理", status="running",
+        tool_name="output_plan",
     )
 
 
@@ -171,13 +189,6 @@ _DONE_TRANSLATORS: dict[str, Callable[..., ActivityDraft]] = {
 }
 
 
-def image_progress_preview(
-    total: Optional[int], done_images: list[str],
-) -> tuple[Optional[dict], dict]:
-    """生成配图进度与预览。总数未知时不显示进度，避免假仪表盘。"""
-    items = [{"url": u, "caption": ""} for u in done_images]
-    preview = {"type": "images", "items": items}
-    if total:
-        prog = {"type": "steps", "current": len(done_images), "total": total, "unit": "张图"}
-        return prog, preview
-    return None, preview
+def image_progress(total: Optional[int], done_images: list[str]) -> tuple[int, Optional[int]]:
+    """配图进度：current=已生成数，total 未知时返 None。"""
+    return len(done_images), total

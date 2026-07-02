@@ -9,6 +9,7 @@ from chorus.config import BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL
 from chorus.domain.skill import SkillLoader
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.services.settings import SettingsService
 from chorus.tools.builtin import (
     BaiduSearchTool,
@@ -24,6 +25,7 @@ from chorus.tools.framework import ToolDispatch
 def build_tool_dispatch(
     settings_service: SettingsService,
     task_repo: TaskRepository,
+    content_repo: TaskContentRepository,
     conn: ConnectionFactory,
     skill_loader: SkillLoader,
 ) -> ToolDispatch:
@@ -35,5 +37,5 @@ def build_tool_dispatch(
         OutputPlanTool(),
         GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
-        CreatePlanTool(task_repo, conn),
+        CreatePlanTool(task_repo, content_repo, conn),
     ], settings_service)

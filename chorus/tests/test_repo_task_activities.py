@@ -1,24 +1,24 @@
-# kitty/tests/test_repo_task_activities.py
-"""TaskActivitiesRepository 的 smoke test：append/id 递增/latest/批量 latest。
+# chorus/tests/test_repo_task_activities.py
+"""TaskActivitiesRepository 的 smoke test：append/id 递增/latest/批量 latest/payload 多态。
+
+载荷收敛为单 payload JSON 列（具名 dataclass 序列化），仿 task_artifacts.artifacts。
 
 运行：``.venv/bin/python -m chorus.tests.test_repo_task_activities``
 """
 from __future__ import annotations
 
-import pytest
-
-from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.domain.task import Task
+from chorus.domain.task.models import SearchResultsPayload
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.tests._helpers import fresh_conn, seed_session
 
 
 def _seed_task(conn, task_id="t1"):
     """建 tasks 父行（task_activities 外键引用 tasks）。"""
-    from chorus.domain.task import Task
     TaskRepository(conn).insert(Task(
         id=task_id, session_id="s1", pipeline_id="p1", agent_type="idea",
-        status="pending", invoke_message="x", dependencies=[],
-        created_at=0.0, updated_at=0.0,
+        status="pending", dependencies=[], created_at=0.0, updated_at=0.0,
     ))
     return task_id
 
@@ -35,7 +35,7 @@ def test_append_assigns_increasing_id():
     a1 = repo.append(tid, "started", "接单啦")
     a2 = repo.append(tid, "tool_done", "搜完了")
     assert a1.id != a2.id
-    assert a1.id < a2.id  # uuid7 趋势递增
+    assert a1.id < a2.id  # 自增趋势递增
     assert a1.event_type == "started" and a1.status == "running"
 
 
@@ -69,17 +69,28 @@ def test_latest_by_task_and_latest_by_tasks():
     assert repo.latest_by_tasks([]) == {}
 
 
-def test_json_fields_roundtrip():
+def test_payload_roundtrip_with_dataclass():
+    """payload 收具名 dataclass，序列化/反序列化往返保持 typed 类型。"""
     repo, conn = _repo()
     tid = _seed_task(conn)
     repo.append(
-        tid, "tool_done", "搜完了",
-        summary_json={"type": "search_results", "total": 3},
-        progress_json={"type": "steps", "current": 1, "total": 3},
+        tid, "tool_done", "搜完了", tool_name="baidu_search",
+        payload=SearchResultsPayload(total=3, bullets=[{"title": "t", "url": "u"}]),
     )
     got = repo.latest_by_task(tid)
-    assert got.summary_json["total"] == 3
-    assert got.progress_json["current"] == 1
+    assert got.tool_name == "baidu_search"
+    assert isinstance(got.payload, SearchResultsPayload)
+    assert got.payload.total == 3
+    assert got.payload.bullets[0]["title"] == "t"
+
+
+def test_payload_none_when_absent():
+    repo, conn = _repo()
+    tid = _seed_task(conn)
+    repo.append(tid, "started", "接单啦")
+    got = repo.latest_by_task(tid)
+    assert got.payload is None
+    assert got.tool_name is None
 
 
 def main():

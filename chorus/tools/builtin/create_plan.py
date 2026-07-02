@@ -17,6 +17,7 @@ from chorus.domain.task import (
 )
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
 
@@ -72,10 +73,12 @@ class CreatePlanTool(Tool):
     def __init__(
         self,
         task_repo: TaskRepository,
+        content_repo: TaskContentRepository,
         conn: ConnectionFactory,
         clock: Callable[[], float] = time.time,
     ):
         self._task_repo = task_repo
+        self._content_repo = content_repo
         self._conn = conn
         self._clock = clock
 
@@ -100,7 +103,7 @@ class CreatePlanTool(Tool):
             validate_steps(steps)
 
             now = self._clock()
-            tasks = expand_pipeline(intent, steps, ctx.session_id, now)
+            pairs = expand_pipeline(intent, steps, ctx.session_id, now)
         except (KeyError, TypeError) as e:
             return Reply(f"create_plan 参数缺失或格式错: {e}")
         except ValidationError as e:
@@ -108,13 +111,14 @@ class CreatePlanTool(Tool):
 
         try:
             with self._conn.transaction():
-                for task in tasks:
+                for task, content in pairs:
                     self._task_repo.insert(task)
+                    self._content_repo.insert(content)
         except Exception as e:
             return Reply(f"建图落库失败，请重试: {e}")
 
-        roles = ", ".join(f"{task.agent_type}#{i}" for i, task in enumerate(tasks, 1))
+        roles = ", ".join(f"{task.agent_type}#{i}" for i, (task, _) in enumerate(pairs, 1))
         return Terminal(
-            f"已创建创作任务图：pipeline={tasks[0].pipeline_id}，"
-            f"{len(tasks)} 个任务 [{roles}]，调度器将自动执行"
+            f"已创建创作任务图：pipeline={pairs[0][0].pipeline_id}，"
+            f"{len(pairs)} 个任务 [{roles}]，调度器将自动执行"
         )

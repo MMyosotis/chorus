@@ -4,8 +4,10 @@ import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 
 const props = defineProps({ task: { type: Object, default: null } })
 
-const progress = computed(() => props.task?.current_activity?.progress_json || null)
-const preview = computed(() => props.task?.current_activity?.artifact_preview_json || null)
+// image 角色的进度与预览合并进单一 payload
+const payload = computed(() => props.task?.current_activity?.payload || null)
+const progress = computed(() => payload.value?.total ? payload.value : null)
+const preview = computed(() => payload.value?.items?.length ? payload.value : null)
 const artifacts = computed(() => props.task?.artifacts || null)
 const isImage = computed(() => props.task?.agent_type === 'image')
 </script>
@@ -17,8 +19,8 @@ const isImage = computed(() => props.task?.agent_type === 'image')
       <!-- image running：current/total 计数进度条 -->
       <span v-if="isImage && progress" class="wc-progress">第 {{ progress.current }}/{{ progress.total }} {{ progress.unit }}</span>
     </div>
-    <!-- 当前活动产物预览（images / text_blocks） -->
-    <div v-if="preview?.type === 'images' && preview.items?.length" class="wc-images">
+    <!-- 当前活动产物预览（images） -->
+    <div v-if="preview?.items?.length" class="wc-images">
       <figure v-for="(img, i) in preview.items" :key="i" class="wc-img">
         <img :src="img.url" :alt="img.caption || ''" loading="lazy" />
         <figcaption v-if="img.caption">{{ img.caption }}</figcaption>

@@ -30,7 +30,7 @@ def _setup():
     seed_session(conn)  # tasks 外键引用 sessions（foreign_keys=ON），须先建父行
     TaskRepository(conn).insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
-        status="running", invoke_message="x", dependencies=[],
+        status="running", dependencies=[],
         created_at=0.0, updated_at=0.0,
     ))
     return conn
@@ -65,7 +65,7 @@ def test_artifacts_load_many():
     conn = _setup()
     TaskRepository(conn).insert(Task(
         id="t2", session_id="s1", pipeline_id="p1", agent_type="script",
-        status="pending", invoke_message="y", dependencies=["t1"],
+        status="pending", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(conn)
@@ -102,7 +102,7 @@ def test_roundtrip_script():
     conn = _setup()
     TaskRepository(conn).insert(Task(
         id="ts", session_id="s1", pipeline_id="p1", agent_type="script",
-        status="finished", invoke_message="x", dependencies=["t1"],
+        status="finished", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(conn)
@@ -119,7 +119,7 @@ def test_roundtrip_image():
     conn = _setup()
     TaskRepository(conn).insert(Task(
         id="ti", session_id="s1", pipeline_id="p1", agent_type="image",
-        status="finished", invoke_message="x", dependencies=["t1"],
+        status="finished", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(conn)
@@ -136,7 +136,7 @@ def test_roundtrip_postcard():
     conn = _setup()
     TaskRepository(conn).insert(Task(
         id="tf", session_id="s1", pipeline_id="p1", agent_type="finalize",
-        status="finished", invoke_message="x", dependencies=["t1"],
+        status="finished", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(conn)

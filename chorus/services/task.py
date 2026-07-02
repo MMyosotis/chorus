@@ -23,6 +23,7 @@ from chorus.domain.task import (
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
 
 _TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
@@ -43,12 +44,16 @@ class TaskService:
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
         task_activities_repo: TaskActivitiesRepository,
+        content_repo: TaskContentRepository,
         session_service: SessionService,
+        conn,
     ):
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
         self._activities_repo = task_activities_repo
+        self._content_repo = content_repo
         self._session = session_service
+        self._conn = conn
 
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
         """确认推进：翻转待确认态为完成。选题角色校验选中项并写回产物。"""
@@ -61,7 +66,7 @@ class TaskService:
             if selected is None:
                 raise ConflictError("idea 步骤需提供 selected 候选索引")
             self._set_selected(task_id, task.agent_type, selected)
-        ok = self._task_repo.cas_update(
+        ok = self._task_repo.transition(
             task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value,
         )
         if not ok:
@@ -69,16 +74,19 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.FINISHED.value}
 
     def retry(self, task_id: str, feedback: dict) -> dict:
-        """带反馈重跑本步：写回反馈并翻转回待执行。"""
+        """带反馈重跑本步：事务内写回反馈并翻转回待执行。"""
         task = self._task_repo.get(task_id)
         if task is None:
             raise KeyError(task_id)
         from_status = task.status
         if from_status not in (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FAILED.value):
             raise ConflictError(f"task 状态 {from_status} 不可重跑")
-        ok = self._task_repo.cas_update(
-            task_id, from_status, TaskStatus.PENDING.value, feedback=feedback,
-        )
+        with self._conn.transaction():
+            ok = self._task_repo.transition(
+                task_id, from_status, TaskStatus.PENDING.value,
+            )
+            if ok:
+                self._content_repo.set_feedback(task_id, feedback)
         if not ok:
             raise ConflictError("CAS 失败（状态已漂移）")
         return {"id": task_id, "status": TaskStatus.PENDING.value}
@@ -133,8 +141,10 @@ class TaskService:
 
     def _graph_dict(self, pipeline_id: str, tasks: list, active: bool) -> dict:
         ordered = topological_order(tasks)
-        arts = self._artifacts_repo.load_many([t.id for t in ordered])
-        latest = self._activities_repo.latest_by_tasks([t.id for t in ordered])
+        ids = [t.id for t in ordered]
+        arts = self._artifacts_repo.load_many(ids)
+        latest = self._activities_repo.latest_by_tasks(ids)
+        contents = self._content_repo.load_many(ids)
         return {
             "pipeline_id": pipeline_id,
             "active": active,
@@ -151,7 +161,7 @@ class TaskService:
                         dataclasses.asdict(arts[t.id].narrative)
                         if t.id in arts and arts[t.id].narrative else None
                     ),
-                    "error": t.error,
+                    "error": contents[t.id].error if t.id in contents else None,
                 }
                 for t in ordered
             ],

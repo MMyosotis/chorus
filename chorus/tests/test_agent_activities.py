@@ -29,6 +29,7 @@ from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
@@ -104,9 +105,10 @@ def _setup():
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
+    content_repo = TaskContentRepository(conn)
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
-    return conn, msg_svc, trace_svc, task_repo, art_repo, act_repo
+    return conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo
 
 
 def _stub_settings():
@@ -116,7 +118,7 @@ def _stub_settings():
     return _S()
 
 
-def _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, tools):
+def _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, tools):
     hooks = HookRegistry()
     trace = TraceEmitter(trace_svc, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
@@ -125,20 +127,20 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, tool
     hooks.register("PostToolUse", trace.on_tool_result)
     disp = ToolDispatch(tools, _stub_settings())
     return SubAgentService(
-        conn, msg_svc, task_repo, art_repo, act_repo,
+        conn, msg_svc, task_repo, art_repo, act_repo, content_repo,
         disp, hooks, stub_chat_model_provider(client), 1024,
     )
 
 
-def _mk_image_task(task_repo, owner_id=100.0, status="running", agent_type="image"):
-    from chorus.domain.task import Task
+def _mk_image_task(task_repo, content_repo, owner_id=100.0, status="running", agent_type="image"):
+    from chorus.domain.task import Task, TaskContent
     t = Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
-        status=status, invoke_message="骨架", dependencies=[],
+        status=status, dependencies=[],
         created_at=0.0, updated_at=0.0, owner_id=owner_id,
-        progress_total=3,
     )
     task_repo.insert(t)
+    content_repo.insert(TaskContent(task_id="t1", invoke_message="骨架", progress_total=3))
     return t
 
 
@@ -158,17 +160,18 @@ def _content(artifacts, narrative):
 
 def test_started_and_awaiting_activities_written():
     """idea 一轮产出 → started + awaiting_confirm 两条 activity，且 started 在前。"""
-    from chorus.domain.task import Task
-    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
+    from chorus.domain.task import Task, TaskContent
+    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
-        status="running", invoke_message="x", dependencies=[],
+        status="running", dependencies=[],
         created_at=0.0, updated_at=0.0, owner_id=100.0,
     ))
+    content_repo.insert(TaskContent(task_id="t1", invoke_message="x"))
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "定了"}
     client = FakeClient([FakeStream([({"content": _content(artifacts, narrative)}, "stop")])])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, [])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
     types_seq = [a.event_type for a in acts]
@@ -182,8 +185,8 @@ def test_generate_image_writes_progressive_tool_done_activities():
 
     顺序契约：started → tool_started → tool_done → ... → awaiting_confirm。
     """
-    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo)
+    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
+    _mk_image_task(task_repo, content_repo)
     artifacts, narrative = _image_artifacts(3)
     tool_delta = {"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(name="generate_image", arguments="{}"))]}
@@ -195,16 +198,16 @@ def test_generate_image_writes_progressive_tool_done_activities():
         FakeStream([({"content": _content(artifacts, narrative)}, "stop")]),
     ])
     tool = FakeImageTool(["http://x/1.jpg", "http://x/2.jpg", "http://x/3.jpg"])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, [tool])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [tool])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
     types_seq = [a.event_type for a in acts]
     tool_done = [a for a in acts if a.event_type == "tool_done"]
     assert len(tool_done) == 3  # 三条独立，不 update
-    # 进度递进：current 1 → 2 → 3
-    currents = [a.progress_json["current"] for a in tool_done if a.progress_json]
+    # 进度递进：current 1 → 2 → 3（payload 为 typed ImageProgressPayload）
+    currents = [a.payload.current for a in tool_done if a.payload]
     assert currents == [1, 2, 3]
-    assert tool_done[-1].progress_json["total"] == 3
+    assert tool_done[-1].payload.total == 3
     # 顺序契约：started 最先；每组 tool_started 在 tool_done 前；awaiting_confirm 最后
     assert types_seq[0] == "started"
     assert types_seq.index("tool_started") < types_seq.index("tool_done")
@@ -221,20 +224,20 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
     无法插入漂移），故此处测 max-steps 路径的租约早退——同样验证"漂移即不写终态活动"。
     """
     from chorus.agents.subagent import _MAX_STEPS
-    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
+    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
+    _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
     bad = "乱七八糟没有段"
 
     def _takeover():
         # 模拟新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
-        task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, owner_id=999.0)
+        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.claim("t1", 999.0)
 
     # 第 1 轮触发抢占 + 坏产出；后续坏产出撞 max-steps
     pairs = [(_takeover, FakeStream([({"content": bad}, "stop")]))]
     pairs += [(None, FakeStream([({"content": bad}, "stop")])) for _ in range(_MAX_STEPS)]
     client = _SideClient(pairs)
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, [])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
     # 租约漂移 → max-steps 路径不写 failed
@@ -252,20 +255,20 @@ def test_lease_takeover_prevents_stale_finalize():
     这是租约存在的核心理由——CAS 单独会成功（status 仍 running），从而偷走新 worker 的
     task；租约用 owner_id 区分新旧 worker，旧 worker 早退不污染。
     """
-    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
+    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
+    _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "定了"}
 
     def _takeover():
         # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
-        task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, owner_id=999.0)
+        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.claim("t1", 999.0)
 
     client = _SideClient([
         (_takeover, FakeStream([({"content": _content(artifacts, narrative)}, "stop")])),
     ])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, [])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
     # 旧 worker 租约失效 → 不写 awaiting_confirm（CAS 单独会成功，租约拦下）
@@ -286,19 +289,19 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
     running），从而偷走新 worker 的 task 到 failed 并写伪 failed activity；租约用
     owner_id 区分新旧 worker，旧 worker 早退不污染。与 _finalize 路径对称。
     """
-    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
+    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
+    _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
 
     def _takeover_and_boom():
         # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
-        task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-        task_repo.cas_update("t1", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, owner_id=999.0)
+        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.claim("t1", 999.0)
         # 旧 worker 的网络调用随后抛异常（触发 run 的 except）
         raise RuntimeError("model boom")
 
     # _SideClient: side 先跑（takeover+raise），stream 永远不会被用到
     client = _SideClient([(_takeover_and_boom, None)])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, [])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
     # 旧 worker 租约失效 → 不写 failed（CAS 单独会成功，租约拦下）
@@ -311,22 +314,22 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
 def test_finalize_drift_writes_no_done_activity():
     """CAS 漂移（被 cancel）→ 不写 done/awaiting activity（与现有 I-2 一致）。"""
     from chorus.domain.task import Task
-    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo = _setup()
-    _mk_image_task(task_repo, owner_id=100.0, agent_type="idea")
+    conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
+    _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "DONE_MARKER"}
     # 单轮：副作用取消任务 + 合法产出流；_finalize CAS 必失败
-    task_repo.cas_update("t1", "running", "cancelled")
+    task_repo.transition("t1", "running", "cancelled")
     # cancelled→pending 不合法（CAS 返 False 不动），用直接 SQL 重置为 running 以便 _run_loop 进入
     conn.get().execute("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'")
 
     def _cancel():
-        task_repo.cas_update("t1", TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value)
+        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value)
 
     client = _SideClient([
         (_cancel, FakeStream([({"content": _content(artifacts, narrative)}, "stop")])),
     ])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, client, [])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
     # 不写 done/awaiting（finalize 漂移：lease 校验 status≠running 即早退，CAS 不会成功）
