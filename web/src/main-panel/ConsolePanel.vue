@@ -106,9 +106,9 @@ onMounted(refreshTestMode)
 
 // ---- TraceItem 渲染辅助 ----
 
-function fmtTs(ts) {
-  if (!ts) return ''
-  const d = new Date(ts * 1000)
+function fmtTs(created_at) {
+  if (!created_at) return ''
+  const d = new Date(created_at * 1000)
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   const ss = String(d.getSeconds()).padStart(2, '0')
@@ -198,7 +198,7 @@ function renderMessageContent(m) {
         </div>
         <div v-if="!traces.length" class="empty-hint">暂无 trace。发条消息试试。</div>
 
-        <!-- 按来源分组树（supervisor / 各 task / scheduler），组内按 ts 时间顺序 -->
+        <!-- 按来源分组树（supervisor / 各 task / scheduler），组内按 created_at 时间顺序 -->
         <details v-for="g in tracesBySource" :key="g.key" class="iter-group src-group" open>
           <summary>
             <span class="iter-title">{{ g.label }}</span>
@@ -207,7 +207,7 @@ function renderMessageContent(m) {
           <div v-for="(it, idx) in g.items" :key="idx" class="trace-item" :class="`phase-${it.phase}`">
             <div class="trace-head">
               <span class="phase-tag">{{ it.phase }}</span>
-              <span class="ts">{{ fmtTs(it.ts) }}</span>
+              <span class="ts">{{ fmtTs(it.created_at) }}</span>
             </div>
 
             <!-- model_request: 显示 messages + tools schema -->

@@ -100,6 +100,6 @@ def _trace_to_dict(t: TraceEntry) -> dict:
         "message_id": t.message_id,
         "task_id": t.task_id,
         "source": t.source,
-        "ts": t.ts,
+        "created_at": t.created_at,
         "payload": t.payload,
     }

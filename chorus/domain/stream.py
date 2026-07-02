@@ -123,8 +123,11 @@ def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta) -> N
     if entry is None:
         entry = ToolCallAccumulator()
         accumulated[idx] = entry
+
+    # 工具首包带id，将id与index绑定，后续包只有index
     if tc_delta.id:
         entry.id = tc_delta.id
+
     if tc_delta.function:
         if tc_delta.function.name:
             entry.name = tc_delta.function.name

@@ -18,7 +18,7 @@ class TracePhase(str, Enum):
     MODEL_RESPONSE = "model_response"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    SCHEDULE = "schedule"  # 调度器派发与回收事件
+    SCHEDULE = "schedule"
 
 
 class ThinkingSegment(BaseModel):
@@ -51,10 +51,10 @@ class TraceEntry(BaseModel):
     id: Optional[int] = None
     session_id: str
     message_id: Optional[str] = None
-    task_id: Optional[str] = None      # 子 agent 与调度器的轨迹填此
-    source: str = "supervisor"         # 来源：supervisor/subagent/scheduler
+    task_id: Optional[str] = None
+    source: str = "supervisor"
     phase: TracePhase
-    ts: float
+    created_at: float
     payload: dict
 
 

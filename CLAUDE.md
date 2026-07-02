@@ -136,7 +136,7 @@ App.vue（三栏 + 多会话状态 + task 轮询编排）
 │   │   └── PostCard.vue（finalize finished 成品卡片）
 │   ├── ProgressBanner.vue（任务图进度横幅）
 │   ├── InputBar.vue（输入框 + 发送按钮）
-│   └── ConsolePanel.vue（trace 控制台，按来源分组、组内按 ts 时间顺序 + 打开时轮询补 subagent/scheduler 未连 SSE 的 trace）
+│   └── ConsolePanel.vue（trace 控制台，按来源分组、组内按 created_at 时间顺序 + 打开时轮询补 subagent/scheduler 未连 SSE 的 trace）
 ├── team-panel/
 │   ├── TeamPanel.vue（角色栏容器）
 │   ├── RoleCard.vue（角色状态徽章 + busy 台词轮播 + awaiting 引导 + done 摘要，无按钮/列表）

@@ -81,11 +81,7 @@ class SessionRepository:
         return [SessionRow(**dict(r)).to_domain() for r in rows]
 
     def update_meta(
-        self,
-        session_id: str,
-        *,
-        title: Optional[str] = None,
-        title_generated: Optional[bool] = None,
+        self, session_id: str, *, title: Optional[str] = None, title_generated: Optional[bool] = None,
         updated_at: Optional[float] = None,
     ) -> None:
         sets: list[str] = []

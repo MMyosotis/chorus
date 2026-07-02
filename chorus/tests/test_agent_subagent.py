@@ -129,7 +129,7 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, fake_client):
 
 
 def _model_responses(trace_svc, task_id="t1"):
-    """该 task 的 model_response trace payload（每轮 ReAct 一条），按 ts 升序。
+    """该 task 的 model_response trace payload（每轮 ReAct 一条），按 created_at 升序。
 
     task_steps 已移除，改用 trace 的 model_response 行锚定 ReAct 轮次与 finish_reason。
     """

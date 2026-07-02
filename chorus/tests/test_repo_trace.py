@@ -19,13 +19,13 @@ def test_add_with_source_and_task_id():
     conn = _setup()
     repo = TraceRepository(conn)
     # supervisor trace（默认 source）
-    rid = repo.add(TraceEntry(session_id="s1", message_id="m1", phase=TracePhase.MODEL_REQUEST, ts=1.0, payload={}))
+    rid = repo.add(TraceEntry(session_id="s1", message_id="m1", phase=TracePhase.MODEL_REQUEST, created_at=1.0, payload={}))
     # subagent trace
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="subagent",
-                        phase=TracePhase.MODEL_RESPONSE, ts=2.0, payload={}))
+                        phase=TracePhase.MODEL_RESPONSE, created_at=2.0, payload={}))
     # scheduler trace
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="scheduler",
-                        phase=TracePhase.SCHEDULE, ts=3.0, payload={"event": "dispatch"}))
+                        phase=TracePhase.SCHEDULE, created_at=3.0, payload={"event": "dispatch"}))
     by_session = repo.list_by_session("s1")
     assert len(by_session) == 3
     sources = [e.source for e in by_session]
@@ -40,7 +40,7 @@ def test_schedule_phase():
     conn = _setup()
     repo = TraceRepository(conn)
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="scheduler",
-                        phase=TracePhase.SCHEDULE, ts=1.0,
+                        phase=TracePhase.SCHEDULE, created_at=1.0,
                         payload={"event": "zombie_reclaim", "task_id": "t1", "detail": "x"}))
     e = repo.list_by_task("t1")[0]
     assert e.phase is TracePhase.SCHEDULE
@@ -53,13 +53,13 @@ def test_batch_aggregate_groups_by_message():
     repo = TraceRepository(conn)
     # m1: 一段思考 + 一次工具调用 + 结果
     repo.add(TraceEntry(session_id="s1", message_id="m1",
-                        phase=TracePhase.MODEL_RESPONSE, ts=1.0,
+                        phase=TracePhase.MODEL_RESPONSE, created_at=1.0,
                         payload={"thinking_segments": [{"text": "想", "duration_ms": 5}]}))
     repo.add(TraceEntry(session_id="s1", message_id="m1",
-                        phase=TracePhase.TOOL_CALL, ts=2.0,
+                        phase=TracePhase.TOOL_CALL, created_at=2.0,
                         payload={"id": "c1", "name": "search", "arguments": {}, "display": "搜"}))
     repo.add(TraceEntry(session_id="s1", message_id="m1",
-                        phase=TracePhase.TOOL_RESULT, ts=3.0,
+                        phase=TracePhase.TOOL_RESULT, created_at=3.0,
                         payload={"tool_call_id": "c1", "name": "search", "content": "r", "duration_ms": 10}))
     # m2: 无 trace
     out = repo.batch_aggregate(["m1", "m2"])

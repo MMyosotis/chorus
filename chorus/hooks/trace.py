@@ -42,7 +42,7 @@ class TraceEmitter:
         })]
 
     def _emit(self, ctx: AgentContext, phase: TracePhase, payload: dict) -> SseEvent:
-        ts = self._trace.add_trace(
+        created_at = self._trace.add_trace(
             session_id=ctx.session_id,
             message_id=ctx.turn.message_id or None,
             source=ctx.source,
@@ -52,7 +52,7 @@ class TraceEmitter:
         )
         return TraceEvent(
             phase=phase,
-            message_id=ctx.turn.message_id or None, ts=ts, payload=payload,
+            message_id=ctx.turn.message_id or None, created_at=created_at, payload=payload,
         )
 
     @staticmethod

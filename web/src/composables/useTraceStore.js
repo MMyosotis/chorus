@@ -1,7 +1,7 @@
 // trace store：单例 reactive，模块级共享给 App.vue 和 ConsolePanel.vue
 //
 // 数据形态：tracesBySession = { [sessionId]: TraceItem[] }
-// TraceItem 是后端 SSE/REST 返回的 trace 事件原文（含 phase / message_id / task_id / source / ts / payload）。
+// TraceItem 是后端 SSE/REST 返回的 trace 事件原文（含 phase / message_id / task_id / source / created_at / payload）。
 //
 // 数据来源：完全来自后端 SQLite。
 // - 进入会话或刷新页面时调 loadFromServer(sessionId) 拉历史 trace 灌进 store
@@ -46,15 +46,15 @@ export function useTraceStore() {
       }
     },
 
-    // ConsolePanel 打开时轮询：重复拉取，按 (ts+phase+message_id+task_id) 去重合并
+    // ConsolePanel 打开时轮询：重复拉取，按 (created_at+phase+message_id+task_id) 去重合并
     async pollFromServer(sessionId) {
       if (!sessionId) return
       try {
         const list = await fetchTraces(sessionId)
         const cur = tracesBySession[sessionId] || (tracesBySession[sessionId] = [])
-        const seen = new Set(cur.map((t) => `${t.ts}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`))
+        const seen = new Set(cur.map((t) => `${t.created_at}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`))
         for (const t of list) {
-          const key = `${t.ts}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`
+          const key = `${t.created_at}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`
           if (!seen.has(key)) {
             cur.push(t)
             seen.add(key)

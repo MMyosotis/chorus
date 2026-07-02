@@ -20,12 +20,12 @@ class TraceService:
                   message_id: Optional[str] = None, task_id: Optional[str] = None,
                   source: str = "supervisor") -> float:
         """落一条轨迹行，时间由本层打戳。返回时间戳供调用方事件复用以对齐。"""
-        ts = time.time()
+        created_at = time.time()
         self._trace_repo.add(TraceEntry(
             id=None, session_id=session_id, message_id=message_id, task_id=task_id,
-            source=source, phase=phase, ts=ts, payload=payload,
+            source=source, phase=phase, created_at=created_at, payload=payload,
         ))
-        return ts
+        return created_at
 
     def list_traces(self, session_id: str) -> list[TraceEntry]:
         return self._trace_repo.list_by_session(session_id)
