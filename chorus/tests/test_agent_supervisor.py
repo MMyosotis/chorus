@@ -9,10 +9,11 @@ import tempfile
 import types
 from pathlib import Path
 
+from chorus.agents.loop import AgentLoop
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
-from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
+from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter, emit_message_start
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
@@ -76,6 +77,7 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     hooks = HookRegistry()
     trace = TraceEmitter(trace_svc, max_tokens=1024)
+    hooks.register("TurnStart", emit_message_start, source="supervisor")
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
@@ -84,9 +86,10 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
 
     entry = stub_chat_model_provider(fake_client)
+    loop = AgentLoop(hooks, tool_dispatcher, 1024)
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, entry,
-        1024, task_repo, tool_dispatcher,
+        task_repo, tool_dispatcher, loop,
     )
 
 

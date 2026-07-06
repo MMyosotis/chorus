@@ -1,8 +1,9 @@
 """子 agent 服务：后台线程跑 ReAct，写库不连事件流。
 
-与主调度共享流消费、工具派发、产物解析与状态机等纯件。主流程：装载任务 → 渲染调用
-→ 循环思考执行工具，无工具调用则解析产物落库 → 异常转失败。横切经扁平钩子，事件
-消费丢弃，轨迹由钩子写库。
+主流程退化为「装载任务 → 构造 strategy → 跑 kernel」：setup（入口 lease 校验 + started 活动
++ 渲染调用 + 选 schema）后，AgentLoop.run 驱动最小回合自动机，subagent 的业务差异（内存
+history + 静默消费 + activity + lease 终态写入）全部进 SubagentLoopStrategy。与主调度共享
+kernel、工具派发、产物解析与状态机纯件。横切经扁平钩子，事件消费丢弃，轨迹由钩子写库。
 """
 from __future__ import annotations
 
@@ -10,9 +11,10 @@ import dataclasses
 import logging
 from typing import Optional
 
+from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
 from chorus.domain.prompt import build_subagent_system_prompt
-from chorus.domain.stream import StreamResult, drain_stream, parse_tool_arguments
+from chorus.domain.stream import StreamResult, silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
@@ -29,7 +31,6 @@ from chorus.domain.task.activity import (
     tool_done_activity,
     tool_started_activity,
 )
-from chorus.hooks import HookRegistry
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
@@ -37,10 +38,100 @@ from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
-from chorus.tools import ToolCall, ToolContext, ToolDispatch
+from chorus.tools import ToolDispatch
 
 logger = logging.getLogger(__name__)
 _MAX_STEPS = 8
+
+
+class SubagentLoopStrategy:
+    """subagent 的回合自动机差异面：内存 history + 静默消费 + activity + lease 终态写入。
+
+    lease 设计：``before_turn`` 每轮顶部只做协作式取消（status 复查 + 心跳），不查 owner lease。
+    owner lease 仍在四个终态写入点拦截陈旧 worker：``run`` 入口、``after_text`` 的 ``_finalize``
+    前、``on_exhausted`` 的 ``_guarded_fail`` 前、``on_error`` 的 ``_guarded_fail`` 前。与现状逐点一致。
+    """
+
+    max_steps = _MAX_STEPS
+
+    def __init__(self, *, task, content, my_owner_id, profile, history,
+                 system_prompt, done_images, schemas, task_repo,
+                 write_activity, finalize, guarded_fail):
+        self.task = task
+        self.content = content
+        self.my_owner_id = my_owner_id
+        self.profile = profile
+        self.history = history
+        self.system_prompt = system_prompt
+        self.done_images = done_images
+        self.schemas = schemas
+        self._task_repo = task_repo
+        self._write_activity = write_activity
+        self._finalize = finalize
+        self._guarded_fail = guarded_fail
+
+    def before_turn(self, ctx, step):
+        self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
+        latest = self._task_repo.get(self.task.id)
+        if latest is None or latest.status != TaskStatus.RUNNING.value:
+            logger.info("subagent task %s no longer running (status=%s), abort loop",
+                        self.task.id, latest.status if latest else "gone")
+            return False
+        return True
+
+    def provider_messages(self, ctx):
+        return [{"role": "system", "content": self.system_prompt}] + self.history
+
+    def tool_schemas(self, ctx):
+        return self.schemas
+
+    def consume(self, stream):
+        return silent_consume(stream)
+
+    def before_dispatch(self, call):
+        self._write_activity(self.task, tool_started_activity(call.name, call.arguments))
+
+    def after_dispatch(self, call, d):
+        td = tool_done_activity(
+            call.name, d.activity_meta,
+            self.content.progress_total if self.content else None,
+            self.done_images,
+        )
+        # 先按已累计算进度，再追加当前图供下一轮，避免双计
+        if call.name == "generate_image" and d.activity_meta and d.activity_meta.get("url"):
+            self.done_images.append(d.activity_meta["url"])
+        if td is not None:
+            self._write_activity(self.task, td)
+
+    def after_tools(self, ctx, result, pairs):
+        self.history.append(_assistant_view(result))
+        self.history.extend(
+            {"role": "tool", "tool_call_id": c.id, "content": d.outcome.content}
+            for c, d in pairs
+        )
+        return LoopAction(LoopSignal.CONTINUE, [])
+
+    def after_text(self, ctx, result):
+        content = "".join(result.text_parts)
+        try:
+            artifacts, narrative = self.profile.parse_output(content)
+        except ValidationError as e:
+            # 纠错提示喂回模型继续自纠，撞上限才判失败
+            self._write_activity(self.task, retrying_activity())
+            self.history.append({"role": "assistant", "content": content or None})
+            self.history.append({"role": "user", "content": e.correction})
+            return LoopAction(LoopSignal.CONTINUE, [])
+        self._finalize(self.task, artifacts, narrative, self.my_owner_id)
+        return LoopAction(LoopSignal.FINISH, [])  # lease 失效也静默退出（不写失败/产物）
+
+    def on_exhausted(self, ctx):
+        self._guarded_fail(self.task, f"超过最大 ReAct 步数 {_MAX_STEPS}", self.my_owner_id)
+        return LoopAction(LoopSignal.FINISH, [])
+
+    def on_error(self, ctx, error):
+        logger.exception("subagent task %s failed", self.task.id)
+        self._guarded_fail(self.task, str(error), self.my_owner_id)
+        return LoopAction(LoopSignal.FINISH, [])
 
 
 class SubAgentService:
@@ -53,9 +144,8 @@ class SubAgentService:
         task_activities_repo: TaskActivitiesRepository,
         content_repo: TaskContentRepository,
         tool_dispatcher: ToolDispatch,
-        hooks: HookRegistry,
         chat_model_provider: ChatModelProvider,
-        max_tokens: int,
+        loop: AgentLoop,
     ):
         self._conn = conn
         self._message = message_service
@@ -64,14 +154,15 @@ class SubAgentService:
         self._activities = task_activities_repo
         self._content_repo = content_repo
         self._tools = tool_dispatcher
-        self._hooks = hooks
         self._models = chat_model_provider
-        self._max_tokens = max_tokens
+        self._loop = loop
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。
 
         失败路径先校验运行租约：若任务已被回收并重抢，则不写失败，让新 worker 继续。
+        setup 阶段异常（装载/渲染/选 schema）由本外层 except 收口；loop 内异常由 kernel
+        的 except 经 strategy.on_error 收口——两者都走 _guarded_fail，无双触发。
         """
         task = self._task_repo.get(task_id)
         if task is None:
@@ -83,11 +174,7 @@ class SubAgentService:
             self._run_loop(task, content, my_owner_id)
         except Exception as e:
             logger.exception("subagent task %s failed", task_id)
-            # 租约校验：被回收重抢则不动新 worker 的任务
-            if not self._lease_valid(task_id, my_owner_id):
-                logger.info("subagent task %s lease expired on failure, skip failed CAS", task_id)
-                return
-            self._fail(task, str(e))
+            self._guarded_fail(task, str(e), my_owner_id)
 
     def _run_loop(self, task, content, my_owner_id: Optional[float]) -> None:
         task_id = task.id
@@ -95,52 +182,33 @@ class SubAgentService:
         if not self._lease_valid(task_id, my_owner_id):
             logger.info("subagent task %s lease expired on enter, abort", task_id)
             return
-        # 写开始活动
         self._write_activity(task, started_activity(task.agent_type))
         profile = AGENT_PROFILES[task.agent_type]
         entry = self._models.get_entry()
-        ctx = AgentContext(
-            session_id=task.session_id, source="subagent", task_id=task_id,
-            chat_model=entry.model_id,
-        )
         invoke = self._build_invoke(task, content)
         system_prompt = build_subagent_system_prompt(task.agent_type)
         history: list[dict] = [{"role": "user", "content": invoke}]
-        tools = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
-        done_images: list[str] = []  # 配图角色累计已生成图，重跑随重置
+        schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
+        ctx = AgentContext(
+            session_id=task.session_id, source="subagent", task_id=task_id,
+            chat_model=entry.model_id, tool_schemas=schemas,
+        )
+        strategy = SubagentLoopStrategy(
+            task=task, content=content, my_owner_id=my_owner_id, profile=profile,
+            history=history, system_prompt=system_prompt, done_images=[], schemas=schemas,
+            task_repo=self._task_repo,
+            write_activity=self._write_activity,
+            finalize=self._finalize,
+            guarded_fail=self._guarded_fail,
+        )
+        list(self._loop.run(ctx, entry=entry, strategy=strategy))
 
-        iteration = 1  # 内存计数器，仅用于撞上限判断
-        while iteration <= _MAX_STEPS:
-            self._task_repo.touch_updated_at(task_id)  # 心跳防僵死
-            # 协作式取消：每轮复查任务态，被取消或回收即退出
-            latest = self._task_repo.get(task_id)
-            if latest is None or latest.status != TaskStatus.RUNNING.value:
-                logger.info("subagent task %s no longer running (status=%s), abort loop",
-                            task_id, latest.status if latest else "gone")
-                return
-            result = self._call_model(entry, system_prompt, history, tools, ctx)
-            tool_results = (
-                self._exec_tools(result, task, content, ctx, done_images)
-                if result.tool_calls else []
-            )
-            if not result.tool_calls:
-                try:
-                    self._finalize(task, result, profile, my_owner_id)
-                    return
-                except ValidationError as e:
-                    # 纠错提示喂回模型继续自纠，撞上限才判失败
-                    self._write_activity(task, retrying_activity())
-                    history.append({"role": "assistant",
-                                    "content": "".join(result.text_parts) or None})
-                    history.append({"role": "user", "content": e.correction})
-                    iteration += 1
-                    continue
-            history.append(_assistant_view(result))
-            history.extend(_tool_msg_views(tool_results))
-            iteration += 1
-        # 超过最大步数仍未结束则判失败，租约内才落库
-        if self._lease_valid(task_id, my_owner_id):
-            self._fail(task, f"超过最大 ReAct 步数 {_MAX_STEPS}")
+    def _guarded_fail(self, task, error: str, my_owner_id: Optional[float]) -> None:
+        """lease 校验 + _fail，供 run() 外层 except 与 strategy.on_error 共享。"""
+        if not self._lease_valid(task.id, my_owner_id):
+            logger.info("subagent task %s lease expired, skip fail", task.id)
+            return
+        self._fail(task, error)
 
     def _fail(self, task, error: str) -> None:
         """事务内 CAS running→failed 并写 error。"""
@@ -179,61 +247,13 @@ class SubAgentService:
             dataclasses.asdict(prior.artifacts) if prior else None,
         )
 
-    def _call_model(self, entry, system_prompt, history, tools, ctx) -> StreamResult:
-        messages = [{"role": "system", "content": system_prompt}] + history
-        ctx.turn.reset()
-        ctx.turn.provider_messages = messages
-        ctx.tool_schemas = tools
-        list(self._hooks.trigger("BeforeModelRequest", ctx))  # 消费丢弃事件
-        stream = entry.client.chat.completions.create(
-            model=entry.model_id, messages=messages, tools=tools or None,
-            max_tokens=self._max_tokens, stream=True,
-        )
-        result = drain_stream(stream)
-        ctx.turn.apply_stream(result)
-        list(self._hooks.trigger("AfterModelResponse", ctx))
-        return result
+    def _finalize(self, task, artifacts, narrative, my_owner_id: Optional[float]) -> None:
+        """先翻转状态再落产物，最后写活动。
 
-    def _exec_tools(self, result, task, content, ctx, done_images: list[str]) -> list[dict]:
-        tool_ctx = ToolContext(session_id=task.session_id)
-        views: list[dict] = []
-        for _, tc in sorted(result.tool_calls.items()):
-            call = ToolCall(id=tc.id, name=tc.name, arguments=parse_tool_arguments(tc.arguments))
-            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
-            list(self._hooks.trigger(
-                "PreToolUse", ctx, call_view,
-                self._tools.format_display(call.name, call.arguments),
-                self._tools.running_label(call.name),
-            ))
-            # 写开始活动
-            self._write_activity(task, tool_started_activity(call.name, call.arguments))
-            d = self._tools.dispatch(call, tool_ctx)
-            # 工具完成活动 + 配图累计
-            meta = getattr(d, "activity_meta", None)
-            td = tool_done_activity(
-                call.name, meta,
-                content.progress_total if content else None, done_images,
-            )
-            # 先按已累计算进度，再追加当前图供下一轮，避免双计
-            if call.name == "generate_image" and meta and meta.get("url"):
-                done_images.append(meta["url"])
-            if td is not None:
-                self._write_activity(task, td)
-            list(self._hooks.trigger("PostToolUse", ctx, call_view, d))
-            views.append({
-                "tool_call_id": call.id, "name": call.name,
-                "content": d.outcome.content, "duration_ms": d.duration_ms,
-            })
-        return views
-
-    def _finalize(self, task, result, profile, my_owner_id: Optional[float]) -> None:
-        """解析产物，先翻转状态再落产物，最后写活动。
-
-        事务内先 CAS 翻转状态，持有才落产物，避免漂移产生孤儿产物。解析失败上抛由
-        调用方喂回模型自纠。完成台词随产物落库，由前端查图渲染，不进消息表。
+        事务内先 CAS 翻转状态，持有才落产物，避免漂移产生孤儿产物。parse_output 已由调用方
+        （strategy.after_text）完成，ValidationError 在此之前抛出。完成台词随产物落库，由前端
+        查图渲染，不进消息表。
         """
-        content = "".join(result.text_parts)
-        artifacts, narrative = profile.parse_output(content)
         if not self._lease_valid(task.id, my_owner_id):
             logger.info("subagent finalize lease expired for task %s, abort", task.id)
             return
@@ -269,8 +289,3 @@ def _assistant_view(result: StreamResult) -> dict:
             for _, tc in sorted(result.tool_calls.items())
         ],
     }
-
-
-def _tool_msg_views(tool_results: list[dict]) -> list[dict]:
-    return [{"role": "tool", "tool_call_id": r["tool_call_id"], "content": r["content"]}
-            for r in tool_results]

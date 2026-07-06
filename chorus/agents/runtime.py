@@ -25,8 +25,8 @@ class TurnState:
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
     provider_messages: Optional[list[dict]] = None
 
-    def reset(self) -> None:
-        self.message_id = ""
+    def reset(self, message_id: str = "") -> None:
+        self.message_id = message_id
         self.text_parts.clear()
         self.accumulated_tool_calls.clear()
         self.finish_reason = None

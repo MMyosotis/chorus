@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Iterator, Optional
+from typing import Generator, Iterator, Optional
 
 from chorus.domain.events import (
     ReasoningDoneEvent,
@@ -117,6 +117,18 @@ def drain_stream(stream) -> StreamResult:
             next(gen)
     except StopIteration as stop:
         return stop.value
+
+
+def silent_consume(stream) -> Generator[SseEvent, None, StreamResult]:
+    """静默消费：generator 接口对齐 consume_stream，不发事件，仅返回累积结果。
+
+    包成 generator 是为了让 kernel 的 ``yield from strategy.consume(stream)`` 能统一
+    拿到 StreamResult 返回值；subagent 不向前端发 SSE token 事件。drain_stream 保留不动。
+    """
+    result = drain_stream(stream)
+    if False:  # unreachable — 使本函数成为 generator
+        yield
+    return result
 
 
 def _close_thinking(

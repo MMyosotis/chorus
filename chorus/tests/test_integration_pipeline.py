@@ -30,6 +30,7 @@ import time
 import types
 from pathlib import Path
 
+from chorus.agents.loop import AgentLoop
 from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
@@ -156,6 +157,7 @@ def _build_assembly():
 
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn)], _stub_settings())
+    agent_loop = AgentLoop(hooks, tool_dispatcher, 1024)
 
     # supervisor：一次 create_plan tool_call 流
     sup_client = FakeClient([FakeStream([
@@ -166,7 +168,7 @@ def _build_assembly():
     ])])
     supervisor = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks,
-        stub_chat_model_provider(sup_client), 1024, task_repo, tool_dispatcher,
+        stub_chat_model_provider(sup_client), task_repo, tool_dispatcher, agent_loop,
     )
 
     # subagent：idea + finalize 两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
@@ -178,8 +180,8 @@ def _build_assembly():
     subagent = SubAgentService(
         conn, msg_svc, task_repo, art_repo,
         TaskActivitiesRepository(conn), content_repo,
-        tool_dispatcher, hooks,
-        stub_chat_model_provider(sub_client), 1024,
+        tool_dispatcher,
+        stub_chat_model_provider(sub_client), agent_loop,
     )
 
     task_service = TaskService(

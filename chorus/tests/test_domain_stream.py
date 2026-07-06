@@ -13,7 +13,7 @@ from __future__ import annotations
 import types
 
 from chorus.domain.events import ReasoningDoneEvent, ReasoningEvent, TokenEvent
-from chorus.domain.stream import StreamResult, consume_stream, drain_stream
+from chorus.domain.stream import StreamResult, consume_stream, drain_stream, silent_consume
 
 
 class _Delta(types.SimpleNamespace):
@@ -140,6 +140,24 @@ def test_drain_stream_accumulates_tool_calls():
     assert result.tool_calls[0].name == "search"
     assert result.finish_reason == "tool_calls"
     assert result.text_parts == []
+
+
+def test_silent_consume_is_generator_returning_result_without_events():
+    # silent_consume 与 consume_stream 同为 generator，但不 yield 任何事件；
+    # kernel 经 `yield from` 既能驱动它、又能拿到返回的 StreamResult。
+    stream = [_chunk({"reasoning_content": "想"}, None), _chunk({"content": "hi"}, "stop")]
+    gen = silent_consume(stream)
+    events = []
+    try:
+        while True:
+            events.append(next(gen))
+    except StopIteration as si:
+        result = si.value
+    assert events == []
+    assert isinstance(result, StreamResult)
+    assert result.text_parts == ["hi"]
+    assert result.finish_reason == "stop"
+    assert len(result.thinking_segments) == 1
 
 
 def main():

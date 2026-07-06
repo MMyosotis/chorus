@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from chorus.agents.supervisor import SupervisorService
+from chorus.agents.supervisor import SupervisorLoopStrategy
 from chorus.config import TOOL_WHITELISTS
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, OutputPlanTool
@@ -72,9 +72,9 @@ def test_web_search_disabled_drops_baidu_search():
 def test_loop_does_not_reference_tool_name_literals():
     """loop 分流只依赖 isinstance(outcome)，源码不出现 'create_plan' 字面量做路由判断。"""
     import inspect
-    # TOOL_WHITELISTS 里有 'create_plan'，但 _dispatch_tools/_handle_terminal 分流段不应硬判名
-    dispatch_src = inspect.getsource(SupervisorService._dispatch_tools)
-    handle_src = inspect.getsource(SupervisorService._handle_terminal)
+    # TOOL_WHITELISTS 里有 'create_plan'，但 after_tools/_handle_terminal 分流段不应硬判名
+    dispatch_src = inspect.getsource(SupervisorLoopStrategy.after_tools)
+    handle_src = inspect.getsource(SupervisorLoopStrategy._handle_terminal)
     assert "create_plan" not in dispatch_src  # 无硬编码名
     # 禁按工具名做相等路由（tc.get("name") 后比名）；tc.get("seq") 取时序字段不属此列
     assert 'tc.get("name")' not in dispatch_src and 'name == "create_plan"' not in dispatch_src

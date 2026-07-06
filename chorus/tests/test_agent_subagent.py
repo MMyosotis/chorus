@@ -9,6 +9,7 @@ import tempfile
 import types
 from pathlib import Path
 
+from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService
 from chorus.domain.session import Session
 from chorus.domain.task import Task, TaskContent, TaskStatus
@@ -124,10 +125,11 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo,
     tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
 
     _provider = stub_chat_model_provider(fake_client)
+    loop = AgentLoop(hooks, tool_dispatcher, 1024)
     return SubAgentService(
         conn, msg_svc, task_repo, art_repo, TaskActivitiesRepository(conn),
-        content_repo, tool_dispatcher, hooks,
-        _provider, 1024,
+        content_repo, tool_dispatcher,
+        _provider, loop,
     )
 
 

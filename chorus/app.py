@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from chorus.agents.loop import AgentLoop
 from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
@@ -22,7 +23,7 @@ from chorus.config import (
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
 from chorus.domain.title import TitleGenerationService
-from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter
+from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter, emit_message_start
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
 
     hooks = HookRegistry()
     trace = TraceEmitter(trace_service, MAX_TOKENS)
+    hooks.register("TurnStart", emit_message_start, source="supervisor")
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
@@ -79,16 +81,18 @@ def create_app() -> FastAPI:
     hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop)
     hooks.register("Error", ErrorFinalizer(message_service).on_error)
 
+    agent_loop = AgentLoop(hooks, tool_dispatcher, MAX_TOKENS)
+
     supervisor_service = SupervisorService(
         session_service, message_service, skill_loader, hooks,
-        chat_models, MAX_TOKENS, task_repo,
-        tool_dispatcher,
+        chat_models, task_repo,
+        tool_dispatcher, agent_loop,
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo,
         task_activities_repo, task_content_repo,
-        tool_dispatcher, hooks, chat_models,
-        MAX_TOKENS,
+        tool_dispatcher, chat_models,
+        agent_loop,
     )
     task_service = TaskService(
         task_repo, task_artifacts_repo,

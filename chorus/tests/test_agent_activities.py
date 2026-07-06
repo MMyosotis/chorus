@@ -3,7 +3,7 @@
 运行：``.venv/bin/python -m chorus.tests.test_agent_activities``
 
 偏离 brief 说明（brief 自身两处冲突，TDD 自纠）：
-1. done_images 累计顺序：brief 的 _exec_tools 在调 tool_done_activity **前** append 当前
+1. done_images 累计顺序：brief 的工具派发在调 tool_done_activity **前** append 当前
    url，但 Task B 已提交的 _image_done 做 ``all_images = done_images + [url]``（约定
    done_images 不含当前 url）——brief 字面顺序会双计，得 [2,3,4] 而 brief 测试断言 [1,2,3]。
    实现改为 **先调 tool_done_activity 再 append**（对齐 Task B 契约 + 命中 [1,2,3]）。
@@ -19,6 +19,7 @@ import json
 import types
 from pathlib import Path
 
+from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService
 from chorus.domain.session import Session
 from chorus.domain.task import TaskStatus
@@ -66,7 +67,7 @@ class FakeClient:
 class _SideClient(FakeClient):
     """FakeClient 变体：每次 create 先跑 side_effect(可空) 再返对应 stream。
 
-    供租约/漂移用例——在 _call_model 内改任务态/owner_id，模拟中途抢占。
+    供租约/漂移用例——在模型调用内改任务态/owner_id，模拟中途抢占。
     """
 
     def __init__(self, pairs):
@@ -126,9 +127,10 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     disp = ToolDispatch(tools, _stub_settings())
+    loop = AgentLoop(hooks, disp, 1024)
     return SubAgentService(
         conn, msg_svc, task_repo, art_repo, act_repo, content_repo,
-        disp, hooks, stub_chat_model_provider(client), 1024,
+        disp, stub_chat_model_provider(client), loop,
     )
 
 
@@ -248,7 +250,7 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
 
 
 def test_lease_takeover_prevents_stale_finalize():
-    """运行租约（_finalize 路径，核心场景）：产出轮 _call_model 中途任务被新 worker 抢占
+    """运行租约（_finalize 路径，核心场景）：产出轮模型调用中途任务被新 worker 抢占
     （zombie 回收 + 重派，status 仍 running 但 owner_id 漂移到 999）。旧 worker 的
     _finalize 租约校验失败 → 不 CAS awaiting、不 upsert 产物、不写 awaiting activity。
 
@@ -281,7 +283,7 @@ def test_lease_takeover_prevents_stale_finalize():
 
 
 def test_lease_takeover_prevents_stale_failed_on_exception():
-    """运行租约（run-except 路径）：_call_model 抛异常时任务已被新 worker 抢占
+    """运行租约（run-except 路径）：模型调用抛异常时任务已被新 worker 抢占
     （zombie 回收 + 重派，status 仍 running 但 owner_id 漂移到 999）。旧 worker 的
     run-except 租约校验失败 → 不 CAS failed、不写 failed activity。
 

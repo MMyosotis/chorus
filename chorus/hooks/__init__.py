@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from chorus.hooks.error_finalizer import ErrorFinalizer
+from chorus.hooks.message_start import emit_message_start
 from chorus.hooks.registry import EVENTS, HookFn, HookRegistry
 from chorus.hooks.title import TitlePostProcessor
 from chorus.hooks.trace import TraceEmitter
@@ -14,6 +15,7 @@ __all__ = [
     "HookRegistry",
     "HookFn",
     "EVENTS",
+    "emit_message_start",
     "TraceEmitter",
     "TitlePostProcessor",
     "ErrorFinalizer",
