@@ -68,8 +68,8 @@ class TraceEmitter:
     def _response_payload(ctx: AgentContext) -> ModelResponse:
         accumulated = ctx.turn.accumulated_tool_calls or {}
         tool_calls = [
-            {"tool_call_id": e.id, "name": e.name, "arguments": parse_tool_arguments(e.arguments)}
-            for _, e in sorted(accumulated.items())
+            {"tool_call_id": call.id, "name": call.name, "arguments": parse_tool_arguments(call.arguments)}
+            for _, call in sorted(accumulated.items())
         ]
         return ModelResponse(
             content="".join(ctx.turn.text_parts or []),

@@ -4,8 +4,8 @@
 """
 from __future__ import annotations
 
-import json
-from typing import Iterator, Optional
+from dataclasses import replace
+from typing import Iterator
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
@@ -16,7 +16,7 @@ from chorus.domain.events import (
     IntentStateEvent,
     SseEvent,
 )
-from chorus.domain.intent import empty_intent_state
+from chorus.domain.message import ToolCallSpec
 from chorus.domain.prompt import PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
@@ -43,6 +43,8 @@ _FORCE_AFTER_TOOLS = (
     "请立刻基于 current_intent_state 和历史对话调用 create_plan。"
 )
 
+_ENFORCE_MAX_STEPS = 6
+
 
 class SupervisorLoopStrategy:
     """supervisor 的回合自动机差异面：SSE 流式消费、成对落库、收尾钩子与意图状态注入。"""
@@ -50,30 +52,27 @@ class SupervisorLoopStrategy:
     max_steps = None
 
     def __init__(self, session_id, message_service, session_service, hooks,
-                 skill_loader, schemas, intent_state=None, enforce_terminal=False):
+                 skill_loader, intent_state: IntentStateService):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
         self._hooks = hooks
         self._skill = skill_loader
-        self.schemas = schemas
-        self._intent_state = intent_state or _NullIntentStateService()
-        self._enforce_terminal = enforce_terminal
-        self._force_instruction = ""
+        self._intent_state = intent_state
         self._pending_intent_events: list = []
-        self.max_steps = 6 if enforce_terminal else None
 
     def before_turn(self):
         self._pending_intent_events = []
         return True
 
-    def provider_messages(self):
-        prompt = build_system_prompt(PromptContext(
+    def _prompt_context(self) -> PromptContext:
+        return PromptContext(
             skill_hints=self._skill.format_hints(),
             intent_state=self._intent_state.get(self.session_id),
-        ))
-        if self._force_instruction:
-            prompt = f"{prompt}\n\n## 本轮系统提醒\n{self._force_instruction}"
+        )
+
+    def provider_messages(self):
+        prompt = build_system_prompt(self._prompt_context())
         return self._message.build_provider_messages(self.session_id, prompt)
 
     def consume(self, stream):
@@ -82,7 +81,7 @@ class SupervisorLoopStrategy:
     def before_dispatch(self, call):
         pass
 
-    def after_dispatch(self, call, d):
+    def after_dispatch(self, call, dispatch):
         if call.name in _INTENT_EVENT_TOOLS:
             self._pending_intent_events.append(
                 IntentStateEvent(state=self._intent_state.get(self.session_id).public_dict())
@@ -90,18 +89,18 @@ class SupervisorLoopStrategy:
 
     def after_tools(self, ctx, result, pairs):
         """成对落库，据是否命中终止决定继续或结束。"""
-        terminal = next(((c, d) for c, d in pairs if isinstance(d.outcome, Terminal)), None)
+        terminal = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Terminal)), None)
         content = self._turn_content(ctx, terminal)
 
         self._message.append_assistant_message(
             self.session_id, message_id=ctx.turn.message_id,
             content=content,
-            tool_calls=[_to_tool_call_spec(c) for c, _ in pairs],
+            tool_calls=[ToolCallSpec.from_arguments(call.id, call.name, call.arguments) for call, _ in pairs],
         )
-        for call, d in pairs:
+        for call, dispatch in pairs:
             self._message.append_tool_message(
                 self.session_id, tool_call_id=call.id, name=call.name,
-                content=d.outcome.content,
+                content=dispatch.outcome.content,
             )
 
         self._session.touch(self.session_id)
@@ -110,17 +109,10 @@ class SupervisorLoopStrategy:
 
         if terminal is not None:
             return LoopAction(LoopSignal.FINISH, events + list(self._handle_terminal(ctx)))
-        if self._enforce_terminal:
-            self._force_instruction = _FORCE_AFTER_TOOLS
-            return LoopAction(LoopSignal.CONTINUE, events)
         return LoopAction(LoopSignal.CONTINUE, events)
 
     def after_text(self, ctx, result):
-        """纯文本回复：落库并发完成事件与收尾钩子。强制建图路径下不落库直接续轮。"""
-        if self._enforce_terminal:
-            self._force_instruction = _FORCE_AFTER_TEXT
-            return LoopAction(LoopSignal.CONTINUE, [])
-
+        """纯文本回复：落库并发完成事件与收尾钩子。"""
         content = "".join(result.text_parts) if result.text_parts else None
         self._message.append_assistant_message(
             self.session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
@@ -151,6 +143,38 @@ class SupervisorLoopStrategy:
         yield from self._hooks.trigger("Stop", ctx)
 
 
+class EnforceCreatePlanStrategy(SupervisorLoopStrategy):
+    """确认意图后的强制建图策略：限步内迫使模型调 create_plan，期间文本不落库。
+
+    仅 override 与"限步强制"相关的面：prompt 注入提醒、文本轮不落库续跑、工具轮未终止则设提醒；
+    落库/收尾/工具派发/事件累积沿用基类。
+    """
+
+    max_steps = _ENFORCE_MAX_STEPS
+
+    def __init__(self, session_id, message_service, session_service, hooks,
+                 skill_loader, intent_state: IntentStateService):
+        super().__init__(session_id, message_service, session_service, hooks,
+                         skill_loader, intent_state)
+        self._force_directive = ""
+
+    def _prompt_context(self) -> PromptContext:
+        ctx = super()._prompt_context()
+        if not self._force_directive:
+            return ctx
+        return replace(ctx, force_directive=self._force_directive)
+
+    def after_tools(self, ctx, result, pairs):
+        action = super().after_tools(ctx, result, pairs)
+        if action.signal is LoopSignal.CONTINUE:
+            self._force_directive = _FORCE_AFTER_TOOLS
+        return action
+
+    def after_text(self, ctx, result):
+        self._force_directive = _FORCE_AFTER_TEXT
+        return LoopAction(LoopSignal.CONTINUE, [])
+
+
 class SupervisorService:
     def __init__(
         self,
@@ -162,7 +186,7 @@ class SupervisorService:
         task_repo: TaskRepository,
         tool_dispatcher: ToolDispatch,
         loop: AgentLoop,
-        intent_state: IntentStateService | None = None,
+        intent_state: IntentStateService,
     ):
         self._session = session_service
         self._message = message_service
@@ -172,7 +196,7 @@ class SupervisorService:
         self._task_repo = task_repo
         self._tools = tool_dispatcher
         self._loop = loop
-        self._intent_state = intent_state or _NullIntentStateService()
+        self._intent_state = intent_state
 
     def stream(
         self, session_id: str, user_message: str, *, require_create_plan: bool = False,
@@ -191,9 +215,10 @@ class SupervisorService:
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
         )
-        strategy = SupervisorLoopStrategy(
-            session_id, self._message, self._session, self._hooks, self._skill, schemas,
-            intent_state=self._intent_state, enforce_terminal=require_create_plan,
+        strategy_cls = EnforceCreatePlanStrategy if require_create_plan else SupervisorLoopStrategy
+        strategy = strategy_cls(
+            session_id, self._message, self._session, self._hooks, self._skill,
+            intent_state=self._intent_state,
         )
 
         try:
@@ -203,13 +228,3 @@ class SupervisorService:
         except Exception as e:
             ctx.outcome.exception = e
             yield from strategy.on_error(ctx, e).events
-
-
-def _to_tool_call_spec(call: ToolCall):
-    from chorus.domain.message import ToolCallSpec
-    return ToolCallSpec(id=call.id, name=call.name, arguments_json=json.dumps(call.arguments, ensure_ascii=False))
-
-
-class _NullIntentStateService:
-    def get(self, session_id: str):
-        return empty_intent_state(session_id)

@@ -14,10 +14,10 @@ from chorus.domain.task.profiles import AGENT_PROFILES
 
 def _profiles_block() -> str:
     lines = []
-    for p in AGENT_PROFILES.values():
-        tools = "/".join(TOOL_WHITELISTS[p.agent_type])
+    for profile in AGENT_PROFILES.values():
+        tools = "/".join(TOOL_WHITELISTS[profile.agent_type])
         lines.append(
-            f"- {p.agent_type}（{p.display_name}）：{p.role_desc}。可用工具：{tools}。"
+            f"- {profile.agent_type}（{profile.display_name}）：{profile.role_desc}。可用工具：{tools}。"
         )
     return "\n".join(lines)
 
@@ -54,6 +54,7 @@ class PromptContext:
     base: str = SYSTEM_PROMPT
     skill_hints: str = ""
     intent_state: IntentState | None = None
+    force_directive: str = ""
 
 
 def build_system_prompt(ctx: PromptContext) -> str:
@@ -62,6 +63,8 @@ def build_system_prompt(ctx: PromptContext) -> str:
         parts.append(_intent_state_block(ctx.intent_state))
     if ctx.skill_hints:
         parts.append(ctx.skill_hints)
+    if ctx.force_directive:
+        parts.append(f"## 本轮系统提醒\n{ctx.force_directive}")
     return "\n\n".join(parts)
 
 

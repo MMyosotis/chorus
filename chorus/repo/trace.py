@@ -94,7 +94,7 @@ class TraceRow(BaseModel):
 
 
 _COLS = ", ".join(TraceRow.model_fields)
-_PH = ", ".join(f":{k}" for k in TraceRow.model_fields)
+_PH = ", ".join(f":{field}" for field in TraceRow.model_fields)
 
 
 class TraceRepository:
@@ -114,14 +114,14 @@ class TraceRepository:
             f"SELECT {_COLS} FROM traces WHERE session_id=? ORDER BY created_at ASC, id ASC",
             (session_id,),
         ).fetchall()
-        return [TraceRow(**dict(r)).to_domain() for r in rows]
+        return [TraceRow(**dict(row)).to_domain() for row in rows]
 
     def list_by_message(self, message_id: str) -> list[TraceEntry]:
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM traces WHERE message_id=? ORDER BY created_at ASC, id ASC",
             (message_id,),
         ).fetchall()
-        return [TraceRow(**dict(r)).to_domain() for r in rows]
+        return [TraceRow(**dict(row)).to_domain() for row in rows]
 
     def list_by_task(self, task_id: str) -> list[TraceEntry]:
         """按任务取其全部轨迹，调试单任务用。"""
@@ -129,7 +129,7 @@ class TraceRepository:
             f"SELECT {_COLS} FROM traces WHERE task_id=? ORDER BY created_at ASC, id ASC",
             (task_id,),
         ).fetchall()
-        return [TraceRow(**dict(r)).to_domain() for r in rows]
+        return [TraceRow(**dict(row)).to_domain() for row in rows]
 
     def aggregate_message_trace(self, message_id: str) -> MessageTrace:
         """从该消息的若干轨迹行重建思考与工具摘要。"""

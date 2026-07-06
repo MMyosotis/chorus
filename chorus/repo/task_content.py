@@ -58,7 +58,7 @@ class TaskContentRow(BaseModel):
 
 
 _COLS = ", ".join(TaskContentRow.model_fields)
-_PH = ", ".join(f":{k}" for k in TaskContentRow.model_fields)
+_PH = ", ".join(f":{field}" for field in TaskContentRow.model_fields)
 
 
 class TaskContentRepository:
@@ -88,7 +88,7 @@ class TaskContentRepository:
             f"SELECT {_COLS} FROM task_content WHERE task_id IN ({placeholders})",
             tuple(task_ids),
         ).fetchall()
-        return {r["task_id"]: TaskContentRow(**dict(r)).to_domain() for r in rows}
+        return {row["task_id"]: TaskContentRow(**dict(row)).to_domain() for row in rows}
 
     def set_error(self, task_id: str, error: str) -> None:
         """写错误信息，upsert（与任务表 CAS 同事务）。"""

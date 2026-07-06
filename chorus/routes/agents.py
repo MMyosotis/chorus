@@ -22,8 +22,8 @@ class ProfileView(BaseModel):
 def get_profiles():
     return {
         agent_type: ProfileView(
-            display_name=p.display_name,
-            enter_line=p.enter_line,
+            display_name=profile.display_name,
+            enter_line=profile.enter_line,
         )
-        for agent_type, p in AGENT_PROFILES.items()
+        for agent_type, profile in AGENT_PROFILES.items()
     }

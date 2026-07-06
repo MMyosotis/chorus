@@ -77,7 +77,7 @@ class Tool(ABC):
 
 class ToolDispatch:
     def __init__(self, tools: list[Tool], settings_service: SettingsService):
-        self._tools: dict[str, Tool] = {t.name: t for t in tools}
+        self._tools: dict[str, Tool] = {tool.name: tool for tool in tools}
         self._settings = settings_service
 
     def select_schemas(self, names: Iterable[str]) -> list[dict]:

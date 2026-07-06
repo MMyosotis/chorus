@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Iterable, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -43,6 +44,10 @@ class ToolCallSpec(BaseModel):
             "type": "function",
             "function": {"name": self.name, "arguments": self.arguments_json},
         }
+
+    @classmethod
+    def from_arguments(cls, id: str, name: str, arguments: dict) -> ToolCallSpec:
+        return cls(id=id, name=name, arguments_json=json.dumps(arguments, ensure_ascii=False))
 
 
 class AssistantMessage(_MessageBase):
@@ -88,7 +93,7 @@ class MessageView(BaseModel):
 def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> list[dict]:
     """构建发给模型的消息序列：系统提示在前，历史消息按传入顺序透传。"""
     result: list[dict] = [{"role": "system", "content": system_prompt}]
-    result.extend(m.to_provider_dict() for m in messages)
+    result.extend(message.to_provider_dict() for message in messages)
     return result
 
 

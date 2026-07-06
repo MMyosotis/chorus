@@ -38,7 +38,7 @@ class RenameRequest(BaseModel):
 
 @router.get("")
 def list_sessions(session: SessionService = Depends(provide_session_service)):
-    return {"sessions": [s.model_dump() for s in session.list()]}
+    return {"sessions": [summary.model_dump() for summary in session.list()]}
 
 
 @router.post("")
@@ -46,8 +46,8 @@ def create_session(req: CreateRequest, session: SessionService = Depends(provide
     title = (req.title or "新对话").strip() or "新对话"
     if len(title) > 60:
         raise HTTPException(status_code=422, detail="title 长度不能超过 60")
-    c = session.create(title)
-    return {"id": c.id, "title": c.title, "created_at": c.created_at, "updated_at": c.updated_at}
+    created = session.create(title)
+    return {"id": created.id, "title": created.title, "created_at": created.created_at, "updated_at": created.updated_at}
 
 
 @router.delete("/{session_id}")
@@ -61,10 +61,10 @@ def rename_session(session_id: str, req: RenameRequest, session: SessionService 
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
     try:
-        c = session.rename(session_id, req.title)
+        renamed = session.rename(session_id, req.title)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    return {"id": c.id, "title": c.title, "created_at": c.created_at, "updated_at": c.updated_at}
+    return {"id": renamed.id, "title": renamed.title, "created_at": renamed.created_at, "updated_at": renamed.updated_at}
 
 
 @router.get("/{session_id}/messages")
@@ -75,7 +75,7 @@ def get_messages(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"messages": [_view_to_dict(v) for v in message.history_view(session_id)]}
+    return {"messages": [_view_to_dict(view) for view in message.history_view(session_id)]}
 
 
 @router.get("/{session_id}/traces")
@@ -86,7 +86,7 @@ def get_traces(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"traces": [_trace_to_dict(t) for t in trace.list_traces(session_id)]}
+    return {"traces": [_trace_to_dict(entry) for entry in trace.list_traces(session_id)]}
 
 
 @router.get("/{session_id}/intent-state")
@@ -137,23 +137,23 @@ def reopen_intent(
     return {"state": intent.reopen(session_id).public_dict()}
 
 
-def _view_to_dict(v: MessageView) -> dict:
-    item: dict = {"role": v.role, "content": v.content}
-    if v.role == "assistant":
-        item["thinking"] = [s.model_dump() for s in v.thinking]
-        item["tools"] = [t.model_dump() for t in v.tools]
+def _view_to_dict(view: MessageView) -> dict:
+    item: dict = {"role": view.role, "content": view.content}
+    if view.role == "assistant":
+        item["thinking"] = [seg.model_dump() for seg in view.thinking]
+        item["tools"] = [tool.model_dump() for tool in view.tools]
     return item
 
 
-def _trace_to_dict(t: TraceEntry) -> dict:
+def _trace_to_dict(entry: TraceEntry) -> dict:
     return {
         "type": "trace",
-        "phase": t.phase.value,
-        "message_id": t.message_id,
-        "task_id": t.task_id,
-        "source": t.source,
-        "created_at": t.created_at,
-        "payload": t.payload.model_dump(),
+        "phase": entry.phase.value,
+        "message_id": entry.message_id,
+        "task_id": entry.task_id,
+        "source": entry.source,
+        "created_at": entry.created_at,
+        "payload": entry.payload.model_dump(),
     }
 
 

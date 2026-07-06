@@ -21,10 +21,10 @@ class SkillLoader:
         self._dir = Path(skills_dir)
 
     def list_summaries(self) -> list[SkillSummary]:
-        return [SkillSummary(name=s.name, description=s.description) for s in self._scan()]
+        return [SkillSummary(name=skill.name, description=skill.description) for skill in self._scan()]
 
     def get(self, name: str) -> Optional[SkillContent]:
-        return next((s for s in self._scan() if s.name == name), None)
+        return next((skill for skill in self._scan() if skill.name == name), None)
 
     def format_hints(self) -> str:
         """把摘要拼成 system prompt 技能段，无技能时返回空串。"""
@@ -32,14 +32,14 @@ class SkillLoader:
         if not summaries:
             return ""
         lines = ["## 可用技能（使用 load_skill 工具获取完整内容）"]
-        for s in summaries:
-            lines.append(f"- **{s.name}**: {s.description}")
+        for skill in summaries:
+            lines.append(f"- **{skill.name}**: {skill.description}")
         return "\n".join(lines)
 
     def _scan(self) -> list[SkillContent]:
         if not self._dir.exists():
             return []
         return [
-            SkillContent.from_markdown(p.read_text(encoding="utf-8"), p.parent.name)
-            for p in sorted(self._dir.glob("*/SKILL.md"))
+            SkillContent.from_markdown(path.read_text(encoding="utf-8"), path.parent.name)
+            for path in sorted(self._dir.glob("*/SKILL.md"))
         ]

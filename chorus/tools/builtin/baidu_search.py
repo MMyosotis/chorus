@@ -21,7 +21,7 @@ def _format_references(refs: list[dict]) -> str:
         content = (ref.get("content") or "").strip().replace("\n", " ")
         if len(content) > 400:
             content = content[:400] + "…"
-        meta_parts = [p for p in (anchor, date) if p]
+        meta_parts = [part for part in (anchor, date) if part]
         meta = f"  ({' · '.join(meta_parts)})" if meta_parts else ""
         lines.append(f"[{i}] {title}{meta}\n    URL: {url}\n    摘要: {content or '(无摘要)'}")
     return "\n".join(lines)
@@ -30,11 +30,11 @@ def _format_references(refs: list[dict]) -> str:
 def _to_meta_refs(refs: list[dict]) -> list[dict]:
     return [
         {
-            "title": (r.get("title") or "").strip() or "(无标题)",
-            "url": (r.get("url") or "").strip(),
-            "snippet": (r.get("content") or "").strip().replace("\n", " ")[:400],
+            "title": (ref.get("title") or "").strip() or "(无标题)",
+            "url": (ref.get("url") or "").strip(),
+            "snippet": (ref.get("content") or "").strip().replace("\n", " ")[:400],
         }
-        for r in refs
+        for ref in refs
     ]
 
 
@@ -69,12 +69,12 @@ class BaiduSearchTool(Tool):
         self._client = client
 
     def display(self, arguments: dict) -> str:
-        q = (arguments.get("query") or "").strip().replace("\n", " ")
-        if len(q) > 60:
-            q = q[:60] + "…"
+        query = (arguments.get("query") or "").strip().replace("\n", " ")
+        if len(query) > 60:
+            query = query[:60] + "…"
         recency = arguments.get("recency")
         suffix = f" ({recency})" if recency in {"week", "month", "semiyear", "year"} else ""
-        return f"百度搜索: {q or '(空查询)'}{suffix}"
+        return f"百度搜索: {query or '(空查询)'}{suffix}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         query = (arguments.get("query") or "").strip()

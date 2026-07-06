@@ -30,6 +30,6 @@ class LoadSkillTool(Tool):
         name = arguments.get("name", "")
         skill = self._skill_loader.get(name)
         if skill is None:
-            available = [s.name for s in self._skill_loader.list_summaries()]
+            available = [skill.name for skill in self._skill_loader.list_summaries()]
             return Reply(f"Error: skill '{name}' not found. Available skills: {json.dumps(available)}")
         return Reply(skill.full_content)

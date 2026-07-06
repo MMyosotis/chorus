@@ -86,9 +86,9 @@ class IntentStateRow(BaseModel):
 
 
 _COLS = ", ".join(IntentStateRow.model_fields)
-_PH = ", ".join(f":{k}" for k in IntentStateRow.model_fields)
+_PH = ", ".join(f":{field}" for field in IntentStateRow.model_fields)
 _UPDATES = ", ".join(
-    f"{k}=excluded.{k}" for k in IntentStateRow.model_fields if k != "session_id"
+    f"{field}=excluded.{field}" for field in IntentStateRow.model_fields if field != "session_id"
 )
 
 

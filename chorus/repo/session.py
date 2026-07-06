@@ -53,7 +53,7 @@ class SessionRow(BaseModel):
 
 
 _COLS = ", ".join(SessionRow.model_fields)
-_PH = ", ".join(f":{k}" for k in SessionRow.model_fields)
+_PH = ", ".join(f":{field}" for field in SessionRow.model_fields)
 
 
 class SessionRepository:
@@ -78,7 +78,7 @@ class SessionRepository:
         rows = self._conn.get().execute(
             f"SELECT {_COLS} FROM sessions ORDER BY updated_at DESC"
         ).fetchall()
-        return [SessionRow(**dict(r)).to_domain() for r in rows]
+        return [SessionRow(**dict(row)).to_domain() for row in rows]
 
     def touch(self, session_id: str, updated_at: float) -> None:
         """刷新会话更新时间。"""
@@ -117,4 +117,4 @@ class SessionRepository:
         rows = self._conn.get().execute(
             "SELECT id FROM sessions WHERE updated_at < ?", (ttl_cut,)
         ).fetchall()
-        return [r["id"] for r in rows]
+        return [row["id"] for row in rows]

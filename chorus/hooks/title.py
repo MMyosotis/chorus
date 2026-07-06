@@ -41,11 +41,11 @@ class TitlePostProcessor:
     def _first_pair(self, session_id: str) -> tuple[str, str]:
         first_user = ""
         first_assistant = ""
-        for m in self._message.list_messages(session_id):
-            if isinstance(m, UserMessage) and not first_user:
-                first_user = m.content
-            elif isinstance(m, AssistantMessage) and (m.content or "").strip() and not first_assistant:
-                first_assistant = m.content or ""
+        for message in self._message.list_messages(session_id):
+            if isinstance(message, UserMessage) and not first_user:
+                first_user = message.content
+            elif isinstance(message, AssistantMessage) and (message.content or "").strip() and not first_assistant:
+                first_assistant = message.content or ""
             if first_user and first_assistant:
                 break
         return first_user, first_assistant

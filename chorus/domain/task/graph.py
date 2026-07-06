@@ -54,32 +54,32 @@ def build_task_graph(
     """拓扑序聚合任务图：纯函数，不碰数据库。"""
     ordered = topological_order(tasks)
     nodes = [TaskNodeView(
-        id=t.id,
-        agent_type=t.agent_type,
-        status=t.status,
-        updated_at=t.updated_at,
-        current_activity=activities.get(t.id),
-        artifacts=arts[t.id].artifacts if t.id in arts else None,
-        narrative=arts[t.id].narrative if t.id in arts else None,
-        error=contents[t.id].error if t.id in contents else None,
-    ) for t in ordered]
+        id=task.id,
+        agent_type=task.agent_type,
+        status=task.status,
+        updated_at=task.updated_at,
+        current_activity=activities.get(task.id),
+        artifacts=arts[task.id].artifacts if task.id in arts else None,
+        narrative=arts[task.id].narrative if task.id in arts else None,
+        error=contents[task.id].error if task.id in contents else None,
+    ) for task in ordered]
 
     return TaskGraph(pipeline_id=pipeline_id, active=active, nodes=nodes)
 
 
-def dump_task_graph(g: TaskGraph) -> dict:
+def dump_task_graph(graph: TaskGraph) -> dict:
     """序列化为前端传输结构。"""
     return {
-        "pipeline_id": g.pipeline_id,
-        "active": g.active,
+        "pipeline_id": graph.pipeline_id,
+        "active": graph.active,
         "tasks": [{
-            "id": n.id,
-            "agent_type": n.agent_type,
-            "status": n.status,
-            "updated_at": n.updated_at,
-            "current_activity": dump_activity(n.current_activity) if n.current_activity else None,
-            "artifacts": dataclasses.asdict(n.artifacts) if n.artifacts else None,
-            "narrative": dataclasses.asdict(n.narrative) if n.narrative else None,
-            "error": n.error,
-        } for n in g.nodes],
+            "id": node.id,
+            "agent_type": node.agent_type,
+            "status": node.status,
+            "updated_at": node.updated_at,
+            "current_activity": dump_activity(node.current_activity) if node.current_activity else None,
+            "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
+            "narrative": dataclasses.asdict(node.narrative) if node.narrative else None,
+            "error": node.error,
+        } for node in graph.nodes],
     }

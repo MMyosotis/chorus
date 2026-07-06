@@ -33,8 +33,8 @@ class OutputPlanTool(Tool):
 
     def display(self, arguments: dict) -> str:
         steps = arguments.get("steps") or []
-        n = len(steps) if isinstance(steps, list) else 0
-        return f"规划 {n} 个步骤"
+        count = len(steps) if isinstance(steps, list) else 0
+        return f"规划 {count} 个步骤"
 
     def run(self, arguments: dict, ctx: ToolContext) -> Reply:
         steps = arguments.get("steps") or []

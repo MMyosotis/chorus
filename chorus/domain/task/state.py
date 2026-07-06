@@ -103,5 +103,5 @@ def select_display_pipeline(
     """展示用流水线：有进行中则返进行中，否则返已完成（已取消不算）。"""
     if active:
         return active
-    finished_only = [t for t in finished if t.status == TaskStatus.FINISHED.value]
+    finished_only = [task for task in finished if task.status == TaskStatus.FINISHED.value]
     return finished_only

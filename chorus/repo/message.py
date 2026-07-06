@@ -96,11 +96,11 @@ class MessageRow(BaseModel):
     def _dump_tool_calls(tool_calls: Optional[list[ToolCallSpec]]) -> Optional[str]:
         if not tool_calls:
             return None
-        return json.dumps([t.model_dump() for t in tool_calls], ensure_ascii=False)
+        return json.dumps([call.model_dump() for call in tool_calls], ensure_ascii=False)
 
 
 _COLS = ", ".join(MessageRow.model_fields)
-_PH = ", ".join(f":{k}" for k in MessageRow.model_fields)
+_PH = ", ".join(f":{field}" for field in MessageRow.model_fields)
 
 
 class MessageRepository:
@@ -121,7 +121,7 @@ class MessageRepository:
             f"SELECT {_COLS} FROM messages WHERE session_id=? ORDER BY id",
             (session_id,),
         ).fetchall()
-        return [MessageRow(**dict(r)).to_domain() for r in rows]
+        return [MessageRow(**dict(row)).to_domain() for row in rows]
 
     def get(self, message_id: str) -> Optional[Message]:
         row = self._conn.get().execute(

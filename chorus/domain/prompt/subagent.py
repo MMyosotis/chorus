@@ -48,10 +48,10 @@ _GUIDANCE = {
 
 def build_subagent_system_prompt(agent_type: str) -> str:
     """按角色返回对应的 system prompt。"""
-    p = AGENT_PROFILES[agent_type]
+    profile = AGENT_PROFILES[agent_type]
     return _BASE.format(
-        role_name=p.display_name,
-        role_desc=p.role_desc,
-        artifacts_shape=_SHAPES[p.artifacts_schema],
-        task_guidance=_GUIDANCE[p.artifacts_schema],
+        role_name=profile.display_name,
+        role_desc=profile.role_desc,
+        artifacts_shape=_SHAPES[profile.artifacts_schema],
+        task_guidance=_GUIDANCE[profile.artifacts_schema],
     )

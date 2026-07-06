@@ -70,7 +70,7 @@ class TaskRow(BaseModel):
 
 
 _COLS = ", ".join(TaskRow.model_fields)
-_PH = ", ".join(f":{k}" for k in TaskRow.model_fields)
+_PH = ", ".join(f":{field}" for field in TaskRow.model_fields)
 
 
 class TaskRepository:
@@ -135,8 +135,8 @@ class TaskRepository:
         result: list[tuple[Task, list[Task]]] = []
         for row in pending_rows:
             task = TaskRow(**dict(row)).to_domain()
-            deps = [self.get(d) for d in task.dependencies if d]
-            result.append((task, [d for d in deps if d is not None]))
+            deps = [self.get(dep) for dep in task.dependencies if dep]
+            result.append((task, [dep for dep in deps if dep is not None]))
         return result
 
     def find_running_before(self, cutoff_ts: float) -> list[Task]:
@@ -145,7 +145,7 @@ class TaskRepository:
             "WHERE status='running' AND updated_at < ?",
             (cutoff_ts,),
         ).fetchall()
-        return [TaskRow(**dict(r)).to_domain() for r in rows]
+        return [TaskRow(**dict(row)).to_domain() for row in rows]
 
     def find_by_session_statuses(
         self, session_id: str, statuses: Iterable[str]
@@ -157,7 +157,7 @@ class TaskRepository:
             f"WHERE session_id=? AND status IN ({placeholders}) ORDER BY created_at, id",
             (session_id, *statuses),
         ).fetchall()
-        return [TaskRow(**dict(r)).to_domain() for r in rows]
+        return [TaskRow(**dict(row)).to_domain() for row in rows]
 
     def find_by_pipeline(self, pipeline_id: str) -> list[Task]:
         """返回流水线全部任务按创建升序，展示用拓扑序由编排层排。"""
@@ -165,7 +165,7 @@ class TaskRepository:
             f"SELECT {_COLS} FROM tasks WHERE pipeline_id=? ORDER BY created_at, id",
             (pipeline_id,),
         ).fetchall()
-        return [TaskRow(**dict(r)).to_domain() for r in rows]
+        return [TaskRow(**dict(row)).to_domain() for row in rows]
 
     def count_by_session_statuses(
         self, session_id: str, statuses: Iterable[str]

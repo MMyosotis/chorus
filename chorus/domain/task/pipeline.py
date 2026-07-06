@@ -99,7 +99,7 @@ def validate_one_step(index: int, step: StepSpec) -> None:
             f"步骤{index}必须依赖至少一个前置步骤（仅首步可无依赖）",
         )
 
-    bad = next((d for d in step.deps if not (0 <= d < index)), None)
+    bad = next((dep for dep in step.deps if not (0 <= dep < index)), None)
     if bad is not None:
         raise ValidationError(
             f"步骤{index}依赖非前置步骤: {bad}",

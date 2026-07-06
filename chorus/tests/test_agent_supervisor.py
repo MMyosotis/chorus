@@ -12,11 +12,13 @@ from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter, emit_message_start
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
+from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
@@ -84,9 +86,10 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
 
     entry = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)
+    intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, entry,
-        task_repo, tool_dispatcher, loop,
+        task_repo, tool_dispatcher, loop, intent_state,
     )
 
 
@@ -238,6 +241,31 @@ def test_new_plan_blocked_by_active_task():
     # user 消息不入库
     msgs = msg_svc.list_messages(s.id)
     assert msgs == []
+
+
+def test_enforce_create_plan_skips_persist_until_plan():
+    """require_create_plan=True：首轮模型只回文本不落库、续轮被强制 create_plan；
+    终态历史 [user, assistant(tool_calls), tool]，首轮文本气泡被丢弃。"""
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
+    # 第一轮：纯文本（enforce 不落库、设提醒、续轮）
+    text_stream = FakeStream([({"content": "好的我来"}, "stop")])
+    # 第二轮：create_plan Terminal
+    plan_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
+        index=0, id="c1", function=types.SimpleNamespace(
+            name="create_plan", arguments=json.dumps(_plan_args())))]}, "tool_calls")])
+    client = FakeClient([text_stream, plan_stream])
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    s = session_svc.create("test")
+    events = list(sup.stream(s.id, "确认并开始", require_create_plan=True))
+    types_seq = [e.type for e in events]
+    assert types_seq[-1] == "done"
+    # 首轮文本未落库；终态只 user + assistant(create_plan) + tool
+    msgs = msg_svc.list_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
+    assert msgs[1].content == "好的，我来帮你创作"  # friendly_reply，非首轮文本
+    assert len(msgs[1].tool_calls) == 1
+    assert msgs[1].tool_calls[0].name == "create_plan"
+    assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 2
 
 
 def main():

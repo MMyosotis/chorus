@@ -57,9 +57,9 @@ class TaskActivity:
 _TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
 
 
-def dump_activity(a: TaskActivity) -> dict:
+def dump_activity(activity: TaskActivity) -> dict:
     """把活动行序列化为可 JSON 化的 dict。"""
-    return _TASK_ACTIVITY_ADAPTER.dump_python(a)
+    return _TASK_ACTIVITY_ADAPTER.dump_python(activity)
 
 
 ActivityPayload = Union[SearchResultsPayload, ImageProgressPayload, FailedPayload]
@@ -159,8 +159,8 @@ def _static_started(line: str) -> Callable[[dict], str]:
 
 def _search_started(args: dict) -> str:
     """搜索类工具的台词，截取查询词前缀，无词走兜底。"""
-    q = (args.get("query") or "").strip()
-    return f"正在搜索：{q[:30]}" if q else "正在联网搜索"
+    query = (args.get("query") or "").strip()
+    return f"正在搜索：{query[:30]}" if query else "正在联网搜索"
 
 
 _STARTED_LINES: dict[str, Callable[[dict], str]] = {
@@ -182,8 +182,8 @@ def _baidu_done(
     refs = (activity_meta or {}).get("refs") or []
     total = len(refs)
     bullets = [
-        {"title": r.get("title") or "(无标题)", "url": r.get("url") or ""}
-        for r in refs
+        {"title": ref.get("title") or "(无标题)", "url": ref.get("url") or ""}
+        for ref in refs
     ]
     role_line = f"找到 {total} 条参考资料" if total else "没有搜到相关结果"
     return ActivityDraft(
@@ -201,9 +201,9 @@ def _image_done(
     url = (activity_meta or {}).get("url") or ""
     all_images = done_images + ([url] if url else [])
     current, total = image_progress(progress_total, all_images)
-    items = [{"url": u, "caption": ""} for u in all_images]
-    n = len(all_images)
-    role_line = f"已生成 {n} 张配图" if n else "配图生成完成"
+    items = [{"url": url, "caption": ""} for url in all_images]
+    count = len(all_images)
+    role_line = f"已生成 {count} 张配图" if count else "配图生成完成"
     return ActivityDraft(
         event_type="tool_done",
         role_line=role_line, status="running",

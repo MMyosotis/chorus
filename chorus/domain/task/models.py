@@ -45,7 +45,7 @@ class Task:
         """可调度：待执行且所有依赖均已完成。失败的上游会阻塞后继。"""
         if self.status != TaskStatus.PENDING.value:
             return False
-        return all(d.status == TaskStatus.FINISHED.value for d in deps)
+        return all(dep.status == TaskStatus.FINISHED.value for dep in deps)
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))

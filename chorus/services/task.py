@@ -65,8 +65,8 @@ class TaskService:
     def cancel_pipeline(self, session_id: str) -> dict:
         """放弃整条流水线：批量取消进行中流水线的非终态任务。无进行中则幂等返 0。"""
         pipeline_id = self._active_pipeline_id(session_id)
-        n = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
-        return {"pipeline_id": pipeline_id, "cancelled": n}
+        count = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
+        return {"pipeline_id": pipeline_id, "cancelled": count}
 
     def get_graph(self, session_id: str) -> TaskGraph:
         """任务图视图：进行中流水线优先，无则取最近已完成。"""
@@ -83,8 +83,8 @@ class TaskService:
             return build_task_graph(None, [], {}, {}, {}, False)
 
         # 取最近更新的流水线
-        latest = max(terminal, key=lambda t: t.updated_at)
-        same_pipeline = [t for t in terminal if t.pipeline_id == latest.pipeline_id]
+        latest = max(terminal, key=lambda task: task.updated_at)
+        same_pipeline = [task for task in terminal if task.pipeline_id == latest.pipeline_id]
         display = select_display_pipeline([], same_pipeline)
         return self._build_graph(latest.pipeline_id, display, False)
 
@@ -92,7 +92,7 @@ class TaskService:
         """返回该任务的用户态活动，按发生顺序。"""
         limit = max(1, min(100, limit))
         rows = self._activities_repo.list_by_task(task_id, limit=limit)
-        return [dump_activity(a) for a in rows]
+        return [dump_activity(activity) for activity in rows]
 
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
@@ -108,7 +108,7 @@ class TaskService:
 
     def _build_graph(self, pipeline_id: str, tasks: list, active: bool) -> TaskGraph:
         """取本图所需产物/活动/内容，交领域聚合。拓扑序在领域内。"""
-        ids = [t.id for t in tasks]
+        ids = [task.id for task in tasks]
         return build_task_graph(
             pipeline_id,
             tasks,

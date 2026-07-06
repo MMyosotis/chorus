@@ -26,6 +26,14 @@ def test_supervisor_prompt_has_profiles():
     assert "选题官" in p  # profiles 注入
 
 
+def test_force_directive_appended_as_reminder():
+    """force_directive 非空 → 末尾追加「## 本轮系统提醒」段；空则不出现该段。"""
+    without = build_system_prompt(PromptContext())
+    assert "本轮系统提醒" not in without
+    with_directive = build_system_prompt(PromptContext(force_directive="必须立刻建图"))
+    assert "## 本轮系统提醒\n必须立刻建图" in with_directive
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -18,6 +18,7 @@ from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, TaskStatus
 from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
@@ -25,6 +26,7 @@ from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
+from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
@@ -146,6 +148,7 @@ def _build_assembly():
     supervisor = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks,
         stub_chat_model_provider(sup_client), task_repo, tool_dispatcher, agent_loop,
+        IntentStateService(IntentStateRepository(conn), session_svc),
     )
 
     # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。

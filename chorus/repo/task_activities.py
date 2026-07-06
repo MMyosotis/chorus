@@ -69,8 +69,8 @@ class TaskActivityRow(BaseModel):
         )
 
 
-_INSERT_COLS = ", ".join(k for k in TaskActivityRow.model_fields if k != "id")
-_INSERT_PH = ", ".join(f":{k}" for k in TaskActivityRow.model_fields if k != "id")
+_INSERT_COLS = ", ".join(field for field in TaskActivityRow.model_fields if field != "id")
+_INSERT_PH = ", ".join(f":{field}" for field in TaskActivityRow.model_fields if field != "id")
 _SELECT_COLS = ", ".join(TaskActivityRow.model_fields)
 
 
@@ -93,7 +93,7 @@ class TaskActivitiesRepository:
             "WHERE task_id=? ORDER BY id LIMIT ?",
             (task_id, limit),
         ).fetchall()
-        return [TaskActivityRow(**dict(r)).to_domain() for r in rows]
+        return [TaskActivityRow(**dict(row)).to_domain() for row in rows]
 
     def latest_by_task(self, task_id: str) -> Optional[TaskActivity]:
         rows = self._conn.get().execute(
@@ -112,4 +112,4 @@ class TaskActivitiesRepository:
             f") x ON a.task_id = x.t_id AND a.id = x.max_id",
             tuple(task_ids),
         ).fetchall()
-        return {r["task_id"]: TaskActivityRow(**dict(r)).to_domain() for r in rows}
+        return {row["task_id"]: TaskActivityRow(**dict(row)).to_domain() for row in rows}

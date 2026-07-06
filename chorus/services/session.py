@@ -22,8 +22,8 @@ class SessionService:
     def list(self) -> list[SessionSummary]:
         sessions = self._session_repo.list_all()
         return [
-            SessionSummary(id=c.id, title=c.title, created_at=c.created_at, updated_at=c.updated_at)
-            for c in sessions
+            SessionSummary(id=session.id, title=session.title, created_at=session.created_at, updated_at=session.updated_at)
+            for session in sessions
         ]
 
     def get(self, session_id: str) -> Optional[Session]:

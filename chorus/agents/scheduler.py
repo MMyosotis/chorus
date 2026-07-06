@@ -48,9 +48,9 @@ class TaskScheduler:
 
     def stop(self) -> None:
         self._stop.set()
-        t = self._thread
-        if t is not None:
-            t.join(timeout=self._interval * 2)
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=self._interval * 2)
             self._thread = None
 
     def _loop(self) -> None:

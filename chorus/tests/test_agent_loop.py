@@ -65,7 +65,6 @@ class _SpyStrategy:
         self._after_tools_signal = after_tools_signal
         self._after_text_signal = after_text_signal
         self.log: list[str] = []
-        self.schemas: list[dict] = []
 
     def before_turn(self):
         self.log.append("before_turn"); return True

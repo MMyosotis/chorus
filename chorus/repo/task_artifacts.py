@@ -64,7 +64,7 @@ class TaskArtifactsRow(BaseModel):
 
 
 _COLS = ", ".join(TaskArtifactsRow.model_fields)
-_PH = ", ".join(f":{k}" for k in TaskArtifactsRow.model_fields)
+_PH = ", ".join(f":{field}" for field in TaskArtifactsRow.model_fields)
 
 
 class TaskArtifactsRepository:
@@ -100,4 +100,4 @@ class TaskArtifactsRepository:
             f"WHERE task_id IN ({placeholders})",
             tuple(task_ids),
         ).fetchall()
-        return {r["task_id"]: TaskArtifactsRow(**dict(r)).to_domain() for r in rows}
+        return {row["task_id"]: TaskArtifactsRow(**dict(row)).to_domain() for row in rows}

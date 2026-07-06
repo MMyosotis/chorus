@@ -47,17 +47,15 @@ class SubagentLoopStrategy:
 
     max_steps = _MAX_STEPS
 
-    def __init__(self, *, task, content, my_owner_id, profile, history,
-                 system_prompt, done_images, schemas, task_repo,
+    def __init__(self, *, task, progress_total, owner_id, profile, invoke,
+                 task_repo,
                  write_activity, finalize, guarded_fail):
         self.task = task
-        self.content = content
-        self.my_owner_id = my_owner_id
+        self.progress_total = progress_total
+        self.owner_id = owner_id
         self.profile = profile
-        self.history = history
-        self.system_prompt = system_prompt
-        self.done_images = done_images
-        self.schemas = schemas
+        self.history = [{"role": "user", "content": invoke}]
+        self.done_images = []
         self._task_repo = task_repo
         self._write_activity = write_activity
         self._finalize = finalize
@@ -71,7 +69,8 @@ class SubagentLoopStrategy:
         return True
 
     def provider_messages(self):
-        return [{"role": "system", "content": self.system_prompt}] + self.history
+        prompt = build_subagent_system_prompt(self.task.agent_type)
+        return [{"role": "system", "content": prompt}] + self.history
 
     def consume(self, stream):
         return silent_consume(stream)
@@ -79,23 +78,23 @@ class SubagentLoopStrategy:
     def before_dispatch(self, call):
         self._write_activity(self.task, tool_started_activity(call.name, call.arguments))
 
-    def after_dispatch(self, call, d):
-        td = tool_done_activity(
-            call.name, d.activity_meta,
-            self.content.progress_total if self.content else None,
+    def after_dispatch(self, call, dispatch):
+        tool_done = tool_done_activity(
+            call.name, dispatch.activity_meta,
+            self.progress_total,
             self.done_images,
         )
         # 先按已累计算进度，再追加当前图供下一轮，避免双计
-        if call.name == "generate_image" and d.activity_meta and d.activity_meta.get("url"):
-            self.done_images.append(d.activity_meta["url"])
-        if td is not None:
-            self._write_activity(self.task, td)
+        if call.name == "generate_image" and dispatch.activity_meta and dispatch.activity_meta.get("url"):
+            self.done_images.append(dispatch.activity_meta["url"])
+        if tool_done is not None:
+            self._write_activity(self.task, tool_done)
 
     def after_tools(self, ctx, result, pairs):
         self.history.append(_assistant_view(result))
         self.history.extend(
-            {"role": "tool", "tool_call_id": c.id, "content": d.outcome.content}
-            for c, d in pairs
+            {"role": "tool", "tool_call_id": call.id, "content": dispatch.outcome.content}
+            for call, dispatch in pairs
         )
         return LoopAction(LoopSignal.CONTINUE, [])
 
@@ -110,15 +109,15 @@ class SubagentLoopStrategy:
             self.history.append({"role": "user", "content": e.correction})
             return LoopAction(LoopSignal.CONTINUE, [])
 
-        self._finalize(self.task, artifacts, narrative, self.my_owner_id)
-        return LoopAction(LoopSignal.FINISH, [])  # lease 失效也静默退出（不写失败/产物）
+        self._finalize(self.task, artifacts, narrative, self.owner_id)
+        return LoopAction(LoopSignal.FINISH, [])
 
     def on_exhausted(self):
-        self._guarded_fail(self.task, f"超过最大 ReAct 步数 {_MAX_STEPS}", self.my_owner_id)
+        self._guarded_fail(self.task, f"超过最大 ReAct 步数 {_MAX_STEPS}", self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
     def on_error(self, ctx, error):
-        self._guarded_fail(self.task, str(error), self.my_owner_id)
+        self._guarded_fail(self.task, str(error), self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
 
@@ -148,35 +147,33 @@ class SubAgentService:
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
         task = self._task_repo.get(task_id)
-        if task is None:
-            return
         content = self._content_repo.load(task_id)
-        my_owner_id = task.owner_id
         try:
-            self._run_loop(task, content, my_owner_id)
+            self._run_loop(task, content, task.owner_id)
         except Exception as e:
-            self._guarded_fail(task, str(e), my_owner_id)
+            self._guarded_fail(task, str(e), task.owner_id)
 
-    def _run_loop(self, task, content, my_owner_id: Optional[float]) -> None:
-        task_id = task.id
+    def _run_loop(self, task, content, owner_id: Optional[float]) -> None:
         # 入口租约校验，被回收重抢则放弃
-        if not self._lease_valid(task_id, my_owner_id):
+        if not self._lease_valid(task.id, owner_id):
             return
 
         self._write_activity(task, started_activity(task.agent_type))
-        profile = AGENT_PROFILES[task.agent_type]
         entry = self._models.get_entry()
-        invoke = self._build_invoke(task, content)
-        system_prompt = build_subagent_system_prompt(task.agent_type)
-        history: list[dict] = [{"role": "user", "content": invoke}]
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
         ctx = AgentContext(
-            session_id=task.session_id, source="subagent", task_id=task_id,
-            chat_model=entry.model_id, tool_schemas=schemas,
+            session_id=task.session_id,
+            source="subagent",
+            task_id=task.id,
+            chat_model=entry.model_id,
+            tool_schemas=schemas,
         )
         strategy = SubagentLoopStrategy(
-            task=task, content=content, my_owner_id=my_owner_id, profile=profile,
-            history=history, system_prompt=system_prompt, done_images=[], schemas=schemas,
+            task=task,
+            progress_total=content.progress_total if content else None,
+            owner_id=owner_id,
+            profile=AGENT_PROFILES[task.agent_type],
+            invoke=self._build_invoke(task, content),
             task_repo=self._task_repo,
             write_activity=self._write_activity,
             finalize=self._finalize,
@@ -185,35 +182,29 @@ class SubAgentService:
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))
 
-    def _guarded_fail(self, task, error: str, my_owner_id: Optional[float]) -> None:
+    def _guarded_fail(self, task, error: str, owner_id: Optional[float]) -> None:
         """租约校验后再失败，供入口外层与策略错误回调共享。"""
-        if not self._lease_valid(task.id, my_owner_id):
-            return
-        self._fail(task, error)
+        if self._lease_valid(task.id, owner_id):
+            self._fail(task, error)
 
     def _fail(self, task, error: str) -> None:
         """事务内 CAS 翻转为失败并写错误信息。"""
         with self._conn.transaction():
-            ok = self._task_repo.transition(
-                task.id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value,
-            )
-            if ok:
-                self._content_repo.set_error(task.id, error)
-        if ok:
-            self._write_activity(task, failed_activity(error))
+            self._task_repo.transition(task.id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value)
+            self._content_repo.set_error(task.id, error)
 
-    def _lease_valid(self, task_id: str, my_owner_id: Optional[float]) -> bool:
+        self._write_activity(task, failed_activity(error))
+
+    def _lease_valid(self, task_id: str, owner_id: Optional[float]) -> bool:
         """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""
         latest = self._task_repo.get(task_id)
-        if latest is None or latest.status != TaskStatus.RUNNING.value:
-            return False
-        return latest.owner_id == my_owner_id
+        return latest is not None and latest.status == TaskStatus.RUNNING.value and latest.owner_id == owner_id
 
     def _write_activity(self, task, draft: ActivityDraft) -> None:
         """写活动，失败不阻断主流程。"""
         try:
             self._activities.append(task.id, draft)
-        except Exception:  # noqa: BLE001 — activity fail-open
+        except Exception:
             pass
 
     def _build_invoke(self, task, content) -> str:
@@ -221,16 +212,16 @@ class SubAgentService:
         deps_outputs: dict = {}
         for dep_id in task.dependencies:
             dep_art = self._artifacts_repo.load(dep_id)
-            if dep_art is not None:
-                deps_outputs[dep_id] = dataclasses.asdict(dep_art.artifacts)
+            deps_outputs[dep_id] = dataclasses.asdict(dep_art.artifacts)
+
         return content.render_invoke(
             deps_outputs,
             dataclasses.asdict(prior.artifacts) if prior else None,
         )
 
-    def _finalize(self, task, artifacts, narrative, my_owner_id: Optional[float]) -> None:
+    def _finalize(self, task, artifacts, narrative, owner_id: Optional[float]) -> None:
         """先翻转状态再落产物，最后写活动。"""
-        if not self._lease_valid(task.id, my_owner_id):
+        if not self._lease_valid(task.id, owner_id):
             return
 
         to_status = (
@@ -241,15 +232,9 @@ class SubAgentService:
 
         # 事务内先 CAS 再落产物，状态与产物原子可见，漂移则两者皆不落
         with self._conn.transaction():
-            ok = self._task_repo.transition(task.id, TaskStatus.RUNNING.value, to_status)
-            if ok:
-                self._artifacts_repo.upsert(
-                    task.id, task.agent_type, artifacts=artifacts, narrative=narrative,
-                )
-        if not ok:
-            return
+            self._task_repo.transition(task.id, TaskStatus.RUNNING.value, to_status)
+            self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
 
-        # 写活动（事务外）
         if is_terminal:
             self._write_activity(task, done_activity(narrative))
         else:
