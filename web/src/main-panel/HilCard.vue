@@ -69,7 +69,6 @@ async function onCancel() {
   <div class="hil-card">
     <div class="hil-title">{{ roleName }} · 等你确认</div>
 
-    <!-- idea：候选列表 -->
     <div v-if="task.agent_type === 'idea'" class="hil-candidates">
       <div
         v-for="c in artifacts.candidates || []"
@@ -84,14 +83,12 @@ async function onCancel() {
       </div>
     </div>
 
-    <!-- script：正文块预览 -->
     <div v-else-if="task.agent_type === 'script'" class="hil-preview">
       <div v-for="(b, i) in artifacts.blocks || []" :key="i" :class="['block', b.kind]">
         {{ b.text }}
       </div>
     </div>
 
-    <!-- image：缩略图 -->
     <div v-else-if="task.agent_type === 'image'" class="hil-images">
       <figure v-for="(img, i) in artifacts.images || []" :key="i" class="img-item">
         <img :src="img.url" :alt="img.caption || ''" loading="lazy" />
@@ -99,7 +96,6 @@ async function onCancel() {
       </figure>
     </div>
 
-    <!-- 操作区 -->
     <div class="hil-actions">
       <button class="btn primary" :disabled="busy" @click="onConfirm">确认推进</button>
       <button class="btn" :disabled="busy" @click="onRetry">带意见重跑本步</button>

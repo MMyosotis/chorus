@@ -1,12 +1,6 @@
-# kitty/tests/test_service_session.py
-"""SessionService 编排层 smoke test：会话元数据 CRUD + 标题归一。
+"""SessionService 编排层 smoke test：会话元数据 CRUD + 标题归一与原子写入。
 
-覆盖 ``chorus/services/session.py``：create/exists/get（未知 raise KeyError）/rename
-（空/超长拒绝）/touch（刷新 updated_at）/delete（CASCADE 带走 messages）
-/list（按 updated_at 倒序）/is_title_set+set_title（已设则 no-op，SQL 原子复检+写入）。
-无内存缓存、无会话级并发锁（同一会话同一时刻仅一个 chat 流），每次直接打库。
-
-运行：.venv/bin/python -m chorus.tests.test_service_session
+无内存缓存、无会话级并发锁，每次直接打库。
 """
 from __future__ import annotations
 
@@ -63,7 +57,7 @@ def test_touch_advances_updated_at():
 
 def test_is_title_set_and_set_title():
     svc = _svc()
-    s = svc.create("hi")                               # title_generated=False
+    s = svc.create("hi")
     assert svc.is_title_set(s.id) is False
     assert svc.set_title(s.id, "自动标题") is True
     got = svc.get(s.id)
@@ -96,9 +90,9 @@ def test_list_sorts_by_updated_at():
     repo.insert(Session(id="a", title="A", title_generated=False, created_at=1.0, updated_at=2.0))
     repo.insert(Session(id="b", title="B", title_generated=False, created_at=1.0, updated_at=5.0))
     svc = SessionService(repo)
-    assert svc.exists("a") and svc.exists("b")        # 直接打库，无需预 load
+    assert svc.exists("a") and svc.exists("b")        # 直接打库，无需预加载
     lst = svc.list()
-    assert [x.id for x in lst] == ["b", "a"]          # updated_at 倒序
+    assert [x.id for x in lst] == ["b", "a"]          # 按更新时间倒序
     assert all(isinstance(x, SessionSummary) for x in lst)
 
 

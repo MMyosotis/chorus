@@ -1,6 +1,6 @@
-"""SubAgentService.run 的 smoke test：ReAct + 产物解析 + CAS awaiting_confirm/finished。
+"""SubAgentService.run smoke：ReAct + 产物解析 + CAS 待复核/完成。
 
-运行：.venv/bin/python -m chorus.tests.test_agent_subagent
+覆盖自纠、协作式取消、最终产出轮漂移等场景。
 """
 from __future__ import annotations
 
@@ -54,14 +54,10 @@ class FakeClient:
 
 
 class SideEffectClient:
-    """FakeClient 变体：每次 create 先跑 side_effect(可空) 再返对应 stream。
-
-    供协作式取消/漂移用例——在 _call_model 内 CAS 任务态，模拟 cancel_pipeline
-    在 ReAct 中途触发。
-    """
+    """FakeClient 变体：每次调用先跑副作用再返对应流，供协作式取消/漂移用例模拟中途取消。"""
 
     def __init__(self, pairs):
-        # pairs: list[(side_effect_fn | None, stream)]
+        # pairs: list[(副作用函数 | None, stream)]
         self._pairs = list(pairs)
         self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
 
@@ -134,10 +130,7 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo,
 
 
 def _model_responses(trace_svc, task_id="t1"):
-    """该 task 的 model_response trace payload（每轮 ReAct 一条），按 created_at 升序。
-
-    task_steps 已移除，改用 trace 的 model_response 行锚定 ReAct 轮次与 finish_reason。
-    """
+    """该 task 的模型响应 trace（每轮 ReAct 一条），按时间升序。"""
     return [
         t.payload for t in trace_svc.list_traces("s1")
         if t.task_id == task_id and t.phase is TracePhase.MODEL_RESPONSE
@@ -212,9 +205,9 @@ def test_subagent_react_with_tool():
 
 
 def test_subagent_failed_on_persistent_bad_output():
-    """连续产物解析失败撞 _MAX_STEPS → CAS running→failed（不再首次即死）。
+    """连续产物解析失败撞步数上限 → CAS running→failed。
 
-    每轮坏产出 → correction 喂回 → 模型仍坏 → 撞步数上限才判死。
+    每轮坏产出喂回自纠，模型仍坏，撞步数上限才判死。
     """
     from chorus.agents.subagent import _MAX_STEPS
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
@@ -227,8 +220,7 @@ def test_subagent_failed_on_persistent_bad_output():
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED.value
     assert content_repo.load("t1").error
-    # 撞 _MAX_STEPS 才判死：每轮（含自纠轮）都留 model_response trace，共 _MAX_STEPS 条——
-    # 旧代码首次即死只会留下 1 条，此断言锚定"运行到耗尽"而非"首轮即死"。
+    # 撞步数上限才判死：每轮都留 trace，共 _MAX_STEPS 条
     assert len(_model_responses(trace_svc)) == _MAX_STEPS
 
 

@@ -1,10 +1,4 @@
-# chorus/tests/test_repo_task_activities.py
-"""TaskActivitiesRepository 的 smoke test：append/id 递增/latest/批量 latest/payload 多态。
-
-载荷收敛为单 payload JSON 列（具名 dataclass 序列化），仿 task_artifacts.artifacts。
-
-运行：``.venv/bin/python -m chorus.tests.test_repo_task_activities``
-"""
+"""TaskActivitiesRepository smoke test：append/id 递增/latest/批量/payload 多态。"""
 from __future__ import annotations
 
 from chorus.domain.task import Task

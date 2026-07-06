@@ -1,8 +1,6 @@
 """任务服务：人工确认编排与任务图视图。
 
-编排层取数据调领域再存数据。状态翻转合法性由领域保证，仓储只做原子翻转；
-确认与重跑先查存在再翻转，翻转失败抛冲突错由路由转 409。任务图优先展示进行中流水线，
-无则取最近已完成。
+状态合法性由领域保证，仓储原子翻转，翻转失败抛冲突错；任务图优先进行中流水线，无则取最近已完成。
 """
 from __future__ import annotations
 
@@ -48,11 +46,7 @@ class TaskService:
         self._conn = conn
 
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
-        """确认推进：翻转待确认→完成，idea 角色写回选中候选。
-
-        副作用（写 selected）在翻转之后，对齐 subagent _finalize。task_id 来自
-        get_graph 存活行，单用户 sequential 下状态不会漂移，故不设 CAS 守卫。
-        """
+        """确认推进：翻转待确认→完成，候选角色写回选中项（在翻转之后）。"""
         task = self._task_repo.get(task_id)
         self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value)
         if task.agent_type == "idea":
@@ -60,12 +54,7 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.FINISHED.value}
 
     def retry(self, task_id: str, feedback: dict) -> dict:
-        """带反馈重跑本步：CAS 翻转回待执行并写回反馈（允许从待确认或失败态）。
-
-        起点态 awaiting_confirm/failed 是 worker 已停的稳态，无并发写方，故 CAS 与
-        feedback 写入不包事务（单条 UPDATE/UPSERT 各自原子）。CAS 依次尝试两态，
-        任一命中即写反馈返回；都失败说明状态已漂移或任务不存在。
-        """
+        """带反馈重跑本步：CAS 翻转回待执行并写回反馈，允许从待确认或失败态。"""
         for from_status in (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FAILED.value):
             if not self._task_repo.transition(task_id, from_status, TaskStatus.PENDING.value):
                 continue
@@ -74,7 +63,7 @@ class TaskService:
         raise ConflictError("CAS 失败（状态已漂移）")
 
     def cancel_pipeline(self, session_id: str) -> dict:
-        """放弃整条流水线：批量取消进行中流水线的非终态任务。无 active 则幂等返 0。"""
+        """放弃整条流水线：批量取消进行中流水线的非终态任务。无进行中则幂等返 0。"""
         pipeline_id = self._active_pipeline_id(session_id)
         n = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
         return {"pipeline_id": pipeline_id, "cancelled": n}
@@ -110,7 +99,7 @@ class TaskService:
         return active[0].pipeline_id if active else None
 
     def _set_selected(self, task_id: str, agent_type: str, selected: Optional[int]) -> None:
-        """把选中候选写回 idea 产物（产物由 subagent _finalize 事务内原子写入，必就绪）。"""
+        """把选中候选写回候选角色产物（子 agent 事务内原子写入，必就绪）。"""
         art = self._artifacts_repo.load(task_id)
         idea = dataclasses.replace(art.artifacts, selected=selected)
         self._artifacts_repo.upsert(

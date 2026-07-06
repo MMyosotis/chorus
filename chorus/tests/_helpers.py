@@ -1,8 +1,7 @@
 """测试共享工具：临时 DB 连接 + sessions 父行种子。
 
-各 repo / service 测试本要重复「建 ConnectionFactory(tmp) + 插 Session 父行（外键约束）」，
-统一收敛到这里。刻意不用 pytest fixture——配合各测试文件裸跑 ``main()`` 的既有风格
-（``python -m kitty.tests.test_xxx`` 即可跑，不强制 pytest）。
+各 repo / service 测试本要重复建临时连接与插会话父行，统一收敛到这里，
+配合各测试文件裸跑 main() 的既有风格。
 """
 from __future__ import annotations
 

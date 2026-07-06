@@ -4,7 +4,6 @@ import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 
 const props = defineProps({ task: { type: Object, default: null } })
 
-// image 角色的进度与预览合并进单一 payload
 const payload = computed(() => props.task?.current_activity?.payload || null)
 const progress = computed(() => payload.value?.total ? payload.value : null)
 const preview = computed(() => payload.value?.items?.length ? payload.value : null)
@@ -16,17 +15,14 @@ const isImage = computed(() => props.task?.agent_type === 'image')
   <div class="work-card">
     <div class="wc-head">
       <span class="wc-role">{{ ROLE_LABELS[task.agent_type] || task.agent_type }}</span>
-      <!-- image running：current/total 计数进度条 -->
       <span v-if="isImage && progress" class="wc-progress">第 {{ progress.current }}/{{ progress.total }} {{ progress.unit }}</span>
     </div>
-    <!-- 当前活动产物预览（images） -->
     <div v-if="preview?.items?.length" class="wc-images">
       <figure v-for="(img, i) in preview.items" :key="i" class="wc-img">
         <img :src="img.url" :alt="img.caption || ''" loading="lazy" />
         <figcaption v-if="img.caption">{{ img.caption }}</figcaption>
       </figure>
     </div>
-    <!-- 产物已落（awaiting_confirm/finished）：完整预览 -->
     <div v-else-if="artifacts && task.status !== 'running'" class="wc-artifacts">
       <div v-if="task.agent_type === 'image'" class="wc-images">
         <figure v-for="(img, i) in artifacts.images || []" :key="i" class="wc-img">

@@ -1,13 +1,11 @@
-"""ToolDispatch.select_schemas smoke test：名字白名单筛选 + web_search 开关。
-
-运行：.venv/bin/python -m chorus.tests.test_tools_select"""
+"""ToolDispatch.select_schemas smoke test：名字白名单筛选 + web_search 开关。"""
 from __future__ import annotations
 
 from chorus.tools import Tool, ToolContext, ToolDispatch, ToolOutcome
 
 
 class _FakeTool(Tool):
-    """最小 Tool：只暴露 name，run 不可达（select_schemas 不触发 run）。"""
+    """最小工具：只暴露名字，run 不可达。"""
 
     def __init__(self, name):
         self.name = name
@@ -37,7 +35,7 @@ def test_select_by_names():
     # image 角色白名单（全集顺序保留）
     got = [s["function"]["name"] for s in reg.select_schemas(["baidu_search", "generate_image", "load_skill"])]
     assert got == ["baidu_search", "generate_image", "load_skill"]
-    # idea 角色白名单（不含 generate_image）
+    # idea 角色白名单（不含生图）
     got = [s["function"]["name"] for s in reg.select_schemas(["baidu_search", "load_skill"])]
     assert got == ["baidu_search", "load_skill"]
     # 不存在的名字静默跳过
@@ -49,10 +47,10 @@ def test_select_by_names():
 
 def test_web_search_disabled_drops_baidu_search():
     reg = _registry("baidu_search", "load_skill", web_search=False)
-    # web_search 关闭：baidu_search 被剔除，保留其余
+    # 关闭联网搜索：搜索工具被剔除，保留其余
     got = [s["function"]["name"] for s in reg.select_schemas(["baidu_search", "load_skill"])]
     assert got == ["load_skill"]
-    # 白名单本就不含 baidu_search 时无副作用
+    # 白名单本就不含搜索工具时无副作用
     got = [s["function"]["name"] for s in reg.select_schemas(["load_skill"])]
     assert got == ["load_skill"]
 
@@ -83,7 +81,7 @@ def test_dispatch_normalizes_tool_run_result():
     assert d1.activity_meta == {"refs": [{"title": "t"}]}
     assert d1.outcome.content == "可见文本"
     d2 = disp.dispatch(ToolCall(id="c2", name="load_skill", arguments={}), ToolContext())
-    assert d2.activity_meta is None  # 裸 outcome → None
+    assert d2.activity_meta is None  # 裸结果无活动元数据
 
 
 def main():

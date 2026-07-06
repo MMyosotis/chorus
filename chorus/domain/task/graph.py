@@ -1,8 +1,4 @@
-"""任务图视图值对象：拓扑序聚合 + 序列化。
-
-围绕单一概念（task graph 投影）的纯数据形状与拼装/序列化规则，不触 repo。
-对齐 MessageView：把编排层就地手搓的视图 dict 收为领域模型。
-"""
+"""任务图视图值对象：拓扑序聚合 + 序列化，纯数据形状不碰数据库。"""
 from __future__ import annotations
 
 import dataclasses
@@ -55,7 +51,7 @@ def build_task_graph(
     contents: dict[str, TaskContent],
     active: bool,
 ) -> TaskGraph:
-    """拓扑序聚合任务图：纯函数，不触 repo。"""
+    """拓扑序聚合任务图：纯函数，不碰数据库。"""
     ordered = topological_order(tasks)
     nodes = [TaskNodeView(
         id=t.id,
@@ -72,11 +68,7 @@ def build_task_graph(
 
 
 def dump_task_graph(g: TaskGraph) -> dict:
-    """序列化为前端 wire shape。
-
-    activity 走 dump_activity（多态 payload），artifacts/narrative 走 dataclasses.asdict
-    ——与原 service 就地手搓 dict 字节一致。
-    """
+    """序列化为前端传输结构。"""
     return {
         "pipeline_id": g.pipeline_id,
         "active": g.active,

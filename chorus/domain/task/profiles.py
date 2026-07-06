@@ -1,9 +1,5 @@
 """角色档案注册表：四子角色的展示名、职责、入场台词、产物模型与产物解析。
-
-新增角色只需加一条档案。文案纯文本禁 emoji。产物解析（切段→校验→还原）随
-档案内聚：每个角色知道自己的产物形状与展示名，parse_output 是 build_artifacts
-的兄弟方法。
-"""
+新增角色只需加一条档案，文案禁 emoji，切段校验还原随档案内聚。"""
 from __future__ import annotations
 
 import json

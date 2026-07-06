@@ -4,7 +4,7 @@ import { getTaskActivities } from '../api.js'
 import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
-  task: { type: Object, default: null }, // graph.tasks 项
+  task: { type: Object, default: null },
 })
 
 const activities = ref([])
@@ -48,8 +48,6 @@ watch(() => props.task?.status, (s) => {
   else if (!timer) { start() }
 })
 
-// 卸载时清理定时器：Dock mode 翻转（如另一任务 → failed）会卸载本组件，
-// 此时 task 仍 running、status watcher 不会触发 stop，需在此兜底，避免泄漏与对陈旧 task.id 的轮询
 onUnmounted(stop)
 
 const roleName = computed(() => ROLE_LABELS[props.task?.agent_type] || props.task?.agent_type || '')
@@ -62,7 +60,6 @@ const roleLine = computed(() => {
 })
 const progress = computed(() => current.value?.payload?.total ? current.value.payload : null)
 const recent = computed(() => activities.value.slice(-2))
-// 展开时显示全部活动（倒序：最新在上），否则只显最近 2 条
 const shownActivities = computed(() => expanded.value ? [...activities.value].reverse() : recent.value)
 </script>
 

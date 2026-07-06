@@ -1,7 +1,6 @@
 """工具框架：工具基类、运行时上下文与调度器。
 
-调度器负责按白名单筛 schema、统一执行计时包错。联网搜索开关内部查设置服务，不外部注入。
-工具登记装配见登记模块。
+调度器按白名单筛 schema、统一执行计时包错，联网搜索开关内部查设置服务。
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from chorus.tools.models import ToolCall, ToolSchema
 
 _DISPLAY_MAX_LEN = 200
 
-# 联网搜索能力对应的工具名（baidu_search 工具的 name）
 WEB_SEARCH_TOOL_NAME = "baidu_search"
 
 

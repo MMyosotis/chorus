@@ -1,16 +1,6 @@
-# kitty/tests/test_hooks.py
-"""hooks 子系统 smoke test：ErrorFinalizer 异常收尾 + TraceEmitter 多来源传播 + TitlePostProcessor 收尾。
+"""hooks 子系统 smoke：异常收尾 + trace 多来源传播 + 标题收尾。
 
-覆盖 ``kitty/hooks/``（此前无直接测试）：
-- ErrorFinalizer.on_error：本轮已分配 message_id 时 append 一条 [Error] assistant 消息
-  关闭本轮（不删数据——失败轮 assistant 本就未入库，库内天然干净）；未分配则跳过。
-- TraceEmitter：before_model_request / on_tool_result 写 TraceEntry 并 yield TraceEvent；
-  PF-B 验证 source/task_id 从 ctx 传播到持久化 TraceEntry（subagent 'subagent'+'t1'，
-  默认 'supervisor'+None）。注：TraceEvent 本身不载 source/task_id，传播落点在 TraceEntry。
-- TitlePostProcessor.on_stop：首轮 user/assistant 对生成标题，set_title 未设则
-  yield TitleUpdateEvent；已设（is_title_set 短路，不调 LLM）/ generate 返 None 则 return None。
-
-运行：.venv/bin/python -m kitty.tests.test_hooks
+覆盖 ErrorFinalizer 关闭失败轮、TraceEmitter 传播 source/task_id、TitlePostProcessor 首轮生成标题。
 """
 from __future__ import annotations
 
@@ -37,8 +27,6 @@ def _setup():
     session_svc = SessionService(SessionRepository(conn))
     return msg_svc, trace_svc, session_svc
 
-
-# ---- ErrorFinalizer ----
 
 def test_error_finalizer_appends_error_message_when_message_id_allocated():
     msg_svc, trace_svc, _ = _setup()
@@ -72,8 +60,6 @@ def test_error_finalizer_skips_when_message_id_not_allocated():
     assert len(msg_svc.list_messages("s1")) == 1      # 未追加任何消息
 
 
-# ---- TraceEmitter ----
-
 def test_trace_propagates_subagent_source_and_task_id():
     msg_svc, trace_svc, _ = _setup()
     emitter = TraceEmitter(trace_svc, max_tokens=512)
@@ -90,7 +76,7 @@ def test_trace_propagates_subagent_source_and_task_id():
     assert ev.message_id == "m1"
     assert ev.payload["model"] == "fake-model"
     assert ev.payload["max_tokens"] == 512
-    # PF-B：source/task_id 传播到持久化 TraceEntry（TraceEvent 本身不载这两个字段）
+    # source/task_id 传播到持久化 trace（事件本身不载这两个字段）
     entry = trace_svc.list_traces("s1")[0]
     assert entry.source == "subagent"
     assert entry.task_id == "t1"
@@ -131,8 +117,6 @@ def test_trace_tool_result_payload_from_result_object():
     assert ev.payload["duration_ms"] == 42
     assert trace_svc.list_traces("s1")[0].source == "subagent"
 
-
-# ---- TitlePostProcessor ----
 
 class _StubTitleService:
     """替身 TitleGenerationService：只实现 generate(first_user, first_assistant)。"""
@@ -177,15 +161,15 @@ def test_title_on_stop_yields_update_when_unset():
 def test_title_skips_when_already_set():
     msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
-    session_svc.rename(s.id, "用户起的名")             # title_generated=True
+    session_svc.rename(s.id, "用户起的名")             # 标记为已生成
     _seed_first_pair(msg_svc, s.id)
     stub = _StubTitleService("不该用")
     ctx = AgentContext(session_id=s.id)
 
     result = TitlePostProcessor(session_svc, msg_svc, stub).on_stop(ctx)
 
-    assert result is None                              # is_title_set 短路 → 跳过
-    assert stub.calls == []                            # 已定名不调 LLM（重构核心收益）
+    assert result is None                              # 已定名短路 → 跳过
+    assert stub.calls == []                            # 已定名不调 LLM
     assert session_svc.get(s.id).title == "用户起的名"
 
 

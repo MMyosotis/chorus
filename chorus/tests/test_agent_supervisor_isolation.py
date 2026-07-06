@@ -1,8 +1,4 @@
-# chorus/tests/test_agent_supervisor_isolation.py
-"""supervisor 白名单隔离 + loop 工具名无关契约。
-
-运行：.venv/bin/python -m chorus.tests.test_agent_supervisor_isolation
-"""
+"""supervisor 白名单隔离 + loop 工具名无关契约。"""
 from __future__ import annotations
 
 from chorus.agents.supervisor import SupervisorLoopStrategy

@@ -1,10 +1,6 @@
-"""Row ↔ DDL 列集一致性契约：每个 XxxRow.model_fields 键集必须等于实际表列名集。
+"""Row 与表列集一致性契约：每个 Row 字段集等于实际表列名集。
 
-防漂移红线：DDL 加列但 Row 漏字段（或反之）。注意 extra="forbid" + strict=True 已在
-运行时每次读写强校验（多列/类型不符即报错），本测试把这条不变量显式文档化——若有人为
-绕过报错而放松 forbid/strict，此处失败提醒。settings 是纯 KV 无 Row，不在此列。
-
-运行：``.venv/bin/python -m chorus.tests.test_repo_row_contract``
+防漂移：DDL 加列但 Row 漏字段（或反之）即失败。settings 是纯 KV 无 Row，不在此列。
 """
 from __future__ import annotations
 
@@ -25,7 +21,7 @@ def _columns(conn: ConnectionFactory, table: str) -> set[str]:
 
 def test_row_fields_match_table_columns():
     conn = fresh_conn()
-    # 各 repo 构造器 ensure_schema 建表
+    # 各 repo 构造时建表
     SessionRepository(conn)
     MessageRepository(conn)
     TraceRepository(conn)

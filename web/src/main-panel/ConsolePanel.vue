@@ -9,13 +9,12 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:open'])
 
-const tab = ref('trace') // 'settings' | 'trace'
+const tab = ref('trace')
 
 function close() {
   emit('update:open', false)
 }
 
-// 测试模式状态
 const testModeEnabled = ref(false)
 const testModeLoading = ref(false)
 const testModeError = ref('')
@@ -41,10 +40,8 @@ async function toggleTestMode() {
   }
 }
 
-// trace 数据：当前会话的列表
 const traces = computed(() => props.traceStore.getTraces(props.activeId))
 
-// 按来源分组树：supervisor / 各 task(task_id) / scheduler（spec 6.8）
 const tracesBySource = computed(() => {
   const all = traces.value
   const groups = new Map()
@@ -66,7 +63,6 @@ const tracesBySource = computed(() => {
   return [...groups.values()]
 })
 
-// 打开时轮询拉 subagent/scheduler trace（不连 SSE，靠轮询补）；关闭即停
 const CONSOLE_POLL = 1500
 let consoleTimer = null
 
@@ -104,8 +100,6 @@ function clearCurrentTrace() {
 
 onMounted(refreshTestMode)
 
-// ---- TraceItem 渲染辅助 ----
-
 function fmtTs(created_at) {
   if (!created_at) return ''
   const d = new Date(created_at * 1000)
@@ -141,7 +135,6 @@ function roleColor(role) {
   return ROLE_COLOR[role] || '#64748b'
 }
 
-// 单条 message 内容渲染：content 可能是 string，也可能是 array（multimodal）
 function renderMessageContent(m) {
   if (typeof m.content === 'string') return [{ kind: 'text', text: m.content }]
   if (Array.isArray(m.content)) {
@@ -198,7 +191,6 @@ function renderMessageContent(m) {
         </div>
         <div v-if="!traces.length" class="empty-hint">暂无 trace。发条消息试试。</div>
 
-        <!-- 按来源分组树（supervisor / 各 task / scheduler），组内按 created_at 时间顺序 -->
         <details v-for="g in tracesBySource" :key="g.key" class="iter-group src-group" open>
           <summary>
             <span class="iter-title">{{ g.label }}</span>
@@ -210,7 +202,6 @@ function renderMessageContent(m) {
               <span class="ts">{{ fmtTs(it.created_at) }}</span>
             </div>
 
-            <!-- model_request: 显示 messages + tools schema -->
             <template v-if="it.phase === 'model_request'">
               <div class="kv">
                 <span class="k">model</span>
@@ -246,7 +237,6 @@ function renderMessageContent(m) {
               </details>
             </template>
 
-            <!-- model_response: 显示 finish_reason + content + tool_calls -->
             <template v-else-if="it.phase === 'model_response'">
               <div class="kv">
                 <span class="k">finish_reason</span>
@@ -268,7 +258,6 @@ function renderMessageContent(m) {
               </details>
             </template>
 
-            <!-- tool_call -->
             <template v-else-if="it.phase === 'tool_call'">
               <div class="kv">
                 <span class="k">tool</span>
@@ -281,7 +270,6 @@ function renderMessageContent(m) {
               <pre class="text-block">{{ shortJson(it.payload?.arguments) }}</pre>
             </template>
 
-            <!-- tool_result -->
             <template v-else-if="it.phase === 'tool_result'">
               <div class="kv">
                 <span class="k">tool</span>
@@ -291,7 +279,6 @@ function renderMessageContent(m) {
               <pre class="text-block">{{ previewText(it.payload?.content || '', 4000) }}</pre>
             </template>
 
-            <!-- schedule（scheduler 派发/CAS/zombie 事件）-->
             <template v-else>
               <pre v-if="it.payload" class="text-block">{{ shortJson(it.payload) }}</pre>
             </template>
@@ -409,7 +396,6 @@ function renderMessageContent(m) {
   padding: 12px;
 }
 
-/* settings tab */
 .setting-row {
   display: flex;
   align-items: flex-start;
@@ -462,7 +448,7 @@ function renderMessageContent(m) {
   font-size: 12px;
 }
 
-/* iOS-style switch */
+/* iOS 风格开关 */
 .switch {
   position: relative;
   display: inline-block;
@@ -511,7 +497,6 @@ input:disabled + .slider {
   cursor: not-allowed;
 }
 
-/* trace tab */
 .trace-toolbar {
   display: flex;
   align-items: center;

@@ -12,9 +12,7 @@ from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# 生成标题的截断阈值
 _GENERATED_MAX_LEN = 30
-# 入库标题字段上限
 STORED_TITLE_MAX_LEN = 60
 
 _GENERATED_STRIP_CHARS = "\"'`「」《》 \n\t"

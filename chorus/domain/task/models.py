@@ -1,9 +1,6 @@
 """tasks / task_content 核心行模型 + 任务图共享词汇表（状态/角色枚举）。
 
-数据模型带只读行为（对齐 Message.to_provider_dict 约定）：Task 持状态机判定
-（can_schedule/is_zombie），TaskContent 持调用消息渲染（render_invoke）。
-状态转移规则表见 state.py，建图规格见 pipeline.py。
-"""
+数据模型带只读行为：任务持可调度判定，内容行持调用消息渲染。"""
 from __future__ import annotations
 
 import json

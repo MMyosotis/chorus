@@ -20,7 +20,6 @@ class ProfileView(BaseModel):
 
 @router.get("/profiles", response_model=dict[str, ProfileView])
 def get_profiles():
-    # 仅暴露前端展示用字段，内部细节不外露
     return {
         agent_type: ProfileView(
             display_name=p.display_name,

@@ -83,11 +83,6 @@ export async function reopenIntent(id) {
   return data.state || null
 }
 
-/**
- * 流式聊天：内部封装 fetch + ReadableStream 解析。
- * onEvent 收到每个 SSE 事件 dict。
- * 返回 { done } —— done 是 Promise，流结束后 resolve。
- */
 export function streamChat(id, message, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/chat`, {
     method: 'POST',
@@ -170,14 +165,12 @@ export async function setTestMode(enabled) {
   return !!data.enabled
 }
 
-// —— 输入框下方模型选项栏 ——
 export async function getModelLists() {
   const res = await fetch(`${SETTINGS_BASE}/models`)
   if (!res.ok) throw new Error(`getModelLists failed: ${res.status}`)
   return res.json()
 }
 
-// —— 角色档案（流水线渲染用 enter_line / display_name，后端 AGENT_PROFILES 唯一来源）——
 let _profilesCache = null
 export async function getAgentProfiles() {
   if (_profilesCache) return _profilesCache
@@ -203,7 +196,6 @@ export async function setOptions(patch) {
   return res.json()
 }
 
-// —— 任务图 / HIL（多智能体创作）——
 const TASKS_BASE = '/api/tasks'
 
 export async function getTaskGraph(sessionId) {

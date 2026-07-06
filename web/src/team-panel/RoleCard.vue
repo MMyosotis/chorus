@@ -12,7 +12,6 @@ const roleName = computed(() => ROLE_LABELS[props.task.agent_type] || props.task
 const badge = computed(() => badgeOf(props.task.status))
 const narrative = computed(() => props.task.narrative || {})
 
-// 状态脉搏：running 用 current_activity.role_line，否则用 narrative
 const pulse = computed(() => {
   if (props.task.status === 'running') return props.task.current_activity?.role_line || ''
   if (props.task.status === 'awaiting_confirm') return narrative.value.awaiting_line || ''
@@ -21,7 +20,6 @@ const pulse = computed(() => {
   return ''
 })
 
-// awaiting_confirm / failed：交互卡（HIL/Recovery）在对话流，这里只给一句引导，不放按钮
 const needsChatAction = computed(() =>
   props.task.status === 'awaiting_confirm' || props.task.status === 'failed'
 )

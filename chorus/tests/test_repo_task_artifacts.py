@@ -1,9 +1,6 @@
-"""task_artifacts repo 的 smoke + round-trip 测试。
+"""task_artifacts repo smoke + round-trip 测试。
 
-round-trip：四种角色产物模型存进去读回来仍是等价模型。artifacts 行自带 agent_type，
-repo 自洽还原，调用方无需喂角色。
-
-运行：``.venv/bin/python -m chorus.tests.test_repo_task_artifacts``
+四种角色产物模型存取往返等价；行自带角色，repo 自洽还原。
 """
 from __future__ import annotations
 
@@ -27,7 +24,7 @@ from chorus.tests._helpers import fresh_conn, seed_session
 
 def _setup():
     conn = fresh_conn()
-    seed_session(conn)  # tasks 外键引用 sessions（foreign_keys=ON），须先建父行
+    seed_session(conn)  # 须先建 sessions 父行（外键约束）
     TaskRepository(conn).insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[],

@@ -1,12 +1,7 @@
-# kitty/tests/test_domain_stream.py
-"""流式响应消费纯函数断言：consume_stream / drain_stream 的增量累积与 SSE 事件。
+"""流式响应消费纯函数断言：增量累积与事件翻译。
 
-覆盖 ``kitty/domain/stream.py``：把 OpenAI 流式 chunk 的增量翻译成 SSE 事件并累积
-text_parts / tool_calls / thinking_segments / finish_reason。consume_stream 既 yield
-事件又经生成器返回值回传 StreamResult；drain_stream 同逻辑但不 yield 事件（subagent 用）。
-仅断言纯函数行为（零 IO），用 SimpleNamespace chunk 模拟 OpenAI 流式分片。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_stream``
+主消费函数边发事件边回传结果；静默消费同逻辑但不发事件，供后台 agent 用。
+以命名元组模拟流式分片，纯函数零外部依赖。
 """
 from __future__ import annotations
 
@@ -61,7 +56,7 @@ def test_reasoning_then_content_emits_reasoning_and_done():
     assert events[0].content == "想想"
     assert "token" in types_seq
     assert result.text_parts == ["答"]
-    # 思考段已收尾并入 thinking_segments（至少含"想想"段）
+    # 思考段已收尾并入结果（至少含"想想"段）
     assert any(seg.text == "想想" for seg in result.thinking_segments)
     assert any(isinstance(e, ReasoningDoneEvent) for e in events)
 
@@ -77,8 +72,7 @@ def test_reasoning_only_closes_at_stream_end():
 
 
 def test_reasoning_segment_reopens_after_mid_stream_close():
-    # 中途 content 触发关闭后，再来一段 reasoning 应独立计时、独立收尾
-    # （回归锚定：close 后须 reset in_progress，否则第二段不重新计时且重复收尾）
+    # 中途正文触发关闭后，再开新思考段应独立计时与收尾
     stream = [
         _chunk({"reasoning_content": "想一"}, None),
         _chunk({"content": "答一"}, None),
@@ -98,7 +92,7 @@ def test_tool_call_deltas_merged_by_index_no_event():
     tc2 = _Delta(index=0, function=_Delta(arguments='1}'))
     stream = [_chunk({"tool_calls": [tc1]}, None), _chunk({"tool_calls": [tc2]}, "tool_calls")]
     events, result = _run(stream)
-    assert events == []  # consume_stream 只累积工具调用, 不 yield ToolCallEvent
+    assert events == []  # 只累积工具调用，不发工具事件
     assert set(result.tool_calls.keys()) == {0}
     merged = result.tool_calls[0]
     assert merged.id == "c1"
@@ -127,7 +121,7 @@ def test_drain_stream_returns_result_without_yielding():
     result = drain_stream(stream)
     assert isinstance(result, StreamResult)
     assert result.text_parts == ["hi"]
-    # drain_stream 收尾时复位 in_progress, 只产出一个思考段
+    # 收尾时复位进度，只产出一个思考段
     assert len(result.thinking_segments) == 1
     assert result.thinking_segments[0].text == "想"
     assert result.finish_reason == "stop"
@@ -143,8 +137,7 @@ def test_drain_stream_accumulates_tool_calls():
 
 
 def test_silent_consume_is_generator_returning_result_without_events():
-    # silent_consume 与 consume_stream 同为 generator，但不 yield 任何事件；
-    # kernel 经 `yield from` 既能驱动它、又能拿到返回的 StreamResult。
+    # 同为生成器但不发事件，靠 yield from 驱动并取返回值
     stream = [_chunk({"reasoning_content": "想"}, None), _chunk({"content": "hi"}, "stop")]
     gen = silent_consume(stream)
     events = []

@@ -1,11 +1,7 @@
-# kitty/tests/test_domain_title.py
 """会话标题领域规则纯函数断言：clean_generated_title / normalize_title。
 
-覆盖 ``kitty/domain/title.py``：LLM 原始标题剥引号/书名号 + 截 30 字、入库标题 strip +
-截 60 字（均无省略号, 硬截断）、空串处理。STORED_TITLE_MAX_LEN==60。
-TitleGenerationService 依赖真实 OpenAI client（非纯函数）, 此处不测。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_title``
+LLM 原始标题剥引号/书名号 + 截 30 字；入库标题去空白 + 截 60 字（均硬截断无省略号）。
+依赖真实 OpenAI 的服务非纯函数，此处不测。
 """
 from __future__ import annotations
 
@@ -65,8 +61,8 @@ def test_normalize_strips_whitespace():
 
 def test_normalize_empty_and_none_become_empty_string():
     assert normalize_title("") == ""
-    assert normalize_title(None) == ""  # `title or ""` 兜底
-    assert normalize_title("   ") == ""  # strip 后空
+    assert normalize_title(None) == ""  # 空值兜底为空串
+    assert normalize_title("   ") == ""  # 去空白后为空
 
 
 def test_normalize_custom_max_len():
@@ -75,7 +71,7 @@ def test_normalize_custom_max_len():
 
 
 def test_clean_then_normalize_pipeline():
-    # 模拟 TitleGenerationService.generate 的真实链路：clean 后 normalize
+    # 模拟真实链路：先清洗再归一
     raw = '  "夏日晚风"  '
     assert normalize_title(clean_generated_title(raw)) == "夏日晚风"
 

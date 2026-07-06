@@ -1,11 +1,6 @@
-# kitty/tests/test_agent_runtime.py
 """AgentContext / TurnState 运行时状态断言。
 
-覆盖 ``kitty/agents/runtime.py``：多智能体字段（source/task_id）默认值、
-``TurnState.reset`` 保留回合级固定字段（source 不被清）。
-loop 运行时状态机契约的锚点。
-
-运行：``.venv/bin/python -m kitty.tests.test_agent_runtime``
+覆盖多智能体字段默认值与回合级固定字段不被 reset 清空。
 """
 from __future__ import annotations
 

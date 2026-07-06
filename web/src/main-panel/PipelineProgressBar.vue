@@ -31,7 +31,6 @@ const label = computed(() => {
   return `第 ${idx}/${ts.length} 步 · ${role}`
 })
 
-// running 时优先用 current_activity.role_line 作短脉搏
 function lineOf(t) {
   if (t.status === 'running') return t.current_activity?.role_line || ''
   if (t.status === 'awaiting_confirm') return t.narrative?.awaiting_line || ''

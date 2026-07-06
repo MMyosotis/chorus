@@ -1,11 +1,6 @@
-# kitty/tests/test_domain_prompt.py
 """系统提示词纯函数断言：supervisor / subagent prompt 拼装规则。
 
-覆盖 ``kitty/domain/prompt`` 的 ``build_system_prompt``（supervisor）与
-``build_subagent_system_prompt``（各角色），锚定 prompt 含关键锚点（create_plan
-工具、profiles 注入、ARTIFACTS/NARRATIVE 段标记、禁 emoji 约束）。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_prompt``
+锚定 prompt 含关键锚点（create_plan 工具、profiles 注入、ARTIFACTS/NARRATIVE 段标记、禁 emoji）。
 """
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """活动流表的唯一 SQL 入口，按事件粒度追加，哑查询不开事务。
 
-载荷收敛为单 payload JSON 列，由 event_type 区分多态。单表单语句，零事务。
+载荷收敛为单个 JSON 列，按事件类型区分多态。单表单语句，零事务。
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ ON task_activities(task_id, id);
 
 
 class TaskActivityRow(BaseModel):
-    """活动流表持久化形状，与列一一对应。payload 为 JSON 列。"""
+    """活动流表持久化形状，与列一一对应。载荷为 JSON 列。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -58,7 +58,7 @@ class TaskActivityRow(BaseModel):
     def from_domain(
         cls, task_id: str, draft: ActivityDraft, created_at: float,
     ) -> "TaskActivityRow":
-        """领域 ActivityDraft 转行模型，payload dataclass 经 JSON 序列化。"""
+        """领域草稿转行模型，载荷经 JSON 序列化。"""
         return cls(
             id=None, task_id=task_id,
             event_type=draft.event_type, role_line=draft.role_line,
@@ -69,7 +69,6 @@ class TaskActivityRow(BaseModel):
         )
 
 
-# 插入排除自增主键，由库分配后回读
 _INSERT_COLS = ", ".join(k for k in TaskActivityRow.model_fields if k != "id")
 _INSERT_PH = ", ".join(f":{k}" for k in TaskActivityRow.model_fields if k != "id")
 _SELECT_COLS = ", ".join(TaskActivityRow.model_fields)
@@ -86,7 +85,6 @@ class TaskActivitiesRepository:
             f"INSERT INTO task_activities({_INSERT_COLS}) VALUES ({_INSERT_PH})",
             row.model_dump(exclude={"id"}),
         )
-        # 自增主键由库分配，回读注入行模型
         return row.model_copy(update={"id": int(cur.lastrowid)}).to_domain()
 
     def list_by_task(self, task_id: str, *, limit: int = 50) -> list[TaskActivity]:

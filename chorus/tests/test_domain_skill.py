@@ -1,11 +1,7 @@
-# kitty/tests/test_domain_skill.py
 """Skill 领域纯逻辑断言：from_markdown / SkillLoader（扫描 + 摘要 + 提示段）。
 
-覆盖 ``kitty/domain/skill``：frontmatter 解析（name/description, 无 tags 字段——实际行为）、
-缺 frontmatter 用 fallback_name、SkillLoader.format_hints 拼成 prompt 段、SkillLoader 扫描
-``*/SKILL.md`` 并按 name 缓存。用 tempfile 临时目录, 不碰项目 DB。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_skill``
+覆盖 frontmatter 解析、缺 frontmatter 用兜底名、提示段拼装、扫描 SKILL.md 并按名缓存。
+用临时目录，不碰项目 DB。
 """
 from __future__ import annotations
 
@@ -20,7 +16,7 @@ def test_from_markdown_parses_frontmatter():
     c = SkillContent.from_markdown(text, fallback_name="fallback")
     assert c.name == "my-skill"
     assert c.description == "一个技能"
-    assert c.full_content == text  # full_content 保留原文
+    assert c.full_content == text  # 保留原文
 
 
 def test_from_markdown_uses_fallback_when_no_frontmatter():
@@ -31,8 +27,7 @@ def test_from_markdown_uses_fallback_when_no_frontmatter():
 
 
 def test_from_markdown_ignores_unknown_keys_has_no_tags_field():
-    # CLAUDE.md 提及 frontmatter 含 tags, 但 SkillContent 模型实际无 tags 字段,
-    # _parse_frontmatter 仅读 name/description, 其余键被忽略——锚定真实行为。
+    # 模型无 tags 字段，多余键被忽略
     text = "---\nname: x\ndescription: y\ntags: [a, b]\n---\nbody"
     c = SkillContent.from_markdown(text, fallback_name="fb")
     assert c.name == "x"
@@ -41,7 +36,7 @@ def test_from_markdown_ignores_unknown_keys_has_no_tags_field():
 
 
 def test_from_markdown_malformed_frontmatter_falls_back():
-    # 只有开头 --- 无闭合, split("---", 2) 不足 3 段 -> 走 fallback
+    # 只有开头无闭合，解析失败走兜底
     text = "---name: x\ndescription: y"
     c = SkillContent.from_markdown(text, fallback_name="fb")
     assert c.name == "fb"
@@ -89,7 +84,7 @@ def test_skill_loader_scans_temp_dir_and_resolves_by_name():
 
 def test_skill_loader_fallback_name_is_parent_dir_name():
     tmp = Path(tempfile.mkdtemp())
-    # 无 frontmatter, name 应回退为目录名
+    # 无 frontmatter，名字回退为目录名
     _write_skill(tmp, "dir-named", "纯正文")
     loader = SkillLoader(skills_dir=tmp)
     assert loader.get("dir-named") is not None
@@ -99,7 +94,7 @@ def test_skill_loader_fallback_name_is_parent_dir_name():
 def test_skill_loader_ignores_non_skill_md_files():
     tmp = Path(tempfile.mkdtemp())
     _write_skill(tmp, "alpha", "---\nname: a\ndescription: x\n---\nb")
-    # 非 SKILL.md 命名的文件应被忽略（glob 是 */SKILL.md）
+    # 非 SKILL.md 命名的文件应被忽略
     (tmp / "alpha" / "README.md").write_text("noise", encoding="utf-8")
     loader = SkillLoader(skills_dir=tmp)
     names = [s.name for s in loader.list_summaries()]

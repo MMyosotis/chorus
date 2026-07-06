@@ -1,7 +1,6 @@
 """任务调度器：后台线程轮询数据库派发可执行任务，并回收僵死任务。
 
-无模型循环、无钩子事件点，调度事件直接内联写轨迹。用信号量限流：非阻塞获取，满则
-跳过该任务下轮再试；成功则翻转状态为运行中并提交子 agent 执行。
+无模型循环，调度事件直接内联写轨迹，用信号量限流。
 """
 from __future__ import annotations
 
@@ -77,7 +76,7 @@ class TaskScheduler:
         # 限流：非阻塞获取，满则跳过下轮再试
         if not self._semaphore.acquire(blocking=False):
             return
-        # 占槽：pending→running，写 owner_id 作为租约归属 token
+        # 占槽：翻转为运行中并写入租约归属标识
         now = time.time()
         ok = self._task_repo.claim(task.id, now)
         if not ok:

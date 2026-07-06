@@ -1,10 +1,6 @@
-# chorus/tests/test_domain_activity.py
 """Activity 翻译层纯函数 smoke：started/tool_done/progress/visibility。
 
-载荷收敛为单一具名 dataclass（SearchResultsPayload / ImageProgressPayload / FailedPayload），
-由 ActivityDraft.payload 携带，event_type 区分多态。
-
-运行：``.venv/bin/python -m chorus.tests.test_domain_activity``
+载荷收敛为单一具名数据类，由草稿携带，事件类型区分多态。
 """
 from __future__ import annotations
 
@@ -27,7 +23,7 @@ def test_started_activity_uses_profile_enter_line():
     d = started_activity("image")
     assert d.event_type == "started"
     assert d.status == "running"
-    assert d.role_line  # 非空（取自 AGENT_PROFILES enter_line）
+    assert d.role_line  # 非空（取自角色档案入场台词）
     assert d.payload is None  # started 无载荷
 
 
@@ -56,7 +52,7 @@ def test_tool_done_activity_generate_image_progress_with_total():
     d = tool_done_activity("generate_image", meta, 3, done)
     assert d is not None
     assert isinstance(d.payload, ImageProgressPayload)
-    # done_images 传入时尚未追加本次 url，但翻译器内部合并本次 → current = 2
+    # 传入时尚未追加本次链接，翻译器内部合并后当前为 2
     assert d.payload.current == 2
     assert d.payload.total == 3
     assert len(d.payload.items) == 2  # 含本次
@@ -68,7 +64,7 @@ def test_tool_done_activity_generate_image_no_total():
     d = tool_done_activity("generate_image", meta, None, [])
     assert d is not None
     assert isinstance(d.payload, ImageProgressPayload)
-    # 无 progress_total → total 为 None
+    # 未知总数则为 None
     assert d.payload.total is None
     assert d.payload.current == 1
     assert len(d.payload.items) == 1
@@ -77,7 +73,7 @@ def test_tool_done_activity_generate_image_no_total():
 def test_image_progress():
     current, total = image_progress(3, ["u1", "u2"])
     assert current == 2 and total == 3
-    # total 未知返 None
+    # 未知总数返回 None
     current, total = image_progress(None, ["u1"])
     assert current == 1 and total is None
 

@@ -1,7 +1,4 @@
-"""ConnectionFactory smoke test：transaction 提交/回滚/不可嵌套 + busy_timeout PRAGMA。
-
-运行：``.venv/bin/python -m kitty.tests.test_repo_connection``
-"""
+"""ConnectionFactory smoke test：事务提交/回滚/不可嵌套 + busy_timeout。"""
 from __future__ import annotations
 
 import tempfile
@@ -19,7 +16,7 @@ def test_transaction_commit():
         with conn.transaction():
             conn.get().execute("INSERT INTO t(v) VALUES(?)", ("a",))
         rows = conn.get().execute("SELECT v FROM t").fetchall()
-        assert [r["v"] for r in rows] == ["a"]  # row_factory=Row，按列名取
+        assert [r["v"] for r in rows] == ["a"]  # 按列名取
 
 
 def test_transaction_rollback():

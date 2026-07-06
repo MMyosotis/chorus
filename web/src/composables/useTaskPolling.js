@@ -1,10 +1,5 @@
-// useTaskPolling：per-session task 图轮询，驱动主面板进度横幅/节拍气泡 + 右侧角色卡。
-//
-// subagent/scheduler 后台进度不连 SSE（只写库），前端靠 ~1.5s 轮询 GET /api/tasks 取图，
-// 并在非流式时刷新 messages 拉回 progress 气泡 + friendly_reply。active=False（全终态）自停。
-//
-// 数据形态：graphBySession = { [sessionId]: { pipeline_id, active, tasks: [...] } }
-// pollingSession：当前轮询中的 sessionId（单会话轮询，切走即停）。
+// 每会话任务图轮询：subagent/scheduler 后台只写库不连 SSE，前端定时拉图驱动进度横幅与角色卡。
+// 非流式时顺带刷新消息取回进度气泡，全任务终态即自停。
 
 import { reactive, ref } from 'vue'
 
@@ -15,9 +10,7 @@ const POLL_INTERVAL = 1500
 const graphBySession = reactive({})
 const pollingSession = ref(null)
 let timer = null
-// 由 App.vue 注入：流式中的会话集合，避免轮询刷新 messages 与 SSE 累积冲突
 let isStreamingFn = () => false
-// 由 App.vue 注入：用 fetchMessages 结果重建该会话消息列表
 let reloadMessagesFn = () => Promise.resolve()
 
 export function useTaskPolling() {
@@ -66,7 +59,7 @@ async function tick() {
   try {
     const graph = await getTaskGraph(sid)
     graphBySession[sid] = graph
-    // 非流式时刷新 messages（progress 气泡 + friendly_reply 落库后靠此取回）
+    // 非流式时刷新消息，取回流式外落库的进度气泡
     if (!isStreamingFn(sid)) {
       await reloadMessagesFn(sid)
     }
@@ -75,6 +68,6 @@ async function tick() {
       pollingSession.value = null
     }
   } catch {
-    // 网络抖动忽略，下个 tick 重试
+    // 网络抖动忽略，下轮重试
   }
 }

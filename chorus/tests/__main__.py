@@ -1,9 +1,6 @@
-"""一键跑全部测试：``.venv/bin/python -m kitty.tests``。
+"""一键跑全部测试：逐个 import 各 test_*.py 模块并调用其 main()（裸跑风格，不依赖 pytest）。
 
-逐个 import 各 ``test_*.py`` 模块并调用其 ``main()``（裸跑风格，不依赖 pytest）。
 任一模块失败即打印 traceback 并以非零退出；全部通过打印汇总。
-
-也可用 ``.venv/bin/python -m pytest kitty/tests/`` 跑（pytest 自动收集 ``test_`` 函数）。
 """
 from __future__ import annotations
 

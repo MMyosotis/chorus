@@ -1,7 +1,4 @@
-"""SupervisorService 顺序契约：only_reply / new_plan / 校验失败降级。
-
-运行：.venv/bin/python -m kitty.tests.test_agent_supervisor
-"""
+"""SupervisorService 顺序契约：普通回复 / 建图 / 校验失败降级。"""
 from __future__ import annotations
 
 import json
@@ -134,7 +131,7 @@ def test_new_plan():
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我写一篇夏日博文"))
     types_seq = [e.type for e in events]
-    assert "task_plan_created" not in types_seq   # 已删
+    assert "task_plan_created" not in types_seq   # 不发此事件
     assert types_seq[-1] == "done"
     # tasks 落库
     assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 2
@@ -183,12 +180,9 @@ def test_reply_outcome_pairs_and_continues():
 
 
 def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
-    """一轮内 ≥2 个 Reply tool_call → 收集后落一条 assistant(tool_calls=[全部])+N tool，
-    消除多 Reply 复用 message_id 撞 messages PK 的回归（并行 baidu_search 等场景）。
+    """一轮内 ≥2 个 Reply 工具调用 → 收集后落一条 assistant 携带全部 tool_calls + N 条 tool 结果。
 
-    锚定 OpenAI 多 tool_call 配对结构：一条 assistant 携带全部 tool_calls → N 条 tool
-    结果。2× load_skill(不存在技能名) 均 Reply，下一轮模型回文本。终态历史须为
-    [user, assistant(2 tool_calls), tool, tool, assistant(文本)]。
+    锚定多 tool_call 配对结构，避免多 Reply 复用 message_id 撞表。下一轮模型回文本。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     # 第一轮：2 个 load_skill tool_call（index 0/1），均 Reply(未命中技能错误串)

@@ -10,7 +10,7 @@ const props = defineProps({
 })
 const emit = defineEmits(['done'])
 
-const phase = ref('idle') // idle → wrapping → done → idle（退场）
+const phase = ref('idle')
 
 watch(() => props.task?.status, (s) => {
   // 仅 finalize finished 触发；cancelled/failed 不触发

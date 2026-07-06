@@ -1,14 +1,12 @@
 """任务图状态机：转移规则表与基于集合的判定函数。
 
-状态语义集中此处。终态冻结，失败不级联——后继待依赖全完成方可调度。
-"""
+状态语义集中此处，终态冻结，失败不级联，后继待依赖全完成方可调度。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from chorus.domain.task.models import Task, TaskStatus
 
-# 状态集合常量
 ACTIVE_STATUSES: frozenset[str] = frozenset({
     TaskStatus.PENDING.value,
     TaskStatus.RUNNING.value,
@@ -19,26 +17,24 @@ TERMINAL_STATUSES: frozenset[str] = frozenset({
     TaskStatus.FAILED.value,
     TaskStatus.CANCELLED.value,
 })
-# 可批量取消的集合，等于全部非终态
 CANCELLABLE_STATUSES: frozenset[str] = frozenset({
     TaskStatus.PENDING.value,
     TaskStatus.RUNNING.value,
     TaskStatus.AWAITING_CONFIRM.value,
 })
 
-# 合法转移规则表（亦作测试夹具）
 LEGAL_TRANSITIONS: set[tuple[str, str]] = {
-    (TaskStatus.PENDING.value, TaskStatus.RUNNING.value),            # scheduler CAS
-    (TaskStatus.RUNNING.value, TaskStatus.AWAITING_CONFIRM.value),   # worker（需复核步）
-    (TaskStatus.RUNNING.value, TaskStatus.FINISHED.value),           # worker（finalize 无需复核）
-    (TaskStatus.RUNNING.value, TaskStatus.FAILED.value),             # worker except
-    (TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value),          # cancel_pipeline 批量翻转
-    (TaskStatus.RUNNING.value, TaskStatus.PENDING.value),            # scheduler zombie 回收
-    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value),  # confirm API CAS
-    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.PENDING.value),   # retry API CAS（带 feedback）
-    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.CANCELLED.value), # cancel API CAS
-    (TaskStatus.PENDING.value, TaskStatus.CANCELLED.value),          # cancel API CAS
-    (TaskStatus.FAILED.value, TaskStatus.PENDING.value),             # retry API CAS（带 feedback）
+    (TaskStatus.PENDING.value, TaskStatus.RUNNING.value),
+    (TaskStatus.RUNNING.value, TaskStatus.AWAITING_CONFIRM.value),
+    (TaskStatus.RUNNING.value, TaskStatus.FINISHED.value),
+    (TaskStatus.RUNNING.value, TaskStatus.FAILED.value),
+    (TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value),
+    (TaskStatus.RUNNING.value, TaskStatus.PENDING.value),
+    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value),
+    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.PENDING.value),
+    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.CANCELLED.value),
+    (TaskStatus.PENDING.value, TaskStatus.CANCELLED.value),
+    (TaskStatus.FAILED.value, TaskStatus.PENDING.value),
 }
 
 

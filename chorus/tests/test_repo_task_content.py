@@ -1,8 +1,4 @@
-# chorus/tests/test_repo_task_content.py
-"""TaskContentRepository 的 smoke test：insert/load/load_many/set_error/set_feedback。
-
-运行：``.venv/bin/python -m chorus.tests.test_repo_task_content``
-"""
+"""TaskContentRepository smoke test：insert/load/load_many/set_error/set_feedback。"""
 from __future__ import annotations
 
 from chorus.domain.task import Task, TaskContent
@@ -51,13 +47,13 @@ def test_load_many():
 
 
 def test_set_error_upsert():
-    """set_error 对已存在行更新 error，对不存在行 upsert 占位 invoke_message。"""
+    """对已存在行更新错误信息，对不存在行 upsert 占位空串。"""
     repo, conn = _repo()
     _seed_task(conn, "t1", status="running")
     repo.insert(TaskContent(task_id="t1", invoke_message="骨架"))
     repo.set_error("t1", "boom")
     assert repo.load("t1").error == "boom"
-    # 不存在行：upsert 不抛（invoke_message 占位空串）
+    # 不存在行：upsert 不抛（占位空串）
     _seed_task(conn, "t2", status="running")
     repo.set_error("t2", "late")
     assert repo.load("t2").error == "late"

@@ -1,6 +1,6 @@
 """任务表的唯一 SQL 入口，哑查询不开事务。
 
-只存调度+身份+状态机；内容字段见 task_content。状态集合由编排层传入，不硬编码。
+只存调度、身份与状态机；任务内容见专门的内容表。状态集合由编排层传入，不硬编码。
 """
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ class TaskRepository:
         return TaskRow(**dict(row)).to_domain() if row else None
 
     def transition(self, task_id: str, from_status: str, to_status: str) -> bool:
-        """原子状态翻转：据原状态匹配更新，看影响行数。updated_at 自动刷新。"""
+        """原子状态翻转：据原状态匹配更新，看影响行数。更新时间自动刷新。"""
         cur = self._conn.get().execute(
             "UPDATE tasks SET status=?, updated_at=? WHERE id=? AND status=?",
             (to_status, time.time(), task_id, from_status),
@@ -100,7 +100,7 @@ class TaskRepository:
         return cur.rowcount > 0
 
     def claim(self, task_id: str, now: float) -> bool:
-        """scheduler 派发占槽：pending→running，顺带写 owner_id 与 updated_at（同戳）。"""
+        """scheduler 派发占槽：待执行转运行中，顺带写归属与更新时间（同戳）。"""
         cur = self._conn.get().execute(
             "UPDATE tasks SET status='running', owner_id=?, updated_at=? "
             "WHERE id=? AND status='pending'",

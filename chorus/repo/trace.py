@@ -1,7 +1,7 @@
 """轨迹表的唯一 SQL 入口。
 
 轨迹与消息物理解耦，仅靠消息标识关联。载荷结构由领域模型强类型约束，
-读回时按 phase 经注册表还原成对应 payload 模型，聚合逻辑重建思考与工具摘要。
+读回时按阶段经注册表还原成对应载荷模型，聚合逻辑重建思考与工具摘要。
 """
 
 from __future__ import annotations
@@ -42,7 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_traces_message ON traces(message_id);
 CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, created_at);
 """
 
-# phase → payload 模型注册表，读回按 phase 还原强类型载荷。
 _PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
     TracePhase.MODEL_REQUEST: ModelRequest,
     TracePhase.MODEL_RESPONSE: ModelResponse,

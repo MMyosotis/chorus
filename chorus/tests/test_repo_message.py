@@ -1,7 +1,4 @@
-"""MessageRepository + MessageService smoke test：三角色回环。
-
-运行：``.venv/bin/python -m chorus.tests.test_repo_message``
-"""
+"""MessageRepository + MessageService smoke test：三角色回环。"""
 from __future__ import annotations
 
 import uuid6
@@ -22,8 +19,7 @@ def _setup():
 def test_three_role_roundtrip():
     svc = _setup()
     svc.append_user_message("s1", "hi")
-    # assistant 的 message_id 由调用方预生成（生产由 supervisor 调 uuid6.uuid7()），
-    # 须用 uuid7 才能与 user/tool 的 id 同处趋势递增序，ORDER BY id 才正确
+    # 用 uuid7 让 id 趋势递增，排序才正确
     svc.append_assistant_message("s1", message_id=str(uuid6.uuid7()), content="yo", tool_calls=[])
     svc.append_tool_message("s1", tool_call_id="c1", name="search", content="r")
     msgs = svc.list_messages("s1")

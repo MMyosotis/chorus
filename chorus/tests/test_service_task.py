@@ -1,7 +1,4 @@
-"""TaskService HIL smoke test：confirm/retry/cancel + get_graph。
-
-运行：.venv/bin/python -m kitty.tests.test_service_task
-"""
+"""TaskService HIL smoke test：confirm/retry/cancel + get_graph。"""
 from __future__ import annotations
 
 import tempfile
@@ -66,7 +63,7 @@ def test_confirm_idea_with_selected():
 
 
 def test_confirm_writes_terminal_updated_at():
-    """C1: confirm awaiting_confirm→finished 后 updated_at 即结束时刻（终态时间由 updated_at 承担）。"""
+    """确认至终态后，结束时刻写入时间戳。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "script", "awaiting_confirm", updated_at=0.0)
     svc.confirm("t1", selected=None)
@@ -76,19 +73,19 @@ def test_confirm_writes_terminal_updated_at():
 
 
 def test_retry_writes_feedback_and_cas():
-    """retry 事务内 CAS 翻转 + 写 feedback 到 task_content（不在 tasks 调度行）。"""
+    """重跑事务内 CAS 翻转 + 反馈写入内容表（不在调度行）。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
     res = svc.retry("t1", feedback={"note": "标题不够吸引"})
     assert res["status"] == TaskStatus.PENDING.value
     got = task_repo.get("t1")
     assert got.status == TaskStatus.PENDING.value
-    # feedback 落在 task_content，不在调度行
+    # 反馈落在内容表，不在调度行
     assert content_repo.load("t1").feedback == {"note": "标题不够吸引"}
 
 
 def test_retry_from_failed():
-    """RecoveryCard 路径：failed 态也可重跑回 pending（CAS 尝试第二态命中）。"""
+    """失败态也可重跑回 pending（CAS 第二态命中）。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "script", "failed")
     res = svc.retry("t1", feedback={"note": "重试"})
@@ -97,7 +94,7 @@ def test_retry_from_failed():
 
 
 def test_retry_wrong_status_conflict():
-    """不可重跑态（如 running）两态 CAS 都失败 → ConflictError。"""
+    """不可重跑态（如 running）两态 CAS 都失败 → 抛冲突。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "idea", "running")
     with pytest.raises(ConflictError):
@@ -125,7 +122,7 @@ def test_cancel_no_active():
 
 
 def test_cancel_pipeline_writes_terminal_updated_at():
-    """C2: cancel_pipeline 批量→cancelled 后 updated_at 即结束时刻（终态时间由 updated_at 承担）。"""
+    """批量取消至 cancelled 后，结束时刻写入时间戳。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="pending", updated_at=0.0)
     _mk(task_repo, content_repo, "b", status="running", updated_at=0.0)
@@ -162,7 +159,7 @@ def _conn_of(task_repo):
 
 
 def test_get_graph_includes_current_activity_and_timestamps():
-    """get_graph 每个 task 含 updated_at/current_activity；error 取自 task_content。"""
+    """任务图每节点含时间戳与当前活动；error 取自内容表。"""
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
     conn = fresh_conn()
@@ -185,12 +182,12 @@ def test_get_graph_includes_current_activity_and_timestamps():
     assert t.current_activity is not None
     assert t.current_activity.role_line == "出图中"
     assert t.current_activity.event_type == "started"
-    # error 字段取自 task_content（此处未写 → None）
+    # error 取自内容表（此处未写 → None）
     assert t.error is None
 
 
 def test_get_graph_error_from_content():
-    """get_graph 的 error 字段取自 task_content，不在 tasks 调度行。"""
+    """任务图的 error 取自内容表，不在调度行。"""
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
     conn = fresh_conn()
@@ -210,7 +207,7 @@ def test_get_graph_error_from_content():
 
 
 def test_get_activities_returns_serialized_list():
-    """get_activities 返 dict 列表（TypeAdapter 序列化），按 id 升序，payload 多态保留。"""
+    """返 dict 列表（TypeAdapter 序列化），按 id 升序，payload 多态保留。"""
     from chorus.domain.task.activity import ActivityDraft, SearchResultsPayload
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
@@ -235,7 +232,7 @@ def test_get_activities_returns_serialized_list():
     assert [a["role_line"] for a in acts] == ["a", "b"]
     assert acts[1]["payload"]["total"] == 1
     assert acts[1]["tool_name"] == "baidu_search"
-    # TypeAdapter dump_python 产出的 dict 可 JSON 序列化
+    # TypeAdapter 序列化结果可 JSON 序列化
     import json as _json
     _json.dumps(acts)
 

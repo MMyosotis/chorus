@@ -1,7 +1,4 @@
-"""agent loop 运行时脚手架：上下文、单轮状态与退出结果。
-
-可变运行时状态，非业务概念，故不归领域层。多智能体扩展字段标识来源与任务。
-"""
+"""agent loop 运行时脚手架：上下文、单轮状态与退出结果，多智能体字段标识来源与任务。"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -56,5 +53,7 @@ class AgentContext:
     source: str = "supervisor"
     task_id: Optional[str] = None
 
+    # 运行级进度，跨轮累加
+    step: int = 0
     turn: TurnState = field(default_factory=TurnState)
     outcome: LoopOutcome = field(default_factory=LoopOutcome)

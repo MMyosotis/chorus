@@ -1,11 +1,7 @@
-# kitty/tests/test_domain_message.py
 """消息序列构造纯函数断言：build_provider_messages / build_history_view。
 
-覆盖 ``kitty/domain/message.py``：sealed 联合（user/assistant/tool）的 to_provider_dict、
-LLM 消息序列唯一构建点 ``[system] + 历史``、progress 子类型压缩、前端视图过滤 tool 并
-挂回 thinking/tools。直接构造 Message 实例（纯函数, 无需 DB）。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_message``
+覆盖 sealed 联合的 provider 序列化、LLM 消息序列唯一构建点、progress 子类型压缩、
+前端视图过滤 tool 并挂回 thinking/tools。直接构造消息实例，纯函数无需 DB。
 """
 from __future__ import annotations
 
@@ -91,7 +87,7 @@ def test_build_history_view_filters_tool_and_attaches_trace():
 
 def test_build_history_view_assistant_none_content_becomes_empty():
     msgs = [_assistant(content=None)]
-    views = build_history_view(msgs, {})  # 无 trace → 空 thinking/tools
+    views = build_history_view(msgs, {})  # 无 trace 则思考段与工具为空
     assert views[0].content == ""
     assert isinstance(views[0], MessageView)
 

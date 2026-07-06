@@ -38,7 +38,7 @@ class TaskArtifactsRow(BaseModel):
     updated_at: Optional[float] = None
 
     def to_domain(self) -> TaskArtifacts:
-        """按本行 agent_type 用注册表里的模型把 JSON 还原成强类型产物。"""
+        """按本行角色类型用注册表里的模型把 JSON 还原成强类型产物。"""
         artifacts = (
             AGENT_PROFILES[self.agent_type].build_artifacts(json.loads(self.artifacts))
             if self.artifacts else None

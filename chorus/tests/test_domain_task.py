@@ -1,10 +1,6 @@
-# kitty/tests/test_domain_task.py
 """任务图领域纯函数表驱动断言：PostCard 契约 / 状态机 / AgentProfile / pipeline。
 
-覆盖 ``kitty/domain/task`` 下 state + profiles + post + pipeline 的纯逻辑
-（不碰 DB，成本极低）。是「状态机/纯函数不测是最大浪费」（spec 第 8 节）的主防线。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_task``
+覆盖 state + profiles + post + pipeline 的纯逻辑，不碰 DB。
 """
 from __future__ import annotations
 
@@ -44,8 +40,6 @@ def _mk(status, deps=None, **kw):
     return Task(**base)
 
 
-# —— PostCard 契约 ——
-
 def test_postcard_contract():
     card = PostCard(
         title="夏日晚风",
@@ -69,10 +63,8 @@ def test_postcard_rejects_unknown_kind():
         PostSection(kind="table", text="x")  # type: ignore[arg-type]
 
 
-# —— 状态机 ——
-
 def test_legal_transitions_table():
-    # 严格闸门：无 finished→*
+    # 终态不可再转移
     assert not any(f == TaskStatus.FINISHED.value for f, _ in LEGAL_TRANSITIONS)
     # 关键转移都在
     assert is_legal_transition("pending", "running")
@@ -80,7 +72,7 @@ def test_legal_transitions_table():
     assert is_legal_transition("awaiting_confirm", "finished")
     assert is_legal_transition("awaiting_confirm", "pending")  # retry
     assert is_legal_transition("failed", "pending")  # retry 复活
-    # cancel_pipeline 实际执行 running→cancelled（批量翻转非终态），须在规则表
+    # 批量取消须支持运行中转取消
     assert is_legal_transition("running", "cancelled")
     assert is_legal_transition("pending", "cancelled")
     assert is_legal_transition("awaiting_confirm", "cancelled")
@@ -94,12 +86,12 @@ def test_can_schedule():
     dep_finished = _mk("finished", id="d1")
     dep_failed = _mk("failed", id="d2")
     assert _mk("pending").can_schedule([dep_finished]) is True
-    # 上游 failed 不满足（砍级联：后继阻塞）
+    # 上游失败则后继阻塞
     assert _mk("pending").can_schedule([dep_failed]) is False
     # 非 pending 不可调度
     assert _mk("running").can_schedule([dep_finished]) is False
     assert _mk("awaiting_confirm").can_schedule([dep_finished]) is False
-    # 无 deps 的 pending 可调度
+    # 无依赖的可调度
     assert _mk("pending").can_schedule([]) is True
 
 
@@ -114,26 +106,22 @@ def test_select_display_pipeline():
     active = [_mk("running", id="a")]
     finished = [_mk("finished", id="f1"), _mk("cancelled", id="c1")]
     assert select_display_pipeline(active, finished) == active  # active 优先
-    # 无 active，返 finished（不含 cancelled）
+    # 无运行中则返已完成（不含已取消）
     assert select_display_pipeline([], finished) == [_mk("finished", id="f1")]
     assert select_display_pipeline([], []) == []
 
 
-# —— AgentProfile 注册表 ——
-
 def test_agent_profiles_registry():
     assert set(AGENT_PROFILES.keys()) == {"idea", "script", "image", "finalize"}
     assert "generate_image" in TOOL_WHITELISTS["image"]  # 唯一带生图的角色
-    # 前三步不含 generate_image
+    # 前三步不含生图
     for at in ("idea", "script", "finalize"):
         assert "generate_image" not in TOOL_WHITELISTS[at]
-    # enter_line 纯文本无 emoji（粗校：仅 ASCII / 中文标点，无典型 emoji 区段）
+    # 入场台词纯文本无 emoji
     for p in AGENT_PROFILES.values():
         assert p.enter_line and p.display_name
         assert p.expected_sections == ("artifacts", "narrative")
 
-
-# —— pipeline 校验 / 展开 / 渲染 / 解析 ——
 
 def test_validate_steps_ok():
     steps = [
@@ -183,7 +171,7 @@ def test_expand_pipeline():
     assert tasks[1].dependencies == [tasks[0].id]
     assert all(t.pipeline_id == tasks[0].pipeline_id for t in tasks)
     assert "夏日晚风" in contents[0].invoke_message
-    # 内容行 task_id 对齐调度行 id
+    # 内容行对齐调度行标识
     assert all(c.task_id == t.id for t, c in pairs)
 
 
@@ -262,8 +250,6 @@ def test_parse_output_missing_section():
         AGENT_PROFILES["idea"].parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>")  # 缺 NARRATIVE
 
 
-# —— topological_order：顺序语义唯一真相源在 dependencies ——
-
 def _task(tid, deps=None, created_at=0.0):
     return Task(
         id=tid, session_id="s", pipeline_id="p", agent_type="idea",
@@ -291,7 +277,7 @@ def test_topological_order_parallel_branches():
 
 
 def test_topological_order_same_layer_tiebreak():
-    """同层按 created_at 升序再 id 兜底，稳定。"""
+    """同层按创建时间升序再以标识兜底，稳定。"""
     a = _task("a")
     b = _task("b", ["a"], created_at=5.0)
     c = _task("c", ["a"], created_at=2.0)
@@ -299,7 +285,7 @@ def test_topological_order_same_layer_tiebreak():
 
 
 def test_topological_order_ignores_external_dep():
-    """dep id 不在列表内（跨 pipeline）忽略，不阻塞排序。"""
+    """依赖标识不在列表内（跨流水线）忽略，不阻塞排序。"""
     a = _task("a", ["外部id"])
     assert [t.id for t in topological_order([a])] == ["a"]
 

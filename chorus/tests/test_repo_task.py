@@ -1,7 +1,4 @@
-"""TaskRepository 的 smoke test：CAS / 哑查询 / cancel_pipeline / 心跳。
-
-运行：``.venv/bin/python -m kitty.tests.test_repo_task``
-"""
+"""TaskRepository smoke test：CAS / 哑查询 / cancel_pipeline / 心跳。"""
 from __future__ import annotations
 
 from chorus.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
@@ -21,7 +18,7 @@ def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None,
 
 def _repo():
     conn = fresh_conn()
-    seed_session(conn)  # tasks 外键引用 sessions（foreign_keys=ON），须先建父行
+    seed_session(conn)  # 须先建 sessions 父行（外键约束）
     return TaskRepository(conn), conn
 
 
@@ -38,12 +35,12 @@ def test_transition_success_and_conflict():
     repo.insert(_mk("t1", status="pending"))
     assert repo.transition("t1", "pending", "running") is True
     assert repo.get("t1").status == "running"
-    # from_status 不匹配 → False（状态已漂移）
+    # 期望态不匹配 → False（状态已漂移）
     assert repo.transition("t1", "pending", "running") is False
 
 
 def test_claim_writes_owner_id():
-    """claim 占槽：pending→running 并写 owner_id（运行租约 token）。"""
+    """占槽：pending→running 并写入运行租约。"""
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
     assert repo.claim("t1", 100.0) is True
@@ -79,7 +76,7 @@ def test_find_running_before():
 
 def test_find_count_by_session_statuses():
     repo, conn = _repo()
-    # 别的 session 的 task 不应被 s1 查到（跨 session 隔离）
+    # 别的会话的 task 不应被查到（跨会话隔离）
     seed_session(conn, sid="s2", title="t2")
     repo.insert(_mk("a", status="pending"))
     repo.insert(_mk("b", status="running"))

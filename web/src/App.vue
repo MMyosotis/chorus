@@ -28,14 +28,13 @@ const taskPolling = useTaskPolling()
 const consoleOpen = ref(false)
 const settingsOpen = ref(false)
 
-const sessions = ref([]) // [{id, title, created_at, updated_at}]
-const messagesBySession = reactive({}) // { [id]: Message[] }
-const streamingBySession = reactive({}) // { [id]: boolean }
-const intentStateBySession = reactive({}) // { [id]: IntentState }
+const sessions = ref([])
+const messagesBySession = reactive({})
+const streamingBySession = reactive({})
+const intentStateBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
 
-// 单一焦点任务：点 RoleCard 切 focus（Dock 纯遥测，不再回传 focus/expand）
 const focusedTaskId = ref(null)
 
 function onTaskFocus(taskId) {
@@ -45,7 +44,6 @@ function onTaskFocus(taskId) {
 const messages = computed(() => messagesBySession[activeId.value] || [])
 const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
-// 会话有活跃创作任务（get_graph 的 active 字段，由后端 TaskService.get_graph 决定）
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
 const activeTitle = computed(() => {
@@ -85,8 +83,7 @@ function mergeAssistantHistory(raw) {
   const result = []
   let pendingTools = []
 
-  // 把 pending（无正文 assistant 累积下来的 tools）合并到 result 中最近一条 assistant。
-  // 没有可合并目标时才落成独立空壳 bubble（兜底，避免信息全丢）。
+  // 把累积的无正文工具调用合并到最近一条助手消息，无目标才落独立气泡兜底
   const flushPending = () => {
     if (!pendingTools.length) return
     for (let i = result.length - 1; i >= 0; i--) {
@@ -182,12 +179,11 @@ async function selectSession(id) {
   activeId.value = id
   await Promise.all([loadMessages(id), loadIntentState(id)])
   injectTaskCards(id)
-  // 进入会话若已有 active task 图，恢复轮询（start 首 tick 拉图，active=False 自停）
+  // 进入会话若已有活跃任务图，恢复轮询
   taskPolling.start(id)
   focusedTaskId.value = null
 }
 
-// 强制从服务器重拉 messages（轮询/done 后取回非流式 friendly_reply + progress 气泡）
 async function forceReloadMessages(id) {
   try {
     const raw = await fetchMessages(id)
@@ -198,8 +194,6 @@ async function forceReloadMessages(id) {
   }
 }
 
-// 把 polling graph 里 awaiting_confirm 的 task 与 finalize finished 的成品
-// 映射成虚拟 messages 条目，追加到该会话消息流末尾（供 ChatWindow 内嵌 HilCard/PostCard）。
 function injectTaskCards(id) {
   const list = messagesBySession[id]
   if (!list) return
@@ -220,13 +214,11 @@ function injectTaskCards(id) {
   }
 }
 
-// 注入轮询依赖（是否该会话正 SSE 流式 / 强制重拉 messages）
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
   reloadMessages: forceReloadMessages,
 })
 
-// HilCard 操作回调
 function onHilConfirmed(taskId) {
   const sid = activeId.value
   if (!sid) return
@@ -320,8 +312,7 @@ function createStreamHandler(sessionId) {
     if (c.tools.state === 'running') c.tools.state = 'idle'
   }
 
-  // 合并尾部"只有 tools、没有正文"的 assistant 气泡到前一个 assistant 上。
-  // 用于 agent loop 末尾模型按工具约束保持沉默时，避免出现幽灵气泡。
+  // 合并尾部无正文的工具气泡到前一条助手消息，避免幽灵气泡
   function mergeTrailingEmptyBubble() {
     if (list.length < 2) return
     const last = list[list.length - 1]
@@ -351,7 +342,7 @@ function createStreamHandler(sessionId) {
   }
 
   const onEvent = (payload) => {
-    // trace 事件先吃掉，不走气泡逻辑（后端是 trace 唯一权威源，含 tool_call/tool_result 也都以 trace 形式产出）
+    // trace 事件直接入 store，不走气泡逻辑
     if (payload.type === 'trace') {
       traceStore.addTrace(sessionId, payload)
       return
@@ -411,12 +402,11 @@ function createStreamHandler(sessionId) {
       finalizeCurrent()
       mergeTrailingEmptyBubble()
       streamingBySession[sessionId] = false
-      // friendly_reply 非流式落库, done 后重拉取回气泡 + 启动/续轮询
+      // 重拉取回非流式落库的气泡并续轮询
       forceReloadMessages(sessionId).finally(() => taskPolling.start(sessionId))
     } else if (payload.type === 'busy') {
-      // 会话有活跃创作任务，后端拒绝（创作准入）。不解锁输入框——靠 activeGraph 维持禁用。
+      // 活跃任务准入拒绝的瞬时信号：不解禁输入框、不注入气泡，进度由任务图反映
       streamingBySession[sessionId] = false
-      // 不注入气泡，busy 是瞬时拒绝信号；activeGraph 已反映进行中
     } else if (payload.type === 'error') {
       ensureAssistant().content = `[错误] ${payload.content}`
       streamingBySession[sessionId] = false
@@ -490,8 +480,7 @@ onMounted(async () => {
   if (sessions.value.length === 0) {
     await onCreate()
   } else {
-    // 复用 selectSession 完整路径：loadMessages + injectTaskCards + 轮询启动。
-    // 刷新后 graph 靠轮询恢复，否则 Dock / TeamPanel 全空。
+    // 复用会话切换完整路径，让刷新后的任务图靠轮询恢复
     await selectSession(sessions.value[0].id)
   }
 })

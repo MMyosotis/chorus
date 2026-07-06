@@ -1,4 +1,5 @@
 <script setup>
+// 运行时遥测面板：只显示焦点任务活动与收尾卡，交互卡由消息流注入避免重复
 import { computed } from 'vue'
 import AgentActivityPreview from './AgentActivityPreview.vue'
 import FinishWrapCard from './FinishWrapCard.vue'
@@ -14,18 +15,13 @@ const tasks = computed(() => props.graph?.tasks || [])
 
 const focusedTask = computed(() => tasks.value.find((t) => t.id === props.focusedTaskId) || null)
 
-// 交互卡归 ChatStream（verdict B：Dock 纯遥测）。
-// awaiting_confirm / failed 时 Dock 不渲染活动卡——按钮在 ChatStream 的 HilCard / RecoveryCard，
-// 这里再显示就会双卡。FinishWrapCard 独立绑 finalize finished，与活动卡解耦。
 const hasInteraction = computed(() =>
   tasks.value.some((t) => t.status === 'awaiting_confirm' || t.status === 'failed')
 )
 
 const activityTask = computed(() => {
   if (hasInteraction.value) return null
-  // 有 running：自动跟踪进行中任务（焦点 running 优先）——遥测。
-  // 无 running：回看模式——用户点了哪个 RoleCard 显示哪个；未点则默认
-  // 显示 finalize finished（成品作者）作为入口，供"查看详情"展开。
+  // 有进行中任务则跟踪焦点，否则回看用户选中的角色
   const running = tasks.value.find((x) => x.status === 'running')
   if (running) {
     return (focusedTask.value && focusedTask.value.status === 'running') ? focusedTask.value : running
@@ -37,15 +33,11 @@ const finalizeFinished = computed(() =>
   tasks.value.find((t) => t.status === 'finished' && t.agent_type === 'finalize') || null
 )
 
-// Dock 可见：有活动卡或收尾卡时才渲染，避免 HIL/failed 时空框
 const visible = computed(() => tasks.value.length > 0 && (activityTask.value || finalizeFinished.value))
 </script>
 
 <template>
   <div v-if="visible" class="runtime-dock">
-    <!-- Dock 纯遥测：只渲染一张 ActivityPreview 焦点卡 + 收尾卡。
-         交互卡（HilCard / RecoveryCard / PostCard）归 ChatStream，经 injectTaskCards 注入消息流——
-         Dock 不重复，避免双卡。awaiting_confirm / failed 时 Dock 整体退场。 -->
     <AgentActivityPreview v-if="activityTask" :task="activityTask" />
     <FinishWrapCard v-if="finalizeFinished" :task="finalizeFinished" @done="$emit('finish-done', $event)" />
   </div>

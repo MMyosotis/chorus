@@ -31,7 +31,6 @@ const formattedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
-// 状态条仅在进行时显示，结束即消失
 const activityState = computed(() => {
   if (props.thinking.state === 'running') return 'thinking'
   if (props.tools.state === 'running') return 'tools'
@@ -54,12 +53,10 @@ const activityLabel = computed(() => {
   return ''
 })
 
-// generate_image 工具的图片占位/渲染：图片严格归属于产生它的本气泡。
 const imageItems = computed(() =>
   (props.tools.items || []).filter((it) => it.name === 'generate_image')
 )
 
-// output_plan 工具的计划卡片：tool_result 回来（duration_ms 有值）后才渲染，避免流式空态。
 const planItems = computed(() =>
   (props.tools.items || []).filter(
     (it) => it.name === 'output_plan' && it.duration_ms != null
@@ -101,7 +98,6 @@ function imageAlt(item) {
   return p.length > 80 ? p.slice(0, 80) : p
 }
 
-// 图片预览（点击放大）
 const previewSrc = ref('')
 const previewAlt = ref('')
 
@@ -121,7 +117,6 @@ function closePreview() {
 <template>
   <div :class="['bubble-row', role]">
     <div :class="['bubble', role]">
-      <!-- 进行中状态条：思考 / 工具调用（结束即消失）-->
       <div
         v-if="activityState !== 'idle'"
         class="status-card"
@@ -137,7 +132,6 @@ function closePreview() {
         </div>
       </div>
 
-      <!-- 执行计划卡片：output_plan 工具产出，置于正文之前 -->
       <div v-if="planItems.length" class="plan-list">
         <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
           <div class="plan-header">执行计划</div>
@@ -147,10 +141,8 @@ function closePreview() {
         </div>
       </div>
 
-      <!-- 正文 -->
       <div v-if="content" class="text" v-html="formattedContent"></div>
 
-      <!-- 生成图像：占位骨架 → 拿到 URL 后替换为图片（放在正文下方）-->
       <div v-if="imageItems.length" class="image-list">
         <div v-for="(item, idx) in imageItems" :key="`img-${idx}`" class="image-item">
           <div v-if="isImageReady(item)" class="image-ready" @click="openPreview(item)">
@@ -169,7 +161,6 @@ function closePreview() {
     </div>
   </div>
 
-  <!-- 图片放大预览 -->
   <Teleport to="body">
     <div v-if="previewSrc" class="image-preview-mask" @click.self="closePreview">
       <img :src="previewSrc" :alt="previewAlt" class="image-preview-img" />

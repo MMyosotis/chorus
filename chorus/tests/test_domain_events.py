@@ -1,11 +1,7 @@
-# kitty/tests/test_domain_events.py
 """SSE 事件 sealed 联合断言：type 判别 / 序列化往返 / 必填校验 / BusyEvent 契约。
 
-覆盖 ``kitty/domain/events.py``：11 种 SSE 事件各持有唯一 type 字面量、frozen + extra=forbid、
-model_dump_json 经 SseEvent discriminated union 往返、缺必填抛 ValidationError。
+11 种事件各持唯一 type 字面量、frozen + extra=forbid、JSON 经联合类型往返、缺必填抛错。
 BusyEvent 携带 content（业务忙非错误，supervisor 创作准入拒绝时回传）。
-
-运行：``.venv/bin/python -m kitty.tests.test_domain_events``
 """
 from __future__ import annotations
 
@@ -29,7 +25,6 @@ from chorus.domain.events import (
 from chorus.domain.trace import TracePhase
 
 
-# (事件类, 构造所需 kwargs, 期望 type 字面量)
 _FIXTURES = [
     (MessageStartEvent, {"id": "m1"}, "message_start"),
     (ReasoningEvent, {"content": "想"}, "reasoning"),
@@ -50,7 +45,7 @@ def test_each_event_has_distinct_type():
     for cls, kwargs, expected in _FIXTURES:
         ev = cls(**kwargs)
         assert ev.type == expected
-        assert expected not in seen  # 各 type 唯一
+        assert expected not in seen  # 各类型唯一
         seen.add(expected)
     assert len(seen) == len(_FIXTURES)
 
@@ -59,7 +54,7 @@ def test_model_dump_json_roundtrips_via_sse_union():
     adapter = TypeAdapter(SseEvent)
     for cls, kwargs, _expected in _FIXTURES:
         ev = cls(**kwargs)
-        # JSON 序列化 -> 经 discriminated union 反序列化 -> 同类同值
+        # JSON 序列化后经联合类型反序列化，同类同值
         rebuilt = adapter.validate_json(ev.model_dump_json())
         assert type(rebuilt) is cls
         assert rebuilt.model_dump() == ev.model_dump()
@@ -67,11 +62,11 @@ def test_model_dump_json_roundtrips_via_sse_union():
 
 def test_required_fields_enforced():
     with pytest.raises(ValidationError):
-        TokenEvent()  # 缺 content
+        TokenEvent()  # 缺正文
     with pytest.raises(ValidationError):
-        MessageStartEvent()  # 缺 id
+        MessageStartEvent()  # 缺标识
     with pytest.raises(ValidationError):
-        ToolCallEvent(id="c1", name="gen", display="x")  # 缺 arguments
+        ToolCallEvent(id="c1", name="gen", display="x")  # 缺参数
 
 
 def test_frozen_and_extra_forbidden():

@@ -78,21 +78,17 @@ watch(
     <div class="brand">
       <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <defs>
-          <!-- 极浅纵向渐变：上方略亮、底部略深，制造柔和光泽而非立体感 -->
           <linearGradient id="lk-logo-bg" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stop-color="#7c83f3" />
             <stop offset="100%" stop-color="#5860e0" />
           </linearGradient>
         </defs>
 
-        <!-- 耳朵 -->
         <path d="M26 30 L33 10 L48 26 Z" fill="url(#lk-logo-bg)" />
         <path d="M74 30 L67 10 L52 26 Z" fill="url(#lk-logo-bg)" />
 
-        <!-- 圆角方框主体 -->
         <rect x="14" y="20" width="72" height="70" rx="22" fill="url(#lk-logo-bg)" />
 
-        <!-- 猫脸：两眼 + 鼻 -->
         <ellipse cx="38" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
         <ellipse cx="62" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
         <path d="M47 66 L53 66 L50 71 Z" fill="#ffffff" fill-opacity="0.92" />

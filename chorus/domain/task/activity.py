@@ -1,7 +1,5 @@
 """task_activities 表领域层：活动行模型 + 载荷多态 + 事件→卡片翻译。
-
-纯函数，不碰数据库，按角色与工具查模板生成。
-"""
+纯函数，不碰数据库，按角色与工具查模板生成。"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -13,14 +11,13 @@ from pydantic.dataclasses import dataclass as pydataclass
 from chorus.domain.task.artifacts import Narrative
 from chorus.domain.task.profiles import AGENT_PROFILES
 
-# 通用态文案
 _FAILED_LINE = "这步出了点问题"
 _RETRYING_LINE = "刚才的格式不太对，我重新整理一下"
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class SearchResultsPayload:
-    """tool_done(baidu_search) 的载荷：搜索结果摘要。"""
+    """搜索完成事件的载荷：搜索结果摘要。"""
 
     total: int
     bullets: list[dict]
@@ -28,7 +25,7 @@ class SearchResultsPayload:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ImageProgressPayload:
-    """tool_done(generate_image) 的载荷：配图进度与预览。"""
+    """配图完成事件的载荷：配图进度与预览。"""
 
     current: int
     items: list[dict]
@@ -38,14 +35,14 @@ class ImageProgressPayload:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class FailedPayload:
-    """failed 事件的载荷：失败详情。"""
+    """失败事件的载荷：失败详情。"""
 
     detail_md: str
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskActivity:
-    """活动流一行：核心字段 + tool_name + 多态 payload。"""
+    """活动流一行：核心字段 + 工具名 + 多态载荷。"""
 
     id: int
     task_id: str
@@ -57,7 +54,6 @@ class TaskActivity:
     payload: Optional[Union["SearchResultsPayload", "ImageProgressPayload", "FailedPayload"]] = None
 
 
-# TaskActivity 序列化适配器：保留多态 payload 的类型还原。
 _TASK_ACTIVITY_ADAPTER = TypeAdapter(TaskActivity)
 
 
@@ -66,10 +62,8 @@ def dump_activity(a: TaskActivity) -> dict:
     return _TASK_ACTIVITY_ADAPTER.dump_python(a)
 
 
-# 活动业务载荷判别联合，按 event_type 取对应类型
 ActivityPayload = Union[SearchResultsPayload, ImageProgressPayload, FailedPayload]
 
-# 载荷类型注册表，(event_type, tool_name) → dataclass 类
 PAYLOAD_TYPES: dict[tuple[str, Optional[str]], type] = {
     ("failed", None): FailedPayload,
     ("tool_done", "baidu_search"): SearchResultsPayload,
@@ -80,9 +74,9 @@ PAYLOAD_TYPES: dict[tuple[str, Optional[str]], type] = {
 def build_payload(
     event_type: str, tool_name: Optional[str], raw: Optional[dict],
 ) -> Optional[ActivityPayload]:
-    """按 (event_type, tool_name) 查注册表把原始数据还原成强类型载荷。
+    """按事件类型与工具名查注册表，把原始数据还原成强类型载荷。
 
-    None 原数据对应无载荷。未知组合 KeyError 上抛，由调用方兜底。
+    无原数据返回空，未知组合抛异常由调用方兜底。
     """
     return None if raw is None else PAYLOAD_TYPES[(event_type, tool_name)](**raw)
 
@@ -237,5 +231,5 @@ _DONE_TRANSLATORS: dict[str, Callable[..., ActivityDraft]] = {
 
 
 def image_progress(total: Optional[int], done_images: list[str]) -> tuple[int, Optional[int]]:
-    """配图进度：current=已生成数，total 未知时返 None。"""
+    """配图进度：返回已生成数与总数，总数未知时为空。"""
     return len(done_images), total

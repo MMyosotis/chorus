@@ -1,7 +1,5 @@
 """task_artifacts 表的全部产物模型：结构化产物 + 角色话术 + 成品契约。
-
-纯数据形状，按角色多态。与 task_artifacts 表一一对应，由 profiles.build_artifacts 还原。
-"""
+纯数据形状，按角色多态，与表一一对应。"""
 from __future__ import annotations
 
 from typing import Literal, Optional, Union
@@ -51,7 +49,7 @@ class ScriptBlock:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ScriptArtifacts:
-    """script 角色产物：正文块序列。"""
+    """文案官产物：正文块序列。"""
 
     blocks: list[ScriptBlock]
 
@@ -64,7 +62,7 @@ class ImageItem:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ImageArtifacts:
-    """image 角色产物：配图列表。"""
+    """配图官产物：配图列表。"""
 
     images: list[ImageItem]
 

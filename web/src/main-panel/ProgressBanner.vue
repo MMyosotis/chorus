@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 import { getAgentProfiles } from '../api.js'
 
-// status → 进度条段状态
 function segState(status) {
   if (status === 'finished') return 'done'
   if (status === 'running') return 'running'
@@ -14,7 +13,6 @@ function segState(status) {
 
 const props = defineProps({ graph: { type: Object, default: null } })
 
-// 角色档案（enter_line 后端唯一来源，启动拉一次缓存）
 const profiles = ref({})
 onMounted(async () => {
   profiles.value = await getAgentProfiles()
@@ -23,7 +21,6 @@ onMounted(async () => {
 const tasks = computed(() => props.graph?.tasks || [])
 
 const current = computed(() => {
-  // 当前步 = 第一个非终态（running/awaiting_confirm/pending），否则末步
   const t = tasks.value.find((x) => x.status !== 'finished' && x.status !== 'failed' && x.status !== 'cancelled')
   return t || tasks.value[tasks.value.length - 1] || null
 })
@@ -40,7 +37,6 @@ const label = computed(() => {
   return `第 ${idx}/${ts.length} 步 · ${role}`
 })
 
-// 每段的台词：running→enter_line、awaiting→narrative.awaiting_line、finished→narrative.done_line
 function lineOf(t) {
   const nar = t.narrative || {}
   if (t.status === 'running') return profiles.value[t.agent_type]?.enter_line || ''

@@ -1,8 +1,6 @@
-"""轮首气泡边界通知：supervisor 专属，发 MessageStartEvent 让前端建新气泡。
+"""轮首气泡边界通知：supervisor 专属，发事件让前端建新气泡。
 
-每轮 reset 后由 kernel 触发 TurnStart 事件，本钩子注册时绑 source="supervisor"——subagent
-不连 SSE、不注册此钩子，其 TurnStart 触发无回调响应。失败只记日志不阻断（通知性质，与
-trace 同类，非主业务）。
+注册时绑 supervisor，subagent 不连 SSE 不注册；通知性质，失败只记日志。
 """
 
 from __future__ import annotations

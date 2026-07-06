@@ -1,11 +1,6 @@
-# chorus/tests/test_agent_loop.py
 """agent loop kernel 契约：最小回合自动机的轮次推进、终止信号、工具派发顺序与异常收口。
 
-覆盖 ``chorus/agents/loop.py``：FakeClient 模拟流式分片，spy strategy 记录方法调用序列，
-spy dispatcher 桩化工具派发。不触真实 LLM / DB / SSE。锚定 bright-line——kernel 据
-``LoopSignal`` 推进，不识 agent 名称与载荷类型。
-
-运行：``.venv/bin/python -m chorus.tests.test_agent_loop``
+FakeClient 模拟流式分片，spy strategy 记录调用序列，spy dispatcher 桩化工具派发，不触真实 LLM / DB / SSE。
 """
 from __future__ import annotations
 
@@ -77,7 +72,7 @@ class _SpyStrategy:
         self._after_text_signal = after_text_signal
         self.log: list[str] = []
 
-    def before_turn(self, ctx, step):
+    def before_turn(self, ctx):
         self.log.append("before_turn"); return True
 
     def provider_messages(self, ctx):
@@ -119,18 +114,18 @@ def _loop(hooks=None, dispatcher=None):
 
 
 def test_kernel_continues_after_tools_then_finishes_on_text():
-    # 第一轮模型请求工具 → after_tools 返回 CONTINUE；第二轮纯文本 → after_text 返回 FINISH
+    # 第一轮请求工具后继续；第二轮纯文本后结束
     entry = _FakeEntry([[_tool_call_chunk()], [_chunk({"content": "done"}, "stop")]])
     ctx = AgentContext(session_id="s1")
     strategy = _SpyStrategy()
     list(_loop().run(ctx, entry=entry, strategy=strategy))
     assert entry.calls == 2
     assert strategy.log.index("after_tools") < strategy.log.index("after_text")
-    assert strategy.log[-1] == "after_text"          # FINISH 即停
+    assert strategy.log[-1] == "after_text"          # 结束即停
 
 
 def test_max_steps_exhausts_after_n_calls():
-    # 每轮都 after_tools CONTINUE，撞 max_steps 走 on_exhausted，不多调一次模型
+    # 每轮工具后继续，撞步数上限走耗尽分支，不多调一次模型
     entry = _FakeEntry([[_tool_call_chunk()], [_tool_call_chunk()]])
     ctx = AgentContext(session_id="s1")
     strategy = _SpyStrategy(max_steps=2)
@@ -151,7 +146,7 @@ def test_kernel_routes_exception_to_on_error():
 
 
 def test_dispatch_tool_calls_orders_pre_before_dispatch_after_post():
-    # 顺序钉死：Pre → before_dispatch → dispatch → after_dispatch → Post，按 index sorted
+    # 顺序：Pre → before_dispatch → dispatch → after_dispatch → Post，按 index 排序
     hooks = HookRegistry()
     order: list[str] = []
     hooks.register("PreToolUse", lambda ctx, *a: order.append("Pre"))

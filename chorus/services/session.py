@@ -1,8 +1,6 @@
-"""会话服务：会话元数据的增删改查 + 标题归一。
+"""会话服务：会话元数据增删改查 + 标题归一。
 
-只管会话概念本身，消息与轨迹的读写归消息服务；会话时间刷新由编排层在消息落库后触发。
-无内存缓存——每次直接打库。同一会话同一时刻只有一个 chat 流，故无需会话级并发锁；
-标题的"复检+写入"靠 SQL 单条 UPDATE 原子保证。
+只管会话概念本身，消息与轨迹归消息服务；无缓存直打库，标题复检加写入靠 SQL 原子。
 """
 
 from __future__ import annotations
@@ -44,10 +42,10 @@ class SessionService:
         return session
 
     def delete(self, session_id: str) -> None:
-        self._session_repo.delete(session_id)  # CASCADE 带走 messages / traces；删 0 行幂等
+        self._session_repo.delete(session_id)  # CASCADE 带走消息与轨迹；删 0 行幂等
 
     def rename(self, session_id: str, title: str) -> Optional[Session]:
-        # 用户手改：严格校验，空或超长都拒绝，只去空白不截断；语义上覆盖，无需复检
+        # 用户手改：严格校验，空或超长拒绝，只去空白不截断
         title = (title or "").strip()
         if not title:
             raise ValueError("title 不能为空")

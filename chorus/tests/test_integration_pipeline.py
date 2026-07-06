@@ -1,26 +1,6 @@
-# kitty/tests/test_integration_pipeline.py
-"""多智能体端到端 4 链路 smoke：supervisor 建图 → subagent awaiting_confirm → confirm finished → scheduler 派发 finalize。
+"""多智能体端到端 4 链路 smoke：建图 → 子 agent 待复核 → 确认完成 → 派发汇总成品。
 
-此前端到端 smoke 仅存于 /tmp 一次性脚本（task-9 brief Step 3），且该脚本有 3 处内联 bug
-（见下）。本文件修正后入库为常驻防线。FakeClient 模拟 LLM，不经真实 API / HTTP；scheduler
-仅手调一次 ``_tick()``（不起后台线程），其派发的 finalize worker 是唯一异步点，用轮询等其落定。
-
-task-9 脚本 3 处 bug（本文件已修正）：
-1. hook 事件名↔方法名映射错：脚本用 ``getattr(t, e)``（e 为 "PreToolUse" 等大驼峰事件名），
-   但 ``TraceEmitter`` 的方法是 snake_case 且非简单同名——正确映射是
-   ``PreToolUse→on_tool_call``、``PostToolUse→on_tool_result``。
-2. subagent 的模型未包 ``ChatModelEntry``：脚本传裸 FakeClient，而 ``SubAgentService`` 取
-   ``entry.client`` / ``entry.model_id``，裸 client 无 model_id。现已改用 stub provider。
-3. 调用了不存在的 repo 方法（原 /tmp 脚本的 ``list_by_session``）：正确方法是
-   ``find_by_session_statuses`` / ``find_pending_with_deps``（已对照 repo/task.py 核实）。
-
-4 条链路（任一断裂即测试失败）：
-1. ``supervisor.stream`` 产出 ``done``（create_plan 经 dispatch Terminal 建图）+ 落库 2 个 active task（idea + finalize）。
-2. CAS idea pending→running 后 ``subagent.run`` → idea awaiting_confirm + 写 artifacts。
-3. ``TaskService.confirm(idea, selected=0)`` → idea finished。
-4. ``scheduler._tick`` 派发 finalize（idea 已 finished 解除 dep 阻塞）→ finalize finished（产出 PostCard）。
-
-运行：.venv/bin/python -m kitty.tests.test_integration_pipeline
+FakeClient 模拟 LLM，不经真实 API / HTTP；scheduler 仅手调一次，其派发的汇总 worker 是唯一异步点。
 """
 from __future__ import annotations
 
@@ -52,9 +32,6 @@ from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool
-
-
-# —— FakeClient / FakeStream（与 test_agent_supervisor / test_agent_subagent 同模式）——
 
 
 class _Delta(types.SimpleNamespace):
@@ -101,7 +78,7 @@ def _idea_content() -> str:
 
 
 def _finalize_content() -> str:
-    # PostCard 结构（parse_output 对 finalize 强校验整棵 PostCard）
+    # PostCard 结构
     card = {
         "title": "夏日晚风",
         "cover": {"url": "http://x/a.jpg"},
@@ -146,7 +123,7 @@ def _build_assembly():
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
 
-    # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复（修正 bug 1：显式 snake_case 方法名映射）
+    # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复
     hooks = HookRegistry()
     trace = TraceEmitter(trace_svc, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
@@ -159,7 +136,7 @@ def _build_assembly():
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn)], _stub_settings())
     agent_loop = AgentLoop(hooks, tool_dispatcher, 1024)
 
-    # supervisor：一次 create_plan tool_call 流
+    # supervisor：一次建图工具调用流
     sup_client = FakeClient([FakeStream([
         ({"tool_calls": [types.SimpleNamespace(
             index=0, id="c1", function=types.SimpleNamespace(
@@ -171,8 +148,7 @@ def _build_assembly():
         stub_chat_model_provider(sup_client), task_repo, tool_dispatcher, agent_loop,
     )
 
-    # subagent：idea + finalize 两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
-    # 入队两轮避免 task-9 脚本的「finalize 复用空队列→failed」fake 限制，让链路 4 真正跑通到 finished。
+    # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
     sub_client = FakeClient([
         FakeStream([({"content": _idea_content()}, "stop")]),
         FakeStream([({"content": _finalize_content()}, "stop")]),
@@ -207,7 +183,6 @@ def test_end_to_end_pipeline():
     assert "task_plan_created" not in [e.type for e in events]
     assert task_repo.count_by_session_statuses(sid, ACTIVE_STATUSES) == 2
 
-    # 修正 bug 3：用真实存在的 find_by_session_statuses（非 list_by_session）
     tasks = task_repo.find_by_session_statuses(sid, ACTIVE_STATUSES)
     idea = next(t for t in tasks if t.agent_type == "idea")
     finalize = next(t for t in tasks if t.agent_type == "finalize")
@@ -219,7 +194,7 @@ def test_end_to_end_pipeline():
     sub.run(idea.id)
     assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM.value
 
-    # confirm 前：finalize 仍被 dep 阻塞（idea awaiting_confirm ≠ finished）
+    # 确认前：汇总仍被依赖阻塞（选题待复核≠已完成）
     assert not finalize.can_schedule([task_repo.get(idea.id)])
 
     # —— 链路 3：confirm idea → finished ——
@@ -228,12 +203,9 @@ def test_end_to_end_pipeline():
 
     # —— 链路 4：scheduler 派发 finalize（dep 已解除）——
     assert finalize.can_schedule([task_repo.get(idea.id)])  # 现在可调度
-    scheduler._tick()  # CAS pending→running + spawn worker 线程跑 subagent.run(finalize)
+    scheduler._tick()  # 占槽并起 worker 线程跑汇总子 agent
 
-    # finalize 由 worker 线程异步跑；轮询等其离开 pending/running（WAL 跨线程可见）。
-    # 因 idea+finalize 两轮 fake 流均已入队，无空队列限制，finalize 应达 finished。
-    # 宽松下限（注释）：finalize 至少不再 pending-with-unmet-dep，即已 running/awaiting/finished/failed；
-    # 此处取强断言 finished，任一链路断裂都会以实际状态暴露。
+    # 汇总由 worker 线程异步跑，轮询等其离开 pending/running。
     deadline = time.time() + 2.0
     fin = task_repo.get(finalize.id)
     while fin.status in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value) and time.time() < deadline:

@@ -1,7 +1,4 @@
-"""TaskScheduler smoke test：派发 + zombie 回收 + CAS 竞态 + 限流。
-
-运行：.venv/bin/python -m kitty.tests.test_agent_scheduler
-"""
+"""TaskScheduler smoke：派发 + zombie 回收 + CAS 竞态 + 限流。"""
 from __future__ import annotations
 
 import tempfile
@@ -46,7 +43,7 @@ def test_dispatch_pending_with_finished_deps():
     sched._tick()
     time.sleep(0.05)  # 等 worker 线程跑完
     assert ran == ["t1"]
-    assert task_repo.get("t1").status in (TaskStatus.RUNNING.value,)  # subagent_run 是 noop，未 CAS awaiting
+    assert task_repo.get("t1").status in (TaskStatus.RUNNING.value,)  # 子 agent 函数是空操作，未翻转状态
 
 
 def test_blocked_by_unfinished_dep():

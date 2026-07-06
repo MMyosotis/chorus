@@ -1,9 +1,4 @@
-"""任务图纯函数：步骤校验、整图展开、调用消息渲染规格。
-
-纯领域逻辑，不碰数据库。建图前的规格类型（CreationIntent/StepSpec）随本概念内聚，
-整图展开作为 CreationIntent 方法读自身字段。产物解析（parse_output）见 profiles.py，
-调用消息渲染（render_invoke）见 models.py 的 TaskContent。
-"""
+"""任务图纯函数：步骤校验、整图展开、调用消息渲染规格，不碰数据库。"""
 from __future__ import annotations
 
 import json

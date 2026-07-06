@@ -1,15 +1,6 @@
-# kitty/tests/test_route_task.py
-"""task 资源路由 HTTP 适配层测试：5 端点的状态码映射。
+"""task 路由 HTTP 适配层测试：5 端点的状态码映射。
 
-覆盖 ``kitty/routes/task.py`` 的 5 个端点，只断言 HTTP 适配行为（KeyError→404 /
-ConflictError→409 / session 不存在→404），不测 service 业务逻辑（那是
-``test_service_task``）。
-
-不起真实 ``create_app()``（会拉起 scheduler lifespan + 触真实 DB），改用最小 FastAPI
-app 仅挂 task_router，经 ``app.dependency_overrides`` 注入 fake session/task service。
-TestClient 不进 lifespan → 不起 scheduler。
-
-运行：.venv/bin/python -m kitty.tests.test_route_task
+只断言适配行为（KeyError→404 / ConflictError→409 / 会话不存在→404），不测业务逻辑；最小 app + 依赖注入 fake service，不起 lifespan。
 """
 from __future__ import annotations
 
@@ -22,7 +13,7 @@ from chorus.services.task import ConflictError
 
 
 class FakeSessionService:
-    """路由仅用到 ``exists(session_id) -> bool``。"""
+    """路由仅用到会话存在性判断。"""
 
     def __init__(self, known: set[str]):
         self._known = set(known)
@@ -32,10 +23,10 @@ class FakeSessionService:
 
 
 class FakeTaskService:
-    """脚本化 stub：按 (method, key) 查表，命中返回值；存的是异常则抛出。
+    """脚本化 stub：按方法与键查表，命中返回值；存的是异常则抛出。
 
-    未注册的 (method, key) 默认抛 KeyError（对应路由 404）。冲突场景显式 set 一个
-    ConflictError。这样 13 个用例共用同一份 fake，靠 set() 区分各用例的预期副作用。
+    未注册的调用默认抛 KeyError（对应路由 404）。冲突场景显式置入 ConflictError。
+    13 个用例共用同一份 fake，靠键区分各用例的预期副作用。
     """
 
     def __init__(self):
@@ -74,11 +65,8 @@ def _client(session: FakeSessionService, task: FakeTaskService) -> TestClient:
     return TestClient(app)
 
 
-# —— GET /api/tasks ——
-
-
 def test_get_tasks_session_not_found():
-    """session.exists=False → 404，不触达 task service。"""
+    """会话不存在 → 404，不触达任务 service。"""
     session = FakeSessionService(known=set())
     task = FakeTaskService()
     r = _client(session, task).get("/api/tasks", params={"session_id": "unknown"})
@@ -86,7 +74,7 @@ def test_get_tasks_session_not_found():
 
 
 def test_get_tasks_ok():
-    """session 存在 → 200 + get_graph 经 dump_task_graph 序列化透出。"""
+    """会话存在 → 200 + 任务图序列化透出。"""
     from chorus.domain.task import TaskGraph, build_task_graph
 
     session = FakeSessionService(known={"s1"})
@@ -97,11 +85,8 @@ def test_get_tasks_ok():
     assert r.json() == {"pipeline_id": "p1", "active": True, "tasks": []}
 
 
-# —— POST /api/tasks/{id}/confirm ——
-
-
 def test_confirm_conflict():
-    """ConflictError → 409。"""
+    """冲突态 → 409。"""
     task = FakeTaskService()
     task.set("confirm", "t1", ConflictError("task 状态 running 不可确认"))
     r = _client(FakeSessionService({"s1"}), task).post("/api/tasks/t1/confirm", json={"selected": 0})
@@ -118,11 +103,8 @@ def test_confirm_ok():
     assert r.json()["status"] == "finished"
 
 
-# —— POST /api/tasks/{id}/retry ——
-
-
 def test_retry_conflict():
-    """ConflictError → 409。"""
+    """冲突态 → 409。"""
     task = FakeTaskService()
     task.set("retry", "t1", ConflictError("task 状态 finished 不可重跑"))
     r = _client(FakeSessionService({"s1"}), task).post(
@@ -142,11 +124,8 @@ def test_retry_ok():
     assert r.json()["status"] == "pending"
 
 
-# —— POST /api/sessions/{id}/pipeline:cancel ——
-
-
 def test_cancel_pipeline_session_not_found():
-    """session 不存在 → 404（先于 task service）。"""
+    """会话不存在 → 404（先于任务 service）。"""
     r = _client(FakeSessionService(set()), FakeTaskService()).post(
         "/api/sessions/unknown/pipeline:cancel"
     )
@@ -154,15 +133,12 @@ def test_cancel_pipeline_session_not_found():
 
 
 def test_cancel_pipeline_ok():
-    """正常 → 200 + 透出 {pipeline_id, cancelled}（无 active 时 cancelled=0 幂等）。"""
+    """正常 → 200 + 透出流水线与取消数（无 active 时为 0 幂等）。"""
     task = FakeTaskService()
     task.set("cancel_pipeline", "s1", {"pipeline_id": "p1", "cancelled": 2})
     r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "cancelled": 2}
-
-
-# —— GET /api/tasks/{id}/activities ——
 
 
 def test_get_activities_ok():

@@ -1,8 +1,4 @@
-"""TraceRepository 多来源扩展的 smoke test：source/task_id 写入、按 session/task 聚合，
-以及五种 phase 载荷的 round-trip 还原契约。
-
-运行：``.venv/bin/python -m chorus.tests.test_repo_trace``
-"""
+"""TraceRepository 多来源 smoke test：来源与任务写入、按会话/任务聚合、五种 phase 载荷往返。"""
 from __future__ import annotations
 
 from chorus.domain.trace import (
@@ -32,7 +28,7 @@ def _request() -> ModelRequest:
 def test_add_with_source_and_task_id():
     conn = _setup()
     repo = TraceRepository(conn)
-    # supervisor trace（默认 source）
+    # supervisor trace（默认来源）
     repo.add(TraceEntry(session_id="s1", message_id="m1", phase=TracePhase.MODEL_REQUEST,
                         created_at=1.0, payload=_request()))
     # subagent trace
@@ -48,7 +44,7 @@ def test_add_with_source_and_task_id():
     assert len(by_session) == 3
     sources = [e.source for e in by_session]
     assert sources == ["supervisor", "subagent", "scheduler"]
-    # list_by_task
+    # 按任务查
     by_task = repo.list_by_task("t1")
     assert len(by_task) == 2
     assert all(e.task_id == "t1" for e in by_task)
@@ -71,7 +67,7 @@ def test_batch_aggregate_groups_by_message():
     """IN 批量查多条 message 的 trace 并聚合；无 trace 的 id 不在结果中。"""
     conn = _setup()
     repo = TraceRepository(conn)
-    # m1: 一段思考 + 一次工具调用 + 结果
+    # 第一条消息：思考 + 工具调用 + 结果
     repo.add(TraceEntry(session_id="s1", message_id="m1",
                         phase=TracePhase.MODEL_RESPONSE, created_at=1.0,
                         payload=ModelResponse(
@@ -85,9 +81,9 @@ def test_batch_aggregate_groups_by_message():
                         phase=TracePhase.TOOL_RESULT, created_at=3.0,
                         payload=TraceToolResult(tool_call_id="c1", name="search",
                                                 content="r", duration_ms=10)))
-    # m2: 无 trace
+    # 第二条消息：无 trace
     out = repo.batch_aggregate(["m1", "m2"])
-    assert set(out.keys()) == {"m1"}  # m2 缺失不在结果
+    assert set(out.keys()) == {"m1"}  # 第二条消息缺失不在结果
     t = out["m1"]
     assert t.thinking[0].text == "想"
     assert t.tools[0].name == "search"

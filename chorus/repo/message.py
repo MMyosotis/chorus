@@ -99,7 +99,6 @@ class MessageRow(BaseModel):
         return json.dumps([t.model_dump() for t in tool_calls], ensure_ascii=False)
 
 
-# 列名与占位由行字段派生，避免多处人工对齐
 _COLS = ", ".join(MessageRow.model_fields)
 _PH = ", ".join(f":{k}" for k in MessageRow.model_fields)
 

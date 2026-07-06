@@ -76,7 +76,7 @@ class ModelResponse(_PayloadBase):
 
 
 class TraceToolCall(_PayloadBase):
-    """工具调用阶段载荷。与 tools.models.ToolCall 同名故加 Trace 前缀消歧。"""
+    """工具调用阶段载荷。"""
 
     tool_call_id: str
     name: str
@@ -86,7 +86,7 @@ class TraceToolCall(_PayloadBase):
 
 
 class TraceToolResult(_PayloadBase):
-    """工具结果阶段载荷。与 TraceToolCall 成对，加 Trace 前缀保持一致。"""
+    """工具结果阶段载荷。"""
 
     tool_call_id: str
     name: str
@@ -171,7 +171,6 @@ def _fold_tool_result(payload: TraceToolResult, acc: _FoldState) -> None:
     )
 
 
-# payload 类型 → fold 函数注册表；未登记类型（ModelRequest/Schedule）自然 no-op
 _FOLDERS: dict[type[TracePayload], Callable[..., None]] = {
     ModelResponse: _fold_response,
     TraceToolCall: _fold_tool_call,
@@ -180,7 +179,7 @@ _FOLDERS: dict[type[TracePayload], Callable[..., None]] = {
 
 
 def aggregate_trace(message_id: str, entries: Iterable[TraceEntry]) -> MessageTrace:
-    """从轨迹行重建思考与工具摘要：按 payload 类型查注册表分派。"""
+    """从轨迹行重建思考与工具摘要：按载荷类型查注册表分派。"""
     acc = _FoldState()
     for entry in entries:
         fn = _FOLDERS.get(type(entry.payload))

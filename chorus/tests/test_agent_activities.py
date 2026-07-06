@@ -1,17 +1,6 @@
-"""SubAgentService 写 task_activities 的顺序契约 + 运行租约 + done_images 累计。
+"""SubAgentService 写 task_activities 的顺序契约 + 运行租约 + 配图进度累计。
 
-运行：``.venv/bin/python -m chorus.tests.test_agent_activities``
-
-偏离 brief 说明（brief 自身两处冲突，TDD 自纠）：
-1. done_images 累计顺序：brief 的工具派发在调 tool_done_activity **前** append 当前
-   url，但 Task B 已提交的 _image_done 做 ``all_images = done_images + [url]``（约定
-   done_images 不含当前 url）——brief 字面顺序会双计，得 [2,3,4] 而 brief 测试断言 [1,2,3]。
-   实现改为 **先调 tool_done_activity 再 append**（对齐 Task B 契约 + 命中 [1,2,3]）。
-2. 租约早退测试：brief 的 test_lease_expired_worker_writes_no_activity 在 sub.run **前**
-   把 owner_id 重 CAS 成 999，期望 entry 租约校验触发早退。但 _run_loop 进入时重新 load
-   task（owner_id=999），捕获 my_owner_id=999，entry _lease_valid 重读也是 999 → 有效
-   → 仍写 started。entry 校验是多线程竞态护栏（entry-load 与 lease-check 相邻同读一份 DB，
-   单线程无法插入漂移），故改为测 max-steps 路径的租约早退——同样验证"漂移即不写终态活动"。
+覆盖活动顺序、租约漂移早退不写终态活动、CAS 漂移不写完成活动等场景。
 """
 from __future__ import annotations
 
@@ -65,14 +54,11 @@ class FakeClient:
 
 
 class _SideClient(FakeClient):
-    """FakeClient 变体：每次 create 先跑 side_effect(可空) 再返对应 stream。
-
-    供租约/漂移用例——在模型调用内改任务态/owner_id，模拟中途抢占。
-    """
+    """FakeClient 变体：每次调用先跑副作用再返对应流，供租约/漂移用例模拟中途抢占。"""
 
     def __init__(self, pairs):
-        # pairs: list[(side_effect_fn | None, stream)]
-        super().__init__([])  # _scripts 不用，走 _pairs
+        # pairs: list[(副作用函数 | None, stream)]
+        super().__init__([])  # 父类队列不用，走 _pairs
         self._pairs = list(pairs)
 
     def _create(self, **kwargs):
@@ -205,16 +191,16 @@ def test_generate_image_writes_progressive_tool_done_activities():
     acts = act_repo.list_by_task("t1")
     types_seq = [a.event_type for a in acts]
     tool_done = [a for a in acts if a.event_type == "tool_done"]
-    assert len(tool_done) == 3  # 三条独立，不 update
-    # 进度递进：current 1 → 2 → 3（payload 为 typed ImageProgressPayload）
+    assert len(tool_done) == 3  # 三条独立，不更新
+    # 进度递进 1 → 2 → 3
     currents = [a.payload.current for a in tool_done if a.payload]
     assert currents == [1, 2, 3]
     assert tool_done[-1].payload.total == 3
-    # 顺序契约：started 最先；每组 tool_started 在 tool_done 前；awaiting_confirm 最后
+    # 顺序：开始最先；每组工具开始在前、完成在后；待复核最后
     assert types_seq[0] == "started"
     assert types_seq.index("tool_started") < types_seq.index("tool_done")
     assert types_seq.index("tool_done") < types_seq.index("awaiting_confirm")
-    # 最终 awaiting_confirm（image 需复核）
+    # 最终待复核（image 需人工确认）
     assert any(a.event_type == "awaiting_confirm" for a in acts)
 
 
@@ -231,11 +217,11 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
     bad = "乱七八糟没有段"
 
     def _takeover():
-        # 模拟新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
+        # 模拟新 worker 抢占：zombie 回收 + 重派
         task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
         task_repo.claim("t1", 999.0)
 
-    # 第 1 轮触发抢占 + 坏产出；后续坏产出撞 max-steps
+    # 第 1 轮触发抢占加坏产出；后续坏产出撞步数上限
     pairs = [(_takeover, FakeStream([({"content": bad}, "stop")]))]
     pairs += [(None, FakeStream([({"content": bad}, "stop")])) for _ in range(_MAX_STEPS)]
     client = _SideClient(pairs)
@@ -263,7 +249,7 @@ def test_lease_takeover_prevents_stale_finalize():
     narrative = {"awaiting_line": "y", "done_line": "定了"}
 
     def _takeover():
-        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
+        # 新 worker 抢占：zombie 回收 + 重派
         task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
         task_repo.claim("t1", 999.0)
 
@@ -273,12 +259,12 @@ def test_lease_takeover_prevents_stale_finalize():
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
-    # 旧 worker 租约失效 → 不写 awaiting_confirm（CAS 单独会成功，租约拦下）
+    # 旧 worker 租约失效 → 不写待复核（CAS 单独会成功，租约拦下）
     assert not any(a.event_type == "awaiting_confirm" for a in acts), \
         f"租约漂移后不应写 awaiting activity，实际: {[a.event_type for a in acts]}"
-    # 不 upsert 产物（不偷新 worker 的 task）
+    # 不落产物（不偷新 worker 的 task）
     assert art_repo.load("t1") is None
-    # 任务仍 running（新 worker 持有，旧 worker 无权 CAS 到 awaiting）
+    # 任务仍 running（新 worker 持有，旧 worker 无权翻到待复核）
     assert task_repo.get("t1").status == TaskStatus.RUNNING.value
 
 
@@ -295,13 +281,13 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
     _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
 
     def _takeover_and_boom():
-        # 新 worker 抢占：zombie 回收 (running→pending) + 重派 (pending→running, owner_id=999)
+        # 新 worker 抢占：zombie 回收 + 重派
         task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
         task_repo.claim("t1", 999.0)
         # 旧 worker 的网络调用随后抛异常（触发 run 的 except）
         raise RuntimeError("model boom")
 
-    # _SideClient: side 先跑（takeover+raise），stream 永远不会被用到
+    # 副作用先跑（抢占加抛异常），stream 永远不会被用到
     client = _SideClient([(_takeover_and_boom, None)])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
@@ -320,9 +306,9 @@ def test_finalize_drift_writes_no_done_activity():
     _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
     artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
     narrative = {"awaiting_line": "y", "done_line": "DONE_MARKER"}
-    # 单轮：副作用取消任务 + 合法产出流；_finalize CAS 必失败
+    # 单轮：副作用取消任务 + 合法产出流；终态 CAS 必失败
     task_repo.transition("t1", "running", "cancelled")
-    # cancelled→pending 不合法（CAS 返 False 不动），用直接 SQL 重置为 running 以便 _run_loop 进入
+    # cancelled→pending 不合法，用直接 SQL 重置为 running 以便进入循环
     conn.get().execute("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'")
 
     def _cancel():
@@ -334,7 +320,7 @@ def test_finalize_drift_writes_no_done_activity():
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
-    # 不写 done/awaiting（finalize 漂移：lease 校验 status≠running 即早退，CAS 不会成功）
+    # 不写 done/待复核（汇总漂移：租约校验 status≠running 即早退，CAS 不会成功）
     assert not any(a.event_type in ("done", "awaiting_confirm") for a in acts)
 
 

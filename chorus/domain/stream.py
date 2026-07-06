@@ -39,10 +39,9 @@ class StreamResult:
 
 
 def parse_tool_arguments(raw: str) -> dict:
-    """把 ToolCallAccumulator.arguments 累积的 JSON 字符串解析为 dict。
+    """把累积的 JSON 字符串解析为 dict。
 
-    流式分片拼出的是字符串，空串或非法 JSON 降级为空 dict，供 ToolCall.arguments 与
-    trace 摘要复用。
+    流式分片拼出的是字符串，空串或非法 JSON 降级为空 dict，供工具调用参数与 trace 摘要复用。
     """
     if not raw:
         return {}
@@ -120,13 +119,12 @@ def drain_stream(stream) -> StreamResult:
 
 
 def silent_consume(stream) -> Generator[SseEvent, None, StreamResult]:
-    """静默消费：generator 接口对齐 consume_stream，不发事件，仅返回累积结果。
+    """静默消费：与流式消费接口对齐，不发事件，仅返回累积结果。
 
-    包成 generator 是为了让 kernel 的 ``yield from strategy.consume(stream)`` 能统一
-    拿到 StreamResult 返回值；subagent 不向前端发 SSE token 事件。drain_stream 保留不动。
+    包成生成器是为了让共享循环内核能统一拿到累积结果；subagent 不向前端发 SSE token 事件。
     """
     result = drain_stream(stream)
-    if False:  # unreachable — 使本函数成为 generator
+    if False:  # 不可达，仅用于让本函数成为生成器
         yield
     return result
 
@@ -144,14 +142,14 @@ def _close_thinking(
 
 
 def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta) -> None:
-    """合并工具调用分片，按 index 归拢拼装。"""
+    """合并工具调用分片，按序号归拢拼装。"""
     idx = tc_delta.index
     entry = accumulated.get(idx)
     if entry is None:
         entry = ToolCallAccumulator()
         accumulated[idx] = entry
 
-    # 工具首包带id，将id与index绑定，后续包只有index
+    # 工具首包带标识，将其与序号绑定，后续包只有序号
     if tc_delta.id:
         entry.id = tc_delta.id
 

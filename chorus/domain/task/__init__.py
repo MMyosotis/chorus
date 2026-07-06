@@ -1,7 +1,5 @@
 """任务图核心领域包：模型、状态机、流水线、角色档案、成品契约。
-
-按业务概念扁平组织，单一概念内聚，不依赖外部层。
-"""
+按业务概念扁平组织，单一概念内聚，不依赖外部层。"""
 from __future__ import annotations
 
 from chorus.domain.task.errors import ValidationError

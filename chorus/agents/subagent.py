@@ -1,9 +1,6 @@
 """子 agent 服务：后台线程跑 ReAct，写库不连事件流。
 
-主流程退化为「装载任务 → 构造 strategy → 跑 kernel」：setup（入口 lease 校验 + started 活动
-+ 渲染调用 + 选 schema）后，AgentLoop.run 驱动最小回合自动机，subagent 的业务差异（内存
-history + 静默消费 + activity + lease 终态写入）全部进 SubagentLoopStrategy。与主调度共享
-kernel、工具派发、产物解析与状态机纯件。横切经扁平钩子，事件消费丢弃，轨迹由钩子写库。
+业务差异进策略，与主调度共享内核、工具派发与状态机纯件，横切经扁平钩子。
 """
 from __future__ import annotations
 
@@ -45,11 +42,9 @@ _MAX_STEPS = 8
 
 
 class SubagentLoopStrategy:
-    """subagent 的回合自动机差异面：内存 history + 静默消费 + activity + lease 终态写入。
+    """subagent 的回合自动机差异面：内存历史、静默消费、活动写入与租约终态校验。
 
-    lease 设计：``before_turn`` 每轮顶部只做协作式取消（status 复查 + 心跳），不查 owner lease。
-    owner lease 仍在四个终态写入点拦截陈旧 worker：``run`` 入口、``after_text`` 的 ``_finalize``
-    前、``on_exhausted`` 的 ``_guarded_fail`` 前、``on_error`` 的 ``_guarded_fail`` 前。与现状逐点一致。
+    每轮顶部做协作式取消（状态复查与心跳），四个终态写入点拦截陈旧工作线程。
     """
 
     max_steps = _MAX_STEPS
@@ -70,7 +65,7 @@ class SubagentLoopStrategy:
         self._finalize = finalize
         self._guarded_fail = guarded_fail
 
-    def before_turn(self, ctx, step):
+    def before_turn(self, ctx):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
         latest = self._task_repo.get(self.task.id)
         if latest is None or latest.status != TaskStatus.RUNNING.value:
@@ -121,6 +116,7 @@ class SubagentLoopStrategy:
             self.history.append({"role": "assistant", "content": content or None})
             self.history.append({"role": "user", "content": e.correction})
             return LoopAction(LoopSignal.CONTINUE, [])
+
         self._finalize(self.task, artifacts, narrative, self.my_owner_id)
         return LoopAction(LoopSignal.FINISH, [])  # lease 失效也静默退出（不写失败/产物）
 
@@ -158,12 +154,7 @@ class SubAgentService:
         self._loop = loop
 
     def run(self, task_id: str) -> None:
-        """后台线程入口，跑 ReAct 写库，异常转失败。
-
-        失败路径先校验运行租约：若任务已被回收并重抢，则不写失败，让新 worker 继续。
-        setup 阶段异常（装载/渲染/选 schema）由本外层 except 收口；loop 内异常由 kernel
-        的 except 经 strategy.on_error 收口——两者都走 _guarded_fail，无双触发。
-        """
+        """后台线程入口，跑 ReAct 写库，异常转失败。"""
         task = self._task_repo.get(task_id)
         if task is None:
             logger.warning("subagent: task %s not found", task_id)
@@ -182,6 +173,7 @@ class SubAgentService:
         if not self._lease_valid(task_id, my_owner_id):
             logger.info("subagent task %s lease expired on enter, abort", task_id)
             return
+
         self._write_activity(task, started_activity(task.agent_type))
         profile = AGENT_PROFILES[task.agent_type]
         entry = self._models.get_entry()
@@ -201,17 +193,18 @@ class SubAgentService:
             finalize=self._finalize,
             guarded_fail=self._guarded_fail,
         )
+
         list(self._loop.run(ctx, entry=entry, strategy=strategy))
 
     def _guarded_fail(self, task, error: str, my_owner_id: Optional[float]) -> None:
-        """lease 校验 + _fail，供 run() 外层 except 与 strategy.on_error 共享。"""
+        """租约校验后再失败，供入口外层与策略错误回调共享。"""
         if not self._lease_valid(task.id, my_owner_id):
             logger.info("subagent task %s lease expired, skip fail", task.id)
             return
         self._fail(task, error)
 
     def _fail(self, task, error: str) -> None:
-        """事务内 CAS running→failed 并写 error。"""
+        """事务内 CAS 翻转为失败并写错误信息。"""
         with self._conn.transaction():
             ok = self._task_repo.transition(
                 task.id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value,
@@ -222,7 +215,7 @@ class SubAgentService:
             self._write_activity(task, failed_activity(error))
 
     def _lease_valid(self, task_id: str, my_owner_id: Optional[float]) -> bool:
-        """租约校验：任务仍运行且 owner_id 未变（未被回收重抢）。"""
+        """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""
         latest = self._task_repo.get(task_id)
         if latest is None or latest.status != TaskStatus.RUNNING.value:
             return False
@@ -248,20 +241,17 @@ class SubAgentService:
         )
 
     def _finalize(self, task, artifacts, narrative, my_owner_id: Optional[float]) -> None:
-        """先翻转状态再落产物，最后写活动。
-
-        事务内先 CAS 翻转状态，持有才落产物，避免漂移产生孤儿产物。parse_output 已由调用方
-        （strategy.after_text）完成，ValidationError 在此之前抛出。完成台词随产物落库，由前端
-        查图渲染，不进消息表。
-        """
+        """先翻转状态再落产物，最后写活动。"""
         if not self._lease_valid(task.id, my_owner_id):
             logger.info("subagent finalize lease expired for task %s, abort", task.id)
             return
+
         to_status = (
             TaskStatus.FINISHED.value if task.agent_type == "finalize"
             else TaskStatus.AWAITING_CONFIRM.value
         )
         is_terminal = to_status == TaskStatus.FINISHED.value
+
         # 事务内先 CAS 再落产物，状态与产物原子可见，漂移则两者皆不落
         with self._conn.transaction():
             ok = self._task_repo.transition(task.id, TaskStatus.RUNNING.value, to_status)
@@ -272,6 +262,7 @@ class SubAgentService:
         if not ok:
             logger.warning("subagent finalize CAS failed (status drifted) for task %s", task.id)
             return
+
         # 写活动（事务外）
         if is_terminal:
             self._write_activity(task, done_activity(narrative))
