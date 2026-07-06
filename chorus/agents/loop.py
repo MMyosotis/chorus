@@ -34,17 +34,17 @@ class LoopStrategy(Protocol):
     """agent loop 的业务差异面，内核据此驱动回合自动机，按固定顺序调用各阶段回调。"""
 
     max_steps: Optional[int]
+    schemas: list[dict]
 
-    def before_turn(self, ctx: AgentContext) -> bool: ...
-    def provider_messages(self, ctx: AgentContext) -> list[dict]: ...
-    def tool_schemas(self, ctx: AgentContext) -> list[dict]: ...
+    def before_turn(self) -> bool: ...
+    def provider_messages(self) -> list[dict]: ...
     def consume(self, stream) -> Generator[SseEvent, None, StreamResult]: ...
     def before_dispatch(self, call: ToolCall) -> None: ...
     def after_dispatch(self, call: ToolCall, d: object) -> None: ...
     def after_tools(self, ctx: AgentContext, result: StreamResult,
                     pairs: list) -> LoopAction: ...
     def after_text(self, ctx: AgentContext, result: StreamResult) -> LoopAction: ...
-    def on_exhausted(self, ctx: AgentContext) -> LoopAction: ...
+    def on_exhausted(self) -> LoopAction: ...
     def on_error(self, ctx: AgentContext, error: BaseException) -> LoopAction: ...
 
 
@@ -63,7 +63,7 @@ class AgentLoop:
                 ctx.step += 1
                 if (yield from self._run_turn(ctx, entry, strategy)) is LoopSignal.FINISH:
                     return
-            yield from strategy.on_exhausted(ctx).events
+            yield from strategy.on_exhausted().events
         except Exception as e:
             ctx.outcome.exception = e
             yield from strategy.on_error(ctx, e).events
@@ -72,13 +72,13 @@ class AgentLoop:
         self, ctx: AgentContext, entry, strategy: LoopStrategy,
     ) -> Generator[SseEvent, None, LoopSignal]:
         """驱动单个回合。"""
-        if not strategy.before_turn(ctx):
+        if not strategy.before_turn():
             return LoopSignal.FINISH
         ctx.turn.reset(message_id=str(uuid6.uuid7()))
         yield from self._hooks.trigger("TurnStart", ctx)
 
-        ctx.tool_schemas = strategy.tool_schemas(ctx)
-        ctx.turn.provider_messages = strategy.provider_messages(ctx)
+        ctx.tool_schemas = strategy.schemas
+        ctx.turn.provider_messages = strategy.provider_messages()
 
         yield from self._hooks.trigger("BeforeModelRequest", ctx)
         stream = entry.client.chat.completions.create(

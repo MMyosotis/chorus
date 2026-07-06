@@ -63,11 +63,11 @@ class SupervisorLoopStrategy:
         self._pending_intent_events: list = []
         self.max_steps = 6 if enforce_terminal else None
 
-    def before_turn(self, ctx):
+    def before_turn(self):
         self._pending_intent_events = []
         return True
 
-    def provider_messages(self, ctx):
+    def provider_messages(self):
         prompt = build_system_prompt(PromptContext(
             skill_hints=self._skill.format_hints(),
             intent_state=self._intent_state.get(self.session_id),
@@ -75,9 +75,6 @@ class SupervisorLoopStrategy:
         if self._force_instruction:
             prompt = f"{prompt}\n\n## 本轮系统提醒\n{self._force_instruction}"
         return self._message.build_provider_messages(self.session_id, prompt)
-
-    def tool_schemas(self, ctx):
-        return self.schemas
 
     def consume(self, stream):
         return consume_stream(stream)
@@ -133,7 +130,7 @@ class SupervisorLoopStrategy:
         events = [DoneEvent()] + list(self._hooks.trigger("Stop", ctx))
         return LoopAction(LoopSignal.FINISH, events)
 
-    def on_exhausted(self, ctx):
+    def on_exhausted(self):
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content="主 Agent 未能完成本轮必要动作，请再试一次")])
 
     def on_error(self, ctx, error):

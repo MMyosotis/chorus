@@ -65,15 +65,13 @@ class _SpyStrategy:
         self._after_tools_signal = after_tools_signal
         self._after_text_signal = after_text_signal
         self.log: list[str] = []
+        self.schemas: list[dict] = []
 
-    def before_turn(self, ctx):
+    def before_turn(self):
         self.log.append("before_turn"); return True
 
-    def provider_messages(self, ctx):
+    def provider_messages(self):
         self.log.append("provider_messages"); return [{"role": "user", "content": "hi"}]
-
-    def tool_schemas(self, ctx):
-        self.log.append("tool_schemas"); return []
 
     def consume(self, stream):
         self.log.append("consume"); return silent_consume(stream)
@@ -90,7 +88,7 @@ class _SpyStrategy:
     def after_text(self, ctx, result):
         self.log.append("after_text"); return LoopAction(self._after_text_signal, [])
 
-    def on_exhausted(self, ctx):
+    def on_exhausted(self):
         self.log.append("on_exhausted"); return LoopAction(LoopSignal.FINISH, [])
 
     def on_error(self, ctx, error):

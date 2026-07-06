@@ -63,18 +63,15 @@ class SubagentLoopStrategy:
         self._finalize = finalize
         self._guarded_fail = guarded_fail
 
-    def before_turn(self, ctx):
+    def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
         latest = self._task_repo.get(self.task.id)
         if latest is None or latest.status != TaskStatus.RUNNING.value:
             return False
         return True
 
-    def provider_messages(self, ctx):
+    def provider_messages(self):
         return [{"role": "system", "content": self.system_prompt}] + self.history
-
-    def tool_schemas(self, ctx):
-        return self.schemas
 
     def consume(self, stream):
         return silent_consume(stream)
@@ -116,7 +113,7 @@ class SubagentLoopStrategy:
         self._finalize(self.task, artifacts, narrative, self.my_owner_id)
         return LoopAction(LoopSignal.FINISH, [])  # lease 失效也静默退出（不写失败/产物）
 
-    def on_exhausted(self, ctx):
+    def on_exhausted(self):
         self._guarded_fail(self.task, f"超过最大 ReAct 步数 {_MAX_STEPS}", self.my_owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
