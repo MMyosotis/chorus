@@ -78,6 +78,11 @@ class BusyEvent(_EventBase):
     content: str
 
 
+class IntentStateEvent(_EventBase):
+    type: Literal["intent_state"] = "intent_state"
+    state: dict
+
+
 SseEvent = Annotated[
     Union[
         MessageStartEvent,
@@ -90,6 +95,7 @@ SseEvent = Annotated[
         TitleUpdateEvent,
         DoneEvent,
         BusyEvent,
+        IntentStateEvent,
         ErrorEvent,
     ],
     Field(discriminator="type"),

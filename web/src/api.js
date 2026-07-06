@@ -60,20 +60,49 @@ export async function fetchTraces(id) {
   return data.traces || []
 }
 
+export async function getIntentState(id) {
+  const res = await fetch(`${BASE}/${id}/intent-state`)
+  if (res.status === 404) {
+    const err = new Error('session not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`intent state failed: ${res.status}`)
+  const data = await res.json()
+  return data.state || null
+}
+
+export function confirmIntent(id, onEvent) {
+  return streamSessionEventSource(`${BASE}/${id}/intent:confirm`, { method: 'POST' }, onEvent)
+}
+
+export async function reopenIntent(id) {
+  const res = await fetch(`${BASE}/${id}/intent:reopen`, { method: 'POST' })
+  if (!res.ok) throw new Error(`reopen intent failed: ${res.status}`)
+  const data = await res.json()
+  return data.state || null
+}
+
 /**
  * 流式聊天：内部封装 fetch + ReadableStream 解析。
  * onEvent 收到每个 SSE 事件 dict。
  * 返回 { done } —— done 是 Promise，流结束后 resolve。
  */
 export function streamChat(id, message, onEvent) {
+  return streamSessionEventSource(`${BASE}/${id}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  }, onEvent)
+}
+
+function streamSessionEventSource(url, options, onEvent) {
   const ctrl = new AbortController()
   const done = (async () => {
     let response
     try {
-      response = await fetch(`${BASE}/${id}/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+      response = await fetch(url, {
+        ...options,
         signal: ctrl.signal,
       })
     } catch (e) {
@@ -237,4 +266,3 @@ export async function cancelPipeline(sessionId) {
   }
   return res.json()
 }
-

@@ -16,6 +16,7 @@ from chorus.domain.task import (
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
+from chorus.services.intent_state import IntentStateService
 from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
 
@@ -73,16 +74,27 @@ class CreatePlanTool(Tool):
         task_repo: TaskRepository,
         content_repo: TaskContentRepository,
         conn: ConnectionFactory,
+        intent_state: IntentStateService | None = None,
     ):
         self._task_repo = task_repo
         self._content_repo = content_repo
         self._conn = conn
+        self._intent_state = intent_state
 
     def display(self, arguments: dict) -> str:
         topic = (arguments.get("intent", {}) or {}).get("topic", "")
         return f"创作：{topic or '(未指定主题)'}"
 
     def run(self, arguments: dict, ctx: ToolContext):  # -> ToolOutcome
+        if not ctx.session_id:
+            return Reply("create_plan 需要 session_id")
+        if self._intent_state is not None and not self._intent_state.is_confirmed(ctx.session_id):
+            state = self._intent_state.get(ctx.session_id)
+            return Reply(
+                "create_plan blocked: 当前意图尚未由用户确认。"
+                f"intent_status={state.intent_status}。请先继续澄清意图，"
+                "或在 ready_to_confirm 后等待用户确认。"
+            )
         try:
             intent_in = arguments["intent"]
             intent = CreationIntent(
@@ -110,6 +122,8 @@ class CreatePlanTool(Tool):
                 for task, content in pairs:
                     self._task_repo.insert(task)
                     self._content_repo.insert(content)
+            if self._intent_state is not None:
+                self._intent_state.mark_dispatched(ctx.session_id)
         except Exception as e:
             return Reply(f"建图落库失败，请重试: {e}")
 

@@ -26,6 +26,7 @@ from chorus.domain.title import TitleGenerationService
 from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter, emit_message_start
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
+from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.settings import SettingsRepository
 from chorus.repo.task import TaskRepository
@@ -40,6 +41,7 @@ from chorus.routes.settings import router as settings_router
 from chorus.routes.settings import settings_router as model_options_router
 from chorus.routes.task import router as task_router
 from chorus.services.message import MessageService
+from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
@@ -55,6 +57,7 @@ def create_app() -> FastAPI:
     settings_service = SettingsService(SettingsRepository(conn))
     session_repo = SessionRepository(conn)
     msg_repo = MessageRepository(conn)
+    intent_repo = IntentStateRepository(conn)
     trace_repo = TraceRepository(conn)
     task_repo = TaskRepository(conn)
     task_artifacts_repo = TaskArtifactsRepository(conn)
@@ -63,13 +66,16 @@ def create_app() -> FastAPI:
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
     message_service = MessageService(msg_repo, trace_service)
+    intent_state_service = IntentStateService(intent_repo, session_service)
 
     chat_models = ChatModelProvider(settings_service)
     # 标题生成固定用默认模型，不随用户当前设置变动
     title_entry = chat_models.title_entry()
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
 
-    tool_dispatcher = build_tool_dispatch(settings_service, task_repo, task_content_repo, conn, skill_loader)
+    tool_dispatcher = build_tool_dispatch(
+        settings_service, task_repo, task_content_repo, conn, skill_loader, intent_state_service,
+    )
 
     hooks = HookRegistry()
     trace = TraceEmitter(trace_service, MAX_TOKENS)
@@ -86,7 +92,7 @@ def create_app() -> FastAPI:
     supervisor_service = SupervisorService(
         session_service, message_service, skill_loader, hooks,
         chat_models, task_repo,
-        tool_dispatcher, agent_loop,
+        tool_dispatcher, agent_loop, intent_state_service,
     )
     subagent_service = SubAgentService(
         conn, message_service, task_repo, task_artifacts_repo,
@@ -111,6 +117,7 @@ def create_app() -> FastAPI:
     app.state.session_service = session_service
     app.state.message_service = message_service
     app.state.trace_service = trace_service
+    app.state.intent_state_service = intent_state_service
     app.state.supervisor_service = supervisor_service
     app.state.task_service = task_service
     app.state.scheduler = scheduler

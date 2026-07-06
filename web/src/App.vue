@@ -11,6 +11,10 @@ import {
   renameSession,
   fetchMessages,
   streamChat,
+  getIntentState,
+  confirmIntent,
+  reopenIntent,
+  cancelPipeline,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
@@ -27,7 +31,9 @@ const settingsOpen = ref(false)
 const sessions = ref([]) // [{id, title, created_at, updated_at}]
 const messagesBySession = reactive({}) // { [id]: Message[] }
 const streamingBySession = reactive({}) // { [id]: boolean }
+const intentStateBySession = reactive({}) // { [id]: IntentState }
 const activeId = ref(null)
+const inputBarRef = ref(null)
 
 // 单一焦点任务：点 RoleCard 切 focus（Dock 纯遥测，不再回传 focus/expand）
 const focusedTaskId = ref(null)
@@ -41,6 +47,7 @@ const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 // 会话有活跃创作任务（get_graph 的 active 字段，由后端 TaskService.get_graph 决定）
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
+const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
 const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
@@ -163,9 +170,17 @@ async function loadMessages(id) {
   }
 }
 
+async function loadIntentState(id) {
+  try {
+    intentStateBySession[id] = await getIntentState(id)
+  } catch {
+    intentStateBySession[id] = null
+  }
+}
+
 async function selectSession(id) {
   activeId.value = id
-  await loadMessages(id)
+  await Promise.all([loadMessages(id), loadIntentState(id)])
   injectTaskCards(id)
   // 进入会话若已有 active task 图，恢复轮询（start 首 tick 拉图，active=False 自停）
   taskPolling.start(id)
@@ -232,7 +247,9 @@ async function onCreate() {
     const meta = await createSession()
     sessions.value.unshift(meta)
     messagesBySession[meta.id] = []
+    intentStateBySession[meta.id] = null
     activeId.value = meta.id
+    loadIntentState(meta.id)
   } catch (e) {
     alert(`新建失败: ${e.message}`)
   }
@@ -249,10 +266,11 @@ async function onDelete(id) {
   sessions.value = sessions.value.filter((c) => c.id !== id)
   delete messagesBySession[id]
   delete streamingBySession[id]
+  delete intentStateBySession[id]
   if (wasActive) {
     if (sessions.value.length > 0) {
       activeId.value = sessions.value[0].id
-      await loadMessages(activeId.value)
+      await Promise.all([loadMessages(activeId.value), loadIntentState(activeId.value)])
     } else {
       await onCreate()
     }
@@ -280,15 +298,8 @@ function bumpSession(id) {
   }
 }
 
-async function onSend(text) {
-  const sessionId = activeId.value
-  if (!sessionId) return
-  if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value) return
-
-  // 闭包 capture：所有引用都是 sessionId / list，与 activeId 解耦
+function createStreamHandler(sessionId) {
   const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
-  list.push({ role: 'user', content: text })
-  streamingBySession[sessionId] = true
 
   let assistantIdx = -1
   const cur = () => (assistantIdx >= 0 ? list[assistantIdx] : null)
@@ -343,6 +354,10 @@ async function onSend(text) {
     // trace 事件先吃掉，不走气泡逻辑（后端是 trace 唯一权威源，含 tool_call/tool_result 也都以 trace 形式产出）
     if (payload.type === 'trace') {
       traceStore.addTrace(sessionId, payload)
+      return
+    }
+    if (payload.type === 'intent_state') {
+      intentStateBySession[sessionId] = payload.state
       return
     }
 
@@ -408,12 +423,61 @@ async function onSend(text) {
     }
   }
 
-  const { done } = streamChat(sessionId, text, onEvent)
+  return { onEvent, finalizeCurrent, mergeTrailingEmptyBubble }
+}
+
+async function runAssistantStream(sessionId, streamFactory) {
+  streamingBySession[sessionId] = true
+  const handler = createStreamHandler(sessionId)
+  const { done } = streamFactory(handler.onEvent)
   await done
-  finalizeCurrent()
-  mergeTrailingEmptyBubble()
+  handler.finalizeCurrent()
+  handler.mergeTrailingEmptyBubble()
   streamingBySession[sessionId] = false
   bumpSession(sessionId)
+}
+
+async function onSend(text) {
+  const sessionId = activeId.value
+  if (!sessionId) return
+  if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value) return
+
+  const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
+  list.push({ role: 'user', content: text })
+  await runAssistantStream(sessionId, (onEvent) => streamChat(sessionId, text, onEvent))
+}
+
+async function onIntentConfirm() {
+  const sessionId = activeId.value
+  if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
+  const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
+  list.push({ role: 'user', content: '确认并开始' })
+  await runAssistantStream(sessionId, (onEvent) => confirmIntent(sessionId, onEvent))
+}
+
+async function onIntentRevise() {
+  const sessionId = activeId.value
+  if (!sessionId || streamingBySession[sessionId]) return
+  try {
+    intentStateBySession[sessionId] = await reopenIntent(sessionId)
+    inputBarRef.value?.focus()
+  } catch (e) {
+    alert(`打开意图修改失败: ${e.message}`)
+  }
+}
+
+async function onIntentStopAndRevise() {
+  const sessionId = activeId.value
+  if (!sessionId || streamingBySession[sessionId]) return
+  try {
+    await cancelPipeline(sessionId)
+    taskPolling.stop()
+    intentStateBySession[sessionId] = await reopenIntent(sessionId)
+    await forceReloadMessages(sessionId)
+    inputBarRef.value?.focus()
+  } catch (e) {
+    alert(`停止并修改失败: ${e.message}`)
+  }
 }
 
 onMounted(async () => {
@@ -461,9 +525,12 @@ onMounted(async () => {
         :messages="messages"
         :streaming="streaming"
         :session-id="activeId || ''"
+        :intent-state="activeIntentState"
         @hil-confirmed="onHilConfirmed"
         @hil-retried="onHilRetried"
         @hil-cancelled="onHilCancelled"
+        @intent-confirm="onIntentConfirm"
+        @intent-revise="onIntentRevise"
       />
       <PipelineRuntimeDock
         :graph="activeGraph"
@@ -472,9 +539,18 @@ onMounted(async () => {
         @finish-done="forceReloadMessages(activeId)"
       />
       <PipelineProgressBar :graph="activeGraph" />
-      <InputBar :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
+      <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
     </div>
-    <TeamPanel :graph="activeGraph" :focused-task-id="focusedTaskId" @focus="onTaskFocus" />
+    <TeamPanel
+      :graph="activeGraph"
+      :focused-task-id="focusedTaskId"
+      :intent-state="activeIntentState"
+      :has-active-task="hasActiveTask"
+      @focus="onTaskFocus"
+      @intent-confirm="onIntentConfirm"
+      @intent-revise="onIntentRevise"
+      @intent-stop-and-revise="onIntentStopAndRevise"
+    />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
   <SettingsPanel v-model:open="settingsOpen" />
@@ -486,7 +562,7 @@ onMounted(async () => {
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  background: #fff;
+  background: #f3f6fa;
   padding: 0;
   gap: 0;
 }
@@ -498,7 +574,7 @@ onMounted(async () => {
   min-width: 0;
   overflow: hidden;
   height: 100%;
-  background: #fff;
+  background: #ffffff;
   border: none;
   box-shadow: none;
 }
@@ -510,7 +586,7 @@ onMounted(async () => {
   justify-content: center;
   padding: 0 34px;
   height: 64px;
-  background: #fff;
+  background: #ffffff;
   color: var(--ch-text);
   border-bottom: 1px solid var(--ch-border);
   flex-shrink: 0;
@@ -535,7 +611,7 @@ onMounted(async () => {
   border: 1px solid var(--ch-border);
   background: #fff;
   color: var(--ch-muted);
-  border-radius: 12px;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -544,15 +620,15 @@ onMounted(async () => {
 }
 
 .header-console-btn:hover {
-  background: var(--ch-violet-soft);
-  color: var(--ch-violet);
+  background: var(--ch-primary-soft);
+  color: var(--ch-primary);
   border-color: #c7d2fe;
 }
 
 .header-console-btn.active {
-  background: var(--ch-violet-soft);
+  background: var(--ch-primary-soft);
   border-color: #c7d2fe;
-  color: var(--ch-violet);
+  color: var(--ch-primary);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
 }
 

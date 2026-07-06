@@ -9,6 +9,10 @@ from __future__ import annotations
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
+from chorus.repo.intent_state import IntentStateRepository
+from chorus.repo.session import SessionRepository
+from chorus.services.intent_state import IntentStateService
+from chorus.services.session import SessionService
 from chorus.tests._helpers import fresh_conn, seed_session
 from chorus.tools.builtin.create_plan import CreatePlanTool
 from chorus.tools.framework import Reply, Terminal, ToolContext
@@ -53,6 +57,19 @@ def test_success_returns_terminal_and_persists_tasks():
     assert set(contents.keys()) == {t.id for t in tasks}
     idea_id = next(t.id for t in tasks if t.agent_type == "idea")
     assert "夏日晚风" in contents[idea_id].invoke_message
+
+
+def test_unconfirmed_intent_blocks_plan_creation():
+    conn = fresh_conn()
+    seed_session(conn, sid="s1")
+    repo = TaskRepository(conn)
+    content_repo = TaskContentRepository(conn)
+    intent = IntentStateService(IntentStateRepository(conn), SessionService(SessionRepository(conn)))
+    tool = CreatePlanTool(repo, content_repo, conn, intent)
+    outcome = tool.run(_args(), ToolContext(session_id="s1"))
+    assert isinstance(outcome, Reply)
+    assert "blocked" in outcome.content
+    assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0
 
 
 def test_missing_intent_key_returns_reply():

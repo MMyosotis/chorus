@@ -4,9 +4,11 @@
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from chorus.config import TOOL_WHITELISTS
+from chorus.domain.intent import IntentState
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 
@@ -21,9 +23,17 @@ def _profiles_block() -> str:
 
 
 SYSTEM_PROMPT = (
-    "你是一个爆款图文博文创作团队的调度主管。用户找你创作小红书/微博风格的图文博文时，"
-    "你调用 create_plan 工具按用户实际编排创作步骤（不固定流程）；普通对话直接文本回复，不调用工具。\n\n"
+    "你是一个图文创作产品的主 Agent，首要职责是和用户对话、理解并细化用户意图。"
+    "你需要自然语言回复用户，同时维护结构化的 current_intent_state。"
+    "只有当用户确认意图后，才调用 create_plan 创建任务。\n\n"
     "禁用任何 emoji 字符——产出话术、回复、产物文本一律纯文本，前端靠角色名与状态徽章表意。\n\n"
+    "## 意图识别规则\n"
+    "- 每个用户回合结束前，除非你正在 confirmed 后创建任务，否则必须调用 update_intent_state。\n"
+    "- update_intent_state 表示你当前理解到了哪里、还缺什么、下一步应该问什么或是否等待确认。\n"
+    "- 如果信息不足，不要调用 create_plan；先用自然语言追问，并把 intent_status 设为 needs_clarification。\n"
+    "- 如果信息足够执行，把 intent_status 设为 ready_to_confirm，confirmation_summary 填给用户确认的摘要，next_action 设为 wait_user_confirm。\n"
+    "- 用户没有确认前，create_plan 会被系统拒绝；不要试图绕过确认。\n"
+    "- 当 current_intent_state.intent_status 为 confirmed，且用户已确认开始时，你应调用 create_plan。\n\n"
     "## 角色档案\n"
     "你可以编排以下角色（agent_type），每个角色有专属职责与工具：\n"
     f"{_profiles_block()}\n\n"
@@ -43,10 +53,25 @@ SYSTEM_PROMPT = (
 class PromptContext:
     base: str = SYSTEM_PROMPT
     skill_hints: str = ""
+    intent_state: IntentState | None = None
 
 
 def build_system_prompt(ctx: PromptContext) -> str:
     parts = [ctx.base]
+    if ctx.intent_state is not None:
+        parts.append(_intent_state_block(ctx.intent_state))
     if ctx.skill_hints:
         parts.append(ctx.skill_hints)
     return "\n\n".join(parts)
+
+
+def _intent_state_block(state: IntentState) -> str:
+    payload = state.public_dict()
+    return (
+        "## 当前意图状态\n"
+        "下面是本会话最新的结构化意图快照。你必须基于它继续对话，"
+        "并在本轮结束前用 update_intent_state 写回新的快照。\n"
+        "<current_intent_state>\n"
+        f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
+        "</current_intent_state>"
+    )

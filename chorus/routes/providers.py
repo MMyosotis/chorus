@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import Request
 
 from chorus.services.message import MessageService
+from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.trace import TraceService
@@ -20,6 +21,10 @@ def provide_message_service(request: Request) -> MessageService:
 
 def provide_trace_service(request: Request) -> TraceService:
     return request.app.state.trace_service
+
+
+def provide_intent_state_service(request: Request) -> IntentStateService:
+    return request.app.state.intent_state_service
 
 
 def provide_settings_service(request: Request) -> SettingsService:

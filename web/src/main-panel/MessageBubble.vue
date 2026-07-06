@@ -199,10 +199,10 @@ function closePreview() {
 
 .bubble.user {
   max-width: 75%;
-  padding: 16px 26px;
-  border-radius: 22px;
-  background: #f1f5f9;
-  color: var(--ch-body);
+  padding: 14px 18px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #172033;
   box-shadow: none;
 }
 
@@ -211,7 +211,7 @@ function closePreview() {
   max-width: 100%;
   padding: 0;
   background: transparent;
-  color: #1e293b;
+  color: #172033;
   border-radius: 0;
 }
 

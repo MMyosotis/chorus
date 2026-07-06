@@ -13,7 +13,7 @@ const textarea = ref(null)
 
 const disabled = computed(() => props.streaming || props.hasActiveTask)
 const placeholder = computed(() =>
-  props.hasActiveTask ? '创作进行中，暂时不能输入；确认节点或完成后恢复。' : '输入消息...'
+  props.hasActiveTask ? '执行中，暂时不能输入；确认节点或完成后恢复。' : '输入消息...'
 )
 
 function handleKeydown(e) {
@@ -38,6 +38,12 @@ function adjustHeight() {
   const maxH = 180
   el.style.height = Math.min(el.scrollHeight, maxH) + 'px'
 }
+
+function focus() {
+  textarea.value?.focus()
+}
+
+defineExpose({ focus })
 </script>
 
 <template>
@@ -99,9 +105,9 @@ function adjustHeight() {
 }
 
 .input-inner:focus-within {
-  border-color: var(--ch-orange-mid);
+  border-color: var(--ch-primary);
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.12);
+  box-shadow: 0 0 0 4px rgba(67, 56, 202, 0.1);
 }
 
 .input-bar.locked .input-inner {
@@ -172,16 +178,16 @@ function adjustHeight() {
   justify-content: center;
   border: none;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--ch-orange-mid), var(--ch-orange));
+  background: var(--ch-primary);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(234, 88, 12, 0.25);
+  box-shadow: 0 8px 18px rgba(67, 56, 202, 0.2);
   transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
 }
 
 .send-btn:hover:not(:disabled) {
   filter: brightness(1.06);
-  box-shadow: 0 10px 22px rgba(234, 88, 12, 0.34);
+  box-shadow: 0 10px 22px rgba(67, 56, 202, 0.28);
 }
 
 .send-btn:active:not(:disabled) {

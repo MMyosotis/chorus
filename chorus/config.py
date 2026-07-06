@@ -68,7 +68,7 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
 # 各角色工具白名单：角色查表取名，再交工具包筛 schema。
 # 工具名是字符串约定，改名需同步本表。
 TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
-    "supervisor": ("create_plan", "load_skill", "baidu_search", "output_plan"),
+    "supervisor": ("update_intent_state", "create_plan", "load_skill", "baidu_search", "output_plan"),
     "idea": ("baidu_search", "load_skill"),
     "script": ("baidu_search", "load_skill"),
     "image": ("baidu_search", "generate_image", "load_skill"),
@@ -79,6 +79,5 @@ TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
 SCHEDULER_INTERVAL = 1.0   # 轮询周期（秒）
 ZOMBIE_TIMEOUT = 120       # 运行中任务心跳超时阈值（秒）
 POOL_SIZE = 4              # 子 agent 线程池大小
-
 
 

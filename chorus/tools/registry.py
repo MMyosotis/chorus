@@ -10,12 +10,14 @@ from chorus.domain.skill import SkillLoader
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
+from chorus.services.intent_state import IntentStateService
 from chorus.services.settings import SettingsService
 from chorus.tools.builtin import (
     BaiduSearchTool,
     CreatePlanTool,
     LoadSkillTool,
     OutputPlanTool,
+    UpdateIntentStateTool,
 )
 from chorus.tools.builtin.generate_image import GenerateImageTool, ImageModelProvider
 from chorus.tools.clients.baidu_search import BaiduSearchClient
@@ -28,6 +30,7 @@ def build_tool_dispatch(
     content_repo: TaskContentRepository,
     conn: ConnectionFactory,
     skill_loader: SkillLoader,
+    intent_state: IntentStateService,
 ) -> ToolDispatch:
     """装配默认工具调度器。工具内部胶水内化于此，外界只暴露跨层依赖。"""
     image_models = ImageModelProvider(settings_service)
@@ -37,5 +40,6 @@ def build_tool_dispatch(
         OutputPlanTool(),
         GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
-        CreatePlanTool(task_repo, content_repo, conn),
+        UpdateIntentStateTool(intent_state),
+        CreatePlanTool(task_repo, content_repo, conn, intent_state),
     ], settings_service)

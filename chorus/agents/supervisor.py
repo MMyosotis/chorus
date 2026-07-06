@@ -1,9 +1,9 @@
 """主调度 agent：流式对话入口，普通对话直接回复，创作请求经建图工具路由。
 
 主流程退化为「入口准入 + 构造 strategy + 跑 kernel」：追加用户消息 → AgentLoop.run 驱动
-最小回合自动机，supervisor 的业务差异（SSE 流式消费 + 成对落库 + Stop 收尾）全部进
-SupervisorLoopStrategy。主流程不识工具名与终止载荷，工具副作用在工具内收口。有活跃创作
-任务时拒绝新请求。横切经扁平钩子。
+最小回合自动机，supervisor 的业务差异（SSE 流式消费 + 成对落库 + Stop 收尾 + 意图状态注入
++ 确认后强制建图）全部进 SupervisorLoopStrategy。主流程不识工具名与终止载荷，工具副作用在
+工具内收口。有活跃创作任务时拒绝新请求。横切经扁平钩子。
 """
 from __future__ import annotations
 
@@ -16,8 +16,10 @@ from chorus.domain.events import (
     BusyEvent,
     DoneEvent,
     ErrorEvent,
+    IntentStateEvent,
     SseEvent,
 )
+from chorus.domain.intent import empty_intent_state
 from chorus.domain.prompt import PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
@@ -27,30 +29,58 @@ from chorus.hooks import HookRegistry
 from chorus.repo.task import TaskRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
+from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
 from chorus.tools import ToolCall, ToolDispatch
 from chorus.tools.framework import Terminal
 
 
+# 意图状态变更需透出 SSE 的工具：update_intent_state 写回快照，create_plan 落 dispatched。
+_INTENT_EVENT_TOOLS = {"update_intent_state", "create_plan"}
+
+# require_create_plan 路径下，模型未产出终止时的强制指令。定义为模块常量，避免 after_tools
+# 源码出现工具名字面量——契约见 test_loop_does_not_reference_tool_name_literals（after_tools
+# 分流只认 isinstance(Terminal)，不识工具名；强制续轮用 terminal 信号判定，不点名）。
+_FORCE_AFTER_TEXT = (
+    "用户已经确认意图，当前回合必须调用 create_plan。"
+    "不要继续澄清，除非 create_plan 工具返回参数纠错。"
+)
+_FORCE_AFTER_TOOLS = (
+    "用户已经确认意图，但你上一轮没有调用 create_plan。"
+    "请立刻基于 current_intent_state 和历史对话调用 create_plan。"
+)
+
+
 class SupervisorLoopStrategy:
-    """supervisor 的回合自动机差异面：SSE 流式消费 + 成对落库 + Stop 收尾。"""
+    """supervisor 的回合自动机差异面：SSE 流式消费 + 成对落库 + Stop 收尾 + 意图状态注入。"""
 
     max_steps = None
 
     def __init__(self, session_id, message_service, session_service, hooks,
-                 skill_loader, schemas):
+                 skill_loader, schemas, intent_state=None, enforce_terminal=False):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
         self._hooks = hooks
         self._skill = skill_loader
         self.schemas = schemas
+        self._intent_state = intent_state or _NullIntentStateService()
+        self._enforce_terminal = enforce_terminal
+        self._force_instruction = ""
+        self._pending_intent_events: list = []
+        self.max_steps = 6 if enforce_terminal else None
 
     def before_turn(self, ctx, step):
+        self._pending_intent_events = []
         return True
 
     def provider_messages(self, ctx):
-        prompt = build_system_prompt(PromptContext(skill_hints=self._skill.format_hints()))
+        prompt = build_system_prompt(PromptContext(
+            skill_hints=self._skill.format_hints(),
+            intent_state=self._intent_state.get(self.session_id),
+        ))
+        if self._force_instruction:
+            prompt = f"{prompt}\n\n## 本轮系统提醒\n{self._force_instruction}"
         return self._message.build_provider_messages(self.session_id, prompt)
 
     def tool_schemas(self, ctx):
@@ -63,10 +93,17 @@ class SupervisorLoopStrategy:
         pass
 
     def after_dispatch(self, call, d):
-        pass
+        if call.name in _INTENT_EVENT_TOOLS:
+            self._pending_intent_events.append(
+                IntentStateEvent(state=self._intent_state.get(self.session_id).public_dict())
+            )
 
     def after_tools(self, ctx, result, pairs):
-        """成对落库（一条 assistant 带全部 tool_calls + N tool），据是否命中终止决定继续/结束。"""
+        """成对落库（一条 assistant 带全部 tool_calls + N tool），据是否命中终止决定继续/结束。
+
+        enforce_terminal 路径下未命中终止则注入 force_instruction 续轮，6 轮上限由 kernel
+        max_steps + on_exhausted 兜底。分流只认 isinstance(Terminal)，不识工具名。
+        """
         terminal = next(((c, d) for c, d in pairs if isinstance(d.outcome, Terminal)), None)
         content = self._turn_content(ctx, terminal)
         self._message.append_assistant_message(
@@ -80,12 +117,20 @@ class SupervisorLoopStrategy:
                 content=d.outcome.content,
             )
         self._session.touch(self.session_id)
-        if terminal is None:
-            return LoopAction(LoopSignal.CONTINUE, [])
-        return LoopAction(LoopSignal.FINISH, list(self._handle_terminal(ctx)))
+        events = list(self._pending_intent_events)
+        self._pending_intent_events = []
+        if terminal is not None:
+            return LoopAction(LoopSignal.FINISH, events + list(self._handle_terminal(ctx)))
+        if self._enforce_terminal:
+            self._force_instruction = _FORCE_AFTER_TOOLS
+            return LoopAction(LoopSignal.CONTINUE, events)
+        return LoopAction(LoopSignal.CONTINUE, events)
 
     def after_text(self, ctx, result):
-        """纯文本回复：落库 + done + Stop 收尾。"""
+        """纯文本回复：落库 + done + Stop 收尾。enforce_terminal 路径下不落库直接续轮。"""
+        if self._enforce_terminal:
+            self._force_instruction = _FORCE_AFTER_TEXT
+            return LoopAction(LoopSignal.CONTINUE, [])
         content = "".join(result.text_parts) if result.text_parts else None
         self._message.append_assistant_message(
             self.session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
@@ -95,7 +140,7 @@ class SupervisorLoopStrategy:
         return LoopAction(LoopSignal.FINISH, events)
 
     def on_exhausted(self, ctx):
-        return LoopAction(LoopSignal.FINISH, [])  # max_steps=None 不可达
+        return LoopAction(LoopSignal.FINISH, [ErrorEvent(content="主 Agent 未能完成本轮必要动作，请再试一次")])
 
     def on_error(self, ctx, error):
         events = list(self._hooks.trigger("Error", ctx)) + [ErrorEvent(content=str(error))]
@@ -126,6 +171,7 @@ class SupervisorService:
         task_repo: TaskRepository,
         tool_dispatcher: ToolDispatch,
         loop: AgentLoop,
+        intent_state: IntentStateService | None = None,
     ):
         self._session = session_service
         self._message = message_service
@@ -135,9 +181,10 @@ class SupervisorService:
         self._task_repo = task_repo
         self._tools = tool_dispatcher
         self._loop = loop
+        self._intent_state = intent_state or _NullIntentStateService()
 
     def stream(
-        self, session_id: str, user_message: str,
+        self, session_id: str, user_message: str, *, require_create_plan: bool = False,
     ) -> Iterator[SseEvent]:
         if not self._session.exists(session_id):
             yield ErrorEvent(content="session not found")
@@ -154,6 +201,7 @@ class SupervisorService:
         )
         strategy = SupervisorLoopStrategy(
             session_id, self._message, self._session, self._hooks, self._skill, schemas,
+            intent_state=self._intent_state, enforce_terminal=require_create_plan,
         )
         try:
             self._message.append_user_message(session_id, user_message)
@@ -167,3 +215,8 @@ class SupervisorService:
 def _to_tool_call_spec(call: ToolCall):
     from chorus.domain.message import ToolCallSpec
     return ToolCallSpec(id=call.id, name=call.name, arguments_json=json.dumps(call.arguments, ensure_ascii=False))
+
+
+class _NullIntentStateService:
+    def get(self, session_id: str):
+        return empty_intent_state(session_id)

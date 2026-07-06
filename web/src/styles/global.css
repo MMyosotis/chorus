@@ -13,7 +13,7 @@ body {
     'Noto Sans SC', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: linear-gradient(135deg, #fff7ed 0%, #eef2ff 100%);
+  background: #f3f6fa;
 }
 
 #app {
@@ -21,18 +21,20 @@ body {
 }
 
 :root {
-  --ch-bg-warm: #fff7ed;
+  --ch-bg-warm: #f3f6fa;
   --ch-bg-cool: #eef2ff;
   --ch-surface: rgba(255, 255, 255, 0.94);
   --ch-surface-soft: #f8fafc;
-  --ch-team-surface: #fafafa;
-  --ch-border: #e2e8f0;
-  --ch-text: #111827;
-  --ch-body: #334155;
-  --ch-muted: #64748b;
-  --ch-faint: #94a3b8;
-  --ch-violet: #4f46e5;
-  --ch-violet-soft: #f5f3ff;
+  --ch-team-surface: #fafbfc;
+  --ch-border: #dde5ee;
+  --ch-text: #172033;
+  --ch-body: #344054;
+  --ch-muted: #667085;
+  --ch-faint: #98a2b3;
+  --ch-primary: #4338ca;
+  --ch-primary-soft: #eef2ff;
+  --ch-violet: #4338ca;
+  --ch-violet-soft: #eef2ff;
   --ch-orange: #ea580c;
   --ch-orange-mid: #fb923c;
   --ch-orange-soft: #fff7ed;
