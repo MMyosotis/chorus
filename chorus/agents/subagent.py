@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import dataclasses
-import logging
 from typing import Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
@@ -37,7 +36,6 @@ from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.tools import ToolDispatch
 
-logger = logging.getLogger(__name__)
 _MAX_STEPS = 8
 
 
@@ -69,8 +67,6 @@ class SubagentLoopStrategy:
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
         latest = self._task_repo.get(self.task.id)
         if latest is None or latest.status != TaskStatus.RUNNING.value:
-            logger.info("subagent task %s no longer running (status=%s), abort loop",
-                        self.task.id, latest.status if latest else "gone")
             return False
         return True
 
@@ -125,7 +121,6 @@ class SubagentLoopStrategy:
         return LoopAction(LoopSignal.FINISH, [])
 
     def on_error(self, ctx, error):
-        logger.exception("subagent task %s failed", self.task.id)
         self._guarded_fail(self.task, str(error), self.my_owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
@@ -157,21 +152,18 @@ class SubAgentService:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
         task = self._task_repo.get(task_id)
         if task is None:
-            logger.warning("subagent: task %s not found", task_id)
             return
         content = self._content_repo.load(task_id)
         my_owner_id = task.owner_id
         try:
             self._run_loop(task, content, my_owner_id)
         except Exception as e:
-            logger.exception("subagent task %s failed", task_id)
             self._guarded_fail(task, str(e), my_owner_id)
 
     def _run_loop(self, task, content, my_owner_id: Optional[float]) -> None:
         task_id = task.id
         # 入口租约校验，被回收重抢则放弃
         if not self._lease_valid(task_id, my_owner_id):
-            logger.info("subagent task %s lease expired on enter, abort", task_id)
             return
 
         self._write_activity(task, started_activity(task.agent_type))
@@ -199,7 +191,6 @@ class SubAgentService:
     def _guarded_fail(self, task, error: str, my_owner_id: Optional[float]) -> None:
         """租约校验后再失败，供入口外层与策略错误回调共享。"""
         if not self._lease_valid(task.id, my_owner_id):
-            logger.info("subagent task %s lease expired, skip fail", task.id)
             return
         self._fail(task, error)
 
@@ -222,11 +213,11 @@ class SubAgentService:
         return latest.owner_id == my_owner_id
 
     def _write_activity(self, task, draft: ActivityDraft) -> None:
-        """写活动，失败只记日志不影响主流程。"""
+        """写活动，失败不阻断主流程。"""
         try:
             self._activities.append(task.id, draft)
         except Exception:  # noqa: BLE001 — activity fail-open
-            logger.warning("activity write failed task=%s", task.id, exc_info=True)
+            pass
 
     def _build_invoke(self, task, content) -> str:
         prior = self._artifacts_repo.load(task.id)
@@ -243,7 +234,6 @@ class SubAgentService:
     def _finalize(self, task, artifacts, narrative, my_owner_id: Optional[float]) -> None:
         """先翻转状态再落产物，最后写活动。"""
         if not self._lease_valid(task.id, my_owner_id):
-            logger.info("subagent finalize lease expired for task %s, abort", task.id)
             return
 
         to_status = (
@@ -260,7 +250,6 @@ class SubAgentService:
                     task.id, task.agent_type, artifacts=artifacts, narrative=narrative,
                 )
         if not ok:
-            logger.warning("subagent finalize CAS failed (status drifted) for task %s", task.id)
             return
 
         # 写活动（事务外）

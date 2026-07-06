@@ -1,6 +1,6 @@
 """轮首气泡边界通知：supervisor 专属，发事件让前端建新气泡。
 
-注册时绑 supervisor，subagent 不连 SSE 不注册；通知性质，失败只记日志。
+注册时绑 supervisor，subagent 不连 SSE 不注册；通知性质，失败不阻断。
 """
 
 from __future__ import annotations

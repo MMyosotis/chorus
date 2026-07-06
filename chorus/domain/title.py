@@ -5,12 +5,9 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Optional
 
 from openai import OpenAI
-
-logger = logging.getLogger(__name__)
 
 _GENERATED_MAX_LEN = 30
 STORED_TITLE_MAX_LEN = 60
@@ -58,7 +55,6 @@ class TitleGenerationService:
                 stream=False,
             )
             raw = (resp.choices[0].message.content or "").strip()
-        except Exception as e:
-            logger.warning("title generation failed: %s", e)
+        except Exception:
             return None
         return clean_generated_title(raw)

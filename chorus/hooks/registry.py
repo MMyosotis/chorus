@@ -5,13 +5,10 @@ register 可带 source 绑定特定 agent，trigger 按 source 过滤——先�
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Callable, Iterator, Optional
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import SseEvent
-
-logger = logging.getLogger(__name__)
 
 HookFn = Callable[..., Any]
 
@@ -44,19 +41,18 @@ class HookRegistry:
         self._hooks.setdefault((event, source), []).append(fn)
 
     def trigger(self, event: str, ctx: AgentContext, *args: Any, **kwargs: Any) -> Iterator[SseEvent]:
-        """按 source 专属 → 全局顺序调用回调，产出其事件；单回调抛错只记日志跳过。"""
+        """按 source 专属 → 全局顺序调用回调，产出其事件；单回调抛错跳过不阻断。"""
         for source in (ctx.source, None):
             yield from self._trigger_source(event, source, ctx, *args, **kwargs)
 
     def _trigger_source(
         self, event: str, source: Optional[str], ctx: AgentContext, *args: Any, **kwargs: Any,
     ) -> Iterator[SseEvent]:
-        """调用单个 source 作用域下注册的回调；单回调抛错只记日志跳过。"""
+        """调用单个 source 作用域下注册的回调；单回调抛错跳过不阻断。"""
         for fn in self._hooks.get((event, source), ()):
             try:
                 result = fn(ctx, *args, **kwargs)
-            except Exception as e:  # noqa: BLE001 — 扩展 hook fail-open
-                logger.warning("hook %s on %s failed: %s", getattr(fn, "__self__", fn), event, e)
+            except Exception:  # noqa: BLE001 — 扩展 hook fail-open
                 continue
             if result is not None:
                 yield from result

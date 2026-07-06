@@ -4,7 +4,6 @@
 """
 from __future__ import annotations
 
-import logging
 import threading
 import time
 from typing import Optional
@@ -15,8 +14,6 @@ from chorus.domain.trace import Schedule, TracePhase
 from chorus.repo.task import TaskRepository
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
-
-logger = logging.getLogger(__name__)
 
 
 class TaskScheduler:
@@ -61,7 +58,7 @@ class TaskScheduler:
             try:
                 self._tick()
             except Exception:  # noqa: BLE001 — 调度器不能因单轮异常退出
-                logger.exception("scheduler tick failed")
+                pass
             self._stop.wait(self._interval)
 
     def _tick(self) -> None:
@@ -94,13 +91,12 @@ class TaskScheduler:
             # 启动失败：回滚状态并释放槽位，下轮重试
             self._semaphore.release()
             self._task_repo.transition(task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
-            logger.exception("scheduler failed to spawn worker for %s", task.id)
 
     def _run_worker(self, task_id: str) -> None:
         try:
             self._subagent_run(task_id)
         except Exception:  # noqa: BLE001
-            logger.exception("subagent worker %s crashed", task_id)
+            pass
         finally:
             self._semaphore.release()
 
@@ -117,7 +113,7 @@ class TaskScheduler:
                                      f"心跳超时 {self._zombie_timeout}s")
 
     def _trace_schedule(self, task_id: str, event: str, from_status: str, to_status: str, detail: str) -> None:
-        """内联写调度轨迹，失败只记日志。"""
+        """内联写调度轨迹，失败不阻断。"""
         try:
             task = self._task_repo.get(task_id)
             if task is None:
@@ -131,4 +127,4 @@ class TaskScheduler:
                 ),
             )
         except Exception:  # noqa: BLE001 — trace fail-open
-            logger.warning("scheduler trace 写入失败 task=%s event=%s", task_id, event)
+            pass
