@@ -64,7 +64,7 @@ class SubagentLoopStrategy:
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
         latest = self._task_repo.get(self.task.id)
-        if latest is None or latest.status != TaskStatus.RUNNING.value:
+        if latest is None or latest.status != TaskStatus.RUNNING:
             return False
         return True
 
@@ -190,7 +190,7 @@ class SubAgentService:
     def _fail(self, task, error: str) -> None:
         """事务内 CAS 翻转为失败并写错误信息。"""
         with self._conn.transaction():
-            self._task_repo.transition(task.id, TaskStatus.RUNNING.value, TaskStatus.FAILED.value)
+            self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.FAILED)
             self._content_repo.set_error(task.id, error)
 
         self._write_activity(task, failed_activity(error))
@@ -198,7 +198,7 @@ class SubAgentService:
     def _lease_valid(self, task_id: str, owner_id: Optional[float]) -> bool:
         """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""
         latest = self._task_repo.get(task_id)
-        return latest is not None and latest.status == TaskStatus.RUNNING.value and latest.owner_id == owner_id
+        return latest is not None and latest.status == TaskStatus.RUNNING and latest.owner_id == owner_id
 
     def _write_activity(self, task, draft: ActivityDraft) -> None:
         """写活动，失败不阻断主流程。"""
@@ -225,14 +225,14 @@ class SubAgentService:
             return
 
         to_status = (
-            TaskStatus.FINISHED.value if task.agent_type == "finalize"
-            else TaskStatus.AWAITING_CONFIRM.value
+            TaskStatus.FINISHED if task.agent_type == "finalize"
+            else TaskStatus.AWAITING_CONFIRM
         )
-        is_terminal = to_status == TaskStatus.FINISHED.value
+        is_terminal = to_status == TaskStatus.FINISHED
 
         # 事务内先 CAS 再落产物，状态与产物原子可见，漂移则两者皆不落
         with self._conn.transaction():
-            self._task_repo.transition(task.id, TaskStatus.RUNNING.value, to_status)
+            self._task_repo.transition(task.id, TaskStatus.RUNNING, to_status)
             self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
 
         if is_terminal:

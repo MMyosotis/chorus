@@ -8,33 +8,33 @@ from dataclasses import dataclass
 from chorus.domain.task.models import Task, TaskStatus
 
 ACTIVE_STATUSES: frozenset[str] = frozenset({
-    TaskStatus.PENDING.value,
-    TaskStatus.RUNNING.value,
-    TaskStatus.AWAITING_CONFIRM.value,
+    TaskStatus.PENDING,
+    TaskStatus.RUNNING,
+    TaskStatus.AWAITING_CONFIRM,
 })
 TERMINAL_STATUSES: frozenset[str] = frozenset({
-    TaskStatus.FINISHED.value,
-    TaskStatus.FAILED.value,
-    TaskStatus.CANCELLED.value,
+    TaskStatus.FINISHED,
+    TaskStatus.FAILED,
+    TaskStatus.CANCELLED,
 })
 CANCELLABLE_STATUSES: frozenset[str] = frozenset({
-    TaskStatus.PENDING.value,
-    TaskStatus.RUNNING.value,
-    TaskStatus.AWAITING_CONFIRM.value,
+    TaskStatus.PENDING,
+    TaskStatus.RUNNING,
+    TaskStatus.AWAITING_CONFIRM,
 })
 
 LEGAL_TRANSITIONS: set[tuple[str, str]] = {
-    (TaskStatus.PENDING.value, TaskStatus.RUNNING.value),
-    (TaskStatus.RUNNING.value, TaskStatus.AWAITING_CONFIRM.value),
-    (TaskStatus.RUNNING.value, TaskStatus.FINISHED.value),
-    (TaskStatus.RUNNING.value, TaskStatus.FAILED.value),
-    (TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value),
-    (TaskStatus.RUNNING.value, TaskStatus.PENDING.value),
-    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value),
-    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.PENDING.value),
-    (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.CANCELLED.value),
-    (TaskStatus.PENDING.value, TaskStatus.CANCELLED.value),
-    (TaskStatus.FAILED.value, TaskStatus.PENDING.value),
+    (TaskStatus.PENDING, TaskStatus.RUNNING),
+    (TaskStatus.RUNNING, TaskStatus.AWAITING_CONFIRM),
+    (TaskStatus.RUNNING, TaskStatus.FINISHED),
+    (TaskStatus.RUNNING, TaskStatus.FAILED),
+    (TaskStatus.RUNNING, TaskStatus.CANCELLED),
+    (TaskStatus.RUNNING, TaskStatus.PENDING),
+    (TaskStatus.AWAITING_CONFIRM, TaskStatus.FINISHED),
+    (TaskStatus.AWAITING_CONFIRM, TaskStatus.PENDING),
+    (TaskStatus.AWAITING_CONFIRM, TaskStatus.CANCELLED),
+    (TaskStatus.PENDING, TaskStatus.CANCELLED),
+    (TaskStatus.FAILED, TaskStatus.PENDING),
 }
 
 
@@ -103,5 +103,5 @@ def select_display_pipeline(
     """展示用流水线：有进行中则返进行中，否则返已完成（已取消不算）。"""
     if active:
         return active
-    finished_only = [task for task in finished if task.status == TaskStatus.FINISHED.value]
+    finished_only = [task for task in finished if task.status == TaskStatus.FINISHED]
     return finished_only

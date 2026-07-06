@@ -168,7 +168,7 @@ def _build_assembly():
     )
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,
-        interval=0.01, zombie_timeout=999, pool_size=2,
+        interval=0.01, zombie_timeout=999,
     )
     return supervisor, subagent, task_service, scheduler, task_repo, session_svc
 
@@ -195,14 +195,14 @@ def test_end_to_end_pipeline():
     # 手动占槽 pending→running（不走 scheduler，保持链路 2/4 的时序可控）
     assert task_repo.claim(idea.id, time.time())
     sub.run(idea.id)
-    assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM.value
+    assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM
 
     # 确认前：汇总仍被依赖阻塞（选题待复核≠已完成）
     assert not finalize.can_schedule([task_repo.get(idea.id)])
 
     # —— 链路 3：confirm idea → finished ——
     task_service.confirm(idea.id, selected=0)
-    assert task_repo.get(idea.id).status == TaskStatus.FINISHED.value
+    assert task_repo.get(idea.id).status == TaskStatus.FINISHED
 
     # —— 链路 4：scheduler 派发 finalize（dep 已解除）——
     assert finalize.can_schedule([task_repo.get(idea.id)])  # 现在可调度
@@ -211,10 +211,10 @@ def test_end_to_end_pipeline():
     # 汇总由 worker 线程异步跑，轮询等其离开 pending/running。
     deadline = time.time() + 2.0
     fin = task_repo.get(finalize.id)
-    while fin.status in (TaskStatus.PENDING.value, TaskStatus.RUNNING.value) and time.time() < deadline:
+    while fin.status in (TaskStatus.PENDING, TaskStatus.RUNNING) and time.time() < deadline:
         time.sleep(0.02)
         fin = task_repo.get(finalize.id)
-    assert fin.status == TaskStatus.FINISHED.value, f"finalize 链路未达 finished，实际: {fin.status}"
+    assert fin.status == TaskStatus.FINISHED, f"finalize 链路未达 finished，实际: {fin.status}"
 
 
 def main():

@@ -1,6 +1,6 @@
 """任务调度器：后台线程轮询数据库派发可执行任务，并回收僵死任务。
 
-无模型循环，调度事件直接内联写轨迹，用信号量限流。
+无模型循环，调度事件直接内联写轨迹。
 """
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import threading
 import time
 from typing import Optional
 
-from chorus.config import POOL_SIZE, SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
+from chorus.config import SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
 from chorus.domain.task import TaskStatus
 from chorus.domain.trace import Schedule, TracePhase
 from chorus.repo.task import TaskRepository
@@ -25,7 +25,6 @@ class TaskScheduler:
         session_service: SessionService,
         interval: float = SCHEDULER_INTERVAL,
         zombie_timeout: int = ZOMBIE_TIMEOUT,
-        pool_size: int = POOL_SIZE,
     ):
         self._task_repo = task_repo
         self._trace = trace_service
@@ -33,14 +32,11 @@ class TaskScheduler:
         self._session = session_service
         self._interval = interval
         self._zombie_timeout = zombie_timeout
-        self._semaphore = threading.BoundedSemaphore(pool_size)
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
 
     def start(self) -> None:
-        """启动后台线程，先回收僵死再周期轮询。幂等。"""
-        if self._thread is not None:
-            return
+        """启动后台线程，先回收僵死再周期轮询。"""
         self._stop.clear()
         self._reclaim_zombies()
         self._thread = threading.Thread(target=self._loop, name="task-scheduler", daemon=True)
@@ -70,47 +66,33 @@ class TaskScheduler:
     def _try_schedule_one(self, task, deps) -> None:
         if not task.can_schedule(deps):
             return
-        # 限流：非阻塞获取，满则跳过下轮再试
-        if not self._semaphore.acquire(blocking=False):
-            return
         # 占槽：翻转为运行中并写入租约归属标识
         now = time.time()
-        ok = self._task_repo.claim(task.id, now)
-        if not ok:
-            self._semaphore.release()
-            self._trace_schedule(task.id, "cas_conflict", TaskStatus.PENDING.value, TaskStatus.RUNNING.value,
-                                 "CAS 失败（状态已漂移）")
+        if not self._task_repo.claim(task.id, now):
+            self._trace_schedule(task.id, "cas_conflict", TaskStatus.PENDING, TaskStatus.RUNNING, "CAS 失败（状态已漂移）")
             return
-        self._trace_schedule(task.id, "dispatch", TaskStatus.PENDING.value, TaskStatus.RUNNING.value, "")
-        # 提交独立线程跑子 agent，完成时释放槽位
+        self._trace_schedule(task.id, "dispatch", TaskStatus.PENDING, TaskStatus.RUNNING, "")
+        # 提交独立线程跑子 agent
         try:
             threading.Thread(
                 target=self._run_worker, args=(task.id,), name=f"subagent-{task.id}", daemon=True,
             ).start()
         except Exception:
-            # 启动失败：回滚状态并释放槽位，下轮重试
-            self._semaphore.release()
-            self._task_repo.transition(task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+            # 启动失败：回滚状态，下轮重试
+            self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.PENDING)
 
     def _run_worker(self, task_id: str) -> None:
         try:
             self._subagent_run(task_id)
         except Exception:  # noqa: BLE001
             pass
-        finally:
-            self._semaphore.release()
 
     def _reclaim_zombies(self) -> None:
         """回收运行且心跳超时的任务，翻回待执行。"""
         now = time.time()
         for task in self._task_repo.find_running_before(now - self._zombie_timeout):
-            ok = self._task_repo.transition(
-                task.id, TaskStatus.RUNNING.value, TaskStatus.PENDING.value,
-            )
-            if ok:
-                self._trace_schedule(task.id, "zombie_reclaim",
-                                     TaskStatus.RUNNING.value, TaskStatus.PENDING.value,
-                                     f"心跳超时 {self._zombie_timeout}s")
+            self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.PENDING)
+            self._trace_schedule(task.id, "zombie_reclaim", TaskStatus.RUNNING, TaskStatus.PENDING, f"心跳超时 {self._zombie_timeout}s")
 
     def _trace_schedule(self, task_id: str, event: str, from_status: str, to_status: str, detail: str) -> None:
         """内联写调度轨迹，失败不阻断。"""

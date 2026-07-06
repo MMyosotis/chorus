@@ -71,6 +71,5 @@ TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
 
 SCHEDULER_INTERVAL = 1.0
 ZOMBIE_TIMEOUT = 120
-POOL_SIZE = 4
 
 

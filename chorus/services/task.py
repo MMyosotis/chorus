@@ -48,18 +48,18 @@ class TaskService:
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
         """确认推进：翻转待确认→完成，候选角色写回选中项（在翻转之后）。"""
         task = self._task_repo.get(task_id)
-        self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FINISHED.value)
+        self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM, TaskStatus.FINISHED)
         if task.agent_type == "idea":
             self._set_selected(task_id, task.agent_type, selected)
-        return {"id": task_id, "status": TaskStatus.FINISHED.value}
+        return {"id": task_id, "status": TaskStatus.FINISHED}
 
     def retry(self, task_id: str, feedback: dict) -> dict:
         """带反馈重跑本步：CAS 翻转回待执行并写回反馈，允许从待确认或失败态。"""
-        for from_status in (TaskStatus.AWAITING_CONFIRM.value, TaskStatus.FAILED.value):
-            if not self._task_repo.transition(task_id, from_status, TaskStatus.PENDING.value):
+        for from_status in (TaskStatus.AWAITING_CONFIRM, TaskStatus.FAILED):
+            if not self._task_repo.transition(task_id, from_status, TaskStatus.PENDING):
                 continue
             self._content_repo.set_feedback(task_id, feedback)
-            return {"id": task_id, "status": TaskStatus.PENDING.value}
+            return {"id": task_id, "status": TaskStatus.PENDING}
         raise ConflictError("CAS 失败（状态已漂移）")
 
     def cancel_pipeline(self, session_id: str) -> dict:

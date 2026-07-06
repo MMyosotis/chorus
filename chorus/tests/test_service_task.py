@@ -58,8 +58,8 @@ def test_confirm_idea_with_selected():
         Narrative(awaiting_line="y", done_line="x"),
     )
     res = svc.confirm("t1", selected=0)
-    assert res["status"] == TaskStatus.FINISHED.value
-    assert task_repo.get("t1").status == TaskStatus.FINISHED.value
+    assert res["status"] == TaskStatus.FINISHED
+    assert task_repo.get("t1").status == TaskStatus.FINISHED
 
 
 def test_confirm_writes_terminal_updated_at():
@@ -68,7 +68,7 @@ def test_confirm_writes_terminal_updated_at():
     _mk(task_repo, content_repo, "t1", "script", "awaiting_confirm", updated_at=0.0)
     svc.confirm("t1", selected=None)
     got = task_repo.get("t1")
-    assert got.status == TaskStatus.FINISHED.value
+    assert got.status == TaskStatus.FINISHED
     assert got.updated_at > 0.0
 
 
@@ -77,9 +77,9 @@ def test_retry_writes_feedback_and_cas():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
     res = svc.retry("t1", feedback={"note": "标题不够吸引"})
-    assert res["status"] == TaskStatus.PENDING.value
+    assert res["status"] == TaskStatus.PENDING
     got = task_repo.get("t1")
-    assert got.status == TaskStatus.PENDING.value
+    assert got.status == TaskStatus.PENDING
     # 反馈落在内容表，不在调度行
     assert content_repo.load("t1").feedback == {"note": "标题不够吸引"}
 
@@ -89,8 +89,8 @@ def test_retry_from_failed():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "script", "failed")
     res = svc.retry("t1", feedback={"note": "重试"})
-    assert res["status"] == TaskStatus.PENDING.value
-    assert task_repo.get("t1").status == TaskStatus.PENDING.value
+    assert res["status"] == TaskStatus.PENDING
+    assert task_repo.get("t1").status == TaskStatus.PENDING
 
 
 def test_retry_wrong_status_conflict():
@@ -108,8 +108,8 @@ def test_cancel_pipeline():
     _mk(task_repo, content_repo, "c", status="finished")
     res = svc.cancel_pipeline("s1")
     assert res["cancelled"] == 2  # a+b 非终态
-    assert task_repo.get("a").status == TaskStatus.CANCELLED.value
-    assert task_repo.get("c").status == TaskStatus.FINISHED.value
+    assert task_repo.get("a").status == TaskStatus.CANCELLED
+    assert task_repo.get("c").status == TaskStatus.FINISHED
 
 
 def test_cancel_no_active():
@@ -130,8 +130,8 @@ def test_cancel_pipeline_writes_terminal_updated_at():
     svc.cancel_pipeline("s1")
     a = task_repo.get("a")
     b = task_repo.get("b")
-    assert a.status == TaskStatus.CANCELLED.value
-    assert b.status == TaskStatus.CANCELLED.value
+    assert a.status == TaskStatus.CANCELLED
+    assert b.status == TaskStatus.CANCELLED
     assert a.updated_at > 0.0
     assert b.updated_at > 0.0
 

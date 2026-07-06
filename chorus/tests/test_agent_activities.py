@@ -218,7 +218,7 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
 
     def _takeover():
         # 模拟新 worker 抢占：zombie 回收 + 重派
-        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.PENDING)
         task_repo.claim("t1", 999.0)
 
     # 第 1 轮触发抢占加坏产出；后续坏产出撞步数上限
@@ -232,7 +232,7 @@ def test_lease_drift_at_max_steps_skips_failed_activity():
     assert not any(a.event_type == "failed" for a in acts), \
         f"租约漂移后不应写 failed activity，实际: {[a.event_type for a in acts]}"
     # 任务仍 running（旧 worker 无权 CAS 新 worker 的 task 到 failed）
-    assert task_repo.get("t1").status == TaskStatus.RUNNING.value
+    assert task_repo.get("t1").status == TaskStatus.RUNNING
 
 
 def test_lease_takeover_prevents_stale_finalize():
@@ -250,7 +250,7 @@ def test_lease_takeover_prevents_stale_finalize():
 
     def _takeover():
         # 新 worker 抢占：zombie 回收 + 重派
-        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.PENDING)
         task_repo.claim("t1", 999.0)
 
     client = _SideClient([
@@ -265,7 +265,7 @@ def test_lease_takeover_prevents_stale_finalize():
     # 不落产物（不偷新 worker 的 task）
     assert art_repo.load("t1") is None
     # 任务仍 running（新 worker 持有，旧 worker 无权翻到待复核）
-    assert task_repo.get("t1").status == TaskStatus.RUNNING.value
+    assert task_repo.get("t1").status == TaskStatus.RUNNING
 
 
 def test_lease_takeover_prevents_stale_failed_on_exception():
@@ -282,7 +282,7 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
 
     def _takeover_and_boom():
         # 新 worker 抢占：zombie 回收 + 重派
-        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.PENDING.value)
+        task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.PENDING)
         task_repo.claim("t1", 999.0)
         # 旧 worker 的网络调用随后抛异常（触发 run 的 except）
         raise RuntimeError("model boom")
@@ -296,7 +296,7 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
     assert not any(a.event_type == "failed" for a in acts), \
         f"租约漂移后不应写 failed activity，实际: {[a.event_type for a in acts]}"
     # 任务仍 running（新 worker 持有，旧 worker 无权 CAS 到 failed）
-    assert task_repo.get("t1").status == TaskStatus.RUNNING.value
+    assert task_repo.get("t1").status == TaskStatus.RUNNING
 
 
 def test_finalize_drift_writes_no_done_activity():
@@ -312,7 +312,7 @@ def test_finalize_drift_writes_no_done_activity():
     conn.get().execute("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'")
 
     def _cancel():
-        task_repo.transition("t1", TaskStatus.RUNNING.value, TaskStatus.CANCELLED.value)
+        task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.CANCELLED)
 
     client = _SideClient([
         (_cancel, FakeStream([({"content": _content(artifacts, narrative)}, "stop")])),

@@ -65,7 +65,7 @@ def test_postcard_rejects_unknown_kind():
 
 def test_legal_transitions_table():
     # 终态不可再转移
-    assert not any(f == TaskStatus.FINISHED.value for f, _ in LEGAL_TRANSITIONS)
+    assert not any(f == TaskStatus.FINISHED for f, _ in LEGAL_TRANSITIONS)
     # 关键转移都在
     assert is_legal_transition("pending", "running")
     assert is_legal_transition("running", "awaiting_confirm")
@@ -165,7 +165,7 @@ def test_expand_pipeline():
     assert len(pairs) == 2
     tasks = [t for t, _ in pairs]
     contents = [c for _, c in pairs]
-    assert all(t.status == TaskStatus.PENDING.value for t in tasks)
+    assert all(t.status == TaskStatus.PENDING for t in tasks)
     assert all(t.session_id == "sess-x" and t.created_at == 1000.0 for t in tasks)
     assert tasks[0].dependencies == []
     assert tasks[1].dependencies == [tasks[0].id]

@@ -16,7 +16,6 @@ from chorus.agents.supervisor import SupervisorService
 from chorus.config import (
     DATA_DIR,
     MAX_TOKENS,
-    POOL_SIZE,
     SCHEDULER_INTERVAL,
     ZOMBIE_TIMEOUT,
 )
@@ -106,7 +105,7 @@ def create_app() -> FastAPI:
     )
     scheduler = TaskScheduler(
         task_repo, trace_service, subagent_service.run, session_service,
-        SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT, POOL_SIZE,
+        SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT,
     )
 
     app = FastAPI(

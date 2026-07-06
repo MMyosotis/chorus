@@ -40,7 +40,7 @@ class CreationIntent:
         task_id = ids[index]
         task = Task(
             id=task_id, session_id=session_id, pipeline_id=pipeline_id,
-            agent_type=step.agent_type, status=TaskStatus.PENDING.value,
+            agent_type=step.agent_type, status=TaskStatus.PENDING,
             dependencies=deps_ids, created_at=now, updated_at=now,
         )
         content = TaskContent(

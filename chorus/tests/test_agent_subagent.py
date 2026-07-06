@@ -152,7 +152,7 @@ def test_subagent_idea_awaiting_confirm():
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     art = art_repo.load("t1")
     assert art.artifacts.candidates[0].title == "t"
     assert art.narrative.done_line == "定了"
@@ -175,7 +175,7 @@ def test_subagent_finalize_finished():
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.FINISHED.value
+    assert task_repo.get("t1").status == TaskStatus.FINISHED
     assert art_repo.load("t1").artifacts.title == "夏日晚风"
 
 
@@ -197,7 +197,7 @@ def test_subagent_react_with_tool():
     ])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     mrs = _model_responses(trace_svc)
     assert len(mrs) == 2
     assert mrs[0].tool_calls[0].name == "baidu_search"
@@ -218,7 +218,7 @@ def test_subagent_failed_on_persistent_bad_output():
     client = FakeClient(streams)
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.FAILED.value
+    assert task_repo.get("t1").status == TaskStatus.FAILED
     assert content_repo.load("t1").error
     # 撞步数上限才判死：每轮都留 trace，共 _MAX_STEPS 条
     assert len(_model_responses(trace_svc)) == _MAX_STEPS
@@ -241,7 +241,7 @@ def test_subagent_self_corrects_on_bad_output():
     ])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM.value
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     art = art_repo.load("t1")
     assert art.artifacts.candidates[0].title == "t"
     # 两轮 model_response trace（第 1 轮自纠 + 第 2 轮成功）
@@ -260,7 +260,7 @@ def _idea_content(done_line="DONE_MARKER"):
 
 def _cancel_to(task_repo, tid, to_status="cancelled"):
     def _side():
-        task_repo.transition(tid, TaskStatus.RUNNING.value, to_status)
+        task_repo.transition(tid, TaskStatus.RUNNING, to_status)
     return _side
 
 
@@ -279,7 +279,7 @@ def test_subagent_cooperative_cancel_between_iterations():
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     # 任务仍 cancelled（_finalize 未成功 CAS 到 awaiting_confirm）
-    assert task_repo.get("t1").status == TaskStatus.CANCELLED.value
+    assert task_repo.get("t1").status == TaskStatus.CANCELLED
     # 不落产物
     assert art_repo.load("t1") is None
     # 第 2 个脚本未消费——证明第 2 轮迭代在 _call_model 前就退出
@@ -300,7 +300,7 @@ def test_subagent_finalize_drift_no_orphan():
     ])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.CANCELLED.value
+    assert task_repo.get("t1").status == TaskStatus.CANCELLED
     # 不落产物（CAS 漂移→跳过 upsert）
     assert art_repo.load("t1") is None
     # 无 done 气泡

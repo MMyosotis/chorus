@@ -43,9 +43,9 @@ class Task:
 
     def can_schedule(self, deps: Iterable["Task"]) -> bool:
         """可调度：待执行且所有依赖均已完成。失败的上游会阻塞后继。"""
-        if self.status != TaskStatus.PENDING.value:
+        if self.status != TaskStatus.PENDING:
             return False
-        return all(dep.status == TaskStatus.FINISHED.value for dep in deps)
+        return all(dep.status == TaskStatus.FINISHED for dep in deps)
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))

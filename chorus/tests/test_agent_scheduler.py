@@ -1,8 +1,7 @@
-"""TaskScheduler smoke：派发 + zombie 回收 + CAS 竞态 + 限流。"""
+"""TaskScheduler smoke：派发 + zombie 回收 + CAS 竞态。"""
 from __future__ import annotations
 
 import tempfile
-import threading
 import time
 from pathlib import Path
 
@@ -39,11 +38,11 @@ def test_dispatch_pending_with_finished_deps():
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
     sched = TaskScheduler(task_repo, trace_svc, lambda tid: ran.append(tid) or None,
-                          _fake_session(), interval=0.01, zombie_timeout=999, pool_size=2)
+                          _fake_session(), interval=0.01, zombie_timeout=999)
     sched._tick()
     time.sleep(0.05)  # 等 worker 线程跑完
     assert ran == ["t1"]
-    assert task_repo.get("t1").status in (TaskStatus.RUNNING.value,)  # 子 agent 函数是空操作，未翻转状态
+    assert task_repo.get("t1").status in (TaskStatus.RUNNING,)  # 子 agent 函数是空操作，未翻转状态
 
 
 def test_blocked_by_unfinished_dep():
@@ -53,10 +52,10 @@ def test_blocked_by_unfinished_dep():
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
     sched = TaskScheduler(task_repo, trace_svc, lambda tid: ran.append(tid), _fake_session(),
-                          interval=0.01, zombie_timeout=999, pool_size=2)
+                          interval=0.01, zombie_timeout=999)
     sched._tick()
     assert ran == []
-    assert task_repo.get("t1").status == TaskStatus.PENDING.value
+    assert task_repo.get("t1").status == TaskStatus.PENDING
 
 
 def test_zombie_reclaim():
@@ -64,24 +63,9 @@ def test_zombie_reclaim():
     conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "t1", status="running", updated_at=0.0)  # 很久以前的心跳
     sched = TaskScheduler(task_repo, trace_svc, lambda tid: None, _fake_session(),
-                          interval=0.01, zombie_timeout=1, pool_size=2)
+                          interval=0.01, zombie_timeout=1)
     sched._reclaim_zombies()
-    assert task_repo.get("t1").status == TaskStatus.PENDING.value
-
-
-def test_pool_limit_skips_when_full():
-    """pool 满（信号量耗尽）→ 不 CAS，task 仍 pending。"""
-    conn, task_repo, trace_svc = _setup()
-    _mk(task_repo, "t1", status="pending")
-    sched = TaskScheduler(task_repo, trace_svc, lambda tid: time.sleep(0.1), _fake_session(),
-                          interval=0.01, pool_size=1)
-    # 占满唯一槽位
-    assert sched._semaphore.acquire(blocking=False)
-    ran = []
-    sched._tick()
-    assert ran == []
-    assert task_repo.get("t1").status == TaskStatus.PENDING.value  # 未 CAS
-    sched._semaphore.release()
+    assert task_repo.get("t1").status == TaskStatus.PENDING
 
 
 def _fake_session():
