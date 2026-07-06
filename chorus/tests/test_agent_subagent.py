@@ -113,12 +113,12 @@ def _stub_settings():
 def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client):
     from chorus.repo.task_activities import TaskActivitiesRepository
     hooks = HookRegistry()
-    trace = TraceEmitter(trace_svc, max_tokens=1024)
+    tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
+    trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
 
     _provider = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)

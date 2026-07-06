@@ -109,11 +109,7 @@ class AgentLoop:
             call = ToolCall(id=tc.id, name=tc.name, arguments=parse_tool_arguments(tc.arguments))
             call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
 
-            list(self._hooks.trigger(
-                "PreToolUse", ctx, call_view,
-                self._dispatcher.format_display(call.name, call.arguments),
-                self._dispatcher.running_label(call.name),
-            ))
+            list(self._hooks.trigger("PreToolUse", ctx, call_view))
 
             strategy.before_dispatch(call)
             result = self._dispatcher.dispatch(call, tool_ctx)

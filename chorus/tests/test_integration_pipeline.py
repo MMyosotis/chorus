@@ -125,15 +125,15 @@ def _build_assembly():
 
     # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复
     hooks = HookRegistry()
-    trace = TraceEmitter(trace_svc, max_tokens=1024)
+    skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn)], _stub_settings())
+    trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
 
-    skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn)], _stub_settings())
     agent_loop = AgentLoop(hooks, tool_dispatcher, 1024)
 
     # supervisor：一次建图工具调用流

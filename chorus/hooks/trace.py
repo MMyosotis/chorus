@@ -16,11 +16,13 @@ from chorus.domain.trace import (
     TraceToolResult,
 )
 from chorus.services.trace import TraceService
+from chorus.tools import ToolDispatch
 
 
 class TraceEmitter:
-    def __init__(self, trace_service: TraceService, max_tokens: int):
+    def __init__(self, trace_service: TraceService, dispatcher: ToolDispatch, max_tokens: int):
         self._trace = trace_service
+        self._dispatcher = dispatcher
         self._max_tokens = max_tokens
 
     def before_model_request(self, ctx: AgentContext) -> Iterable[SseEvent]:
@@ -34,12 +36,11 @@ class TraceEmitter:
     def after_model_response(self, ctx: AgentContext) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.MODEL_RESPONSE, self._response_payload(ctx))]
 
-    def on_tool_call(
-        self, ctx: AgentContext, call: dict, display: str, running_label: Any
-    ) -> Iterable[SseEvent]:
+    def on_tool_call(self, ctx: AgentContext, call: dict) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.TOOL_CALL, TraceToolCall(
             tool_call_id=call["id"], name=call["name"], arguments=call["arguments"],
-            display=display, running_label=running_label,
+            display=self._dispatcher.format_display(call["name"], call["arguments"]),
+            running_label=self._dispatcher.running_label(call["name"]),
         ))]
 
     def on_tool_result(self, ctx: AgentContext, call: dict, result: Any) -> Iterable[SseEvent]:

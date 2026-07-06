@@ -28,6 +28,16 @@ def _setup():
     return msg_svc, trace_svc, session_svc
 
 
+class _StubDispatcher:
+    """TraceEmitter.on_tool_call 拉展示串用；本文件不测该路径，给个不爆的桩。"""
+
+    def format_display(self, name, arguments):
+        return name
+
+    def running_label(self, name):
+        return "工具调用中"
+
+
 def test_error_finalizer_appends_error_message_when_message_id_allocated():
     msg_svc, trace_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
@@ -62,7 +72,7 @@ def test_error_finalizer_skips_when_message_id_not_allocated():
 
 def test_trace_propagates_subagent_source_and_task_id():
     msg_svc, trace_svc, _ = _setup()
-    emitter = TraceEmitter(trace_svc, max_tokens=512)
+    emitter = TraceEmitter(trace_svc, _StubDispatcher(), max_tokens=512)
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     ctx.chat_model = "fake-model"
@@ -85,7 +95,7 @@ def test_trace_propagates_subagent_source_and_task_id():
 
 def test_trace_default_supervisor_when_ctx_unset():
     msg_svc, trace_svc, _ = _setup()
-    emitter = TraceEmitter(trace_svc, max_tokens=256)
+    emitter = TraceEmitter(trace_svc, _StubDispatcher(), max_tokens=256)
     ctx = AgentContext(session_id="s1")               # 默认 source="supervisor", task_id=None
     ctx.chat_model = "fake-model"
 
@@ -98,7 +108,7 @@ def test_trace_default_supervisor_when_ctx_unset():
 
 def test_trace_tool_result_payload_from_result_object():
     msg_svc, trace_svc, _ = _setup()
-    emitter = TraceEmitter(trace_svc, max_tokens=256)
+    emitter = TraceEmitter(trace_svc, _StubDispatcher(), max_tokens=256)
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     call = {"id": "call-1", "name": "search", "arguments": {"q": "x"}}

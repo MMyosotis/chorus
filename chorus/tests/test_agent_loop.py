@@ -49,13 +49,7 @@ class _FakeEntry:
 
 
 class _SpyDispatcher:
-    """桩化 ToolDispatch：display/label 返回固定串，dispatch 恒返 Reply。"""
-
-    def format_display(self, name, arguments):
-        return f"display:{name}"
-
-    def running_label(self, name):
-        return f"label:{name}"
+    """桩化 ToolDispatch：dispatch 恒返 Reply。"""
 
     def dispatch(self, call, ctx):
         return DispatchResult(outcome=Reply("ok"), duration_ms=1, activity_meta=None)
@@ -149,8 +143,8 @@ def test_dispatch_tool_calls_orders_pre_before_dispatch_after_post():
     # 顺序：Pre → before_dispatch → dispatch → after_dispatch → Post，按 index 排序
     hooks = HookRegistry()
     order: list[str] = []
-    hooks.register("PreToolUse", lambda ctx, *a: order.append("Pre"))
-    hooks.register("PostToolUse", lambda ctx, *a: order.append("Post"))
+    hooks.register("PreToolUse", lambda ctx, call: order.append("Pre"))
+    hooks.register("PostToolUse", lambda ctx, call, result: order.append("Post"))
     tool_calls = {
         0: ToolCallAccumulator(id="c0", name="b"),
         1: ToolCallAccumulator(id="c1", name="a"),

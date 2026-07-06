@@ -73,14 +73,14 @@ def _setup():
 def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, fake_client):
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     hooks = HookRegistry()
-    trace = TraceEmitter(trace_svc, max_tokens=1024)
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
+    trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
     hooks.register("TurnStart", emit_message_start, source="supervisor")
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
 
     entry = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)

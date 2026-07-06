@@ -78,7 +78,7 @@ def create_app() -> FastAPI:
     )
 
     hooks = HookRegistry()
-    trace = TraceEmitter(trace_service, MAX_TOKENS)
+    trace = TraceEmitter(trace_service, tool_dispatcher, MAX_TOKENS)
     hooks.register("TurnStart", emit_message_start, source="supervisor")
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
