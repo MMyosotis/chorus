@@ -310,13 +310,12 @@ function createStreamHandler(sessionId) {
     if (c.tools.state === 'running') c.tools.state = 'idle'
   }
 
-  // 合并尾部无正文的工具气泡到前一条助手消息，避免幽灵气泡
-  function mergeTrailingEmptyBubble() {
+  // 尾部无正文气泡：工具并入上一条助手消息后丢弃
+  function dropTrailingEmptyBubble() {
     if (list.length < 2) return
     const last = list[list.length - 1]
     if (last.role !== 'assistant') return
     if (last.content && last.content.trim()) return
-    if (!last.tools.items.length) return
     let prev = null
     for (let i = list.length - 2; i >= 0; i--) {
       if (list[i].role === 'assistant') {
@@ -324,16 +323,17 @@ function createStreamHandler(sessionId) {
         break
       }
     }
-    if (!prev) return
-    for (const it of last.tools.items) {
-      prev.tools.items.push({
-        id: it.id,
-        name: it.name,
-        arguments: it.arguments,
-        duration_ms: it.duration_ms ?? null,
-        content: it.content,
-        display: it.display,
-      })
+    if (prev && last.tools.items.length) {
+      for (const it of last.tools.items) {
+        prev.tools.items.push({
+          id: it.id,
+          name: it.name,
+          arguments: it.arguments,
+          duration_ms: it.duration_ms ?? null,
+          content: it.content,
+          display: it.display,
+        })
+      }
     }
     list.splice(list.length - 1, 1)
     assistantIdx = list.length - 1
@@ -402,7 +402,7 @@ function createStreamHandler(sessionId) {
       }
     } else if (payload.type === 'done') {
       finalizeCurrent()
-      mergeTrailingEmptyBubble()
+      dropTrailingEmptyBubble()
       streamingBySession[sessionId] = false
       // 重拉取回非流式落库的气泡并续轮询
       forceReloadMessages(sessionId).finally(() => taskPolling.start(sessionId))
@@ -415,7 +415,7 @@ function createStreamHandler(sessionId) {
     }
   }
 
-  return { onEvent, finalizeCurrent, mergeTrailingEmptyBubble }
+  return { onEvent, finalizeCurrent, dropTrailingEmptyBubble }
 }
 
 async function runAssistantStream(sessionId, streamFactory) {
@@ -424,7 +424,7 @@ async function runAssistantStream(sessionId, streamFactory) {
   const { done } = streamFactory(handler.onEvent)
   await done
   handler.finalizeCurrent()
-  handler.mergeTrailingEmptyBubble()
+  handler.dropTrailingEmptyBubble()
   streamingBySession[sessionId] = false
   bumpSession(sessionId)
 }

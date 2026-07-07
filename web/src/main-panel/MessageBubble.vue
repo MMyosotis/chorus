@@ -35,10 +35,11 @@ const hasRunningTool = computed(() =>
   (props.tools.items || []).some((it) => it.duration_ms == null)
 )
 
+const bareMode = computed(() => props.role === 'assistant' && props.active && !props.content)
+
 const activityState = computed(() => {
   if (props.thinking.state === 'running') return 'thinking'
   if (props.tools.state === 'running' && hasRunningTool.value) return 'tools'
-  // 流式气泡在正文出现前的空窗
   if (props.active && !props.content && !hasRunningTool.value) return 'preparing'
   return 'idle'
 })
@@ -56,7 +57,6 @@ const activityLabel = computed(() => {
   if (activityState.value === 'tools') {
     return runningTool.value?.running_label || '工具调用中'
   }
-  if (activityState.value === 'preparing') return '准备中'
   return ''
 })
 
@@ -70,9 +70,10 @@ const planItems = computed(() =>
   )
 )
 
-// 已完成工具的紧凑留痕（图与计划卡有专属渲染，意图记账进右侧栏）
-const doneToolChips = computed(() =>
-  (props.tools.items || [])
+// 流式期间不显示已完成工具 chip，等本轮结束再留痕
+const doneToolChips = computed(() => {
+  if (props.active) return []
+  return (props.tools.items || [])
     .filter((it) =>
       it.duration_ms != null &&
       it.name !== 'generate_image' &&
@@ -80,7 +81,7 @@ const doneToolChips = computed(() =>
       it.name !== 'update_intent_state'
     )
     .map((it) => it.display || it.name)
-)
+})
 
 function extractImageUrl(content) {
   if (typeof content !== 'string') return ''
@@ -134,30 +135,9 @@ function closePreview() {
 </script>
 
 <template>
-  <div :class="['bubble-row', role]">
+  <div :class="['bubble-row', role, { bare: bareMode }]">
     <div class="sender">{{ role === 'user' ? '我' : '创作助手' }}</div>
-    <div :class="['bubble', role]">
-      <div
-        v-if="activityState !== 'idle'"
-        class="status-card"
-        :class="activityState"
-      >
-        <div class="status-header">
-          <span class="status-text">{{ activityLabel }}</span>
-          <span class="dots" aria-hidden="true">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
-          </span>
-        </div>
-      </div>
-
-      <div v-if="doneToolChips.length" class="tool-chips">
-        <span v-for="(label, idx) in doneToolChips" :key="`tc-${idx}`" class="tool-chip">
-          <span class="tool-chip-tick" aria-hidden="true">✓</span>{{ label }}
-        </span>
-      </div>
-
+    <div :class="['bubble', role, { bare: bareMode }]">
       <div v-if="planItems.length" class="plan-list">
         <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
           <div class="plan-header">执行计划</div>
@@ -183,7 +163,35 @@ function closePreview() {
           </div>
         </div>
       </div>
-      <span v-if="active && content && activityState !== 'thinking' && activityState !== 'tools'" class="cursor">|</span>
+
+      <span v-if="active && content && activityState === 'idle'" class="cursor">|</span>
+    </div>
+
+    <div v-if="content && activityState === 'tools'" class="tool-dots" aria-hidden="true">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+    <div v-if="!bareMode && doneToolChips.length" class="tool-chips">
+      <span v-for="(label, idx) in doneToolChips" :key="`tc-${idx}`" class="tool-chip">
+        <span class="tool-chip-tick" aria-hidden="true">✓</span>{{ label }}
+      </span>
+    </div>
+
+    <div
+      v-if="activityState !== 'idle' && !(activityState === 'tools' && content)"
+      class="status-card"
+      :class="activityState"
+    >
+      <div class="status-header">
+        <span v-if="activityLabel" class="status-text">{{ activityLabel }}</span>
+        <span class="dots" aria-hidden="true">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </span>
+      </div>
     </div>
   </div>
 
@@ -213,7 +221,7 @@ function closePreview() {
   font-size: 12px;
   color: var(--ch-muted);
   letter-spacing: 0.3px;
-  margin: 0 0 6px;
+  margin: 0 0 10px;
 }
 
 .bubble {
@@ -240,6 +248,16 @@ function closePreview() {
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-md);
   color: var(--ch-text);
+}
+
+.bubble.assistant.bare {
+  width: auto;
+  max-width: 100%;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  line-height: 0;
 }
 
 .bubble.assistant .text :deep(p) {
@@ -344,7 +362,7 @@ function closePreview() {
 
 /* ===== 极简内联状态条（思考 / 工具调用）===== */
 .status-card {
-  margin: 0 0 14px;
+  margin: 8px 0 0;
   font-size: 13px;
   user-select: none;
   background: transparent;
@@ -352,13 +370,8 @@ function closePreview() {
   transition: opacity 0.15s;
 }
 
-.status-card:last-child {
-  margin-bottom: 8px;
-}
-
-.status-card + .text,
-.status-card + .cursor {
-  margin-top: 6px;
+.bubble-row.bare .status-card {
+  margin-top: 0;
 }
 
 .status-header {
@@ -375,9 +388,8 @@ function closePreview() {
   line-height: 1;
 }
 
-/* 配色：思考灰、工具橙、准备中更弱 */
 .status-card.thinking {
-  color: var(--ch-muted);
+  color: var(--ch-primary);
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.tools {
@@ -385,7 +397,7 @@ function closePreview() {
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.preparing {
-  color: var(--ch-faint);
+  color: var(--ch-primary);
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 
@@ -399,8 +411,26 @@ function closePreview() {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 0 0 12px;
+  margin: 10px 0 0;
 }
+
+.tool-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 10px 0 0;
+  line-height: 1;
+}
+.tool-dots .dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ch-primary);
+  opacity: 0.3;
+  animation: dotWave 1.2s ease-in-out infinite;
+}
+.tool-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.tool-dots .dot:nth-child(3) { animation-delay: 0.4s; }
 .tool-chip {
   display: inline-flex;
   align-items: center;
