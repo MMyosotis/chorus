@@ -11,7 +11,7 @@ from typing import Generator, Iterable, Iterator, Optional, Protocol
 import uuid6
 
 from chorus.agents.runtime import AgentContext
-from chorus.domain.events import SseEvent
+from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
 from chorus.domain.stream import StreamResult, parse_tool_arguments
 from chorus.hooks import HookRegistry
 from chorus.tools import ToolCall, ToolContext, ToolDispatch
@@ -89,7 +89,9 @@ class AgentLoop:
         yield from self._hooks.trigger("AfterModelResponse", ctx)
 
         if result.tool_calls:
-            pairs = self._dispatch_tool_calls(ctx, result.tool_calls, strategy=strategy)
+            pairs = yield from self._dispatch_tool_calls(
+                ctx, result.tool_calls, strategy=strategy,
+            )
             action = strategy.after_tools(ctx, result, pairs)
         else:
             action = strategy.after_text(ctx, result)
@@ -99,8 +101,8 @@ class AgentLoop:
 
     def _dispatch_tool_calls(
         self, ctx: AgentContext, tool_calls: dict, *, strategy: LoopStrategy,
-    ) -> list:
-        """按序执行模型请求的工具，触发前后置钩子。"""
+    ) -> Generator[SseEvent, None, list]:
+        """按序执行工具，发钩子与气泡工具事件。"""
         tool_ctx = ToolContext(session_id=ctx.session_id)
         pairs = []
         for _, tc in sorted(tool_calls.items()):
@@ -110,9 +112,17 @@ class AgentLoop:
             list(self._hooks.trigger("PreToolUse", ctx, call_view))
 
             strategy.before_dispatch(call)
+            yield ToolCallEvent(
+                id=call.id, name=call.name, arguments=call.arguments,
+                display=self._dispatcher.format_display(call.name, call.arguments),
+                running_label=self._dispatcher.running_label(call.name),
+            )
             result = self._dispatcher.dispatch(call, tool_ctx)
             strategy.after_dispatch(call, result)
-
+            yield ToolResultEvent(
+                tool_call_id=call.id, name=call.name,
+                content=result.outcome.content, duration_ms=result.duration_ms,
+            )
             list(self._hooks.trigger("PostToolUse", ctx, call_view, result))
             pairs.append((call, result))
         return pairs

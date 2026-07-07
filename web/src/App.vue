@@ -388,6 +388,10 @@ function createStreamHandler(sessionId) {
         item.duration_ms = payload.duration_ms
         item.content = payload.content
       }
+      // 全部工具已落定则退出工具态
+      if (tools.state === 'running' && !tools.items.some((it) => it.duration_ms == null)) {
+        tools.state = 'idle'
+      }
     } else if (payload.type === 'title_update') {
       const idx = sessions.value.findIndex((c) => c.id === payload.id)
       if (idx >= 0) {
@@ -527,7 +531,12 @@ onMounted(async () => {
     <TeamPanel
       :graph="activeGraph"
       :focused-task-id="focusedTaskId"
+      :intent-state="activeIntentState"
+      :has-active-task="hasActiveTask"
       @focus="onTaskFocus"
+      @confirm="onIntentConfirm"
+      @revise="onIntentRevise"
+      @stop-and-revise="onIntentStopAndRevise"
     />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />

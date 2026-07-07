@@ -49,10 +49,16 @@ class _FakeEntry:
 
 
 class _SpyDispatcher:
-    """桩化 ToolDispatch：dispatch 恒返 Reply。"""
+    """桩化派发器：恒返回传走向，展示文案给最小实现。"""
 
     def dispatch(self, call, ctx):
         return DispatchResult(outcome=Reply("ok"), duration_ms=1, activity_meta=None)
+
+    def format_display(self, name, arguments):
+        return name
+
+    def running_label(self, name):
+        return "工具调用中"
 
 
 class _SpyStrategy:
@@ -151,12 +157,19 @@ def test_dispatch_tool_calls_orders_pre_before_dispatch_after_post():
         def before_dispatch(self, call):
             order.append(f"before:{call.name}")
 
-        def after_dispatch(self, call, d):
+        def after_dispatch(self, call, dispatch):
             order.append(f"after:{call.name}")
 
-    pairs = _loop(hooks=hooks)._dispatch_tool_calls(
+    gen = _loop(hooks=hooks)._dispatch_tool_calls(
         AgentContext(session_id="s1"), tool_calls, strategy=_DispatchSpy(),
     )
+    pairs = []
+    while True:
+        try:
+            next(gen)
+        except StopIteration as stop:
+            pairs = stop.value
+            break
     assert [c.name for c, _ in pairs] == ["b", "a"]
     assert order == [
         "Pre", "before:b", "after:b", "Post",

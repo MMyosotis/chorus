@@ -71,7 +71,7 @@ watch(
           :content="msg.content"
           :thinking="msg.thinking"
           :tools="msg.tools"
-          :show-cursor="streaming && idx === messages.length - 1 && msg.role === 'assistant'"
+          :active="streaming && idx === messages.length - 1 && msg.role === 'assistant'"
         />
       </template>
       <div v-if="messages.length === 0" class="empty-hint">

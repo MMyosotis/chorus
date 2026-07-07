@@ -2,14 +2,18 @@
 import { computed } from 'vue'
 
 import RoleCard from './RoleCard.vue'
+import IntentStateCard from './IntentStateCard.vue'
 
 const props = defineProps({
   graph: { type: Object, default: null },
   focusedTaskId: { type: String, default: null },
+  intentState: { type: Object, default: null },
+  hasActiveTask: { type: Boolean, default: false },
 })
-const emit = defineEmits(['focus'])
+const emit = defineEmits(['focus', 'confirm', 'revise', 'stop-and-revise'])
 
 const tasks = computed(() => props.graph?.tasks || [])
+const hasIntent = computed(() => !!props.intentState)
 
 function onFocus(id) {
   emit('focus', id)
@@ -18,8 +22,16 @@ function onFocus(id) {
 
 <template>
   <aside class="team-panel">
-    <div v-if="!tasks.length" class="team-empty">暂无创作任务</div>
-    <template v-else>
+    <IntentStateCard
+      v-if="hasIntent"
+      :state="intentState"
+      :has-active-task="hasActiveTask"
+      @confirm="$emit('confirm')"
+      @revise="$emit('revise')"
+      @stop-and-revise="$emit('stop-and-revise')"
+    />
+    <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
+    <template v-if="tasks.length">
       <div class="team-head">
         <div class="h">创作团队</div>
         <div class="sub">{{ tasks.length }} 个角色 · 流水线协作中</div>
@@ -53,6 +65,12 @@ function onFocus(id) {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+}
+
+/* 顶部意图卡固定不压 */
+.team-panel > :deep(.intent-card) {
+  flex-shrink: 0;
+  margin: 14px 14px 0;
 }
 
 .team-head {

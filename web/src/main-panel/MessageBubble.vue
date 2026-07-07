@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify'
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, required: true },
-  showCursor: { type: Boolean, default: false },
+  active: { type: Boolean, default: false },
   thinking: {
     type: Object,
     default: () => ({ state: 'idle' }),
@@ -31,9 +31,15 @@ const formattedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
+const hasRunningTool = computed(() =>
+  (props.tools.items || []).some((it) => it.duration_ms == null)
+)
+
 const activityState = computed(() => {
   if (props.thinking.state === 'running') return 'thinking'
-  if (props.tools.state === 'running') return 'tools'
+  if (props.tools.state === 'running' && hasRunningTool.value) return 'tools'
+  // 流式气泡在正文出现前的空窗
+  if (props.active && !props.content && !hasRunningTool.value) return 'preparing'
   return 'idle'
 })
 
@@ -50,6 +56,7 @@ const activityLabel = computed(() => {
   if (activityState.value === 'tools') {
     return runningTool.value?.running_label || '工具调用中'
   }
+  if (activityState.value === 'preparing') return '准备中'
   return ''
 })
 
@@ -61,6 +68,18 @@ const planItems = computed(() =>
   (props.tools.items || []).filter(
     (it) => it.name === 'output_plan' && it.duration_ms != null
   )
+)
+
+// 已完成工具的紧凑留痕（图与计划卡有专属渲染，意图记账进右侧栏）
+const doneToolChips = computed(() =>
+  (props.tools.items || [])
+    .filter((it) =>
+      it.duration_ms != null &&
+      it.name !== 'generate_image' &&
+      it.name !== 'output_plan' &&
+      it.name !== 'update_intent_state'
+    )
+    .map((it) => it.display || it.name)
 )
 
 function extractImageUrl(content) {
@@ -133,6 +152,12 @@ function closePreview() {
         </div>
       </div>
 
+      <div v-if="doneToolChips.length" class="tool-chips">
+        <span v-for="(label, idx) in doneToolChips" :key="`tc-${idx}`" class="tool-chip">
+          <span class="tool-chip-tick" aria-hidden="true">✓</span>{{ label }}
+        </span>
+      </div>
+
       <div v-if="planItems.length" class="plan-list">
         <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
           <div class="plan-header">执行计划</div>
@@ -158,7 +183,7 @@ function closePreview() {
           </div>
         </div>
       </div>
-      <span v-if="showCursor && content && activityState !== 'thinking' && activityState !== 'tools'" class="cursor">|</span>
+      <span v-if="active && content && activityState !== 'thinking' && activityState !== 'tools'" class="cursor">|</span>
     </div>
   </div>
 
@@ -350,7 +375,7 @@ function closePreview() {
   line-height: 1;
 }
 
-/* 配色：思考灰、工具调用橙（活跃高亮） */
+/* 配色：思考灰、工具橙、准备中更弱 */
 .status-card.thinking {
   color: var(--ch-muted);
   animation: pulseRow 1.6s ease-in-out infinite;
@@ -359,10 +384,44 @@ function closePreview() {
   color: var(--ch-orange);
   animation: pulseRow 1.6s ease-in-out infinite;
 }
+.status-card.preparing {
+  color: var(--ch-faint);
+  animation: pulseRow 1.6s ease-in-out infinite;
+}
 
 @keyframes pulseRow {
   0%, 100% { opacity: 1; }
   50%      { opacity: 0.65; }
+}
+
+/* 已完成工具的紧凑留痕 */
+.tool-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--ch-bg-warm);
+  border: 1px solid var(--ch-border);
+  color: var(--ch-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-chip-tick {
+  color: var(--ch-primary);
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .dots {
