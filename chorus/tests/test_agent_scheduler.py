@@ -68,6 +68,18 @@ def test_zombie_reclaim():
     assert task_repo.get("t1").status == TaskStatus.PENDING
 
 
+def test_tick_guarded_swallows_single_tick_exception():
+    """单轮 _tick 抛异常时 _tick_guarded 吞掉，不外抛（防打死调度线程）。"""
+    _, task_repo, trace_svc = _setup()
+    sched = TaskScheduler(task_repo, trace_svc, lambda tid: None, _fake_session(),
+                          interval=0.01, zombie_timeout=999)
+
+    def boom():
+        raise RuntimeError("boom")
+    sched._tick = boom
+    sched._tick_guarded()  # 不抛即通过
+
+
 def _fake_session():
     class _S:
         pass

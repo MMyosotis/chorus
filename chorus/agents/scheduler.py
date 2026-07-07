@@ -51,11 +51,15 @@ class TaskScheduler:
 
     def _loop(self) -> None:
         while not self._stop.is_set():
-            try:
-                self._tick()
-            except Exception:  # noqa: BLE001 — 调度器不能因单轮异常退出
-                pass
+            self._tick_guarded()
             self._stop.wait(self._interval)
+
+    def _tick_guarded(self) -> None:
+        """单轮调度，单轮异常不外抛以免打死调度线程。"""
+        try:
+            self._tick()
+        except Exception:  # noqa: BLE001 — 调度器不能因单轮异常退出
+            pass
 
     def _tick(self) -> None:
         """一轮：扫描待执行任务，可调度则翻转并提交，再回收僵死。"""
@@ -66,20 +70,25 @@ class TaskScheduler:
     def _try_schedule_one(self, task, deps) -> None:
         if not task.can_schedule(deps):
             return
+
         # 占槽：翻转为运行中并写入租约归属标识
-        now = time.time()
-        if not self._task_repo.claim(task.id, now):
-            self._trace_schedule(task.id, "cas_conflict", TaskStatus.PENDING, TaskStatus.RUNNING, "CAS 失败（状态已漂移）")
+        if not self._task_repo.claim(task.id, time.time()):
+            self._trace_schedule(task.session_id, Schedule(
+                event="cas_conflict", task_id=task.id,
+                from_status=TaskStatus.PENDING, to_status=TaskStatus.RUNNING,
+                detail="CAS 失败（状态已漂移）",
+            ))
             return
-        self._trace_schedule(task.id, "dispatch", TaskStatus.PENDING, TaskStatus.RUNNING, "")
+
+        self._trace_schedule(task.session_id, Schedule(
+            event="dispatch", task_id=task.id,
+            from_status=TaskStatus.PENDING, to_status=TaskStatus.RUNNING, detail="",
+        ))
+
         # 提交独立线程跑子 agent
-        try:
-            threading.Thread(
-                target=self._run_worker, args=(task.id,), name=f"subagent-{task.id}", daemon=True,
-            ).start()
-        except Exception:
-            # 启动失败：回滚状态，下轮重试
-            self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.PENDING)
+        threading.Thread(
+            target=self._run_worker, args=(task.id,), name=f"subagent-{task.id}", daemon=True,
+        ).start()
 
     def _run_worker(self, task_id: str) -> None:
         try:
@@ -92,21 +101,18 @@ class TaskScheduler:
         now = time.time()
         for task in self._task_repo.find_running_before(now - self._zombie_timeout):
             self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.PENDING)
-            self._trace_schedule(task.id, "zombie_reclaim", TaskStatus.RUNNING, TaskStatus.PENDING, f"心跳超时 {self._zombie_timeout}s")
+            self._trace_schedule(task.session_id, Schedule(
+                event="zombie_reclaim", task_id=task.id,
+                from_status=TaskStatus.RUNNING, to_status=TaskStatus.PENDING,
+                detail=f"心跳超时 {self._zombie_timeout}s",
+            ))
 
-    def _trace_schedule(self, task_id: str, event: str, from_status: str, to_status: str, detail: str) -> None:
+    def _trace_schedule(self, session_id: str, schedule: Schedule) -> None:
         """内联写调度轨迹，失败不阻断。"""
         try:
-            task = self._task_repo.get(task_id)
-            if task is None:
-                return
             self._trace.add_trace(
-                session_id=task.session_id, task_id=task_id, source="scheduler",
-                phase=TracePhase.SCHEDULE,
-                payload=Schedule(
-                    event=event, task_id=task_id, from_status=from_status,
-                    to_status=to_status, detail=detail,
-                ),
+                session_id=session_id, task_id=schedule.task_id, source="scheduler",
+                phase=TracePhase.SCHEDULE, payload=schedule,
             )
         except Exception:  # noqa: BLE001 — trace fail-open
             pass
