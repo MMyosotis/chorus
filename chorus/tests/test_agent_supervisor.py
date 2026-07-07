@@ -24,7 +24,7 @@ from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider
 from chorus.tools import ToolDispatch
-from chorus.tools.builtin import CreatePlanTool, LoadSkillTool
+from chorus.tools.builtin import CreatePlanTool, LoadSkillTool, UpdateIntentStateTool
 
 
 class _Delta(types.SimpleNamespace):
@@ -75,7 +75,12 @@ def _setup():
 def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, fake_client):
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     hooks = HookRegistry()
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn), LoadSkillTool(skill_loader)], _stub_settings())
+    intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
+    tool_dispatcher = ToolDispatch([
+        CreatePlanTool(task_repo, content_repo, conn),
+        LoadSkillTool(skill_loader),
+        UpdateIntentStateTool(intent_state),
+    ], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
     hooks.register("TurnStart", emit_message_start, source="supervisor")
     hooks.register("BeforeModelRequest", trace.before_model_request)
@@ -86,7 +91,6 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
 
     entry = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)
-    intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
     return SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, entry,
         task_repo, tool_dispatcher, loop, intent_state,
@@ -266,6 +270,48 @@ def test_enforce_create_plan_skips_persist_until_plan():
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "create_plan"
     assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 2
+
+
+def test_update_intent_state_finishes_one_turn():
+    """文本 + update_intent_state(Terminal) → 单轮单气泡 FINISH，不续轮生成重复回复。
+
+    锚定副作用型工具返回 Terminal 结束本轮：模型同轮已回文本 + 调 update_intent_state 记状态，
+    应单条 assistant(文本+tool_calls) + tool(result) 收尾，不产生第二轮 assistant。
+    """
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
+    intent_args = {
+        "interaction_intent": "smalltalk",
+        "intent_status": "empty",
+        "goal": "闲聊",
+        "known_slots": {},
+        "missing_slots": [],
+        "open_questions": [],
+        "confirmation_summary": None,
+        "next_action": "reply_only",
+        "confidence": 0.9,
+    }
+    stream = FakeStream([
+        ({"content": "你好！"}, None),
+        ({"tool_calls": [types.SimpleNamespace(
+            index=0, id="c1", function=types.SimpleNamespace(
+                name="update_intent_state", arguments=json.dumps(intent_args)))]}, "tool_calls"),
+    ])
+    client = FakeClient([stream])
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    s = session_svc.create("test")
+    events = list(sup.stream(s.id, "你好"))
+    types_seq = [e.type for e in events]
+    # 单轮单气泡：仅一个 message_start
+    assert types_seq.count("message_start") == 1
+    assert types_seq[-1] == "done"
+    # 历史：user + assistant(文本 + tool_calls) + tool，无第二条 assistant
+    msgs = msg_svc.list_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
+    assert msgs[1].content == "你好！"
+    assert len(msgs[1].tool_calls) == 1
+    assert msgs[1].tool_calls[0].name == "update_intent_state"
+    assert msgs[2].role == "tool"
+    assert msgs[2].tool_call_id == "c1"
 
 
 def main():

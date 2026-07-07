@@ -130,11 +130,12 @@ class SupervisorLoopStrategy:
         return LoopAction(LoopSignal.FINISH, events)
 
     def _turn_content(self, ctx, terminal):
-        """助手内容：终止轮用工具带的友好回复，纯回复轮用模型文本。"""
-        if terminal is not None:
-            call, _ = terminal
-            return call.arguments.get("friendly_reply") or "好的，开始为你创作"
-        return "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
+        """助手内容：模型流式文本优先，无文本时取终止型工具的 friendly_reply 回退。"""
+        text = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
+        if terminal is None:
+            return text
+        call, _ = terminal
+        return text or call.arguments.get("friendly_reply")
 
     def _handle_terminal(self, ctx):
         """终止分支：工具副作用已在工具内完成，主流程只做收尾。"""

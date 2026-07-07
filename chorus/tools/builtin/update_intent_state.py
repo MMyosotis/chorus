@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from chorus.domain.intent import IntentStatePatch
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Tool, ToolContext
+from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
 
 class UpdateIntentStateTool(Tool):
@@ -128,7 +128,7 @@ class UpdateIntentStateTool(Tool):
         except ValidationError as e:
             return Reply(f"update_intent_state 参数格式错: {e}")
         state = self._intent.update_from_tool(ctx.session_id, patch)
-        return Reply(
+        return Terminal(
             "intent_state updated: "
             f"status={state.intent_status}, next_action={state.next_action}, version={state.version}"
         )
