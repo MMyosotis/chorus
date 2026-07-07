@@ -18,9 +18,8 @@ import chorus.app as _app
 from chorus.startup import run_startup
 
 _supervisor = _app.app.state.supervisor_service
-_settings = _app.app.state.settings_service
 _session = _app.app.state.session_service
-run_startup(_supervisor._skill, _session, _app.app.state.scheduler)
+run_startup(_app.app.state.scheduler)
 
 
 COLORS = {
@@ -89,10 +88,7 @@ def main() -> None:
         if not stripped:
             continue
 
-        for ev in _supervisor.stream(
-            session_id, query,
-            web_search=_settings.get_web_search(),
-        ):
+        for ev in _supervisor.stream(session_id, query):
             _handle_event(ev)
 
     print("\n再见！")
