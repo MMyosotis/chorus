@@ -4,16 +4,14 @@ import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import PostCard from './PostCard.vue'
 import RecoveryCard from './RecoveryCard.vue'
-import IntentConfirmCard from './IntentConfirmCard.vue'
 
 const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   sessionId: { type: String, default: '' },
-  intentState: { type: Object, default: null },
 })
 
-defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
+defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled'])
 
 const container = ref(null)
 
@@ -76,13 +74,6 @@ watch(
           :show-cursor="streaming && idx === messages.length - 1 && msg.role === 'assistant'"
         />
       </template>
-      <IntentConfirmCard
-        v-if="intentState?.intent_status === 'ready_to_confirm'"
-        :state="intentState"
-        :busy="streaming"
-        @confirm="$emit('intent-confirm')"
-        @revise="$emit('intent-revise')"
-      />
       <div v-if="messages.length === 0" class="empty-hint">
         <p>发送消息开始对话</p>
       </div>

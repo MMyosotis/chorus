@@ -76,27 +76,10 @@ watch(
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <linearGradient id="lk-logo-bg" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#7c83f3" />
-            <stop offset="100%" stop-color="#5860e0" />
-          </linearGradient>
-        </defs>
-
-        <path d="M26 30 L33 10 L48 26 Z" fill="url(#lk-logo-bg)" />
-        <path d="M74 30 L67 10 L52 26 Z" fill="url(#lk-logo-bg)" />
-
-        <rect x="14" y="20" width="72" height="70" rx="22" fill="url(#lk-logo-bg)" />
-
-        <ellipse cx="38" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
-        <ellipse cx="62" cy="52" rx="4.2" ry="6.5" fill="#ffffff" />
-        <path d="M47 66 L53 66 L50 71 Z" fill="#ffffff" fill-opacity="0.92" />
-      </svg>
       <span class="brand-title">稿搭</span>
     </div>
     <div class="sidebar-header">
-      <button class="new-btn" @click="emit('create')">+ 新对话</button>
+      <button class="new-btn" @click="emit('create')">新对话</button>
     </div>
     <div class="session-list">
       <div
@@ -155,9 +138,9 @@ watch(
 
 <style scoped>
 .sidebar {
-  width: clamp(250px, 18vw, 290px);
+  width: 270px;
   flex-shrink: 0;
-  background: var(--ch-surface-soft);
+  background: #f7f8fb;
   border: none;
   border-right: 1px solid var(--ch-border);
   border-radius: 0;
@@ -171,84 +154,69 @@ watch(
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 28px 20px 10px;
+  padding: 24px 20px 8px;
   flex-shrink: 0;
 }
 
-.logo {
-  width: 30px;
-  height: 30px;
-  display: block;
-  border-radius: 9px;
-  filter: drop-shadow(0 1px 2px rgba(30, 41, 59, 0.10))
-          drop-shadow(0 3px 8px rgba(99, 102, 241, 0.28));
-}
-
 .brand-title {
-  font-family: 'ZCOOL QingKe HuangYou', cursive;
-  font-size: 24px;
-  font-weight: 400;
-  letter-spacing: 1px;
-  background: linear-gradient(120deg, var(--ch-orange), var(--ch-violet));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 760;
+  color: #172033;
 }
 
 .sidebar-header {
-  padding: 14px 20px 10px;
+  padding: 10px 20px 12px;
   flex-shrink: 0;
 }
 
 .new-btn {
-  width: 100%;
-  padding: 9px 12px;
-  border: none;
-  border-radius: 16px;
-  background: linear-gradient(135deg, var(--ch-orange-mid), var(--ch-orange));
-  color: #fff;
+  width: 230px;
+  height: 38px;
+  border: 1px solid #d6dbea;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #172033;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 650;
   cursor: pointer;
-  box-shadow: 0 10px 22px rgba(234, 88, 12, 0.22);
-  transition: box-shadow 0.2s, filter 0.2s;
+  box-shadow: none;
+  transition: background 0.2s, border-color 0.2s;
 }
 .new-btn:hover {
-  filter: brightness(1.05);
-  box-shadow: 0 12px 26px rgba(234, 88, 12, 0.28);
+  background: #f8fafc;
+  border-color: #c8d1e5;
 }
 .new-btn:active {
-  filter: brightness(0.97);
+  background: #f3f6fa;
 }
 
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 20px 12px;
+  padding: 2px 20px 12px;
   scrollbar-width: thin;
 }
 
 .sidebar-footer {
-  padding: 10px 20px 18px;
-  border-top: 1px solid var(--ch-border);
+  padding: 10px 20px 20px;
 }
 
 .settings-btn {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #475569;
-  border-radius: 14px;
+  width: 230px;
+  height: 36px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #667085;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 13px;
-  transition: background 0.15s, border-color 0.15s;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
 }
 .settings-btn:hover {
-  background: #f8fafc;
-  border-color: rgba(129, 140, 248, 0.4);
-  color: #6366f1;
+  background: #eef2f7;
+  color: #344054;
 }
 
 .session-item {
@@ -258,7 +226,7 @@ watch(
   gap: 8px;
   padding: 11px 14px;
   min-height: 54px;
-  border-radius: 17px;
+  border-radius: 12px;
   cursor: pointer;
   font-size: 14px;
   color: #1e293b;
@@ -268,13 +236,13 @@ watch(
 }
 
 .session-item:hover {
-  background: #fff;
-  box-shadow: inset 0 0 0 1px rgba(226, 232, 240, 0.8);
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(214, 220, 234, 0.9);
 }
 
 .session-item.active {
-  background: #eef2ff;
-  box-shadow: inset 0 0 0 1px #c7d2fe;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #cfd7e8;
 }
 
 .session-title {
@@ -289,7 +257,7 @@ watch(
   flex: 1;
   min-width: 0;
   padding: 2px 6px;
-  border: 1px solid #6366f1;
+  border: 1px solid #c9d3e3;
   border-radius: 4px;
   font-size: 14px;
   outline: none;
@@ -302,16 +270,16 @@ watch(
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #818cf8;
+  background: #667085;
   flex-shrink: 0;
-  box-shadow: 0 0 0 0 rgba(129, 140, 248, 0.5);
+  box-shadow: 0 0 0 0 rgba(102, 112, 133, 0.35);
   animation: pulseDot 1.2s ease-in-out infinite;
 }
 
 @keyframes pulseDot {
-  0%   { opacity: 1; transform: scale(1); box-shadow: 0 0 6px 1px rgba(129, 140, 248, 0.55); }
-  50%  { opacity: 0.5; transform: scale(0.85); box-shadow: 0 0 2px 0 rgba(129, 140, 248, 0.2); }
-  100% { opacity: 1; transform: scale(1); box-shadow: 0 0 6px 1px rgba(129, 140, 248, 0.55); }
+  0%   { opacity: 1; transform: scale(1); box-shadow: 0 0 5px 1px rgba(102, 112, 133, 0.3); }
+  50%  { opacity: 0.55; transform: scale(0.9); box-shadow: 0 0 2px 0 rgba(102, 112, 133, 0.14); }
+  100% { opacity: 1; transform: scale(1); box-shadow: 0 0 5px 1px rgba(102, 112, 133, 0.3); }
 }
 
 .session-actions {
@@ -340,8 +308,8 @@ watch(
 }
 
 .icon-btn:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.09);
-  color: #6366f1;
+  background: #eef2f7;
+  color: #344054;
 }
 
 .icon-btn:disabled {

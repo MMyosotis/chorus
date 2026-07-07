@@ -22,10 +22,10 @@ body {
 
 :root {
   --ch-bg-warm: #f3f6fa;
-  --ch-bg-cool: #eef2ff;
+  --ch-bg-cool: #f7f8fb;
   --ch-surface: rgba(255, 255, 255, 0.94);
-  --ch-surface-soft: #f8fafc;
-  --ch-team-surface: #fafbfc;
+  --ch-surface-soft: #f7f8fb;
+  --ch-team-surface: #fafafa;
   --ch-border: #dde5ee;
   --ch-text: #172033;
   --ch-body: #344054;
@@ -45,10 +45,10 @@ body {
   --ch-green-soft: #ecfdf5;
   --ch-red: #dc2626;
   --ch-red-soft: #fef2f2;
-  --ch-radius-xl: 32px;
-  --ch-radius-lg: 28px;
-  --ch-radius-md: 22px;
-  --ch-radius-sm: 16px;
+  --ch-radius-xl: 24px;
+  --ch-radius-lg: 18px;
+  --ch-radius-md: 14px;
+  --ch-radius-sm: 10px;
   --ch-chat-width: 820px;
   --ch-runtime-width: 760px;
   --ch-shadow-workbench: 0 22px 52px rgba(30, 27, 75, 0.14);

@@ -98,10 +98,10 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 20px 28px;
+  padding: 18px 28px 6px;
 }
 .dock-label {
-  color: #c2410c;
+  color: #8b6b1d;
   font-size: 10px;
   font-weight: 850;
   letter-spacing: 0.1em;
@@ -116,14 +116,14 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--ch-orange-mid), var(--ch-orange));
-  color: #fff;
+  background: #f3e7c5;
+  color: #78581b;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   font-weight: 850;
-  box-shadow: 0 8px 18px rgba(234, 88, 12, 0.22);
+  box-shadow: none;
 }
 .ap-copy {
   min-width: 0;
@@ -143,38 +143,38 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   text-overflow: ellipsis;
 }
 .detail-pill {
-  border: 1px solid var(--ch-orange-mid);
+  border: 1px solid #dcc48c;
   background: #fff;
-  color: #c2410c;
+  color: #8b6b1d;
   border-radius: 999px;
-  padding: 8px 18px;
+  padding: 8px 16px;
   font-size: 11px;
   font-weight: 850;
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.detail-pill:hover { background: var(--ch-orange-mid); color: #fff; }
+.detail-pill:hover { background: #f3e7c5; color: #78581b; }
 .mini-progress {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
-  color: #c2410c;
+  color: #8b6b1d;
   font-size: 12px;
   font-weight: 760;
 }
 .mini-track {
   height: 6px;
   border-radius: 999px;
-  background: #fed7aa;
+  background: #ecd9a7;
   overflow: hidden;
 }
 .mini-track i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--ch-orange-mid), var(--ch-orange));
+  background: #b58b1e;
 }
 .ap-list {
   display: flex;
@@ -195,7 +195,7 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   flex-shrink: 0;
   background: var(--ch-faint);
 }
-.ap-dot.running { background: var(--ch-orange-mid); animation: softPulse 1.4s ease-in-out infinite; }
+.ap-dot.running { background: #b58b1e; animation: softPulse 1.4s ease-in-out infinite; }
 .ap-dot.done { background: var(--ch-green-mid); }
 .ap-dot.warning { background: var(--ch-amber); }
 .ap-dot.failed { background: #f87171; }

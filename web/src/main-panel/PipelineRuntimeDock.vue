@@ -50,11 +50,11 @@ const visible = computed(() => tasks.value.length > 0 && (activityTask.value || 
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  border-radius: var(--ch-radius-lg);
-  border: 1px solid var(--ch-orange-border);
-  background: linear-gradient(135deg, var(--ch-orange-soft) 0%, var(--ch-violet-soft) 100%);
-  box-shadow: 0 14px 32px rgba(234, 88, 12, 0.08), 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  gap: 6px;
+  border-radius: 18px;
+  border: 1px solid #e7d4aa;
+  background: #fffaf0;
+  box-shadow: none;
   overflow: hidden;
   animation: dockIn 180ms ease-out;
 }

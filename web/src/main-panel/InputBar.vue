@@ -98,7 +98,7 @@ defineExpose({ focus })
   gap: 4px;
   padding: 8px 10px 8px 20px;
   border: 1px solid var(--ch-border);
-  border-radius: 19px;
+  border-radius: 12px;
   background: #fff;
   box-shadow: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
@@ -112,8 +112,8 @@ defineExpose({ focus })
 
 .input-bar.locked .input-inner {
   min-height: 38px;
-  background: #f1f5f9;
-  border-color: transparent;
+  background: #eef2f7;
+  border-color: #dde5ee;
   justify-content: center;
   padding: 0 22px;
 }
@@ -177,17 +177,17 @@ defineExpose({ focus })
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 50%;
-  background: var(--ch-primary);
+  border-radius: 10px;
+  background: #1f2937;
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(67, 56, 202, 0.2);
+  box-shadow: none;
   transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
 }
 
 .send-btn:hover:not(:disabled) {
-  filter: brightness(1.06);
-  box-shadow: 0 10px 22px rgba(67, 56, 202, 0.28);
+  filter: brightness(1.05);
+  box-shadow: none;
 }
 
 .send-btn:active:not(:disabled) {

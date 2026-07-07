@@ -56,14 +56,14 @@ function lineOf(t) {
 .progress-banner {
   width: min(var(--ch-runtime-width), calc(100% - 32px));
   min-height: 38px;
-  margin: 2px auto 10px;
+  margin: 2px auto 12px;
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 8px 22px;
   background: #fff;
   border: 1px solid var(--ch-border);
-  border-radius: 999px;
+  border-radius: 12px;
   font-size: 12px;
   color: var(--ch-muted);
   flex-shrink: 0;
@@ -91,11 +91,11 @@ function lineOf(t) {
   background: var(--ch-border);
 }
 .seg.running {
-  background: linear-gradient(90deg, var(--ch-orange-mid), var(--ch-orange));
+  background: #b58b1e;
   animation: pulse 1.4s ease-in-out infinite;
 }
-.seg.waiting { background: var(--ch-amber); }
-.seg.done { background: var(--ch-green-mid); }
+.seg.waiting { background: #d3a738; }
+.seg.done { background: #3fb38a; }
 .seg.failed { background: #f87171; }
 .seg-role {
   display: none;

@@ -514,12 +514,9 @@ onMounted(async () => {
         :messages="messages"
         :streaming="streaming"
         :session-id="activeId || ''"
-        :intent-state="activeIntentState"
         @hil-confirmed="onHilConfirmed"
         @hil-retried="onHilRetried"
         @hil-cancelled="onHilCancelled"
-        @intent-confirm="onIntentConfirm"
-        @intent-revise="onIntentRevise"
       />
       <PipelineRuntimeDock
         :graph="activeGraph"
@@ -533,12 +530,7 @@ onMounted(async () => {
     <TeamPanel
       :graph="activeGraph"
       :focused-task-id="focusedTaskId"
-      :intent-state="activeIntentState"
-      :has-active-task="hasActiveTask"
       @focus="onTaskFocus"
-      @intent-confirm="onIntentConfirm"
-      @intent-revise="onIntentRevise"
-      @intent-stop-and-revise="onIntentStopAndRevise"
     />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
@@ -583,7 +575,7 @@ onMounted(async () => {
 
 .session-title {
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 760;
   color: var(--ch-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -615,10 +607,10 @@ onMounted(async () => {
 }
 
 .header-console-btn.active {
-  background: var(--ch-primary-soft);
-  border-color: #c7d2fe;
-  color: var(--ch-primary);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.08);
+  background: #eef2f7;
+  border-color: #cfd7e8;
+  color: #344054;
+  box-shadow: none;
 }
 
 @media (max-width: 900px) {
