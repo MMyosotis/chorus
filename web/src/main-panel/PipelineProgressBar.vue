@@ -4,7 +4,7 @@ import { ROLE_LABELS } from '../team-panel/roleMeta.js'
 
 const props = defineProps({ graph: { type: Object, default: null } })
 
-function segState(status) {
+function stepState(status) {
   if (status === 'finished') return 'done'
   if (status === 'running') return 'running'
   if (status === 'awaiting_confirm') return 'waiting'
@@ -15,39 +15,35 @@ function segState(status) {
 const tasks = computed(() => props.graph?.tasks || [])
 
 const current = computed(() => {
-  const t = tasks.value.find((x) => x.status !== 'finished' && x.status !== 'failed' && x.status !== 'cancelled')
-  return t || tasks.value[tasks.value.length - 1] || null
+  const next = tasks.value.find(
+    (task) => task.status !== 'finished' && task.status !== 'failed' && task.status !== 'cancelled',
+  )
+  return next || tasks.value[tasks.value.length - 1] || null
 })
 
 const label = computed(() => {
-  const ts = tasks.value
-  if (!ts.length) return ''
-  const cur = current.value
-  if (!cur) return '创作完成'
-  const idx = ts.indexOf(cur) + 1
-  const role = ROLE_LABELS[cur.agent_type] || cur.agent_type
-  if (cur.status === 'awaiting_confirm') return `等你确认 · 第 ${idx}/${ts.length} 步 · ${role}`
-  if (cur.status === 'running') return `创作进行中 · 第 ${idx}/${ts.length} 步 · ${role}`
-  return `第 ${idx}/${ts.length} 步 · ${role}`
+  if (!tasks.value.length) return ''
+  const active = current.value
+  if (!active) return '创作完成'
+  const idx = tasks.value.indexOf(active) + 1
+  const role = ROLE_LABELS[active.agent_type] || active.agent_type
+  if (active.status === 'awaiting_confirm') return `等你确认 · 第 ${idx}/${tasks.value.length} 步`
+  if (active.status === 'running') return `创作进行中 · 第 ${idx}/${tasks.value.length} 步`
+  return `第 ${idx}/${tasks.value.length} 步`
 })
-
-function lineOf(t) {
-  if (t.status === 'running') return t.current_activity?.role_line || ''
-  if (t.status === 'awaiting_confirm') return t.narrative?.awaiting_line || ''
-  if (t.status === 'finished') return t.narrative?.done_line || ''
-  return ''
-}
 </script>
 
 <template>
   <div v-if="tasks.length" class="progress-banner">
     <span class="progress-label">{{ label }}</span>
-    <div class="progress-segs">
-      <div v-for="t in tasks" :key="t.id" class="seg-cell">
-        <span class="seg" :class="segState(t.status)" />
-        <span class="seg-role">{{ ROLE_LABELS[t.agent_type] || t.agent_type }}</span>
-        <span v-if="lineOf(t)" class="seg-line" :class="segState(t.status)">{{ lineOf(t) }}</span>
-      </div>
+    <div class="pipe">
+      <template v-for="(task, i) in tasks" :key="task.id">
+        <span v-if="i > 0" class="pipe-sep" aria-hidden="true">›</span>
+        <span class="pipe-step" :class="stepState(task.status)">
+          <span v-if="stepState(task.status) === 'done'" class="pipe-tick" aria-hidden="true">✓</span>
+          <span class="pipe-name">{{ ROLE_LABELS[task.agent_type] || task.agent_type }}</span>
+        </span>
+      </template>
     </div>
   </div>
 </template>
@@ -55,65 +51,67 @@ function lineOf(t) {
 <style scoped>
 .progress-banner {
   width: min(var(--ch-runtime-width), calc(100% - 32px));
-  min-height: 38px;
   margin: 2px auto 12px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 14px;
-  padding: 8px 22px;
-  background: var(--ch-surface);
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-md);
-  font-size: 12px;
+  padding: 0 4px;
+  font-size: 12.5px;
   color: var(--ch-muted);
   flex-shrink: 0;
 }
 .progress-label {
   white-space: nowrap;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--ch-faint);
+  flex-shrink: 0;
 }
-.progress-segs {
-  display: flex;
-  gap: 12px;
-  flex: 1;
-  align-items: center;
-}
-.seg-cell {
+.pipe {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
+  overflow: hidden;
 }
-.seg {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--ch-border);
+.pipe-sep {
+  color: var(--ch-border-2);
+  font-size: 13px;
+  flex-shrink: 0;
+  line-height: 1;
 }
-.seg.running {
-  background: var(--ch-orange);
-  animation: pulse 1.4s ease-in-out infinite;
+.pipe-step {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
 }
-.seg.waiting { background: var(--ch-primary); }
-.seg.done { background: var(--ch-green); }
-.seg.failed { background: var(--ch-red); }
-.seg-role {
-  display: none;
+.pipe-tick {
+  color: var(--ch-green);
+  font-size: 11px;
 }
-.seg-line {
-  display: none;
+.pipe-name {
+  color: var(--ch-faint);
+  letter-spacing: 0.2px;
 }
-.seg-line.running { color: var(--ch-orange); }
-.seg-line.waiting { color: var(--ch-primary-2); }
-.seg-line.done { color: var(--ch-green); }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.58; } }
+
+.pipe-step.done .pipe-name { color: var(--ch-muted); }
+.pipe-step.running .pipe-name {
+  color: var(--ch-orange);
+  font-family: var(--ch-serif);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.pipe-step.waiting .pipe-name {
+  color: var(--ch-primary);
+  font-family: var(--ch-serif);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.pipe-step.failed .pipe-name { color: var(--ch-red); }
 
 @media (max-width: 760px) {
-  .progress-banner {
-    padding: 8px 14px;
-  }
-  .progress-label {
-    display: none;
-  }
+  .progress-banner { gap: 8px; }
+  .progress-label { display: none; }
 }
 </style>

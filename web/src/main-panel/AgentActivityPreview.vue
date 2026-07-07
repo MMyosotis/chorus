@@ -60,7 +60,7 @@ const roleLine = computed(() => {
 })
 const progress = computed(() => current.value?.payload?.total ? current.value.payload : null)
 const recent = computed(() => activities.value.slice(-2))
-const shownActivities = computed(() => expanded.value ? [...activities.value].reverse() : recent.value)
+const history = computed(() => activities.value.slice(0, -2))
 </script>
 
 <template>
@@ -83,12 +83,20 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
       </div>
     </div>
 
-    <TransitionGroup v-if="shownActivities.length" name="ap" tag="div" class="ap-list">
-      <div v-for="a in shownActivities" :key="a.id" class="ap-item" :class="a.status">
+    <div class="ap-list">
+      <div v-if="history.length" class="ap-history-wrap" :class="{ expanded }">
+        <div class="ap-history-inner">
+          <div v-for="a in history" :key="a.id" class="ap-item" :class="a.status">
+            <span class="ap-dot" :class="a.status" />
+            <span class="ap-recent-line">{{ a.role_line }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-for="a in recent" :key="a.id" class="ap-item" :class="a.status">
         <span class="ap-dot" :class="a.status" />
         <span class="ap-recent-line">{{ a.role_line }}</span>
       </div>
-    </TransitionGroup>
+    </div>
   </div>
 </template>
 
@@ -181,6 +189,20 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   gap: 8px;
   padding-left: 50px;
 }
+.ap-history-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s ease;
+}
+.ap-history-wrap.expanded {
+  grid-template-rows: 1fr;
+}
+.ap-history-inner {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .ap-item {
   display: flex;
   gap: 10px;
@@ -205,16 +227,6 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   white-space: nowrap;
   font-size: 12px;
   color: var(--ch-muted);
-}
-
-.ap-enter-active,
-.ap-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-.ap-enter-from,
-.ap-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
 }
 
 @keyframes softPulse {
