@@ -193,23 +193,24 @@ function closePreview() {
 
 .bubble {
   line-height: 1.7;
-  font-size: 15px;
+  font-size: 14px;
   word-break: break-word;
 }
 
 .bubble.user {
   max-width: 75%;
   padding: 12px 16px;
-  border-radius: var(--ch-radius-md);
+  border-radius: 12px 12px 4px 12px;
   background: var(--ch-primary);
   color: #fff;
+  line-height: 1.6;
   box-shadow: none;
 }
 
 .bubble.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 16px 20px;
+  padding: 12px 16px;
   background: var(--ch-bg-cool);
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-md);

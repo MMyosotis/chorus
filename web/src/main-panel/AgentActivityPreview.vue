@@ -65,11 +65,10 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
 
 <template>
   <div class="activity-preview">
-    <div class="dock-label">PIPELINE FOCUS DOCK · 当前焦点</div>
     <div class="ap-main">
-      <span class="role-avatar">{{ roleName.slice(0, 1) }}</span>
+      <span :class="['role-avatar', { running: task?.status === 'running' }]">{{ roleName.slice(0, 1) }}</span>
       <div class="ap-copy">
-        <div class="ap-title">{{ roleName }}正在推进</div>
+        <div class="ap-title">{{ roleName }}</div>
         <div class="ap-line">{{ roleLine }}</div>
       </div>
       <span class="detail-pill" @click="expanded = !expanded">
@@ -84,12 +83,12 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
       </div>
     </div>
 
-    <div v-if="shownActivities.length" class="ap-list">
+    <TransitionGroup v-if="shownActivities.length" name="ap" tag="div" class="ap-list">
       <div v-for="a in shownActivities" :key="a.id" class="ap-item" :class="a.status">
         <span class="ap-dot" :class="a.status" />
         <span class="ap-recent-line">{{ a.role_line }}</span>
       </div>
-    </div>
+    </TransitionGroup>
   </div>
 </template>
 
@@ -98,18 +97,12 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 18px 28px 6px;
-}
-.dock-label {
-  color: var(--ch-faint);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  padding: 18px 28px;
 }
 .ap-main {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: start;
   gap: 14px;
 }
 .role-avatar {
@@ -124,39 +117,43 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   font-family: var(--ch-serif);
   font-size: 15px;
   font-weight: 700;
-  box-shadow: none;
+}
+.role-avatar.running {
+  background: var(--ch-orange-soft);
+  color: var(--ch-orange-2);
 }
 .ap-copy {
   min-width: 0;
 }
 .ap-title {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--ch-text);
   font-family: var(--ch-serif);
   font-weight: 600;
   margin-bottom: 6px;
 }
 .ap-line {
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--ch-body);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 .detail-pill {
-  border: 1px solid var(--ch-border-2);
-  background: var(--ch-surface);
-  color: var(--ch-body);
+  background: var(--ch-primary-soft);
+  color: var(--ch-primary-2);
+  border: 1px solid transparent;
   border-radius: 999px;
   padding: 8px 16px;
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s;
 }
-.detail-pill:hover { background: var(--ch-bg-cool); color: var(--ch-text); }
+.detail-pill:hover { background: color-mix(in srgb, var(--ch-primary) 14%, var(--ch-primary-soft)); }
 .mini-progress {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -182,7 +179,7 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-left: 48px;
+  padding-left: 50px;
 }
 .ap-item {
   display: flex;
@@ -208,6 +205,16 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   white-space: nowrap;
   font-size: 12px;
   color: var(--ch-muted);
+}
+
+.ap-enter-active,
+.ap-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.ap-enter-from,
+.ap-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 @keyframes softPulse {
