@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
-import { getTestMode, setTestMode } from '../api.js'
+import { getTestMode, setTestMode, getModelLists, getOptions, setOptions } from '../api.js'
 
 const props = defineProps({
   activeId: { type: String, default: null },
@@ -38,6 +38,61 @@ async function toggleTestMode() {
   } finally {
     testModeLoading.value = false
   }
+}
+
+const chatModels = ref([])
+const imageModels = ref([])
+const chatModel = ref('')
+const imageModel = ref('')
+const webSearch = ref(true)
+const modelsLoading = ref(false)
+const modelsError = ref('')
+const saving = ref(false)
+
+async function loadModels() {
+  modelsLoading.value = true
+  modelsError.value = ''
+  try {
+    const [lists, opts] = await Promise.all([getModelLists(), getOptions()])
+    chatModels.value = lists.chat_models || []
+    imageModels.value = lists.image_models || []
+    chatModel.value = opts.chat_model
+    imageModel.value = opts.image_model
+    webSearch.value = !!opts.web_search
+  } catch (e) {
+    modelsError.value = e.message || '加载模型选项失败'
+  } finally {
+    modelsLoading.value = false
+  }
+}
+
+async function persistOptions(patch) {
+  if (saving.value) return
+  saving.value = true
+  modelsError.value = ''
+  try {
+    const opts = await setOptions(patch)
+    chatModel.value = opts.chat_model
+    imageModel.value = opts.image_model
+    webSearch.value = !!opts.web_search
+  } catch (e) {
+    modelsError.value = e.message || '保存失败'
+  } finally {
+    saving.value = false
+  }
+}
+
+function onChatModel(e) {
+  chatModel.value = e.target.value
+  persistOptions({ chat_model: e.target.value })
+}
+function onImageModel(e) {
+  imageModel.value = e.target.value
+  persistOptions({ image_model: e.target.value })
+}
+function onWebSearch(e) {
+  webSearch.value = e.target.checked
+  persistOptions({ web_search: e.target.checked })
 }
 
 const traces = computed(() => props.traceStore.getTraces(props.activeId))
@@ -82,8 +137,12 @@ function stopConsolePoll() {
 }
 
 watch(() => props.open, (o) => {
-  if (o) startConsolePoll()
-  else stopConsolePoll()
+  if (o) {
+    startConsolePoll()
+    loadModels()
+  } else {
+    stopConsolePoll()
+  }
 })
 watch(() => props.activeId, (sid) => {
   if (!props.open || !sid) return
@@ -125,14 +184,14 @@ function previewText(s, max = 200) {
 }
 
 const ROLE_COLOR = {
-  system: '#64748b',
-  user: '#6366f1',
-  assistant: '#10b981',
-  tool: '#4f46e5',
+  system: '#71717a',
+  user: '#3b5a72',
+  assistant: '#16a34a',
+  tool: '#2c4a5e',
 }
 
 function roleColor(role) {
-  return ROLE_COLOR[role] || '#64748b'
+  return ROLE_COLOR[role] || '#71717a'
 }
 
 function renderMessageContent(m) {
@@ -170,6 +229,31 @@ function renderMessageContent(m) {
       </header>
 
       <section v-if="tab === 'settings'" class="console-body">
+        <div v-if="modelsLoading" class="hint">加载中...</div>
+        <div v-else-if="modelsError" class="error-hint">{{ modelsError }}</div>
+        <template v-else>
+          <div class="group-title">模型</div>
+          <label class="setting-row">
+            <div class="setting-label"><strong>对话模型</strong></div>
+            <select class="opt-select" :value="chatModel" :disabled="saving" @change="onChatModel">
+              <option v-for="m in chatModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+            </select>
+          </label>
+          <label class="setting-row">
+            <div class="setting-label"><strong>生图模型</strong></div>
+            <select class="opt-select" :value="imageModel" :disabled="saving" @change="onImageModel">
+              <option v-for="m in imageModels" :key="m.id" :value="m.id">{{ m.id }}</option>
+            </select>
+          </label>
+          <div class="group-title">功能</div>
+          <div class="setting-row">
+            <div class="setting-label"><strong>联网搜索</strong></div>
+            <label class="switch">
+              <input type="checkbox" :checked="webSearch" :disabled="saving" @change="onWebSearch" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </template>
         <div class="setting-row">
           <div class="setting-label">
             <strong>图像测试模式</strong>
@@ -297,17 +381,17 @@ function renderMessageContent(m) {
   bottom: 0;
   width: 480px;
   max-width: 90vw;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(24px) saturate(170%);
   -webkit-backdrop-filter: blur(24px) saturate(170%);
-  border-left: 1px solid rgba(226, 232, 240, 0.7);
-  box-shadow: -16px 0 40px rgba(30, 41, 59, 0.10), -2px 0 8px rgba(30, 41, 59, 0.05);
+  border-left: 1px solid var(--ch-border);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.06);
   z-index: 1000;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   font-size: 13px;
-  color: #1e293b;
+  color: var(--ch-text);
 }
 
 @media (max-width: 600px) {
@@ -332,8 +416,8 @@ function renderMessageContent(m) {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  background: rgba(248, 250, 252, 0.6);
+  border-bottom: 1px solid var(--ch-border);
+  background: var(--ch-bg-cool);
   flex-shrink: 0;
 }
 
@@ -348,27 +432,26 @@ function renderMessageContent(m) {
   padding: 4px 10px;
   border-radius: 6px;
   cursor: pointer;
-  color: #64748b;
+  color: var(--ch-muted);
   font-size: 13px;
 }
 
 .tabs button:hover {
-  color: #1e293b;
+  color: var(--ch-text);
 }
 
 .tabs button.active {
-  background: #ffffff;
-  border-color: rgba(226, 232, 240, 0.8);
-  color: #1e293b;
+  background: color-mix(in srgb, var(--ch-primary) 8%, transparent);
+  border-color: transparent;
+  color: var(--ch-text);
   font-weight: 500;
-  box-shadow: 0 1px 3px rgba(30, 41, 59, 0.06);
 }
 
 .count {
   display: inline-block;
   margin-left: 4px;
   padding: 0 6px;
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  background: var(--ch-primary);
   color: #fff;
   border-radius: 10px;
   font-size: 11px;
@@ -381,13 +464,13 @@ function renderMessageContent(m) {
   border: none;
   font-size: 22px;
   line-height: 1;
-  color: #64748b;
+  color: var(--ch-muted);
   cursor: pointer;
   padding: 0 6px;
 }
 
 .close-btn:hover {
-  color: #1e293b;
+  color: var(--ch-text);
 }
 
 .console-body {
@@ -398,13 +481,10 @@ function renderMessageContent(m) {
 
 .setting-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  padding: 12px 2px;
 }
 
 .setting-label {
@@ -414,23 +494,71 @@ function renderMessageContent(m) {
   flex: 1;
 }
 
+.setting-label strong {
+  font-weight: 500;
+  color: var(--ch-text);
+  font-size: 13px;
+}
+
 .setting-label small {
-  color: #64748b;
-  font-size: 12px;
+  color: var(--ch-muted);
+  font-size: 11.5px;
   line-height: 1.5;
+}
+
+.group-title {
+  font-family: var(--ch-serif);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ch-primary-2);
+  margin: 0 2px 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ch-border);
+}
+
+.group-title:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.opt-select {
+  appearance: none;
+  -webkit-appearance: none;
+  align-self: center;
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--ch-border-2);
+  border-radius: var(--ch-radius-sm);
+  font-size: 13px;
+  color: var(--ch-body);
+  background-color: var(--ch-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233b5a72' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.opt-select:hover {
+  border-color: var(--ch-primary);
+}
+
+.opt-select:focus {
+  outline: none;
+  border-color: var(--ch-primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ch-primary) 14%, transparent);
 }
 
 .text-btn {
   background: transparent;
   border: none;
-  color: #6366f1;
+  color: var(--ch-primary);
   cursor: pointer;
   font-size: 12px;
   padding: 2px 4px;
 }
 
 .text-btn:disabled {
-  color: #cbd5e1;
+  color: var(--ch-border-2);
   cursor: not-allowed;
 }
 
@@ -441,10 +569,10 @@ function renderMessageContent(m) {
 .error-hint {
   margin-top: 10px;
   padding: 8px 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--ch-red-soft);
+  border: 1px solid color-mix(in srgb, var(--ch-red) 30%, var(--ch-border));
   border-radius: 6px;
-  color: #b91c1c;
+  color: var(--ch-red);
   font-size: 12px;
 }
 
@@ -466,7 +594,7 @@ function renderMessageContent(m) {
 .slider {
   position: absolute;
   inset: 0;
-  background: #cbd5e1;
+  background: var(--ch-border-2);
   border-radius: 20px;
   transition: 0.2s;
   cursor: pointer;
@@ -485,7 +613,7 @@ function renderMessageContent(m) {
 }
 
 input:checked + .slider {
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  background: var(--ch-orange);
 }
 
 input:checked + .slider::before {
@@ -505,7 +633,7 @@ input:disabled + .slider {
 }
 
 .hint {
-  color: #94a3b8;
+  color: var(--ch-faint);
   font-size: 12px;
 }
 
@@ -516,23 +644,23 @@ input:disabled + .slider {
 
 .empty-hint {
   text-align: center;
-  color: #94a3b8;
+  color: var(--ch-faint);
   padding: 40px 0;
   font-size: 13px;
 }
 
 .iter-group {
   margin-bottom: 12px;
-  background: #fff;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--ch-surface);
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-sm);
   overflow: hidden;
 }
 
 .iter-group > summary {
   cursor: pointer;
   padding: 8px 12px;
-  background: #f8fafc;
+  background: var(--ch-bg-cool);
   font-size: 12px;
   display: flex;
   align-items: center;
@@ -549,7 +677,7 @@ input:disabled + .slider {
 
 .iter-title {
   font-weight: 500;
-  color: #1e293b;
+  color: var(--ch-text);
 }
 
 .iter-meta {
@@ -559,26 +687,26 @@ input:disabled + .slider {
 }
 
 .iter-count {
-  color: #64748b;
+  color: var(--ch-muted);
 }
 
 .trace-item {
   padding: 8px 12px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid var(--ch-border);
   border-left: 2px solid transparent;
 }
 
 .trace-item.phase-model_request {
-  border-left-color: #6366f1;
+  border-left-color: var(--ch-primary);
 }
 
 .trace-item.phase-model_response {
-  border-left-color: #10b981;
+  border-left-color: var(--ch-green);
 }
 
 .trace-item.phase-tool_call,
 .trace-item.phase-tool_result {
-  border-left-color: #4f46e5;
+  border-left-color: var(--ch-primary-2);
 }
 
 .trace-head {
@@ -593,17 +721,17 @@ input:disabled + .slider {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #475569;
+  color: var(--ch-body);
 }
 
-.phase-model_request .phase-tag { color: #4f46e5; }
-.phase-model_response .phase-tag { color: #059669; }
+.phase-model_request .phase-tag { color: var(--ch-primary); }
+.phase-model_response .phase-tag { color: var(--ch-green); }
 .phase-tool_call .phase-tag,
-.phase-tool_result .phase-tag { color: #4f46e5; }
+.phase-tool_result .phase-tag { color: var(--ch-primary-2); }
 
 .ts {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--ch-faint);
   font-family: ui-monospace, monospace;
 }
 
@@ -616,18 +744,18 @@ input:disabled + .slider {
 }
 
 .kv .k {
-  color: #94a3b8;
+  color: var(--ch-faint);
   min-width: 80px;
   flex-shrink: 0;
 }
 
 .kv .v {
-  color: #1e293b;
+  color: var(--ch-text);
   word-break: break-all;
 }
 
 .dim {
-  color: #94a3b8;
+  color: var(--ch-faint);
 }
 
 .mono {
@@ -637,7 +765,7 @@ input:disabled + .slider {
 
 .dur {
   font-size: 11px;
-  color: #64748b;
+  color: var(--ch-muted);
   margin-left: auto;
 }
 
@@ -646,23 +774,23 @@ input:disabled + .slider {
   padding: 1px 6px;
   border-radius: 4px;
   font-size: 11px;
-  background: #f1f5f9;
-  color: #475569;
+  background: var(--ch-bg-cool);
+  color: var(--ch-body);
 }
 
-.badge-tool_calls { background: #ede9fe; color: #6d28d9; }
-.badge-stop { background: #d1fae5; color: #047857; }
-.badge-error { background: #fee2e2; color: #b91c1c; }
+.badge-tool_calls { background: var(--ch-primary-soft); color: var(--ch-primary); }
+.badge-stop { background: var(--ch-green-soft); color: var(--ch-green); }
+.badge-error { background: var(--ch-red-soft); color: var(--ch-red); }
 
 .text-block {
   margin: 4px 0;
   padding: 6px 8px;
-  background: #f8fafc;
+  background: var(--ch-bg-cool);
   border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
   line-height: 1.5;
-  color: #334155;
+  color: var(--ch-body);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 240px;
@@ -676,7 +804,7 @@ input:disabled + .slider {
 .sub > summary {
   cursor: pointer;
   font-size: 12px;
-  color: #64748b;
+  color: var(--ch-muted);
   user-select: none;
   padding: 2px 0;
   list-style: none;
@@ -704,15 +832,15 @@ input:disabled + .slider {
 
 .sub-title {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--ch-faint);
   margin-bottom: 4px;
 }
 
 .msg-row {
   margin: 4px 0;
   padding: 4px 8px;
-  border-left: 2px solid #cbd5e1;
-  background: #fafbfc;
+  border-left: 2px solid var(--ch-border-2);
+  background: var(--ch-bg-cool);
   border-radius: 0 4px 4px 0;
 }
 
@@ -737,10 +865,10 @@ input:disabled + .slider {
 
 .truncated {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--ch-faint);
   font-style: italic;
   padding: 4px 6px;
-  background: #f1f5f9;
+  background: var(--ch-bg-cool);
   border-radius: 3px;
 }
 

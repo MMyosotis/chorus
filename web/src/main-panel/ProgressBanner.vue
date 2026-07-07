@@ -65,10 +65,10 @@ function lineOf(t) {
   align-items: center;
   gap: 12px;
   padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.6);
-  border-top: 1px solid rgba(226, 232, 240, 0.5);
+  background: var(--ch-surface);
+  border-top: 1px solid var(--ch-border);
   font-size: 13px;
-  color: #475569;
+  color: var(--ch-body);
   flex-shrink: 0;
 }
 .progress-label { white-space: nowrap; }
@@ -87,32 +87,32 @@ function lineOf(t) {
 .seg {
   height: 4px;
   border-radius: 2px;
-  background: #e2e8f0;
+  background: var(--ch-border);
 }
 .seg.running {
-  background: linear-gradient(90deg, #818cf8, #6366f1);
+  background: var(--ch-orange);
   animation: pulse 1.2s ease-in-out infinite;
 }
-.seg.waiting { background: #fbbf24; }
-.seg.done { background: #34d399; }
-.seg.failed { background: #f87171; }
+.seg.waiting { background: var(--ch-primary); }
+.seg.done { background: var(--ch-green); }
+.seg.failed { background: var(--ch-red); }
 .seg-role {
   font-size: 12px;
-  color: #64748b;
+  color: var(--ch-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .seg-line {
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--ch-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.seg-line.running { color: #6366f1; }
-.seg-line.waiting { color: #b45309; }
-.seg-line.done { color: #047857; }
+.seg-line.running { color: var(--ch-orange); }
+.seg-line.waiting { color: var(--ch-primary-2); }
+.seg-line.done { color: var(--ch-green); }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

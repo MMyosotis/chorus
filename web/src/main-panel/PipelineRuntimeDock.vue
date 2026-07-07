@@ -51,10 +51,10 @@ const visible = computed(() => tasks.value.length > 0 && (activityTask.value || 
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border-radius: 18px;
-  border: 1px solid #e7d4aa;
-  background: #fffaf0;
-  box-shadow: none;
+  border-radius: var(--ch-radius-lg);
+  border: 1px solid var(--ch-border);
+  background: var(--ch-surface);
+  box-shadow: var(--ch-shadow-dock);
   overflow: hidden;
   animation: dockIn 180ms ease-out;
 }

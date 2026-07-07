@@ -9,11 +9,11 @@
 html,
 body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei',
     'Noto Sans SC', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f3f6fa;
+  background: var(--ch-bg-warm);
 }
 
 #app {
@@ -21,39 +21,42 @@ body {
 }
 
 :root {
-  --ch-bg-warm: #f3f6fa;
-  --ch-bg-cool: #f7f8fb;
-  --ch-surface: rgba(255, 255, 255, 0.94);
-  --ch-surface-soft: #f7f8fb;
+  --ch-bg-warm: #ffffff;
+  --ch-bg-cool: #fafafa;
+  --ch-surface: #ffffff;
+  --ch-surface-soft: #fafafa;
   --ch-team-surface: #fafafa;
-  --ch-border: #dde5ee;
-  --ch-text: #172033;
-  --ch-body: #344054;
-  --ch-muted: #667085;
-  --ch-faint: #98a2b3;
-  --ch-primary: #4338ca;
-  --ch-primary-soft: #eef2ff;
-  --ch-violet: #4338ca;
-  --ch-violet-soft: #eef2ff;
+  --ch-border: #ececef;
+  --ch-border-2: #dcdde0;
+  --ch-text: #18181b;
+  --ch-body: #52525b;
+  --ch-muted: #71717a;
+  --ch-faint: #a1a1aa;
+  --ch-primary: #3b5a72;
+  --ch-primary-soft: #e8eef3;
+  --ch-primary-2: #2c4a5e;
+  --ch-violet: #3b5a72;
+  --ch-violet-soft: #e8eef3;
   --ch-orange: #ea580c;
+  --ch-orange-2: #c2410c;
   --ch-orange-mid: #fb923c;
-  --ch-orange-soft: #fff7ed;
+  --ch-orange-soft: #ffedd5;
   --ch-orange-border: #fed7aa;
   --ch-amber: #f59e0b;
-  --ch-green: #059669;
-  --ch-green-mid: #34d399;
-  --ch-green-soft: #ecfdf5;
+  --ch-green: #16a34a;
+  --ch-green-mid: #4ade80;
+  --ch-green-soft: #dcfce7;
   --ch-red: #dc2626;
   --ch-red-soft: #fef2f2;
-  --ch-radius-xl: 24px;
-  --ch-radius-lg: 18px;
-  --ch-radius-md: 14px;
-  --ch-radius-sm: 10px;
-  --ch-chat-width: 820px;
+  --ch-radius-xl: 20px;
+  --ch-radius-lg: 14px;
+  --ch-radius-md: 12px;
+  --ch-radius-sm: 8px;
   --ch-runtime-width: 760px;
-  --ch-shadow-workbench: 0 22px 52px rgba(30, 27, 75, 0.14);
-  --ch-shadow-dock: 0 -4px 28px rgba(49, 46, 129, 0.12),
-                    0 16px 34px rgba(49, 46, 129, 0.08);
+  --ch-serif: 'Noto Serif SC', 'PingFang SC', serif;
+  --ch-shadow-workbench: 0 8px 30px rgba(0, 0, 0, 0.05);
+  --ch-shadow-dock: 0 -2px 20px rgba(0, 0, 0, 0.04),
+                    0 8px 24px rgba(0, 0, 0, 0.04);
 }
 
 ::-webkit-scrollbar {
@@ -71,4 +74,23 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+.ch-tip {
+  position: fixed;
+  z-index: 9999;
+  max-width: 260px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: rgba(30, 30, 30, 0.92);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: none;
+}
+
+.ch-tip.visible {
+  display: block;
 }

@@ -116,6 +116,7 @@ function closePreview() {
 
 <template>
   <div :class="['bubble-row', role]">
+    <div class="sender">{{ role === 'user' ? '我' : '创作助手' }}</div>
     <div :class="['bubble', role]">
       <div
         v-if="activityState !== 'idle'"
@@ -172,14 +173,22 @@ function closePreview() {
 <style scoped>
 .bubble-row {
   display: flex;
+  flex-direction: column;
 }
 
 .bubble-row.user {
-  justify-content: flex-end;
+  align-items: flex-end;
 }
 
 .bubble-row.assistant {
-  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.sender {
+  font-size: 12px;
+  color: var(--ch-muted);
+  letter-spacing: 0.3px;
+  margin: 0 0 6px;
 }
 
 .bubble {
@@ -190,20 +199,21 @@ function closePreview() {
 
 .bubble.user {
   max-width: 75%;
-  padding: 14px 18px;
-  border-radius: 8px;
-  background: #eef2ff;
-  color: #172033;
+  padding: 12px 16px;
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-primary);
+  color: #fff;
   box-shadow: none;
 }
 
 .bubble.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 0;
-  background: transparent;
-  color: #172033;
-  border-radius: 0;
+  padding: 16px 20px;
+  background: var(--ch-bg-cool);
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-md);
+  color: var(--ch-text);
 }
 
 .bubble.assistant .text :deep(p) {
@@ -218,6 +228,7 @@ function closePreview() {
 .bubble.assistant .text :deep(h3),
 .bubble.assistant .text :deep(h4) {
   margin: 14px 0 8px;
+  font-family: var(--ch-serif);
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: 0.2px;
@@ -235,15 +246,15 @@ function closePreview() {
   letter-spacing: 0.2px;
 }
 .bubble.assistant .text :deep(code) {
-  background: rgba(15, 23, 42, 0.08);
+  background: var(--ch-bg-cool);
   padding: 1px 6px;
   border-radius: 4px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
 }
 .bubble.assistant .text :deep(pre) {
-  background: #0f172a;
-  color: #e2e8f0;
+  background: #1a1a1f;
+  color: #e4e4e7;
   padding: 12px 14px;
   border-radius: 8px;
   overflow-x: auto;
@@ -260,11 +271,11 @@ function closePreview() {
 .bubble.assistant .text :deep(blockquote) {
   margin: 8px 0;
   padding: 4px 12px;
-  border-left: 3px solid #cbd5e1;
-  color: #475569;
+  border-left: 3px solid var(--ch-border-2);
+  color: var(--ch-body);
 }
 .bubble.assistant .text :deep(a) {
-  color: #6366f1;
+  color: var(--ch-primary);
   text-decoration: underline;
 }
 .bubble.assistant .text :deep(table) {
@@ -275,19 +286,19 @@ function closePreview() {
 }
 .bubble.assistant .text :deep(th),
 .bubble.assistant .text :deep(td) {
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--ch-border);
   padding: 8px 12px;
   line-height: 1.7;
   word-break: break-word;
 }
 .bubble.assistant .text :deep(th) {
-  background: rgba(99, 102, 241, 0.06);
+  background: var(--ch-bg-cool);
   font-weight: 600;
   text-align: left;
 }
 .bubble.assistant .text :deep(hr) {
   border: none;
-  border-top: 1px solid #cbd5e1;
+  border-top: 1px solid var(--ch-border);
   margin: 12px 0;
 }
 
@@ -295,7 +306,7 @@ function closePreview() {
   display: inline-block;
   margin-left: 1px;
   animation: blink 0.8s step-end infinite;
-  color: #64748b;
+  color: var(--ch-muted);
   font-weight: 200;
 }
 
@@ -338,13 +349,13 @@ function closePreview() {
   line-height: 1;
 }
 
-/* 配色：运行中保留主题色 */
+/* 配色：思考灰、工具调用橙（活跃高亮） */
 .status-card.thinking {
-  color: #6366f1;
+  color: var(--ch-muted);
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.tools {
-  color: #6366f1;
+  color: var(--ch-orange);
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 
@@ -391,14 +402,14 @@ function closePreview() {
 .plan-card {
   border: 1px solid var(--ch-orange-border);
   background: var(--ch-orange-soft);
-  border-radius: 22px;
+  border-radius: var(--ch-radius-lg);
   padding: 12px 16px;
 }
 
 .plan-header {
   font-size: 13px;
   font-weight: 600;
-  color: #c2410c;
+  color: var(--ch-orange-2);
   letter-spacing: 0.3px;
   margin-bottom: 8px;
   line-height: 1;
@@ -407,7 +418,7 @@ function closePreview() {
 .plan-steps {
   margin: 0;
   padding-left: 22px;
-  color: #1e293b;
+  color: var(--ch-text);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -443,17 +454,17 @@ function closePreview() {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: 18px;
-  box-shadow: 0 14px 32px rgba(30, 41, 59, 0.14), 0 2px 6px rgba(30, 41, 59, 0.06);
+  border-radius: var(--ch-radius-lg);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
 }
 
 .image-placeholder {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 18px;
+  border-radius: var(--ch-radius-lg);
   overflow: hidden;
-  background: #eef2f7;
+  background: var(--ch-bg-cool);
 }
 
 .image-skeleton {
@@ -461,9 +472,9 @@ function closePreview() {
   inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(15, 23, 42, 0.04) 0%,
-    rgba(15, 23, 42, 0.10) 50%,
-    rgba(15, 23, 42, 0.04) 100%
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.10) 50%,
+    rgba(0, 0, 0, 0.04) 100%
   );
   background-size: 200% 100%;
   animation: imgShimmer 1.4s ease-in-out infinite;
@@ -481,15 +492,15 @@ function closePreview() {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: #64748b;
+  color: var(--ch-muted);
   letter-spacing: 0.4px;
 }
 
 .image-error {
   padding: 10px 14px;
   border-radius: 8px;
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--ch-red-soft);
+  color: var(--ch-red);
   font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -534,7 +545,7 @@ function closePreview() {
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.92);
-  color: #1e293b;
+  color: var(--ch-text);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;

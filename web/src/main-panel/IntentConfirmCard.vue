@@ -40,11 +40,11 @@ defineEmits(['confirm', 'revise'])
 <style scoped>
 .intent-confirm {
   width: min(100%, 640px);
-  border: 1px solid #dde5ee;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-surface);
   padding: 18px;
-  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.07);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
 }
 
 .confirm-head {
@@ -55,26 +55,27 @@ defineEmits(['confirm', 'revise'])
 }
 
 .confirm-head p {
-  color: #667085;
+  color: var(--ch-muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   margin-bottom: 5px;
 }
 
 .confirm-head h3 {
-  color: #172033;
+  color: var(--ch-text);
   font-size: 18px;
   line-height: 1.35;
-  font-weight: 760;
+  font-family: var(--ch-serif);
+  font-weight: 600;
 }
 
 .confirm-head > span {
   border-radius: 999px;
   padding: 5px 10px;
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--ch-primary-soft);
+  color: var(--ch-primary);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .confirm-grid {
@@ -85,24 +86,24 @@ defineEmits(['confirm', 'revise'])
 }
 
 .confirm-item {
-  border: 1px solid #e8edf3;
-  border-radius: 8px;
-  background: #fafbfc;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-sm);
+  background: var(--ch-bg-cool);
   padding: 12px;
 }
 
 .confirm-item span {
   display: block;
-  color: #667085;
+  color: var(--ch-muted);
   font-size: 12px;
   margin-bottom: 5px;
 }
 
 .confirm-item strong {
-  color: #172033;
+  color: var(--ch-text);
   font-size: 14px;
   line-height: 1.45;
-  font-weight: 680;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -114,10 +115,10 @@ defineEmits(['confirm', 'revise'])
 
 button {
   height: 38px;
-  border-radius: 8px;
+  border-radius: var(--ch-radius-sm);
   padding: 0 16px;
   font-size: 14px;
-  font-weight: 760;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -127,15 +128,16 @@ button:disabled {
 }
 
 .primary {
-  border: 1px solid #4338ca;
-  background: #4338ca;
+  border: 1px solid var(--ch-orange);
+  background: var(--ch-orange);
   color: #ffffff;
 }
+.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
 
 .secondary {
-  border: 1px solid #dde5ee;
-  background: #ffffff;
-  color: #344054;
+  border: 1px solid var(--ch-border-2);
+  background: var(--ch-surface);
+  color: var(--ch-body);
 }
 
 @media (max-width: 720px) {

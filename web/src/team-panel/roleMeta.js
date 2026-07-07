@@ -9,6 +9,17 @@ export const ROLE_LABELS = {
 
 export const ROLE_ORDER = ['idea', 'script', 'image', 'finalize']
 
+export const ROLE_TAG = {
+  idea: '选题洞察',
+  script: '文案撰写',
+  image: '配图生成',
+  finalize: '成品整合',
+}
+
+export function stepOf(agentType) {
+  return ROLE_ORDER.indexOf(agentType) + 1
+}
+
 export const STATUS_BADGE = {
   pending: { label: '待命', cls: 'idle' },
   running: { label: '工作中', cls: 'running' },

@@ -37,14 +37,14 @@ const isImage = computed(() => props.task?.agent_type === 'image')
 </template>
 
 <style scoped>
-.work-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 10px 12px; }
+.work-card { border: 1px solid var(--ch-border); border-radius: var(--ch-radius-sm); background: var(--ch-surface); padding: 10px 12px; }
 .wc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.wc-role { font-size: 13px; font-weight: 500; color: #1e293b; }
-.wc-progress { font-size: 12px; color: #6366f1; font-weight: 500; }
+.wc-role { font-size: 13px; font-weight: 500; color: var(--ch-text); }
+.wc-progress { font-size: 12px; color: var(--ch-orange); font-weight: 600; }
 .wc-images { display: flex; flex-wrap: wrap; gap: 8px; }
 .wc-img { margin: 0; }
-.wc-img img { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; }
-.wc-img figcaption { font-size: 11px; color: #64748b; }
-.wc-blocks .block { margin: 4px 0; font-size: 13px; color: #475569; }
-.wc-blocks .block.heading { font-weight: 500; color: #1e293b; }
+.wc-img img { width: 96px; height: 96px; object-fit: cover; border-radius: var(--ch-radius-sm); }
+.wc-img figcaption { font-size: 11px; color: var(--ch-muted); }
+.wc-blocks .block { margin: 4px 0; font-size: 13px; color: var(--ch-body); }
+.wc-blocks .block.heading { font-weight: 600; color: var(--ch-text); }
 </style>

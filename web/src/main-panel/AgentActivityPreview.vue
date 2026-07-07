@@ -101,9 +101,9 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   padding: 18px 28px 6px;
 }
 .dock-label {
-  color: #8b6b1d;
+  color: var(--ch-faint);
   font-size: 10px;
-  font-weight: 850;
+  font-weight: 600;
   letter-spacing: 0.1em;
 }
 .ap-main {
@@ -115,14 +115,15 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
 .role-avatar {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  background: #f3e7c5;
-  color: #78581b;
+  border-radius: 10px;
+  background: var(--ch-bg-cool);
+  color: var(--ch-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
-  font-weight: 850;
+  font-family: var(--ch-serif);
+  font-size: 15px;
+  font-weight: 700;
   box-shadow: none;
 }
 .ap-copy {
@@ -131,7 +132,8 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
 .ap-title {
   font-size: 13px;
   color: var(--ch-text);
-  font-weight: 760;
+  font-family: var(--ch-serif);
+  font-weight: 600;
   margin-bottom: 6px;
 }
 .ap-line {
@@ -143,38 +145,38 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   text-overflow: ellipsis;
 }
 .detail-pill {
-  border: 1px solid #dcc48c;
-  background: #fff;
-  color: #8b6b1d;
+  border: 1px solid var(--ch-border-2);
+  background: var(--ch-surface);
+  color: var(--ch-body);
   border-radius: 999px;
   padding: 8px 16px;
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.detail-pill:hover { background: #f3e7c5; color: #78581b; }
+.detail-pill:hover { background: var(--ch-bg-cool); color: var(--ch-text); }
 .mini-progress {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
   gap: 12px;
-  color: #8b6b1d;
+  color: var(--ch-muted);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 600;
 }
 .mini-track {
   height: 6px;
   border-radius: 999px;
-  background: #ecd9a7;
+  background: var(--ch-border);
   overflow: hidden;
 }
 .mini-track i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #b58b1e;
+  background: var(--ch-orange);
 }
 .ap-list {
   display: flex;
@@ -195,10 +197,10 @@ const shownActivities = computed(() => expanded.value ? [...activities.value].re
   flex-shrink: 0;
   background: var(--ch-faint);
 }
-.ap-dot.running { background: #b58b1e; animation: softPulse 1.4s ease-in-out infinite; }
-.ap-dot.done { background: var(--ch-green-mid); }
+.ap-dot.running { background: var(--ch-orange); animation: softPulse 1.4s ease-in-out infinite; }
+.ap-dot.done { background: var(--ch-green); }
 .ap-dot.warning { background: var(--ch-amber); }
-.ap-dot.failed { background: #f87171; }
+.ap-dot.failed { background: var(--ch-red); }
 .ap-recent-line {
   min-width: 0;
   overflow: hidden;

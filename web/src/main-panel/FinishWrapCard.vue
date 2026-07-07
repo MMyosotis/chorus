@@ -36,10 +36,10 @@ watch(() => props.task?.status, (s) => {
 <style scoped>
 .finish-wrap { display: flex; align-items: center; gap: 12px; justify-content: center;
   padding: 20px 24px; border-radius: var(--ch-radius-lg); background: var(--ch-green-soft);
-  border: 1px solid #bbf7d0; margin: 0; }
-.fw-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--ch-green-mid); color: #fff;
+  border: 1px solid color-mix(in srgb, var(--ch-green) 30%, var(--ch-border)); margin: 0; }
+.fw-icon { width: 36px; height: 36px; border-radius: 50%; background: var(--ch-green); color: #fff;
   display: flex; align-items: center; justify-content: center; font-size: 20px; }
-.fw-text { font-size: 15px; color: #047857; font-weight: 800; }
+.fw-text { font-size: 15px; color: var(--ch-green); font-family: var(--ch-serif); font-weight: 600; }
 .finish-wrap.wrapping .fw-icon { animation: pop 0.4s ease; }
 @keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 </style>

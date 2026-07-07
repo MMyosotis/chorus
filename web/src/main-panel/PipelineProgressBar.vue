@@ -61,16 +61,16 @@ function lineOf(t) {
   align-items: center;
   gap: 14px;
   padding: 8px 22px;
-  background: #fff;
+  background: var(--ch-surface);
   border: 1px solid var(--ch-border);
-  border-radius: 12px;
+  border-radius: var(--ch-radius-md);
   font-size: 12px;
   color: var(--ch-muted);
   flex-shrink: 0;
 }
 .progress-label {
   white-space: nowrap;
-  font-weight: 760;
+  font-weight: 600;
 }
 .progress-segs {
   display: flex;
@@ -91,12 +91,12 @@ function lineOf(t) {
   background: var(--ch-border);
 }
 .seg.running {
-  background: #b58b1e;
+  background: var(--ch-orange);
   animation: pulse 1.4s ease-in-out infinite;
 }
-.seg.waiting { background: #d3a738; }
-.seg.done { background: #3fb38a; }
-.seg.failed { background: #f87171; }
+.seg.waiting { background: var(--ch-primary); }
+.seg.done { background: var(--ch-green); }
+.seg.failed { background: var(--ch-red); }
 .seg-role {
   display: none;
 }
@@ -104,8 +104,8 @@ function lineOf(t) {
   display: none;
 }
 .seg-line.running { color: var(--ch-orange); }
-.seg-line.waiting { color: #b45309; }
-.seg-line.done { color: #047857; }
+.seg-line.waiting { color: var(--ch-primary-2); }
+.seg-line.done { color: var(--ch-green); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.58; } }
 
 @media (max-width: 760px) {

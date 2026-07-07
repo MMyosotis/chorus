@@ -99,21 +99,21 @@ defineExpose({ focus })
   padding: 8px 10px 8px 20px;
   border: 1px solid var(--ch-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--ch-surface);
   box-shadow: none;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
 .input-inner:focus-within {
   border-color: var(--ch-primary);
-  background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(67, 56, 202, 0.1);
+  background: var(--ch-surface);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ch-primary) 14%, transparent);
 }
 
 .input-bar.locked .input-inner {
   min-height: 38px;
-  background: #eef2f7;
-  border-color: #dde5ee;
+  background: var(--ch-bg-cool);
+  border-color: var(--ch-border);
   justify-content: center;
   padding: 0 22px;
 }
@@ -148,7 +148,7 @@ defineExpose({ focus })
 
 /* 创作中 placeholder：灰阶 + 省略号呼吸流动 */
 .input-field:disabled::placeholder {
-  color: #94a3b8;
+  color: var(--ch-faint);
   animation: busyDots 1.4s steps(4, end) infinite;
 }
 
@@ -178,15 +178,15 @@ defineExpose({ focus })
   justify-content: center;
   border: none;
   border-radius: 10px;
-  background: #1f2937;
+  background: var(--ch-text);
   color: #fff;
   cursor: pointer;
   box-shadow: none;
-  transition: box-shadow 0.2s, transform 0.15s, filter 0.2s;
+  transition: background 0.18s, transform 0.15s;
 }
 
 .send-btn:hover:not(:disabled) {
-  filter: brightness(1.05);
+  background: var(--ch-orange);
   box-shadow: none;
 }
 
@@ -195,7 +195,7 @@ defineExpose({ focus })
 }
 
 .send-btn:disabled {
-  background: #cbd5e1;
+  background: var(--ch-border-2);
   cursor: not-allowed;
   box-shadow: none;
 }

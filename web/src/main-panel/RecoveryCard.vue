@@ -51,19 +51,42 @@ async function onCancel() {
 </template>
 
 <style scoped>
-.recovery-card { border: 1px solid #fecaca; border-radius: var(--ch-radius-md);
-  background: var(--ch-red-soft); padding: 20px 22px; margin: 4px 0;
-  box-shadow: 0 18px 38px rgba(185, 28, 28, 0.08); }
-.rc-title { font-size: 18px; font-weight: 850; color: #b91c1c; margin-bottom: 10px; }
-.rc-error-text { font-size: 13px; color: #b91c1c; background: rgba(248, 113, 113, 0.1);
-  border-radius: 14px; padding: 8px 10px; margin-bottom: 10px; }
-.rc-feedback { width: 100%; box-sizing: border-box; border: 1px solid var(--ch-border); border-radius: 14px;
-  padding: 6px 8px; font-size: 13px; resize: vertical; margin-bottom: 8px; }
+.recovery-card {
+  border: 1px solid color-mix(in srgb, var(--ch-red) 30%, var(--ch-border));
+  border-radius: var(--ch-radius-md);
+  background: var(--ch-red-soft);
+  padding: 20px 22px;
+  margin: 4px 0;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+.rc-title {
+  font-size: 17px;
+  font-family: var(--ch-serif);
+  font-weight: 600;
+  color: var(--ch-red);
+  margin-bottom: 10px;
+}
+.rc-error-text {
+  font-size: 13px;
+  color: var(--ch-red);
+  background: var(--ch-surface);
+  border-radius: var(--ch-radius-sm);
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+.rc-feedback {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--ch-border); border-radius: var(--ch-radius-sm);
+  padding: 6px 8px; font-size: 13px; resize: vertical; margin-bottom: 8px;
+}
 .rc-actions { display: flex; gap: 8px; }
-.btn { border: 1px solid #cbd5e1; background: #fff; color: var(--ch-muted); padding: 8px 14px;
-  border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 760; }
+.btn {
+  border: 1px solid var(--ch-border-2); background: var(--ch-surface); color: var(--ch-muted);
+  padding: 8px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #fff; border-color: #fca5a5; color: #b91c1c; }
-.btn.danger { color: #b91c1c; border-color: #fca5a5; }
-.rc-error { color: #b91c1c; font-size: 12px; margin-top: 6px; }
+.btn.primary { background: var(--ch-orange); border-color: var(--ch-orange); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
+.btn.danger { color: var(--ch-red); border-color: color-mix(in srgb, var(--ch-red) 40%, var(--ch-border)); }
+.rc-error { color: var(--ch-red); font-size: 12px; margin-top: 6px; }
 </style>

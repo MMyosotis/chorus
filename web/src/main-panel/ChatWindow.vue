@@ -87,11 +87,11 @@ watch(
   overflow-y: auto;
   padding: 34px 16px 10px;
   background: transparent;
-  scrollbar-gutter: stable;
+  scrollbar-gutter: stable both-edges;
 }
 
 .chat-inner {
-  max-width: var(--ch-chat-width);
+  max-width: var(--ch-runtime-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;

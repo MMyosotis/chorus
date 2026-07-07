@@ -104,12 +104,12 @@ const nextLabel = computed(() => ({
 
 <style scoped>
 .intent-card {
-  background: #ffffff;
-  border: 1px solid #dde5ee;
-  border-radius: 8px;
+  background: var(--ch-surface);
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-md);
   padding: 18px;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
-  color: #172033;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  color: var(--ch-text);
 }
 
 .intent-top {
@@ -121,9 +121,9 @@ const nextLabel = computed(() => ({
 
 .eyebrow {
   margin-bottom: 6px;
-  color: #667085;
+  color: var(--ch-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0;
 }
@@ -131,37 +131,38 @@ const nextLabel = computed(() => ({
 h2 {
   font-size: 17px;
   line-height: 1.35;
-  font-weight: 760;
-  color: #172033;
+  font-family: var(--ch-serif);
+  font-weight: 600;
+  color: var(--ch-text);
 }
 
 .status-pill {
   flex-shrink: 0;
   border-radius: 999px;
   padding: 5px 10px;
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--ch-primary-soft);
+  color: var(--ch-primary);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .needs_clarification .status-pill,
 .capturing .status-pill {
-  background: #fffbeb;
-  color: #b45309;
+  background: var(--ch-orange-soft);
+  color: var(--ch-orange-2);
 }
 
 .dispatched .status-pill,
 .confirmed .status-pill {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--ch-green-soft);
+  color: var(--ch-green);
 }
 
 .progress-track {
   height: 7px;
   margin: 18px 0 14px;
   border-radius: 999px;
-  background: #e8edf3;
+  background: var(--ch-border);
   overflow: hidden;
 }
 
@@ -169,7 +170,7 @@ h2 {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #4338ca;
+  background: var(--ch-primary);
   transition: width 0.24s ease;
 }
 
@@ -177,7 +178,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #667085;
+  color: var(--ch-muted);
   font-size: 13px;
 }
 
@@ -185,20 +186,20 @@ h2 {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #4338ca;
+  background: var(--ch-primary);
 }
 
 .section {
   margin-top: 18px;
   padding-top: 16px;
-  border-top: 1px solid #e8edf3;
+  border-top: 1px solid var(--ch-border);
 }
 
 .section-title {
   margin-bottom: 10px;
-  color: #667085;
+  color: var(--ch-muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .slot-grid,
@@ -218,14 +219,14 @@ h2 {
 
 .slot-item span,
 .summary-row span {
-  color: #667085;
+  color: var(--ch-muted);
   overflow-wrap: anywhere;
 }
 
 .slot-item strong,
 .summary-row strong {
-  color: #172033;
-  font-weight: 650;
+  color: var(--ch-text);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
@@ -237,17 +238,17 @@ h2 {
 }
 
 .missing-list span {
-  border: 1px solid #fcd34d;
+  border: 1px solid var(--ch-orange-border);
   border-radius: 999px;
   padding: 4px 9px;
-  color: #92400e;
-  background: #fffbeb;
+  color: var(--ch-orange-2);
+  background: var(--ch-orange-soft);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .question {
-  color: #475467;
+  color: var(--ch-body);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -260,26 +261,27 @@ h2 {
 
 button {
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--ch-radius-sm);
   padding: 0 14px;
   font-size: 13px;
-  font-weight: 750;
+  font-weight: 600;
   cursor: pointer;
 }
 
 .primary {
-  border: 1px solid #4338ca;
-  background: #4338ca;
+  border: 1px solid var(--ch-orange);
+  background: var(--ch-orange);
   color: #ffffff;
 }
+.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
 
 .secondary {
-  border: 1px solid #dde5ee;
-  background: #ffffff;
-  color: #344054;
+  border: 1px solid var(--ch-border-2);
+  background: var(--ch-surface);
+  color: var(--ch-body);
 }
 
 .danger {
-  color: #b42318;
+  color: var(--ch-red);
 }
 </style>

@@ -21,12 +21,10 @@ import { useTaskPolling } from './composables/useTaskPolling.js'
 import PipelineProgressBar from './main-panel/PipelineProgressBar.vue'
 import PipelineRuntimeDock from './main-panel/PipelineRuntimeDock.vue'
 import TeamPanel from './team-panel/TeamPanel.vue'
-import SettingsPanel from './SettingsPanel.vue'
 
 const traceStore = useTraceStore()
 const taskPolling = useTaskPolling()
 const consoleOpen = ref(false)
-const settingsOpen = ref(false)
 
 const sessions = ref([])
 const messagesBySession = reactive({})
@@ -496,7 +494,6 @@ onMounted(async () => {
       @create="onCreate"
       @delete="onDelete"
       @rename="onRename"
-      @open-settings="settingsOpen = true"
     />
     <div class="main-panel">
       <header class="header">
@@ -534,7 +531,6 @@ onMounted(async () => {
     />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
-  <SettingsPanel v-model:open="settingsOpen" />
 </template>
 
 <style scoped>
@@ -543,7 +539,7 @@ onMounted(async () => {
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  background: #f3f6fa;
+  background: var(--ch-bg-warm);
   padding: 0;
   gap: 0;
 }
@@ -575,7 +571,8 @@ onMounted(async () => {
 
 .session-title {
   font-size: 18px;
-  font-weight: 760;
+  font-family: var(--ch-serif);
+  font-weight: 600;
   color: var(--ch-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -603,13 +600,13 @@ onMounted(async () => {
 .header-console-btn:hover {
   background: var(--ch-primary-soft);
   color: var(--ch-primary);
-  border-color: #c7d2fe;
+  border-color: var(--ch-border-2);
 }
 
 .header-console-btn.active {
-  background: #eef2f7;
-  border-color: #cfd7e8;
-  color: #344054;
+  background: var(--ch-bg-cool);
+  border-color: var(--ch-border-2);
+  color: var(--ch-body);
   box-shadow: none;
 }
 
