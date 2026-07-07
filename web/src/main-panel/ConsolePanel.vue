@@ -140,6 +140,7 @@ watch(() => props.open, (o) => {
   if (o) {
     startConsolePoll()
     loadModels()
+    refreshTestMode()
   } else {
     stopConsolePoll()
   }
