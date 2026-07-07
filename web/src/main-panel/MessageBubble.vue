@@ -200,7 +200,7 @@ function closePreview() {
 .bubble.user {
   max-width: 75%;
   padding: 12px 16px;
-  border-radius: 12px 12px 4px 12px;
+  border-radius: var(--ch-radius-md);
   background: var(--ch-primary);
   color: #fff;
   line-height: 1.6;
