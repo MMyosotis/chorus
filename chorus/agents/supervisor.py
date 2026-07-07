@@ -130,7 +130,7 @@ class SupervisorLoopStrategy:
         return LoopAction(LoopSignal.FINISH, events)
 
     def _turn_content(self, ctx, terminal):
-        """助手内容：模型流式文本优先，无文本时取终止型工具的 friendly_reply 回退。"""
+        """助手内容：模型同轮文本，或建图工具自带的友好回复。"""
         text = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
         if terminal is None:
             return text
