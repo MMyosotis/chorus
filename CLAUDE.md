@@ -244,6 +244,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
   2. **重构方案**：给出具体优化思路、改动范围、重构后的效果。
 - **仅在我明确同意、确认方案后**，你再按照方案执行代码重构；若我提出修改意见，同步调整方案后再操作。
 - 若无重构必要，正常推进开发即可。
+- **E2E 等真实 LLM 端到端测试跑完后，先询问是否删除测试产生的会话与数据，不自动清理**（`scripts/e2e_intent_test.py` / `scripts/debug_cli.py` 在 `data/chorus.db` 留下的会话、消息、意图状态等产物，用户可能要回看结果或继续调试）。
 
 - **控制流嵌套不得超过 3 层**（if/for/while/with/try 各算一层，elif 同级不加深）。
 
