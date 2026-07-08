@@ -164,7 +164,6 @@ function closePreview() {
         </div>
       </div>
 
-      <span v-if="active && content && activityState === 'idle'" class="cursor">|</span>
     </div>
 
     <div v-if="content && activityState === 'tools'" class="tool-running-line" aria-hidden="true">
@@ -347,20 +346,6 @@ function closePreview() {
   border: none;
   border-top: 1px solid var(--ch-border);
   margin: 12px 0;
-}
-
-.cursor {
-  display: inline-block;
-  margin-left: 1px;
-  animation: blink 0.8s step-end infinite;
-  color: var(--ch-muted);
-  font-weight: 200;
-}
-
-@keyframes blink {
-  50% {
-    opacity: 0;
-  }
 }
 
 /* ===== 极简内联状态条（思考 / 工具调用）===== */

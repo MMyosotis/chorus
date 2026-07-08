@@ -313,6 +313,34 @@ function createStreamHandler(sessionId) {
   let assistantIdx = -1
   const cur = () => (assistantIdx >= 0 ? list[assistantIdx] : null)
 
+  // 打字机队列：token 按字入队，rAF 每帧逐字追加，避免三四个字一起蹦出
+  const charQueue = []
+  let typingRaf = null
+
+  function drainQueue() {
+    typingRaf = null
+    const c = cur()
+    if (!c || charQueue.length === 0) return
+    // 追赶步长：堆积越多每帧出字越多，纯逐字时每帧 1 字
+    const step = Math.max(1, Math.ceil(charQueue.length / 6))
+    c.content += charQueue.splice(0, step).join('')
+    if (charQueue.length > 0) scheduleTyping()
+  }
+  function scheduleTyping() {
+    if (typingRaf) return
+    typingRaf = requestAnimationFrame(drainQueue)
+  }
+  function flushTyping() {
+    if (typingRaf) {
+      cancelAnimationFrame(typingRaf)
+      typingRaf = null
+    }
+    const c = cur()
+    if (c && charQueue.length > 0) {
+      c.content += charQueue.splice(0).join('')
+    }
+  }
+
   function startNewAssistant() {
     list.push(makeEmptyAssistant())
     assistantIdx = list.length - 1
@@ -322,6 +350,8 @@ function createStreamHandler(sessionId) {
     return cur()
   }
   function finalizeCurrent() {
+    // 收尾前把队列剩余字一次性吐出，避免最后几个字丢失或拖到流结束
+    flushTyping()
     const c = cur()
     if (!c) return
     // 状态条仅在进行时显示，结束即消失
@@ -382,7 +412,10 @@ function createStreamHandler(sessionId) {
       // 思考结束即消失状态条
       if (c.thinking.state === 'running') c.thinking.state = 'idle'
     } else if (payload.type === 'token') {
-      ensureAssistant().content += payload.content
+      const c = ensureAssistant()
+      // 按 Unicode code point 拆字，避免拆坏中文/emoji 代理对
+      charQueue.push(...Array.from(payload.content || ''))
+      scheduleTyping()
     } else if (payload.type === 'tool_call') {
       const c = ensureAssistant()
       const tools = c.tools
@@ -429,6 +462,12 @@ function createStreamHandler(sessionId) {
       // 活跃任务准入拒绝的瞬时信号：不解禁输入框、不注入气泡，进度由任务图反映
       streamingBySession[sessionId] = false
     } else if (payload.type === 'error') {
+      // 错误覆盖正文前丢弃队列、停掉打字机，避免残帧把旧字符写回
+      charQueue.length = 0
+      if (typingRaf) {
+        cancelAnimationFrame(typingRaf)
+        typingRaf = null
+      }
       ensureAssistant().content = `[错误] ${payload.content}`
       streamingBySession[sessionId] = false
     }
