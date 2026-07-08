@@ -17,26 +17,28 @@ IntentStatus = Literal[
     "dispatched",
 ]
 
-InteractionIntent = Literal[
-    "smalltalk",
-    "create_content",
-    "clarify_existing",
-    "modify_intent",
-    "confirm_intent",
-    "reject_intent",
-    "cancel_task",
-    "ask_status",
-    "give_feedback",
-]
-
+# next_action 由 intent_status 派生，不让模型填，避免与 status 不自洽。
 NextAction = Literal[
     "reply_only",
     "ask_user",
     "wait_user_confirm",
     "create_plan_after_confirm",
     "dispatching",
-    "blocked",
 ]
+
+_STATUS_TO_NEXT_ACTION: dict[str, NextAction] = {
+    "empty": "reply_only",
+    "capturing": "ask_user",
+    "needs_clarification": "ask_user",
+    "ready_to_confirm": "wait_user_confirm",
+    "confirmed": "create_plan_after_confirm",
+    "dispatched": "dispatching",
+}
+
+
+def derive_next_action(status: str) -> NextAction:
+    """从意图成熟度派生下一步动作，单一映射集中维护。"""
+    return _STATUS_TO_NEXT_ACTION.get(status, "reply_only")
 
 
 class ConfirmationItem(BaseModel):
@@ -59,20 +61,19 @@ class IntentState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: str
-    interaction_intent: InteractionIntent = "smalltalk"
     intent_status: IntentStatus = "empty"
     goal: str = ""
     known_slots: dict[str, Any] = Field(default_factory=dict)
     missing_slots: list[str] = Field(default_factory=list)
-    open_questions: list[str] = Field(default_factory=list)
     confirmation_summary: Optional[ConfirmationSummary] = None
-    next_action: NextAction = "reply_only"
-    confidence: float = 0.0
     version: int = 0
     updated_at: float = Field(default_factory=time.time)
 
     def public_dict(self) -> dict:
-        return self.model_dump(mode="json")
+        """对外视图：含派生 next_action，供前端展示与 prompt 注入。"""
+        data = self.model_dump(mode="json")
+        data["next_action"] = derive_next_action(self.intent_status)
+        return data
 
 
 class IntentStatePatch(BaseModel):
@@ -80,15 +81,11 @@ class IntentStatePatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    interaction_intent: InteractionIntent
     intent_status: IntentStatus
     goal: str = ""
     known_slots: dict[str, Any] = Field(default_factory=dict)
     missing_slots: list[str] = Field(default_factory=list)
-    open_questions: list[str] = Field(default_factory=list)
     confirmation_summary: Optional[ConfirmationSummary] = None
-    next_action: NextAction
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 def empty_intent_state(session_id: str) -> IntentState:

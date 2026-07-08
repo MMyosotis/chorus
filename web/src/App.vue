@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import ChatWindow from './main-panel/ChatWindow.vue'
 import InputBar from './main-panel/InputBar.vue'
 import SessionSidebar from './SessionSidebar.vue'
@@ -177,6 +177,7 @@ async function selectSession(id) {
   activeId.value = id
   await Promise.all([loadMessages(id), loadIntentState(id)])
   injectTaskCards(id)
+  injectIntentCard(id)
   // 进入会话若已有活跃任务图，恢复轮询
   taskPolling.start(id)
   focusedTaskId.value = null
@@ -187,6 +188,7 @@ async function forceReloadMessages(id) {
     const raw = await fetchMessages(id)
     messagesBySession[id] = mergeAssistantHistory(raw)
     injectTaskCards(id)
+    injectIntentCard(id)
   } catch {
     // 轮询期间忽略
   }
@@ -211,6 +213,23 @@ function injectTaskCards(id) {
     }
   }
 }
+
+// ready_to_confirm 时把确认单作为虚拟消息注入对话区，与 hil/postcard 同机制
+function injectIntentCard(id) {
+  const list = messagesBySession[id]
+  if (!list) return
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].kind === 'intent-confirm') list.splice(i, 1)
+  }
+  const state = intentStateBySession[id]
+  if (state && state.intent_status === 'ready_to_confirm') {
+    list.push({ kind: 'intent-confirm', state, id: 'intent-confirm', role: 'assistant' })
+  }
+}
+
+watch(activeIntentState, () => {
+  if (activeId.value) injectIntentCard(activeId.value)
+})
 
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
@@ -518,6 +537,8 @@ onMounted(async () => {
         @hil-confirmed="onHilConfirmed"
         @hil-retried="onHilRetried"
         @hil-cancelled="onHilCancelled"
+        @intent-confirm="onIntentConfirm"
+        @intent-revise="onIntentRevise"
       />
       <PipelineRuntimeDock
         :graph="activeGraph"
@@ -534,8 +555,6 @@ onMounted(async () => {
       :intent-state="activeIntentState"
       :has-active-task="hasActiveTask"
       @focus="onTaskFocus"
-      @confirm="onIntentConfirm"
-      @revise="onIntentRevise"
       @stop-and-revise="onIntentStopAndRevise"
     />
   </div>

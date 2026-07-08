@@ -1,10 +1,10 @@
 """主调度 agent：流式对话入口，普通对话直接回复，创作请求经建图工具路由。
 
 业务差异进策略，主流程不识工具名与终止载荷，有活跃创作任务时拒绝新请求。
+意图记录与建图均靠 prompt 引导 + 工具内校验，不做代码层强制拦截。
 """
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Iterator
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
@@ -34,22 +34,13 @@ from chorus.tools.framework import Terminal
 
 _INTENT_EVENT_TOOLS = {"update_intent_state", "create_plan"}
 
-_FORCE_AFTER_TEXT = (
-    "用户已经确认意图，当前回合必须调用 create_plan。"
-    "不要继续澄清，除非 create_plan 工具返回参数纠错。"
-)
-_FORCE_AFTER_TOOLS = (
-    "用户已经确认意图，但你上一轮没有调用 create_plan。"
-    "请立刻基于 current_intent_state 和历史对话调用 create_plan。"
-)
-
-_ENFORCE_MAX_STEPS = 6
+_SUPERVISOR_MAX_STEPS = 20
 
 
 class SupervisorLoopStrategy:
     """supervisor 的回合自动机差异面：SSE 流式消费、成对落库、收尾钩子与意图状态注入。"""
 
-    max_steps = None
+    max_steps = _SUPERVISOR_MAX_STEPS
 
     def __init__(self, session_id, message_service, session_service, hooks,
                  skill_loader, intent_state: IntentStateService):
@@ -144,38 +135,6 @@ class SupervisorLoopStrategy:
         yield from self._hooks.trigger("Stop", ctx)
 
 
-class EnforceCreatePlanStrategy(SupervisorLoopStrategy):
-    """确认意图后的强制建图策略：限步内迫使模型调 create_plan，期间文本不落库。
-
-    仅 override 与"限步强制"相关的面：prompt 注入提醒、文本轮不落库续跑、工具轮未终止则设提醒；
-    落库/收尾/工具派发/事件累积沿用基类。
-    """
-
-    max_steps = _ENFORCE_MAX_STEPS
-
-    def __init__(self, session_id, message_service, session_service, hooks,
-                 skill_loader, intent_state: IntentStateService):
-        super().__init__(session_id, message_service, session_service, hooks,
-                         skill_loader, intent_state)
-        self._force_directive = ""
-
-    def _prompt_context(self) -> PromptContext:
-        ctx = super()._prompt_context()
-        if not self._force_directive:
-            return ctx
-        return replace(ctx, force_directive=self._force_directive)
-
-    def after_tools(self, ctx, result, pairs):
-        action = super().after_tools(ctx, result, pairs)
-        if action.signal is LoopSignal.CONTINUE:
-            self._force_directive = _FORCE_AFTER_TOOLS
-        return action
-
-    def after_text(self, ctx, result):
-        self._force_directive = _FORCE_AFTER_TEXT
-        return LoopAction(LoopSignal.CONTINUE, [])
-
-
 class SupervisorService:
     def __init__(
         self,
@@ -200,7 +159,7 @@ class SupervisorService:
         self._intent_state = intent_state
 
     def stream(
-        self, session_id: str, user_message: str, *, require_create_plan: bool = False,
+        self, session_id: str, user_message: str,
     ) -> Iterator[SseEvent]:
         if not self._session.exists(session_id):
             yield ErrorEvent(content="session not found")
@@ -216,8 +175,7 @@ class SupervisorService:
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
         )
-        strategy_cls = EnforceCreatePlanStrategy if require_create_plan else SupervisorLoopStrategy
-        strategy = strategy_cls(
+        strategy = SupervisorLoopStrategy(
             session_id, self._message, self._session, self._hooks, self._skill,
             intent_state=self._intent_state,
         )

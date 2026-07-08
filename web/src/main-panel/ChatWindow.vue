@@ -4,6 +4,7 @@ import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import PostCard from './PostCard.vue'
 import RecoveryCard from './RecoveryCard.vue'
+import IntentConfirmCard from './IntentConfirmCard.vue'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -11,7 +12,7 @@ const props = defineProps({
   sessionId: { type: String, default: '' },
 })
 
-defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled'])
+defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
 
 const container = ref(null)
 
@@ -64,6 +65,12 @@ watch(
           :session-id="sessionId"
           @retried="$emit('hil-retried', $event)"
           @cancelled="$emit('hil-cancelled', $event)"
+        />
+        <IntentConfirmCard
+          v-else-if="msg.kind === 'intent-confirm'"
+          :state="msg.state"
+          @confirm="$emit('intent-confirm')"
+          @revise="$emit('intent-revise')"
         />
         <MessageBubble
           v-else

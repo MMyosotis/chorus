@@ -1,7 +1,6 @@
 <script setup>
-const props = defineProps({
+defineProps({
   state: { type: Object, default: null },
-  busy: { type: Boolean, default: false },
 })
 
 defineEmits(['confirm', 'revise'])
@@ -10,16 +9,13 @@ defineEmits(['confirm', 'revise'])
 <template>
   <section class="intent-confirm">
     <div class="confirm-head">
-      <div>
-        <p>意图待确认</p>
-        <h3>{{ state?.confirmation_summary?.title || state?.goal || '请确认这次创作方向' }}</h3>
-      </div>
-      <span>{{ Math.round((state?.confidence || 0) * 100) }}%</span>
+      <p>意图待确认</p>
+      <h3>{{ state?.confirmation_summary?.title || state?.goal || '请确认这次创作方向' }}</h3>
     </div>
 
-    <div class="confirm-grid">
+    <div v-if="(state?.confirmation_summary?.items || []).length" class="confirm-grid">
       <div
-        v-for="item in (state?.confirmation_summary?.items || [])"
+        v-for="item in state.confirmation_summary.items"
         :key="item.label"
         class="confirm-item"
       >
@@ -29,10 +25,8 @@ defineEmits(['confirm', 'revise'])
     </div>
 
     <div class="confirm-actions">
-      <button class="primary" :disabled="busy" @click="$emit('confirm')">
-        {{ busy ? '准备中' : '确认并开始' }}
-      </button>
-      <button class="secondary" :disabled="busy" @click="$emit('revise')">继续调整</button>
+      <button class="primary" @click="$emit('confirm')">确认并开始</button>
+      <button class="secondary" @click="$emit('revise')">继续调整</button>
     </div>
   </section>
 </template>
@@ -49,16 +43,14 @@ defineEmits(['confirm', 'revise'])
 
 .confirm-head {
   display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
 }
 
 .confirm-head p {
   color: var(--ch-muted);
   font-size: 12px;
   font-weight: 600;
-  margin-bottom: 5px;
 }
 
 .confirm-head h3 {
@@ -66,15 +58,6 @@ defineEmits(['confirm', 'revise'])
   font-size: 18px;
   line-height: 1.35;
   font-family: var(--ch-serif);
-  font-weight: 600;
-}
-
-.confirm-head > span {
-  border-radius: 999px;
-  padding: 5px 10px;
-  background: var(--ch-primary-soft);
-  color: var(--ch-primary);
-  font-size: 12px;
   font-weight: 600;
 }
 
@@ -122,23 +105,21 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
 .primary {
   border: 1px solid var(--ch-orange);
   background: var(--ch-orange);
   color: #ffffff;
 }
-.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
+
+.primary:hover { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
 
 .secondary {
   border: 1px solid var(--ch-border-2);
   background: var(--ch-surface);
   color: var(--ch-body);
 }
+
+.secondary:hover { background: var(--ch-bg-cool); }
 
 @media (max-width: 720px) {
   .confirm-grid {

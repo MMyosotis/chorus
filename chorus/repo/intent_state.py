@@ -13,15 +13,11 @@ from chorus.repo.connection import ConnectionFactory
 _DDL = """
 CREATE TABLE IF NOT EXISTS intent_states (
     session_id            TEXT PRIMARY KEY,
-    interaction_intent    TEXT NOT NULL,
     intent_status         TEXT NOT NULL,
     goal                  TEXT NOT NULL DEFAULT '',
     known_slots           TEXT NOT NULL DEFAULT '{}',
     missing_slots         TEXT NOT NULL DEFAULT '[]',
-    open_questions        TEXT NOT NULL DEFAULT '[]',
     confirmation_summary  TEXT,
-    next_action           TEXT NOT NULL,
-    confidence            REAL NOT NULL DEFAULT 0,
     version               INTEGER NOT NULL DEFAULT 0,
     updated_at            REAL NOT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
@@ -33,30 +29,22 @@ class IntentStateRow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     session_id: str
-    interaction_intent: str
     intent_status: str
-    goal: str
-    known_slots: str
-    missing_slots: str
-    open_questions: str
-    confirmation_summary: Optional[str]
-    next_action: str
-    confidence: float
-    version: int
+    goal: str = ""
+    known_slots: str = "{}"
+    missing_slots: str = "[]"
+    confirmation_summary: Optional[str] = None
+    version: int = 0
     updated_at: float
 
     def to_domain(self) -> IntentState:
         return IntentState(
             session_id=self.session_id,
-            interaction_intent=self.interaction_intent,
             intent_status=self.intent_status,
             goal=self.goal,
             known_slots=_loads(self.known_slots, {}),
             missing_slots=_loads(self.missing_slots, []),
-            open_questions=_loads(self.open_questions, []),
             confirmation_summary=_loads(self.confirmation_summary, None),
-            next_action=self.next_action,
-            confidence=self.confidence,
             version=self.version,
             updated_at=self.updated_at,
         )
@@ -71,15 +59,11 @@ class IntentStateRow(BaseModel):
             )
         return cls(
             session_id=state.session_id,
-            interaction_intent=state.interaction_intent,
             intent_status=state.intent_status,
             goal=state.goal,
             known_slots=json.dumps(state.known_slots, ensure_ascii=False),
             missing_slots=json.dumps(state.missing_slots, ensure_ascii=False),
-            open_questions=json.dumps(state.open_questions, ensure_ascii=False),
             confirmation_summary=summary,
-            next_action=state.next_action,
-            confidence=state.confidence,
             version=state.version,
             updated_at=state.updated_at,
         )

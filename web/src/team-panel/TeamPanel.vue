@@ -10,7 +10,7 @@ const props = defineProps({
   intentState: { type: Object, default: null },
   hasActiveTask: { type: Boolean, default: false },
 })
-const emit = defineEmits(['focus', 'confirm', 'revise', 'stop-and-revise'])
+const emit = defineEmits(['focus', 'stop-and-revise'])
 
 const tasks = computed(() => props.graph?.tasks || [])
 const hasIntent = computed(() => !!props.intentState)
@@ -22,14 +22,16 @@ function onFocus(id) {
 
 <template>
   <aside class="team-panel">
-    <IntentStateCard
-      v-if="hasIntent"
-      :state="intentState"
-      :has-active-task="hasActiveTask"
-      @confirm="$emit('confirm')"
-      @revise="$emit('revise')"
-      @stop-and-revise="$emit('stop-and-revise')"
-    />
+    <template v-if="hasIntent">
+      <div class="team-head">
+        <div class="h">意图识别</div>
+      </div>
+      <IntentStateCard
+        :state="intentState"
+        :has-active-task="hasActiveTask"
+        @stop-and-revise="$emit('stop-and-revise')"
+      />
+    </template>
     <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
     <template v-if="tasks.length">
       <div class="team-head">
@@ -67,10 +69,10 @@ function onFocus(id) {
   overflow: hidden;
 }
 
-/* 顶部意图卡固定不压 */
+/* 意图卡紧跟标题，左右对齐角色列表 */
 .team-panel > :deep(.intent-card) {
   flex-shrink: 0;
-  margin: 14px 14px 0;
+  margin: 0 14px;
 }
 
 .team-head {

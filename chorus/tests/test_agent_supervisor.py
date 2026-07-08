@@ -153,12 +153,12 @@ def test_new_plan():
 
 
 def test_reply_outcome_pairs_and_continues():
-    """Reply 型 tool_call 成对落库 + loop 继续到第二轮文本回复 + done。
+    """Reply 型 tool_call 成对落库 + loop 继续到第二轮文本回复 done。
 
     锚定 OpenAI tool_calls/tool 配对约束：Reply 分支须先 append assistant(tool_calls=[call])
     再 append tool(result)，否则下一轮 build_provider_messages 回放孤儿 tool 消息。
     用真实 LoadSkillTool 加载不存在的技能名 → Reply("Error: skill '...' not found...")，
-    下一轮模型回文本。终态历史须为 [user, assistant(tool_calls), tool, assistant(文本)]。
+    下一轮模型回文本 done。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     # 第一轮：load_skill("ghost") → Reply(未命中技能错误串)
@@ -173,7 +173,7 @@ def test_reply_outcome_pairs_and_continues():
     events = list(sup.stream(s.id, "帮我加载 ghost 技能"))
     types_seq = [e.type for e in events]
     assert types_seq[-1] == "done"
-    # 历史如实：user + assistant(tool_calls=[load_skill]) + tool(result) + assistant(文本)
+    # 历史：user + assistant(tool_calls) + tool + assistant(文本)
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
     assert len(msgs[1].tool_calls) == 1
@@ -189,7 +189,7 @@ def test_reply_outcome_pairs_and_continues():
 def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
     """一轮内 ≥2 个 Reply 工具调用 → 收集后落一条 assistant 携带全部 tool_calls + N 条 tool 结果。
 
-    锚定多 tool_call 配对结构，避免多 Reply 复用 message_id 撞表。下一轮模型回文本。
+    锚定多 tool_call 配对结构，避免多 Reply 复用 message_id 撞表。下一轮模型回文本 done。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     # 第一轮：2 个 load_skill tool_call（index 0/1），均 Reply(未命中技能错误串)
@@ -214,15 +214,17 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 和 phantom 技能"))
     types_seq = [e.type for e in events]
-    # 无 PK 冲突 → 无 error；正常结束 done
+    # 无 error；正常结束 done
     assert "error" not in types_seq
     assert types_seq[-1] == "done"
-    # 历史如实：user + assistant(2 tool_calls) + tool + tool + assistant(文本)
+    # 历史：user + assistant(2 tool_calls) + tool + tool + assistant(文本)
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool", "tool", "assistant"]
-    assert len(msgs[1].tool_calls) == 2          # 一条 assistant 携带两个 tool_call
+    assert len(msgs[1].tool_calls) == 2          # 第一条 assistant 携带两个 tool_call
     assert msgs[2].tool_call_id == "c1"          # 顺序保留
     assert msgs[3].tool_call_id == "c2"
+    assert msgs[4].tool_calls == []              # 文本轮无 tool_call
+    assert msgs[4].content == "两个技能都没找到"
 
 
 def test_new_plan_blocked_by_active_task():
@@ -247,71 +249,48 @@ def test_new_plan_blocked_by_active_task():
     assert msgs == []
 
 
-def test_enforce_create_plan_skips_persist_until_plan():
-    """require_create_plan=True：首轮模型只回文本不落库、续轮被强制 create_plan；
-    终态历史 [user, assistant(tool_calls), tool]，首轮文本气泡被丢弃。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
-    # 第一轮：纯文本（enforce 不落库、设提醒、续轮）
-    text_stream = FakeStream([({"content": "好的我来"}, "stop")])
-    # 第二轮：create_plan Terminal
-    plan_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
-        index=0, id="c1", function=types.SimpleNamespace(
-            name="create_plan", arguments=json.dumps(_plan_args())))]}, "tool_calls")])
-    client = FakeClient([text_stream, plan_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
-    s = session_svc.create("test")
-    events = list(sup.stream(s.id, "确认并开始", require_create_plan=True))
-    types_seq = [e.type for e in events]
-    assert types_seq[-1] == "done"
-    # 首轮文本未落库；终态只 user + assistant(create_plan) + tool
-    msgs = msg_svc.list_messages(s.id)
-    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
-    assert msgs[1].content == "好的，我来帮你创作"  # friendly_reply，非首轮文本
-    assert len(msgs[1].tool_calls) == 1
-    assert msgs[1].tool_calls[0].name == "create_plan"
-    assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 2
+def test_update_intent_state_does_not_finish():
+    """update_intent_state 返 Reply 不杀轮次：文本+工具同轮 → after_tools CONTINUE → 下一轮纯文本 done。
 
-
-def test_update_intent_state_finishes_one_turn():
-    """文本 + update_intent_state(Terminal) → 单轮单气泡 FINISH，不续轮生成重复回复。
-
-    锚定副作用型工具返回 Terminal 结束本轮：模型同轮已回文本 + 调 update_intent_state 记状态，
-    应单条 assistant(文本+tool_calls) + tool(result) 收尾，不产生第二轮 assistant。
+    甲方案：工具纯记状态，终止权交还模型。模型同轮出文本 + 调 update_intent_state 后，
+    loop 不在工具层 FINISH，须等下一轮模型纯文本（无 tool_call）走 after_text 才 done。
+    锚定"工具不替模型决定流程"的机制契约。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     intent_args = {
-        "interaction_intent": "smalltalk",
         "intent_status": "empty",
         "goal": "闲聊",
         "known_slots": {},
         "missing_slots": [],
-        "open_questions": [],
         "confirmation_summary": None,
-        "next_action": "reply_only",
-        "confidence": 0.9,
     }
-    stream = FakeStream([
+    # 第一轮：文本 + update_intent_state(Reply) → after_tools 无 Terminal → CONTINUE
+    tool_stream = FakeStream([
         ({"content": "你好！"}, None),
         ({"tool_calls": [types.SimpleNamespace(
             index=0, id="c1", function=types.SimpleNamespace(
                 name="update_intent_state", arguments=json.dumps(intent_args)))]}, "tool_calls"),
     ])
-    client = FakeClient([stream])
+    # 第二轮：模型纯文本（不再调工具）→ after_text → done
+    text_stream = FakeStream([({"content": "很高兴帮你"}, "stop")])
+    client = FakeClient([tool_stream, text_stream])
     sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "你好"))
     types_seq = [e.type for e in events]
-    # 单轮单气泡：仅一个 message_start
-    assert types_seq.count("message_start") == 1
+    # 两轮两个 message_start：工具不杀轮次，靠下一轮纯文本结束
+    assert types_seq.count("message_start") == 2
     assert types_seq[-1] == "done"
-    # 历史：user + assistant(文本 + tool_calls) + tool，无第二条 assistant
+    # 历史：user + assistant(文本+tool_calls) + tool + assistant(纯文本)
     msgs = msg_svc.list_messages(s.id)
-    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
+    assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
     assert msgs[1].content == "你好！"
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "update_intent_state"
     assert msgs[2].role == "tool"
     assert msgs[2].tool_call_id == "c1"
+    assert msgs[3].content == "很高兴帮你"
+    assert (msgs[3].tool_calls or []) == []
 
 
 def main():

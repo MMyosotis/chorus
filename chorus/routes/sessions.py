@@ -116,7 +116,7 @@ def confirm_intent(
 
     def event_generator():
         yield _sse(IntentStateEvent(state=state.public_dict()))
-        for event in supervisor.stream(session_id, "确认并开始", require_create_plan=True):
+        for event in supervisor.stream(session_id, "确认并开始"):
             yield _sse(event)
 
     return StreamingResponse(

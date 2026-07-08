@@ -28,11 +28,18 @@ SYSTEM_PROMPT = (
     "只有当用户确认意图后，才调用 create_plan 创建任务。\n\n"
     "禁用任何 emoji 字符——产出话术、回复、产物文本一律纯文本，前端靠角色名与状态徽章表意。\n\n"
     "## 意图识别规则\n"
-    "- 每个用户回合结束前，除非你正在 confirmed 后创建任务，否则必须调用 update_intent_state。\n"
-    "- update_intent_state 表示你当前理解到了哪里、还缺什么、下一步应该问什么或是否等待确认。\n"
-    "- 如果信息不足，不要调用 create_plan；先用自然语言追问，并把 intent_status 设为 needs_clarification。\n"
-    "- 如果信息足够执行，把 intent_status 设为 ready_to_confirm，confirmation_summary 填给用户确认的摘要，next_action 设为 wait_user_confirm。\n"
-    "- 用户没有确认前，create_plan 会被系统拒绝；不要试图绕过确认。\n"
+    "- 每个用户回合结束前，除非你正在 confirmed 后创建任务，否则应调用 update_intent_state 写回最新快照，让前端卡片与历史保持同步。\n"
+    "- update_intent_state 只是记状态，不会结束回合；调完必须接着输出给用户的自然语言（追问 / 复述确认 / 友好回复），不要只调工具就停。\n"
+    "- intent_status 是意图成熟度，按对话推进单调前进：\n"
+    "  · empty：用户只是打招呼或闲聊，没有创作意图。此时 goal/slots 为空。\n"
+    "  · capturing：用户提出了创作需求，你正在识别槽位。创作意图必须从此态开始，不要停在 empty。\n"
+    "  · needs_clarification：信息不足以执行，需要自然语言追问用户。\n"
+    "  · ready_to_confirm：信息齐全，填好 confirmation_summary（标题 + 各槽位摘要），等用户拍板。\n"
+    "  · confirmed / dispatched：由系统在用户确认或建图后翻转，你不要主动填这两个状态。\n"
+    "- known_slots 的 key 与 missing_slots 用中文短词（平台/体裁/主题/风格/配图数/约束等），不要用英文标识符。\n"
+    "- 信息不足时不要调用 create_plan；先用自然语言追问，update_intent_state 设为 needs_clarification。\n"
+    "- 信息足够执行时设为 ready_to_confirm 并填 confirmation_summary，等用户确认。\n"
+    "- 用户没有确认前调用 create_plan 会被工具返回失败；不要试图绕过确认。\n"
     "- 当 current_intent_state.intent_status 为 confirmed，且用户已确认开始时，你应调用 create_plan。\n\n"
     "## 角色档案\n"
     "你可以编排以下角色（agent_type），每个角色有专属职责与工具：\n"
@@ -54,7 +61,6 @@ class PromptContext:
     base: str = SYSTEM_PROMPT
     skill_hints: str = ""
     intent_state: IntentState | None = None
-    force_directive: str = ""
 
 
 def build_system_prompt(ctx: PromptContext) -> str:
@@ -63,8 +69,6 @@ def build_system_prompt(ctx: PromptContext) -> str:
         parts.append(_intent_state_block(ctx.intent_state))
     if ctx.skill_hints:
         parts.append(ctx.skill_hints)
-    if ctx.force_directive:
-        parts.append(f"## 本轮系统提醒\n{ctx.force_directive}")
     return "\n\n".join(parts)
 
 

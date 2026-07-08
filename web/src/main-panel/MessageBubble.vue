@@ -167,10 +167,13 @@ function closePreview() {
       <span v-if="active && content && activityState === 'idle'" class="cursor">|</span>
     </div>
 
-    <div v-if="content && activityState === 'tools'" class="tool-dots" aria-hidden="true">
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
+    <div v-if="content && activityState === 'tools'" class="tool-running-line" aria-hidden="true">
+      <span v-if="runningTool?.running_label" class="tool-running-label">{{ runningTool.running_label }}</span>
+      <span class="tool-dots">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </span>
     </div>
 
     <div v-if="!bareMode && doneToolChips.length" class="tool-chips">
@@ -414,12 +417,22 @@ function closePreview() {
   margin: 10px 0 0;
 }
 
+.tool-running-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  line-height: 1;
+}
+.tool-running-label {
+  color: var(--ch-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
 .tool-dots {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin: 10px 0 0;
-  line-height: 1;
 }
 .tool-dots .dot {
   width: 4px;

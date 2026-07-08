@@ -6,9 +6,12 @@ const props = defineProps({
   hasActiveTask: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['confirm', 'revise', 'stop-and-revise'])
+defineEmits(['stop-and-revise'])
 
 const status = computed(() => props.state?.intent_status || 'empty')
+const goal = computed(() => props.state?.goal || '')
+
+// 已识别槽位：过滤空值，最多 8 条
 const knownEntries = computed(() => {
   const slots = props.state?.known_slots || {}
   return Object.entries(slots)
@@ -16,39 +19,56 @@ const knownEntries = computed(() => {
     .slice(0, 8)
 })
 const missing = computed(() => props.state?.missing_slots || [])
-const questions = computed(() => props.state?.open_questions || [])
-const summaryItems = computed(() => props.state?.confirmation_summary?.items || [])
-const title = computed(() => props.state?.confirmation_summary?.title || props.state?.goal || '等待识别意图')
-const progress = computed(() => {
-  if (status.value === 'empty') return 0
-  if (status.value === 'capturing') return 28
-  if (status.value === 'needs_clarification') return 56
-  if (status.value === 'ready_to_confirm') return 86
-  return 100
-})
+const title = computed(() => props.state?.confirmation_summary?.title || goal.value || '等待识别意图')
+
+const progress = computed(() => ({
+  empty: 0,
+  capturing: 28,
+  needs_clarification: 56,
+  ready_to_confirm: 86,
+}[status.value] ?? 100))
+
 const statusLabel = computed(() => ({
   empty: '待开始',
   capturing: '识别中',
   needs_clarification: '待补充',
-  ready_to_confirm: '待确认',
+  ready_to_confirm: '待你确认',
   confirmed: '已确认',
   dispatched: '执行中',
 }[status.value] || '识别中'))
-const nextLabel = computed(() => ({
-  reply_only: '主 Agent 回复用户',
-  ask_user: '主 Agent 继续澄清',
-  wait_user_confirm: '等待用户确认',
-  create_plan_after_confirm: '准备创建任务',
-  dispatching: '任务执行中',
-  blocked: '等待处理',
-}[props.state?.next_action] || '等待用户输入'))
+
+// capturing / needs_clarification 才展开脚手架卡
+const expanded = computed(() =>
+  status.value === 'capturing' || status.value === 'needs_clarification'
+)
 </script>
 
 <template>
-  <section class="intent-card" :class="status">
+  <!-- 折叠态：已确认 / 执行中，一行带停止入口 -->
+  <section v-if="status === 'confirmed' || status === 'dispatched'" class="intent-card collapsed">
+    <span class="dot done"></span>
+    <span class="collapse-text">已确认：{{ goal || '开始执行' }}</span>
+    <button v-if="hasActiveTask" class="link-danger" @click="$emit('stop-and-revise')">停止并修改</button>
+  </section>
+
+  <!-- ready_to_confirm：锚点提示，确认单在对话区 -->
+  <section v-else-if="status === 'ready_to_confirm'" class="intent-card anchor">
+    <span class="dot pulse"></span>
+    <span>待你确认</span>
+    <span class="anchor-hint">请在对话区查看确认单</span>
+  </section>
+
+  <!-- empty：极简占位 -->
+  <section v-else-if="status === 'empty'" class="intent-card minimal">
+    <span class="dot"></span>
+    <span>{{ goal || '正在理解你的需求' }}</span>
+  </section>
+
+  <!-- capturing / needs_clarification：脚手架卡 -->
+  <section v-else class="intent-card" :class="status">
     <div class="intent-top">
       <div>
-        <p class="eyebrow">Intent</p>
+        <p class="eyebrow">意图</p>
         <h2>{{ title }}</h2>
       </div>
       <span class="status-pill">{{ statusLabel }}</span>
@@ -56,11 +76,6 @@ const nextLabel = computed(() => ({
 
     <div class="progress-track">
       <span :style="{ width: `${progress}%` }"></span>
-    </div>
-
-    <div class="next-line">
-      <span class="dot"></span>
-      <span>{{ nextLabel }}</span>
     </div>
 
     <div v-if="knownEntries.length" class="section">
@@ -73,31 +88,9 @@ const nextLabel = computed(() => ({
       </div>
     </div>
 
-    <div v-if="summaryItems.length" class="section">
-      <div class="section-title">确认摘要</div>
-      <div class="summary-list">
-        <div v-for="item in summaryItems" :key="item.label" class="summary-row">
-          <span>{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="missing.length || questions.length" class="section">
-      <div class="section-title">待补充</div>
-      <div class="missing-list">
-        <span v-for="item in missing" :key="item">{{ item }}</span>
-      </div>
-      <p v-for="q in questions" :key="q" class="question">{{ q }}</p>
-    </div>
-
-    <div v-if="status === 'ready_to_confirm'" class="actions">
-      <button class="primary" @click="$emit('confirm')">确认意图</button>
-      <button class="secondary" @click="$emit('revise')">继续调整</button>
-    </div>
-
-    <div v-else-if="hasActiveTask" class="actions">
-      <button class="secondary danger" @click="$emit('stop-and-revise')">停止并修改</button>
+    <div v-if="missing.length" class="section">
+      <div class="section-title">还想了解</div>
+      <p class="missing-line">{{ missing.join('、') }}</p>
     </div>
   </section>
 </template>
@@ -112,6 +105,63 @@ const nextLabel = computed(() => ({
   color: var(--ch-text);
 }
 
+/* 折叠 / 锚点 / 极简 三态：单行布局 */
+.collapsed,
+.anchor,
+.minimal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  font-size: 13px;
+}
+
+.collapse-text {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.link-danger {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--ch-red);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-danger:hover { text-decoration: underline; }
+
+.anchor-hint {
+  margin-left: auto;
+  color: var(--ch-faint);
+  font-size: 12px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ch-faint);
+}
+
+.minimal .dot { background: var(--ch-primary); }
+.anchor .dot { background: var(--ch-orange); }
+.done { background: var(--ch-green); }
+
+.pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* 脚手架卡：原丰富布局 */
 .intent-top {
   display: flex;
   align-items: flex-start;
@@ -125,7 +175,6 @@ const nextLabel = computed(() => ({
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0;
 }
 
 h2 {
@@ -152,12 +201,6 @@ h2 {
   color: var(--ch-orange-2);
 }
 
-.dispatched .status-pill,
-.confirmed .status-pill {
-  background: var(--ch-green-soft);
-  color: var(--ch-green);
-}
-
 .progress-track {
   height: 7px;
   margin: 18px 0 14px;
@@ -174,21 +217,6 @@ h2 {
   transition: width 0.24s ease;
 }
 
-.next-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ch-muted);
-  font-size: 13px;
-}
-
-.dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ch-primary);
-}
-
 .section {
   margin-top: 18px;
   padding-top: 16px;
@@ -202,14 +230,12 @@ h2 {
   font-weight: 600;
 }
 
-.slot-grid,
-.summary-list {
+.slot-grid {
   display: grid;
   gap: 8px;
 }
 
-.slot-item,
-.summary-row {
+.slot-item {
   display: grid;
   grid-template-columns: minmax(64px, 0.42fr) 1fr;
   gap: 10px;
@@ -217,71 +243,21 @@ h2 {
   font-size: 13px;
 }
 
-.slot-item span,
-.summary-row span {
+.slot-item span {
   color: var(--ch-muted);
   overflow-wrap: anywhere;
 }
 
-.slot-item strong,
-.summary-row strong {
+.slot-item strong {
   color: var(--ch-text);
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.missing-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.missing-list span {
-  border: 1px solid var(--ch-orange-border);
-  border-radius: 999px;
-  padding: 4px 9px;
-  color: var(--ch-orange-2);
-  background: var(--ch-orange-soft);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.question {
+.missing-line {
   color: var(--ch-body);
   font-size: 13px;
   line-height: 1.55;
-}
-
-.actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 18px;
-}
-
-button {
-  height: 36px;
-  border-radius: var(--ch-radius-sm);
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.primary {
-  border: 1px solid var(--ch-orange);
-  background: var(--ch-orange);
-  color: #ffffff;
-}
-.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
-
-.secondary {
-  border: 1px solid var(--ch-border-2);
-  background: var(--ch-surface);
-  color: var(--ch-body);
-}
-
-.danger {
-  color: var(--ch-red);
+  overflow-wrap: anywhere;
 }
 </style>

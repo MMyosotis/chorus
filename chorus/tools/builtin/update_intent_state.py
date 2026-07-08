@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from chorus.domain.intent import IntentStatePatch
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
+from chorus.tools.framework import Reply, Tool, ToolContext
 
 
 class UpdateIntentStateTool(Tool):
@@ -18,21 +18,6 @@ class UpdateIntentStateTool(Tool):
     parameters = {
         "type": "object",
         "properties": {
-            "interaction_intent": {
-                "type": "string",
-                "enum": [
-                    "smalltalk",
-                    "create_content",
-                    "clarify_existing",
-                    "modify_intent",
-                    "confirm_intent",
-                    "reject_intent",
-                    "cancel_task",
-                    "ask_status",
-                    "give_feedback",
-                ],
-                "description": "当前用户话语的交互意图",
-            },
             "intent_status": {
                 "type": "string",
                 "enum": [
@@ -43,22 +28,24 @@ class UpdateIntentStateTool(Tool):
                     "confirmed",
                     "dispatched",
                 ],
-                "description": "当前结构化意图成熟度",
+                "description": (
+                    "意图成熟度，按对话推进单调前进："
+                    "empty=刚打招呼无创作意图；"
+                    "capturing=用户已提创作需求，正在识别槽位（创作必须从此态开始，不要停 empty）；"
+                    "needs_clarification=信息不足需追问；"
+                    "ready_to_confirm=信息齐全，填好 confirmation_summary 等用户拍板；"
+                    "confirmed/dispatched 由系统翻转，模型不要主动填"
+                ),
             },
             "goal": {"type": "string", "description": "一句话概括用户目标"},
             "known_slots": {
                 "type": "object",
-                "description": "已识别的关键槽位，例如 platform/output_type/topic/style/image_count/constraints",
+                "description": "已识别的关键槽位，key 用中文短词（平台/体裁/主题/风格/配图数/约束等），value 用自然语言",
             },
             "missing_slots": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "仍缺失、会影响执行派发的槽位",
-            },
-            "open_questions": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "接下来要问用户的具体问题",
+                "description": "仍缺失、会影响执行派发的槽位，用中文短词（主题/风格/配图数等）",
             },
             "confirmation_summary": {
                 "type": ["object", "null"],
@@ -79,38 +66,16 @@ class UpdateIntentStateTool(Tool):
                 "required": ["title", "items"],
                 "description": "ready_to_confirm 时给用户确认的摘要；未就绪可为 null",
             },
-            "next_action": {
-                "type": "string",
-                "enum": [
-                    "reply_only",
-                    "ask_user",
-                    "wait_user_confirm",
-                    "create_plan_after_confirm",
-                    "dispatching",
-                    "blocked",
-                ],
-                "description": "主流程下一步动作",
-            },
-            "confidence": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1,
-                "description": "你对当前意图理解准确性的置信度",
-            },
         },
         "required": [
-            "interaction_intent",
             "intent_status",
             "goal",
             "known_slots",
             "missing_slots",
-            "open_questions",
             "confirmation_summary",
-            "next_action",
-            "confidence",
         ],
     }
-    running_label = "更新意图理解"
+    running_label = "意图识别中"
 
     def __init__(self, intent_state: IntentStateService):
         self._intent = intent_state
@@ -128,7 +93,9 @@ class UpdateIntentStateTool(Tool):
         except ValidationError as e:
             return Reply(f"update_intent_state 参数格式错: {e}")
         state = self._intent.update_from_tool(ctx.session_id, patch)
-        return Terminal(
+        # 返 Reply 不杀轮次：记状态只是规划辅助，终止权交还模型 + after_text nag 兜底，
+        # 让模型接着把追问/确认的话说出来，而非工具擅自终结回合。
+        return Reply(
             "intent_state updated: "
-            f"status={state.intent_status}, next_action={state.next_action}, version={state.version}"
+            f"status={state.intent_status}, version={state.version}"
         )
