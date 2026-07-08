@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""E2E 意图链路：真实 LLM 跑创作场景，验证拦截续跑 + 表写入 + 卡片数据。
+"""E2E 意图链路：真实 LLM 跑创作场景，验证意图状态机 + 表写入 + 卡片数据。
 
 非交互，供自动化端到端验证。跑完打印事件序列摘要 + intent_states 表内容。
 """
@@ -66,7 +66,7 @@ def run_one(label: str, query: str) -> None:
     full = "".join(text_parts)
     print(f"\n[耗时] {elapsed:.1f}s")
     print(f"[事件计数] {counts}")
-    print(f"[message_start 轮数] {turn}  (>=2 说明触发拦截续跑)")
+    print(f"[message_start 轮数] {turn}  (>=2 说明多轮 ReAct 循环)")
     print(f"[工具调用序列] {tool_seq}")
     print(f"[正文] {full[:200]!r}{'…' if len(full)>200 else ''}")
 
@@ -110,11 +110,14 @@ def run_one(label: str, query: str) -> None:
     conn.close()
 
 
-# 场景1:闲聊 —— 应不触发拦截(无工具调用),单轮 done
+# 场景1: 闲聊 —— 不触发意图识别，单轮 done
 run_one("闲聊", "你好呀,你能帮我做什么?")
 
-# 场景2:创作请求 —— 可能触发 baidu_search,观察是否拦截续跑补记意图
+# 场景2: 创作请求 —— 意图捕获 + 搜索补信息 + 追问缺失槽位
 run_one("创作", "帮我做一篇图文,主题是2026年春节档电影票房预测")
+
+# 场景3: 信息明确的创作请求 —— 槽位更全，可能直接确认
+run_one("明确创作", "帮我写一篇小红书风格的图文笔记，主题是2026年春节档电影推荐，配3张图")
 
 print("\n" + "=" * 70)
 print("E2E 完成")
