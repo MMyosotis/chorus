@@ -14,11 +14,10 @@ from chorus.domain.task import (
     TaskGraph,
     TaskStatus,
     build_task_graph,
-    dump_activity,
     select_display_pipeline,
 )
 from chorus.repo.task import TaskRepository
-from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
@@ -29,13 +28,13 @@ class TaskService:
         self,
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
-        task_activities_repo: TaskActivitiesRepository,
+        task_progress_repo: TaskProgressRepository,
         content_repo: TaskContentRepository,
         session_service: SessionService,
     ):
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
-        self._activities_repo = task_activities_repo
+        self._progress_repo = task_progress_repo
         self._content_repo = content_repo
         self._session = session_service
 
@@ -79,12 +78,6 @@ class TaskService:
         display = select_display_pipeline([], same_pipeline)
         return self._build_graph(latest.pipeline_id, display, False)
 
-    def get_activities(self, task_id: str, *, limit: int = 50) -> list[dict]:
-        """返回该任务的用户态活动，按发生顺序。"""
-        limit = max(1, min(100, limit))
-        rows = self._activities_repo.list_by_task(task_id, limit=limit)
-        return [dump_activity(activity) for activity in rows]
-
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         return active[0].pipeline_id if active else None
@@ -98,13 +91,13 @@ class TaskService:
         )
 
     def _build_graph(self, pipeline_id: str, tasks: list, active: bool) -> TaskGraph:
-        """取本图所需产物/活动/内容，交领域聚合。拓扑序在领域内。"""
+        """取本图所需产物/进度/内容，交领域聚合。拓扑序在领域内。"""
         ids = [task.id for task in tasks]
         return build_task_graph(
             pipeline_id,
             tasks,
             self._artifacts_repo.load_many(ids),
-            self._activities_repo.latest_by_tasks(ids),
+            self._progress_repo.load_many(ids),
             self._content_repo.load_many(ids),
             active,
         )

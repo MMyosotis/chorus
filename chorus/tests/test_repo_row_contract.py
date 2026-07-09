@@ -8,7 +8,7 @@ from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRow, MessageRepository
 from chorus.repo.session import SessionRow, SessionRepository
 from chorus.repo.task import TaskRow, TaskRepository
-from chorus.repo.task_activities import TaskActivityRow, TaskActivitiesRepository
+from chorus.repo.task_progress import TaskProgressRepository, TaskProgressRow
 from chorus.repo.task_artifacts import TaskArtifactsRow, TaskArtifactsRepository
 from chorus.repo.trace import TraceRow, TraceRepository
 from chorus.tests._helpers import fresh_conn
@@ -27,14 +27,14 @@ def test_row_fields_match_table_columns():
     TraceRepository(conn)
     TaskRepository(conn)
     TaskArtifactsRepository(conn)
-    TaskActivitiesRepository(conn)
+    TaskProgressRepository(conn)
 
     cases = [
         ("messages", MessageRow),
         ("traces", TraceRow),
         ("tasks", TaskRow),
         ("task_artifacts", TaskArtifactsRow),
-        ("task_activities", TaskActivityRow),
+        ("task_progress", TaskProgressRow),
         ("sessions", SessionRow),
     ]
     for table, row_cls in cases:

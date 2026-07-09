@@ -34,6 +34,7 @@ class AgentProfile:
     artifacts_schema: str
     expected_sections: tuple[str, ...]
     artifacts_model: Type[Any]
+    composing_label: str
 
     def build_artifacts(self, raw: Any) -> Any:
         """把原始数据按本角色的产物形状还原成对象。"""
@@ -89,6 +90,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_schema="idea",
         expected_sections=("artifacts", "narrative"),
         artifacts_model=IdeaArtifacts,
+        composing_label="个候选",
     ),
     "script": AgentProfile(
         agent_type="script",
@@ -98,6 +100,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_schema="script",
         expected_sections=("artifacts", "narrative"),
         artifacts_model=ScriptArtifacts,
+        composing_label="段",
     ),
     "image": AgentProfile(
         agent_type="image",
@@ -107,6 +110,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_schema="image",
         expected_sections=("artifacts", "narrative"),
         artifacts_model=ImageArtifacts,
+        composing_label="张",
     ),
     "finalize": AgentProfile(
         agent_type="finalize",
@@ -116,6 +120,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_schema="postcard",
         expected_sections=("artifacts", "narrative"),
         artifacts_model=PostCard,
+        composing_label="节",
     ),
 }
 

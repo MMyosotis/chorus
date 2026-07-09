@@ -17,18 +17,8 @@ from chorus.domain.task import (
     TaskStatus,
     ValidationError,
 )
-from chorus.domain.task.activity import (
-    ActivityDraft,
-    awaiting_activity,
-    done_activity,
-    failed_activity,
-    retrying_activity,
-    started_activity,
-    tool_done_activity,
-    tool_started_activity,
-)
 from chorus.repo.task import TaskRepository
-from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.agents.chat_model import ChatModelProvider
@@ -39,7 +29,7 @@ _MAX_STEPS = 8
 
 
 class SubagentLoopStrategy:
-    """subagent 的回合自动机差异面：内存历史、静默消费、活动写入与租约终态校验。
+    """subagent 的回合自动机差异面：内存历史、静默消费、进度写入与租约终态校验。
 
     每轮顶部做协作式取消（状态复查与心跳），四个终态写入点拦截陈旧工作线程。
     """
@@ -47,16 +37,14 @@ class SubagentLoopStrategy:
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, progress_total, owner_id, profile, invoke,
-                 task_repo,
-                 write_activity, finalize, guarded_fail):
+                 task_repo, progress_repo, finalize, guarded_fail):
         self.task = task
         self.progress_total = progress_total
         self.owner_id = owner_id
         self.profile = profile
         self.history = [{"role": "user", "content": invoke}]
-        self.done_images = []
         self._task_repo = task_repo
-        self._write_activity = write_activity
+        self._progress_repo = progress_repo
         self._finalize = finalize
         self._guarded_fail = guarded_fail
 
@@ -75,19 +63,10 @@ class SubagentLoopStrategy:
         return silent_consume(stream)
 
     def before_dispatch(self, call):
-        self._write_activity(self.task, tool_started_activity(call.name, call.arguments))
+        pass
 
     def after_dispatch(self, call, dispatch):
-        tool_done = tool_done_activity(
-            call.name, dispatch.activity_meta,
-            self.progress_total,
-            self.done_images,
-        )
-        # 先按已累计算进度，再追加当前图供下一轮，避免双计
-        if call.name == "generate_image" and dispatch.activity_meta and dispatch.activity_meta.get("url"):
-            self.done_images.append(dispatch.activity_meta["url"])
-        if tool_done is not None:
-            self._write_activity(self.task, tool_done)
+        pass
 
     def after_tools(self, ctx, result, pairs):
         self.history.append(_assistant_view(result))
@@ -103,7 +82,8 @@ class SubagentLoopStrategy:
             artifacts, narrative = self.profile.parse_output(content)
         except ValidationError as e:
             # 纠错提示喂回模型继续自纠，撞上限才判失败
-            self._write_activity(self.task, retrying_activity())
+            self._progress_repo.upsert_progress(
+                self.task.id, last_signal="刚才格式没对齐，重新理一理")
             self.history.append({"role": "assistant", "content": content or None})
             self.history.append({"role": "user", "content": e.correction})
             return LoopAction(LoopSignal.CONTINUE, [])
@@ -126,7 +106,7 @@ class SubAgentService:
         message_service: MessageService,
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
-        task_activities_repo: TaskActivitiesRepository,
+        task_progress_repo: TaskProgressRepository,
         content_repo: TaskContentRepository,
         tool_dispatcher: ToolDispatch,
         chat_model_provider: ChatModelProvider,
@@ -135,7 +115,7 @@ class SubAgentService:
         self._message = message_service
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
-        self._activities = task_activities_repo
+        self._progress = task_progress_repo
         self._content_repo = content_repo
         self._tools = tool_dispatcher
         self._models = chat_model_provider
@@ -155,7 +135,8 @@ class SubAgentService:
         if not self._lease_valid(task.id, owner_id):
             return
 
-        self._write_activity(task, started_activity(task.agent_type))
+        self._progress.upsert_progress(
+            task.id, composing_label=AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
         ctx = AgentContext(
@@ -172,7 +153,7 @@ class SubAgentService:
             profile=AGENT_PROFILES[task.agent_type],
             invoke=self._build_invoke(task, content),
             task_repo=self._task_repo,
-            write_activity=self._write_activity,
+            progress_repo=self._progress,
             finalize=self._finalize,
             guarded_fail=self._guarded_fail,
         )
@@ -188,20 +169,12 @@ class SubAgentService:
         """翻转为失败并写错误信息。"""
         self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.FAILED)
         self._content_repo.set_error(task.id, error)
-
-        self._write_activity(task, failed_activity(error))
+        self._progress.upsert_progress(task.id, last_signal="这步失败了")
 
     def _lease_valid(self, task_id: str, owner_id: Optional[float]) -> bool:
         """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""
         latest = self._task_repo.get(task_id)
         return latest is not None and latest.status == TaskStatus.RUNNING and latest.owner_id == owner_id
-
-    def _write_activity(self, task, draft: ActivityDraft) -> None:
-        """写活动，失败不阻断主流程。"""
-        try:
-            self._activities.append(task.id, draft)
-        except Exception:
-            pass
 
     def _build_invoke(self, task, content) -> str:
         prior = self._artifacts_repo.load(task.id)
@@ -216,7 +189,7 @@ class SubAgentService:
         )
 
     def _finalize(self, task, artifacts, narrative, owner_id: Optional[float]) -> None:
-        """先翻转状态再落产物，最后写活动。"""
+        """先翻转状态再落产物。"""
         if not self._lease_valid(task.id, owner_id):
             return
 
@@ -224,16 +197,9 @@ class SubAgentService:
             TaskStatus.FINISHED if task.agent_type == "finalize"
             else TaskStatus.AWAITING_CONFIRM
         )
-        is_terminal = to_status == TaskStatus.FINISHED
-
-        # 先翻状态再落产物，最后写活动
+        # 先翻状态再落产物，避免孤儿产物
         self._task_repo.transition(task.id, TaskStatus.RUNNING, to_status)
         self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
-
-        if is_terminal:
-            self._write_activity(task, done_activity(narrative))
-        else:
-            self._write_activity(task, awaiting_activity(narrative))
 
 
 def _assistant_view(result: StreamResult) -> dict:

@@ -6,7 +6,6 @@ from pathlib import Path
 
 from chorus.domain.session import Session
 from chorus.domain.task import (
-    ActivityDraft,
     IdeaArtifacts,
     IdeaCandidate,
     Narrative,
@@ -17,7 +16,7 @@ from chorus.domain.task import (
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
-from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
@@ -30,11 +29,11 @@ def _setup():
     conn = ConnectionFactory(Path(tmp) / "t.db")
     SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
     task_repo = TaskRepository(conn)
-    act_repo = TaskActivitiesRepository(conn)
+    progress_repo = TaskProgressRepository(conn)
     content_repo = TaskContentRepository(conn)
     session_svc = SessionService(SessionRepository(conn))
     svc = TaskService(
-        task_repo, TaskArtifactsRepository(conn), act_repo, content_repo, session_svc,
+        task_repo, TaskArtifactsRepository(conn), progress_repo, content_repo, session_svc,
     )
     return svc, task_repo, content_repo
 
@@ -148,30 +147,31 @@ def _conn_of(task_repo):
     return task_repo._conn  # noqa: SLF001 — 测试辅助
 
 
-def test_get_graph_includes_current_activity_and_timestamps():
-    """任务图每节点含时间戳与当前活动；error 取自内容表。"""
+def test_get_graph_includes_progress_and_timestamps():
+    """任务图每节点含时间戳与运行期进度；error 取自内容表。"""
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
     conn = fresh_conn()
     seed_session(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
-    act_repo = TaskActivitiesRepository(conn)
     content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)))
+    svc = TaskService(task_repo, art_repo, TaskProgressRepository(conn), content_repo, _SS(_SR(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", dependencies=[],
         created_at=0.0, updated_at=10.0,
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", progress_total=3))
-    act_repo.append("t1", ActivityDraft(event_type="started", role_line="出图中"))
+    progress_repo = TaskProgressRepository(conn)
+    progress_repo.upsert_progress("t1", composing_chars=120, composing_units=2, composing_label="张")
     graph = svc.get_graph("s1")
     t = graph.nodes[0]
     assert t.updated_at == 10.0
-    assert t.current_activity is not None
-    assert t.current_activity.role_line == "出图中"
-    assert t.current_activity.event_type == "started"
+    assert t.progress is not None
+    assert t.progress.composing_chars == 120
+    assert t.progress.composing_units == 2
+    assert t.progress.composing_label == "张"
     # error 取自内容表（此处未写 → None）
     assert t.error is None
 
@@ -184,9 +184,8 @@ def test_get_graph_error_from_content():
     seed_session(conn)
     task_repo = TaskRepository(conn)
     art_repo = TaskArtifactsRepository(conn)
-    act_repo = TaskActivitiesRepository(conn)
     content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)))
+    svc = TaskService(task_repo, art_repo, TaskProgressRepository(conn), content_repo, _SS(_SR(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[], created_at=0.0, updated_at=1.0,
@@ -194,37 +193,6 @@ def test_get_graph_error_from_content():
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", error="boom"))
     graph = svc.get_graph("s1")
     assert graph.nodes[0].error == "boom"
-
-
-def test_get_activities_returns_serialized_list():
-    """返 dict 列表（TypeAdapter 序列化），按 id 升序，payload 多态保留。"""
-    from chorus.domain.task.activity import ActivityDraft, SearchResultsPayload
-    from chorus.services.session import SessionService as _SS
-    from chorus.repo.session import SessionRepository as _SR
-    conn = fresh_conn()
-    seed_session(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    act_repo = TaskActivitiesRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)))
-    task_repo.insert(Task(
-        id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
-        status="running", dependencies=[], created_at=0.0, updated_at=0.0,
-    ))
-    content_repo.insert(TaskContent(task_id="t1", invoke_message="x"))
-    act_repo.append("t1", ActivityDraft(event_type="started", role_line="a"))
-    act_repo.append("t1", ActivityDraft(
-        event_type="tool_done", role_line="b", status="running", tool_name="baidu_search",
-        payload=SearchResultsPayload(total=1, bullets=[{"title": "t", "url": "u"}]),
-    ))
-    acts = svc.get_activities("t1")
-    assert [a["role_line"] for a in acts] == ["a", "b"]
-    assert acts[1]["payload"]["total"] == 1
-    assert acts[1]["tool_name"] == "baidu_search"
-    # TypeAdapter 序列化结果可 JSON 序列化
-    import json as _json
-    _json.dumps(acts)
 
 
 def main():

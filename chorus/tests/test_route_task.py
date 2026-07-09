@@ -42,9 +42,6 @@ class FakeTaskService:
     def get_graph(self, session_id):
         return self._call("get_graph", session_id)
 
-    def get_activities(self, task_id, *, limit=50):
-        return self._call("get_activities", task_id)
-
     def confirm(self, task_id, selected):
         return self._call("confirm", task_id)
 
@@ -118,20 +115,6 @@ def test_cancel_pipeline_ok():
     r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "cancelled": 2}
-
-
-def test_get_activities_ok():
-    task = FakeTaskService()
-    task.set("get_activities", "t1", [{"id": "x1", "event_type": "started"}])
-    r = _client(FakeSessionService({"s1"}), task).get("/api/tasks/t1/activities", params={"limit": 10})
-    assert r.status_code == 200
-    assert r.json() == {"task_id": "t1", "activities": [{"id": "x1", "event_type": "started"}]}
-
-
-def test_get_activities_limit_out_of_range():
-    r = _client(FakeSessionService({"s1"}), FakeTaskService()).get(
-        "/api/tasks/t1/activities", params={"limit": 0})
-    assert r.status_code == 422
 
 
 def main():

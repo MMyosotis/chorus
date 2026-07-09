@@ -1,4 +1,4 @@
-"""任务资源路由：任务图查询、人工确认写操作与活动流。"""
+"""任务资源路由：任务图查询与人工确认写操作。"""
 from __future__ import annotations
 
 from typing import Optional
@@ -31,20 +31,6 @@ def get_task_graph(
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
     return dump_task_graph(task.get_graph(session_id))
-
-
-@router.get("/tasks/{task_id}/activities")
-def get_task_activities(
-    task_id: str,
-    limit: int = 50,
-    task: TaskService = Depends(provide_task_service),
-):
-    if limit < 1 or limit > 100:
-        raise HTTPException(status_code=422, detail="limit 须在 1..100")
-    return {
-        "task_id": task_id,
-        "activities": task.get_activities(task_id, limit=limit),
-    }
 
 
 @router.post("/tasks/{task_id}/confirm")

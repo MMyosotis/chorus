@@ -7,7 +7,7 @@ from typing import Optional, Union
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydataclass
 
-from chorus.domain.task.activity import TaskActivity, dump_activity
+from chorus.domain.task.activity import TaskProgress, dump_progress
 from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     ImageArtifacts,
@@ -22,13 +22,13 @@ from chorus.domain.task.state import topological_order
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskNodeView:
-    """任务图节点投影：调度行 + 最新活动 + 产物 + 错误。"""
+    """任务图节点投影：调度行 + 运行期进度 + 产物 + 错误。"""
 
     id: str
     agent_type: str
     status: str
     updated_at: float
-    current_activity: Optional[TaskActivity] = None
+    progress: Optional[TaskProgress] = None
     artifacts: Optional[Union[IdeaArtifacts, ScriptArtifacts, ImageArtifacts, PostCard]] = None
     narrative: Optional[Narrative] = None
     error: Optional[str] = None
@@ -47,7 +47,7 @@ def build_task_graph(
     pipeline_id: Optional[str],
     tasks: list[Task],
     arts: dict[str, TaskArtifacts],
-    activities: dict[str, TaskActivity],
+    progress: dict[str, TaskProgress],
     contents: dict[str, TaskContent],
     active: bool,
 ) -> TaskGraph:
@@ -58,7 +58,7 @@ def build_task_graph(
         agent_type=task.agent_type,
         status=task.status,
         updated_at=task.updated_at,
-        current_activity=activities.get(task.id),
+        progress=progress.get(task.id),
         artifacts=arts[task.id].artifacts if task.id in arts else None,
         narrative=arts[task.id].narrative if task.id in arts else None,
         error=contents[task.id].error if task.id in contents else None,
@@ -77,7 +77,7 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "agent_type": node.agent_type,
             "status": node.status,
             "updated_at": node.updated_at,
-            "current_activity": dump_activity(node.current_activity) if node.current_activity else None,
+            "progress": dump_progress(node.progress) if node.progress else None,
             "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
             "narrative": dataclasses.asdict(node.narrative) if node.narrative else None,
             "error": node.error,

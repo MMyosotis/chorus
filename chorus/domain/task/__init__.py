@@ -29,15 +29,8 @@ from chorus.domain.task.artifacts import (
     TaskArtifacts,
 )
 from chorus.domain.task.activity import (
-    ActivityDraft,
-    FailedPayload,
-    ImageProgressPayload,
-    PAYLOAD_TYPES,
-    SearchResultsPayload,
-    TaskActivity,
     TaskProgress,
-    build_payload,
-    dump_activity,
+    dump_progress,
 )
 from chorus.domain.task.pipeline import (
     CreationIntent,
@@ -57,22 +50,17 @@ from chorus.domain.task.state import (
 
 __all__ = [
     "ValidationError",
-    "ActivityDraft",
     "AgentType",
     "CreationIntent",
-    "FailedPayload",
     "IdeaArtifacts",
     "IdeaCandidate",
     "ImageArtifacts",
     "ImageItem",
-    "ImageProgressPayload",
     "Narrative",
     "ScriptArtifacts",
     "ScriptBlock",
-    "SearchResultsPayload",
     "StepSpec",
     "Task",
-    "TaskActivity",
     "TaskArtifacts",
     "TaskContent",
     "TaskGraph",
@@ -92,9 +80,7 @@ __all__ = [
     "select_display_pipeline",
     "topological_order",
     "validate_steps",
-    "PAYLOAD_TYPES",
-    "build_payload",
     "build_task_graph",
-    "dump_activity",
+    "dump_progress",
     "dump_task_graph",
 ]

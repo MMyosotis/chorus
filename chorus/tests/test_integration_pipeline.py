@@ -22,7 +22,7 @@ from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
-from chorus.repo.task_activities import TaskActivitiesRepository
+from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
@@ -137,13 +137,13 @@ def _build_assembly():
     ])
     subagent = SubAgentService(
         msg_svc, task_repo, art_repo,
-        TaskActivitiesRepository(conn), content_repo,
+        TaskProgressRepository(conn), content_repo,
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
     )
 
     task_service = TaskService(
-        task_repo, art_repo, TaskActivitiesRepository(conn), content_repo, session_svc,
+        task_repo, art_repo, TaskProgressRepository(conn), content_repo, session_svc,
     )
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,
