@@ -205,18 +205,6 @@ export async function getTaskGraph(sessionId) {
   return res.json()
 }
 
-export async function getTaskActivities(taskId, { limit = 50 } = {}) {
-  const params = new URLSearchParams({ limit: String(limit) })
-  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/activities?${params}`)
-  if (res.status === 404) {
-    const err = new Error('task not found')
-    err.status = 404
-    throw err
-  }
-  if (!res.ok) throw new Error(`getTaskActivities failed: ${res.status}`)
-  return res.json()
-}
-
 export async function confirmTask(taskId, selected) {
   const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/confirm`, {
     method: 'POST',

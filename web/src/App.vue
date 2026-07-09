@@ -19,8 +19,6 @@ import {
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
-import PipelineProgressBar from './main-panel/PipelineProgressBar.vue'
-import PipelineRuntimeDock from './main-panel/PipelineRuntimeDock.vue'
 import TeamPanel from './team-panel/TeamPanel.vue'
 
 const traceStore = useTraceStore()
@@ -586,13 +584,6 @@ onMounted(async () => {
         @intent-confirm="onIntentConfirm"
         @intent-revise="onIntentRevise"
       />
-      <PipelineRuntimeDock
-        :graph="activeGraph"
-        :focused-task-id="focusedTaskId"
-        :session-id="activeId || ''"
-        @finish-done="forceReloadMessages(activeId)"
-      />
-      <PipelineProgressBar :graph="activeGraph" />
       <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
     </div>
     <TeamPanel
