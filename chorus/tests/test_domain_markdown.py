@@ -1,7 +1,7 @@
 """Markdown 产出解析:注释元信息抽取 + 四角色解析,纯函数。"""
 from chorus.domain.task.markdown import (
     parse_meta, strip_markdown_meta, parse_script_md,
-    parse_idea_md, parse_image_md, parse_postcard_md,
+    parse_idea_md, parse_image_md, parse_postcard_md, UnitCounter,
 )
 
 
@@ -75,6 +75,26 @@ def test_parse_postcard_md_tree():
     assert out["tags"] == ["#秋日", "#阳台"]
     kinds = [s["kind"] for s in out["sections"]]
     assert "heading" in kinds and "quote" in kinds and "image" in kinds
+
+
+def test_unit_counter_counts_heading_lines():
+    counter = UnitCounter("## ")
+    counter.feed("## 第一段\n\n")
+    counter.feed("正文\n\n## 第二段")
+    assert counter.count == 2
+
+
+def test_unit_counter_ignores_partial_marker():
+    counter = UnitCounter("## ")
+    counter.feed("#")  # 不完整
+    counter.feed("# 标题")  # 拼成 ## 标题
+    assert counter.count == 1
+
+
+def test_unit_counter_resets_between_tasks():
+    counter = UnitCounter("### ")
+    counter.feed("### a\n### b\n")
+    assert counter.count == 2
 
 
 def main():

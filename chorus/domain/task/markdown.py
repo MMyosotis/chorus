@@ -140,3 +140,24 @@ def parse_postcard_md(body: str) -> dict[str, Any]:
             pending_para.append(stripped)
     flush_list(); flush_para()
     return {"title": title, "sections": sections, "cover": None, "tags": tags, "summary": ""}
+
+
+class UnitCounter:
+    """流式数 markdown 行标记出现次数,容忍跨分片拼接。"""
+
+    def __init__(self, marker: str):
+        self._marker = marker
+        self._buf = ""
+        self._count = 0
+
+    def feed(self, text: str) -> None:
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line.strip().startswith(self._marker):
+                self._count += 1
+
+    @property
+    def count(self) -> int:
+        pending = 1 if self._buf.strip().startswith(self._marker) else 0
+        return self._count + pending
