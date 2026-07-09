@@ -53,6 +53,8 @@ body {
   --ch-radius-md: 12px;
   --ch-radius-sm: 8px;
   --ch-runtime-width: 760px;
+  --ch-hair: #f1f1f3;
+  --ch-turn-gap: 44px;
   --ch-serif: 'Noto Serif SC', 'PingFang SC', serif;
   --ch-shadow-workbench: 0 8px 30px rgba(0, 0, 0, 0.05);
   --ch-shadow-dock: 0 -2px 20px rgba(0, 0, 0, 0.04),

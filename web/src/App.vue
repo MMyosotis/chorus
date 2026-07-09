@@ -49,6 +49,10 @@ const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
 })
+const activeSessionUpdatedAt = computed(() => {
+  const c = sessions.value.find((x) => x.id === activeId.value)
+  return c ? c.updated_at : null
+})
 
 function makeEmptyAssistant() {
   return {
@@ -575,6 +579,7 @@ onMounted(async () => {
         :messages="messages"
         :streaming="streaming"
         :session-id="activeId || ''"
+        :session-updated-at="activeSessionUpdatedAt"
         @hil-confirmed="onHilConfirmed"
         @hil-retried="onHilRetried"
         @hil-cancelled="onHilCancelled"

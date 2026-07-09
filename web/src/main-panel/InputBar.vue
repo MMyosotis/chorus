@@ -96,26 +96,19 @@ defineExpose({ focus })
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 8px 10px 8px 20px;
-  border: 1px solid var(--ch-border);
-  border-radius: 12px;
-  background: var(--ch-surface);
-  box-shadow: none;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  padding: 4px 0 8px;
+  border-bottom: 1px solid var(--ch-border-2);
+  background: transparent;
+  transition: border-color 0.2s;
 }
 
 .input-inner:focus-within {
   border-color: var(--ch-primary);
-  background: var(--ch-surface);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ch-primary) 14%, transparent);
 }
 
 .input-bar.locked .input-inner {
-  min-height: 38px;
-  background: var(--ch-bg-cool);
-  border-color: var(--ch-border);
-  justify-content: center;
-  padding: 0 22px;
+  border-color: var(--ch-border-2);
+  padding: 4px 0 8px;
 }
 
 .input-field {
@@ -171,23 +164,22 @@ defineExpose({ focus })
 
 .send-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  border-radius: 10px;
-  background: var(--ch-text);
-  color: #fff;
+  border: 1px solid var(--ch-border-2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ch-primary);
   cursor: pointer;
-  box-shadow: none;
-  transition: background 0.18s, transform 0.15s;
+  transition: border-color 0.18s, background 0.18s, transform 0.15s;
 }
 
 .send-btn:hover:not(:disabled) {
-  background: var(--ch-orange);
-  box-shadow: none;
+  border-color: var(--ch-primary);
+  background: var(--ch-primary-soft);
 }
 
 .send-btn:active:not(:disabled) {
@@ -195,8 +187,9 @@ defineExpose({ focus })
 }
 
 .send-btn:disabled {
-  background: var(--ch-border-2);
+  background: transparent;
+  border-color: var(--ch-border);
+  color: var(--ch-faint);
   cursor: not-allowed;
-  box-shadow: none;
 }
 </style>

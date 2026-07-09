@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import PostCard from './PostCard.vue'
@@ -10,11 +10,21 @@ const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   sessionId: { type: String, default: '' },
+  sessionUpdatedAt: { type: Number, default: null },
 })
 
 defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
 
 const container = ref(null)
+
+const dateline = computed(() => {
+  const ts = props.sessionUpdatedAt
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}.${m}.${day}`
+})
 
 watch(
   () =>
@@ -49,6 +59,11 @@ watch(
 <template>
   <div ref="container" class="chat-window">
     <div class="chat-inner">
+      <div v-if="dateline" class="dateline">
+        <span>{{ dateline }}</span>
+        <span class="sep">·</span>
+        <span>讨论</span>
+      </div>
       <template v-for="(msg, idx) in messages" :key="msg.id || idx">
         <HilCard
           v-if="msg.kind === 'hil'"
@@ -102,7 +117,27 @@ watch(
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--ch-turn-gap);
+}
+
+.dateline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--ch-faint);
+  letter-spacing: 0.3px;
+}
+
+.dateline .sep {
+  color: var(--ch-border-2);
+}
+
+.dateline::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ch-hair);
 }
 
 .empty-hint {

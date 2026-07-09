@@ -136,8 +136,9 @@ function closePreview() {
 
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
-    <div class="sender">{{ role === 'user' ? '我' : '创作助手' }}</div>
+    <div :class="['sender', role]">{{ role === 'user' ? '我' : '助手' }}</div>
     <div :class="['bubble', role, { bare: bareMode }]">
+      <div v-if="role === 'user'" class="u-bar"></div>
       <div v-if="planItems.length" class="plan-list">
         <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
           <div class="plan-header">执行计划</div>
@@ -212,7 +213,7 @@ function closePreview() {
 }
 
 .bubble-row.user {
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .bubble-row.assistant {
@@ -226,6 +227,12 @@ function closePreview() {
   margin: 0 0 10px;
 }
 
+.sender.assistant {
+  color: var(--ch-primary-2);
+  font-family: var(--ch-serif);
+  letter-spacing: 0.4px;
+}
+
 .bubble {
   line-height: 1.7;
   font-size: 14px;
@@ -233,23 +240,35 @@ function closePreview() {
 }
 
 .bubble.user {
-  max-width: 75%;
-  padding: 12px 16px;
-  border-radius: var(--ch-radius-md);
+  display: flex;
+  gap: 14px;
+  color: var(--ch-text);
+  font-size: 14.5px;
+  line-height: 1.8;
+}
+
+.u-bar {
+  width: 3px;
   background: var(--ch-primary);
-  color: #fff;
-  line-height: 1.6;
-  box-shadow: none;
+  border-radius: 1.5px;
+  flex-shrink: 0;
+}
+
+.bubble.user .text {
+  flex: 1;
+  min-width: 0;
 }
 
 .bubble.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 12px 16px;
-  background: var(--ch-bg-cool);
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-md);
+  padding: 0;
+  background: transparent;
+  border: none;
   color: var(--ch-text);
+  font-size: 14.5px;
+  line-height: 1.85;
+  letter-spacing: 0.2px;
 }
 
 .bubble.assistant.bare {
@@ -263,7 +282,7 @@ function closePreview() {
 }
 
 .bubble.assistant .text :deep(p) {
-  margin: 0 0 10px;
+  margin: 0 0 14px;
   letter-spacing: 0.2px;
 }
 .bubble.assistant .text :deep(p:last-child) {
@@ -381,7 +400,7 @@ function closePreview() {
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.tools {
-  color: var(--ch-orange);
+  color: var(--ch-primary);
   animation: pulseRow 1.6s ease-in-out infinite;
 }
 .status-card.preparing {
@@ -483,37 +502,35 @@ function closePreview() {
 .plan-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin: 4px 0 14px;
 }
 
 .plan-card {
-  border: 1px solid var(--ch-orange-border);
-  background: var(--ch-orange-soft);
-  border-radius: var(--ch-radius-lg);
-  padding: 12px 16px;
+  border-left: 2px solid var(--ch-border-2);
+  padding: 4px 0 4px 18px;
+  margin: 18px 0 20px;
+  background: transparent;
 }
 
 .plan-header {
-  font-size: 13px;
+  font-family: var(--ch-serif);
   font-weight: 600;
-  color: var(--ch-orange-2);
-  letter-spacing: 0.3px;
-  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--ch-muted);
+  letter-spacing: 0.4px;
+  margin-bottom: 10px;
   line-height: 1;
 }
 
 .plan-steps {
   margin: 0;
-  padding-left: 22px;
-  color: var(--ch-text);
-  font-size: 14px;
-  line-height: 1.7;
+  padding-left: 20px;
+  color: var(--ch-body);
+  font-size: 13.5px;
+  line-height: 1.9;
 }
 
 .plan-steps li {
-  margin: 4px 0;
-  letter-spacing: 0.2px;
+  margin: 3px 0;
 }
 
 /* ===== 生成图像：占位 / 渲染 ===== */
