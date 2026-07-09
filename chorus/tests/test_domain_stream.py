@@ -153,6 +153,19 @@ def test_silent_consume_is_generator_returning_result_without_events():
     assert len(result.thinking_segments) == 1
 
 
+def test_silent_consume_on_token_callback():
+    stream = [_chunk({"content": "你好"}, None), _chunk({"content": "世界"}, "stop")]
+    collected = []
+    gen = silent_consume(stream, on_token=lambda c: collected.append(c))
+    try:
+        while True:
+            next(gen)
+    except StopIteration as si:
+        result = si.value
+    assert collected == ["你好", "世界"]
+    assert result.text_parts == ["你好", "世界"]
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

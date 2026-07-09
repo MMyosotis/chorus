@@ -118,13 +118,18 @@ def drain_stream(stream) -> StreamResult:
         return stop.value
 
 
-def silent_consume(stream) -> Generator[SseEvent, None, StreamResult]:
-    """静默消费：与流式消费接口对齐，不发事件，仅返回累积结果。
-
-    包成生成器是为了让共享循环内核能统一拿到累积结果；subagent 不向前端发 SSE token 事件。
-    """
-    result = drain_stream(stream)
-    if False:  # 不可达，仅用于让本函数成为生成器
+def silent_consume(stream, on_token=None) -> Generator[SseEvent, None, StreamResult]:
+    """静默消费,可选 on_token 回调透出正文 token,仅返回累积结果。"""
+    gen = _accumulate(stream)
+    result = None
+    try:
+        while True:
+            event = next(gen)
+            if on_token is not None and isinstance(event, TokenEvent):
+                on_token(event.content)
+    except StopIteration as stop:
+        result = stop.value
+    if False:  # 不可达,仅用于让本函数成为生成器
         yield
     return result
 
