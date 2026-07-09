@@ -3,6 +3,7 @@ import { ref, watch, nextTick, computed } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import PostCard from './PostCard.vue'
+import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
 
@@ -74,6 +75,7 @@ watch(
           @cancelled="$emit('hil-cancelled', $event)"
         />
         <PostCard v-else-if="msg.kind === 'postcard'" :task="msg.task" />
+        <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
         <RecoveryCard
           v-else-if="msg.kind === 'recovery'"
           :task="msg.task"

@@ -205,6 +205,15 @@ function injectTaskCards(id) {
   for (let i = list.length - 1; i >= 0; i--) {
     if (list[i].kind === 'hil' || list[i].kind === 'postcard' || list[i].kind === 'recovery') list.splice(i, 1)
   }
+  // running 卡原地刷新进度，避免轮询每 tick 重建闪烁
+  const runningTask = (graph?.tasks || []).find((t) => t.status === 'running')
+  const runningIdx = list.findIndex((m) => m.kind === 'running')
+  if (runningTask) {
+    if (runningIdx >= 0) list[runningIdx].task = runningTask
+    else list.push({ kind: 'running', task: runningTask, id: 'running:' + runningTask.id, role: 'assistant' })
+  } else if (runningIdx >= 0) {
+    list.splice(runningIdx, 1)
+  }
   if (!graph) return
   for (const t of (graph.tasks || [])) {
     if (t.status === 'awaiting_confirm') {
