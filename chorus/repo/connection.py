@@ -1,13 +1,9 @@
-"""SQLite 连接工厂：线程局部连接，统一启 WAL、外键与超时。
-
-事务上下文管理器供编排层开事务，仓储层永不开。
-"""
+"""SQLite 连接工厂：线程局部连接，统一启 WAL、外键与超时。"""
 
 from __future__ import annotations
 
 import sqlite3
 import threading
-from contextlib import contextmanager
 from pathlib import Path
 
 
@@ -33,20 +29,3 @@ class ConnectionFactory:
     def ensure_schema(self, ddl: str) -> None:
         """执行一段建表 DDL（幂等 CREATE TABLE IF NOT EXISTS）。"""
         self.get().executescript(ddl)
-
-    @contextmanager
-    def transaction(self):
-        """显式事务，不可嵌套。"""
-        conn = self.get()
-        if getattr(self._tls, "in_txn", False):
-            raise RuntimeError("transaction 不可嵌套")
-        conn.execute("BEGIN")
-        self._tls.in_txn = True
-        try:
-            yield
-            conn.execute("COMMIT")
-        except BaseException:
-            conn.execute("ROLLBACK")
-            raise
-        finally:
-            self._tls.in_txn = False

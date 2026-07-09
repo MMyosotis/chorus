@@ -128,7 +128,7 @@ def _build_assembly():
     # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, conn)], _stub_settings())
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo)], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
@@ -157,14 +157,14 @@ def _build_assembly():
         FakeStream([({"content": _finalize_content()}, "stop")]),
     ])
     subagent = SubAgentService(
-        conn, msg_svc, task_repo, art_repo,
+        msg_svc, task_repo, art_repo,
         TaskActivitiesRepository(conn), content_repo,
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
     )
 
     task_service = TaskService(
-        task_repo, art_repo, TaskActivitiesRepository(conn), content_repo, session_svc, conn,
+        task_repo, art_repo, TaskActivitiesRepository(conn), content_repo, session_svc,
     )
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,

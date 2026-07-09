@@ -1,4 +1,4 @@
-"""TaskRepository smoke test：CAS / 哑查询 / cancel_pipeline / 心跳。"""
+"""TaskRepository smoke test：状态翻转 / 哑查询 / cancel_pipeline / 心跳。"""
 from __future__ import annotations
 
 from chorus.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
@@ -30,26 +30,26 @@ def test_insert_and_get():
     assert repo.get("nope") is None
 
 
-def test_transition_success_and_conflict():
+def test_transition_updates_status():
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
     assert repo.transition("t1", "pending", "running") is True
     assert repo.get("t1").status == "running"
-    # 期望态不匹配 → False（状态已漂移）
-    assert repo.transition("t1", "pending", "running") is False
+    # 不存在的任务返回 False
+    assert repo.transition("nope", "pending", "running") is False
 
 
 def test_claim_writes_owner_id():
-    """占槽：pending→running 并写入运行租约。"""
+    """占槽：设为运行中并写运行租约。"""
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
     assert repo.claim("t1", 100.0) is True
     t = repo.get("t1")
     assert t.status == "running" and t.owner_id == 100.0
-    # 非 pending 状态占槽失败
-    assert repo.claim("t1", 200.0) is False
-    assert repo.get("t1").owner_id == 100.0  # 不覆盖
-    # running -> awaiting_confirm -> finished 走纯翻转，updated_at 自动刷新
+    # 再次占槽覆盖租约归属
+    assert repo.claim("t1", 200.0) is True
+    assert repo.get("t1").owner_id == 200.0
+    # running -> awaiting_confirm -> finished，updated_at 自动刷新
     assert repo.transition("t1", "running", "awaiting_confirm") is True
     assert repo.transition("t1", "awaiting_confirm", "finished") is True
     assert repo.get("t1").status == "finished"

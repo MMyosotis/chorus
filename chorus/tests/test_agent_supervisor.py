@@ -77,7 +77,7 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
     hooks = HookRegistry()
     intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
     tool_dispatcher = ToolDispatch([
-        CreatePlanTool(task_repo, content_repo, conn),
+        CreatePlanTool(task_repo, content_repo),
         LoadSkillTool(skill_loader),
         UpdateIntentStateTool(intent_state),
     ], _stub_settings())

@@ -27,7 +27,6 @@ from chorus.domain.task.activity import (
     tool_done_activity,
     tool_started_activity,
 )
-from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -124,7 +123,6 @@ class SubagentLoopStrategy:
 class SubAgentService:
     def __init__(
         self,
-        conn: ConnectionFactory,
         message_service: MessageService,
         task_repo: TaskRepository,
         task_artifacts_repo: TaskArtifactsRepository,
@@ -134,7 +132,6 @@ class SubAgentService:
         chat_model_provider: ChatModelProvider,
         loop: AgentLoop,
     ):
-        self._conn = conn
         self._message = message_service
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
@@ -188,10 +185,9 @@ class SubAgentService:
             self._fail(task, error)
 
     def _fail(self, task, error: str) -> None:
-        """事务内 CAS 翻转为失败并写错误信息。"""
-        with self._conn.transaction():
-            self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.FAILED)
-            self._content_repo.set_error(task.id, error)
+        """翻转为失败并写错误信息。"""
+        self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.FAILED)
+        self._content_repo.set_error(task.id, error)
 
         self._write_activity(task, failed_activity(error))
 
@@ -230,10 +226,9 @@ class SubAgentService:
         )
         is_terminal = to_status == TaskStatus.FINISHED
 
-        # 事务内先 CAS 再落产物，状态与产物原子可见，漂移则两者皆不落
-        with self._conn.transaction():
-            self._task_repo.transition(task.id, TaskStatus.RUNNING, to_status)
-            self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
+        # 先翻状态再落产物，最后写活动
+        self._task_repo.transition(task.id, TaskStatus.RUNNING, to_status)
+        self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
 
         if is_terminal:
             self._write_activity(task, done_activity(narrative))

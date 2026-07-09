@@ -13,7 +13,6 @@ from chorus.domain.task import (
     ValidationError,
     validate_steps,
 )
-from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
@@ -73,12 +72,10 @@ class CreatePlanTool(Tool):
         self,
         task_repo: TaskRepository,
         content_repo: TaskContentRepository,
-        conn: ConnectionFactory,
         intent_state: IntentStateService | None = None,
     ):
         self._task_repo = task_repo
         self._content_repo = content_repo
-        self._conn = conn
         self._intent_state = intent_state
 
     def display(self, arguments: dict) -> str:
@@ -117,15 +114,12 @@ class CreatePlanTool(Tool):
         except ValidationError as e:
             return Reply(e.correction)
 
-        try:
-            with self._conn.transaction():
-                for task, content in pairs:
-                    self._task_repo.insert(task)
-                    self._content_repo.insert(content)
-            if self._intent_state is not None:
-                self._intent_state.mark_dispatched(ctx.session_id)
-        except Exception as e:
-            return Reply(f"建图落库失败，请重试: {e}")
+        for task, content in pairs:
+            self._task_repo.insert(task)
+            self._content_repo.insert(content)
+
+        if self._intent_state is not None:
+            self._intent_state.mark_dispatched(ctx.session_id)
 
         roles = ", ".join(f"{task.agent_type}#{i}" for i, (task, _) in enumerate(pairs, 1))
         return Terminal(

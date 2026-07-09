@@ -94,14 +94,14 @@ def create_app() -> FastAPI:
         tool_dispatcher, agent_loop, intent_state_service,
     )
     subagent_service = SubAgentService(
-        conn, message_service, task_repo, task_artifacts_repo,
+        message_service, task_repo, task_artifacts_repo,
         task_activities_repo, task_content_repo,
         tool_dispatcher, chat_models,
         agent_loop,
     )
     task_service = TaskService(
         task_repo, task_artifacts_repo,
-        task_activities_repo, task_content_repo, session_service, conn,
+        task_activities_repo, task_content_repo, session_service,
     )
     scheduler = TaskScheduler(
         task_repo, trace_service, subagent_service.run, session_service,

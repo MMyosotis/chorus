@@ -1,6 +1,6 @@
 """task 路由 HTTP 适配层测试：5 端点的状态码映射。
 
-只断言适配行为（KeyError→404 / ConflictError→409 / 会话不存在→404），不测业务逻辑；最小 app + 依赖注入 fake service，不起 lifespan。
+只断言适配行为（会话不存在→404 / 参数越界→422），不测业务逻辑；最小 app + 依赖注入 fake service，不起 lifespan。
 """
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from fastapi.testclient import TestClient
 
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.routes.task import router as task_router
-from chorus.services.task import ConflictError
 
 
 class FakeSessionService:
@@ -25,8 +24,7 @@ class FakeSessionService:
 class FakeTaskService:
     """脚本化 stub：按方法与键查表，命中返回值；存的是异常则抛出。
 
-    未注册的调用默认抛 KeyError（对应路由 404）。冲突场景显式置入 ConflictError。
-    13 个用例共用同一份 fake，靠键区分各用例的预期副作用。
+    未注册的调用默认抛 KeyError（对应路由 500）。11 个用例共用同一份 fake，靠键区分各用例的预期副作用。
     """
 
     def __init__(self):
@@ -85,15 +83,6 @@ def test_get_tasks_ok():
     assert r.json() == {"pipeline_id": "p1", "active": True, "tasks": []}
 
 
-def test_confirm_conflict():
-    """冲突态 → 409。"""
-    task = FakeTaskService()
-    task.set("confirm", "t1", ConflictError("task 状态 running 不可确认"))
-    r = _client(FakeSessionService({"s1"}), task).post("/api/tasks/t1/confirm", json={"selected": 0})
-    assert r.status_code == 409
-    assert "不可确认" in r.json()["detail"]
-
-
 def test_confirm_ok():
     """正常 → 200 + 透出 service 返回体。"""
     task = FakeTaskService()
@@ -101,16 +90,6 @@ def test_confirm_ok():
     r = _client(FakeSessionService({"s1"}), task).post("/api/tasks/t1/confirm", json={"selected": 0})
     assert r.status_code == 200
     assert r.json()["status"] == "finished"
-
-
-def test_retry_conflict():
-    """冲突态 → 409。"""
-    task = FakeTaskService()
-    task.set("retry", "t1", ConflictError("task 状态 finished 不可重跑"))
-    r = _client(FakeSessionService({"s1"}), task).post(
-        "/api/tasks/t1/retry", json={"feedback": {"note": "改标题"}}
-    )
-    assert r.status_code == 409
 
 
 def test_retry_ok():

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.services.session import SessionService
-from chorus.services.task import ConflictError, TaskService
+from chorus.services.task import TaskService
 from chorus.domain.task import dump_task_graph
 
 router = APIRouter(prefix="/api")
@@ -53,10 +53,7 @@ def confirm_task(
     req: ConfirmRequest,
     task: TaskService = Depends(provide_task_service),
 ):
-    try:
-        return task.confirm(task_id, req.selected)
-    except ConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    return task.confirm(task_id, req.selected)
 
 
 @router.post("/tasks/{task_id}/retry")
@@ -65,10 +62,7 @@ def retry_task(
     req: RetryRequest,
     task: TaskService = Depends(provide_task_service),
 ):
-    try:
-        return task.retry(task_id, req.feedback)
-    except ConflictError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+    return task.retry(task_id, req.feedback)
 
 
 @router.post("/sessions/{session_id}/pipeline:cancel")

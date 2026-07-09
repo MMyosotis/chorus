@@ -64,8 +64,8 @@ def test_is_title_set_and_set_title():
     assert got.title == "自动标题"
     assert got.title_generated is True
     assert svc.is_title_set(s.id) is True
-    assert svc.set_title(s.id, "另一个") is False          # 已设 → no-op（锁内复检）
-    assert svc.get(s.id).title == "自动标题"                 # 不变
+    assert svc.set_title(s.id, "另一个") is True               # 无条件覆盖
+    assert svc.get(s.id).title == "另一个"
     s2 = svc.create("x")
     assert svc.set_title(s2.id, "   ") is False             # 归一为空 → 跳过
     assert svc.get(s2.id).title == "x"

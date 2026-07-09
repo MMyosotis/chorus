@@ -1,4 +1,4 @@
-"""TaskScheduler smoke：派发 + zombie 回收 + CAS 竞态。"""
+"""TaskScheduler smoke：派发 + zombie 回收 + 占槽失败跳过。"""
 from __future__ import annotations
 
 import tempfile
@@ -32,7 +32,7 @@ def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
 
 
 def test_dispatch_pending_with_finished_deps():
-    """pending + deps 全 finished → CAS running + 调 subagent_run。"""
+    """pending + deps 全 finished → 占槽 running + 调 subagent_run。"""
     conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "dep", status="finished")
     _mk(task_repo, "t1", status="pending", deps=["dep"])
@@ -59,7 +59,7 @@ def test_blocked_by_unfinished_dep():
 
 
 def test_zombie_reclaim():
-    """running + 心跳超时 → CAS running→pending。"""
+    """running + 心跳超时 → 翻转回 pending。"""
     conn, task_repo, trace_svc = _setup()
     _mk(task_repo, "t1", status="running", updated_at=0.0)  # 很久以前的心跳
     sched = TaskScheduler(task_repo, trace_svc, lambda tid: None, _fake_session(),

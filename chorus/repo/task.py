@@ -92,18 +92,17 @@ class TaskRepository:
         return TaskRow(**dict(row)).to_domain() if row else None
 
     def transition(self, task_id: str, from_status: str, to_status: str) -> bool:
-        """原子状态翻转：据原状态匹配更新，看影响行数。更新时间自动刷新。"""
+        """状态翻转：直接设目标状态，更新时间自动刷新。返回是否命中行。"""
         cur = self._conn.get().execute(
-            "UPDATE tasks SET status=?, updated_at=? WHERE id=? AND status=?",
-            (to_status, time.time(), task_id, from_status),
+            "UPDATE tasks SET status=?, updated_at=? WHERE id=?",
+            (to_status, time.time(), task_id),
         )
         return cur.rowcount > 0
 
     def claim(self, task_id: str, now: float) -> bool:
-        """scheduler 派发占槽：待执行转运行中，顺带写归属与更新时间（同戳）。"""
+        """scheduler 派发占槽：设为运行中并写归属与更新时间。"""
         cur = self._conn.get().execute(
-            "UPDATE tasks SET status='running', owner_id=?, updated_at=? "
-            "WHERE id=? AND status='pending'",
+            "UPDATE tasks SET status='running', owner_id=?, updated_at=? WHERE id=?",
             (now, now, task_id),
         )
         return cur.rowcount > 0
@@ -115,17 +114,16 @@ class TaskRepository:
         )
 
     def cancel_pipeline(self, pipeline_id: str, statuses: Iterable[str]) -> int:
-        """事务内批量取消非终态任务，返回受影响行数。状态集合由编排层传入。"""
+        """批量取消非终态任务，返回受影响行数。状态集合由编排层传入。"""
         statuses = list(statuses)
         placeholders = ",".join("?" * len(statuses))
         now = time.time()
-        with self._conn.transaction():
-            cur = self._conn.get().execute(
-                f"UPDATE tasks SET status='cancelled', updated_at=? "
-                f"WHERE pipeline_id=? AND status IN ({placeholders})",
-                (now, pipeline_id, *statuses),
-            )
-            return cur.rowcount
+        cur = self._conn.get().execute(
+            f"UPDATE tasks SET status='cancelled', updated_at=? "
+            f"WHERE pipeline_id=? AND status IN ({placeholders})",
+            (now, pipeline_id, *statuses),
+        )
+        return cur.rowcount
 
     def find_pending_with_deps(self) -> list[tuple[Task, list[Task]]]:
         """返回所有待执行任务及其依赖，调度判定交领域。"""

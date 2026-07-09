@@ -1,6 +1,6 @@
 """任务服务：人工确认编排与任务图视图。
 
-状态合法性由领域保证，仓储原子翻转，翻转失败抛冲突错；任务图优先进行中流水线，无则取最近已完成。
+状态合法性由领域保证，仓储直接翻转；任务图优先进行中流水线，无则取最近已完成。
 """
 from __future__ import annotations
 
@@ -24,10 +24,6 @@ from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
 
 
-class ConflictError(Exception):
-    """状态冲突或前置条件不满足。"""
-
-
 class TaskService:
     def __init__(
         self,
@@ -36,14 +32,12 @@ class TaskService:
         task_activities_repo: TaskActivitiesRepository,
         content_repo: TaskContentRepository,
         session_service: SessionService,
-        conn,
     ):
         self._task_repo = task_repo
         self._artifacts_repo = task_artifacts_repo
         self._activities_repo = task_activities_repo
         self._content_repo = content_repo
         self._session = session_service
-        self._conn = conn
 
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
         """确认推进：翻转待确认→完成，候选角色写回选中项（在翻转之后）。"""
@@ -54,13 +48,10 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.FINISHED}
 
     def retry(self, task_id: str, feedback: dict) -> dict:
-        """带反馈重跑本步：CAS 翻转回待执行并写回反馈，允许从待确认或失败态。"""
-        for from_status in (TaskStatus.AWAITING_CONFIRM, TaskStatus.FAILED):
-            if not self._task_repo.transition(task_id, from_status, TaskStatus.PENDING):
-                continue
-            self._content_repo.set_feedback(task_id, feedback)
-            return {"id": task_id, "status": TaskStatus.PENDING}
-        raise ConflictError("CAS 失败（状态已漂移）")
+        """带反馈重跑本步：翻回待执行并写回反馈。"""
+        self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM, TaskStatus.PENDING)
+        self._content_repo.set_feedback(task_id, feedback)
+        return {"id": task_id, "status": TaskStatus.PENDING}
 
     def cancel_pipeline(self, session_id: str) -> dict:
         """放弃整条流水线：批量取消进行中流水线的非终态任务。无进行中则幂等返 0。"""
@@ -99,7 +90,7 @@ class TaskService:
         return active[0].pipeline_id if active else None
 
     def _set_selected(self, task_id: str, agent_type: str, selected: Optional[int]) -> None:
-        """把选中候选写回候选角色产物（子 agent 事务内原子写入，必就绪）。"""
+        """把选中候选写回候选角色产物（子 agent 已先落，必就绪）。"""
         art = self._artifacts_repo.load(task_id)
         idea = dataclasses.replace(art.artifacts, selected=selected)
         self._artifacts_repo.upsert(

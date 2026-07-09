@@ -4,8 +4,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from chorus.domain.session import Session
 from chorus.domain.task import (
     ActivityDraft,
@@ -23,7 +21,7 @@ from chorus.repo.task_activities import TaskActivitiesRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
-from chorus.services.task import ConflictError, TaskService
+from chorus.services.task import TaskService
 from chorus.tests._helpers import fresh_conn, seed_session
 
 
@@ -36,7 +34,7 @@ def _setup():
     content_repo = TaskContentRepository(conn)
     session_svc = SessionService(SessionRepository(conn))
     svc = TaskService(
-        task_repo, TaskArtifactsRepository(conn), act_repo, content_repo, session_svc, conn,
+        task_repo, TaskArtifactsRepository(conn), act_repo, content_repo, session_svc,
     )
     return svc, task_repo, content_repo
 
@@ -72,8 +70,8 @@ def test_confirm_writes_terminal_updated_at():
     assert got.updated_at > 0.0
 
 
-def test_retry_writes_feedback_and_cas():
-    """重跑事务内 CAS 翻转 + 反馈写入内容表（不在调度行）。"""
+def test_retry_writes_feedback():
+    """重跑翻回待执行 + 反馈写入内容表（不在调度行）。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
     res = svc.retry("t1", feedback={"note": "标题不够吸引"})
@@ -85,20 +83,12 @@ def test_retry_writes_feedback_and_cas():
 
 
 def test_retry_from_failed():
-    """失败态也可重跑回 pending（CAS 第二态命中）。"""
+    """失败态也可重跑回 pending。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "script", "failed")
     res = svc.retry("t1", feedback={"note": "重试"})
     assert res["status"] == TaskStatus.PENDING
     assert task_repo.get("t1").status == TaskStatus.PENDING
-
-
-def test_retry_wrong_status_conflict():
-    """不可重跑态（如 running）两态 CAS 都失败 → 抛冲突。"""
-    svc, task_repo, content_repo = _setup()
-    _mk(task_repo, content_repo, "t1", "idea", "running")
-    with pytest.raises(ConflictError):
-        svc.retry("t1", feedback={})
 
 
 def test_cancel_pipeline():
@@ -168,7 +158,7 @@ def test_get_graph_includes_current_activity_and_timestamps():
     art_repo = TaskArtifactsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)), conn)
+    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", dependencies=[],
@@ -196,7 +186,7 @@ def test_get_graph_error_from_content():
     art_repo = TaskArtifactsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)), conn)
+    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[], created_at=0.0, updated_at=1.0,
@@ -217,7 +207,7 @@ def test_get_activities_returns_serialized_list():
     art_repo = TaskArtifactsRepository(conn)
     act_repo = TaskActivitiesRepository(conn)
     content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)), conn)
+    svc = TaskService(task_repo, art_repo, act_repo, content_repo, _SS(_SR(conn)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[], created_at=0.0, updated_at=0.0,

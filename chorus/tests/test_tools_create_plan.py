@@ -33,7 +33,7 @@ def _build():
     seed_session(conn, sid="s1")
     repo = TaskRepository(conn)
     content_repo = TaskContentRepository(conn)
-    tool = CreatePlanTool(repo, content_repo, conn)
+    tool = CreatePlanTool(repo, content_repo)
     ctx = ToolContext(session_id="s1")
     return conn, repo, content_repo, tool, ctx
 
@@ -63,7 +63,7 @@ def test_unconfirmed_intent_blocks_plan_creation():
     repo = TaskRepository(conn)
     content_repo = TaskContentRepository(conn)
     intent = IntentStateService(IntentStateRepository(conn), SessionService(SessionRepository(conn)))
-    tool = CreatePlanTool(repo, content_repo, conn, intent)
+    tool = CreatePlanTool(repo, content_repo, intent)
     outcome = tool.run(_args(), ToolContext(session_id="s1"))
     assert isinstance(outcome, Reply)
     assert "blocked" in outcome.content

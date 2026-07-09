@@ -1,4 +1,4 @@
-"""SubAgentService.run smoke：ReAct + 产物解析 + CAS 待复核/完成。
+"""SubAgentService.run smoke：ReAct + 产物解析 + 翻转待复核/完成。
 
 覆盖自纠、协作式取消、最终产出轮漂移等场景。
 """
@@ -123,7 +123,7 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo,
     _provider = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)
     return SubAgentService(
-        conn, msg_svc, task_repo, art_repo, TaskActivitiesRepository(conn),
+        msg_svc, task_repo, art_repo, TaskActivitiesRepository(conn),
         content_repo, tool_dispatcher,
         _provider, loop,
     )
@@ -139,7 +139,7 @@ def _model_responses(trace_svc, task_id="t1"):
 
 
 def test_subagent_idea_awaiting_confirm():
-    """idea 子 Agent：无工具轮直接产出 → CAS running→awaiting_confirm + 写 artifacts。"""
+    """idea 子 Agent：无工具轮直接产出 → 翻转 running→awaiting_confirm + 写 artifacts。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     # 一轮文本回复（产出协议）
@@ -161,7 +161,7 @@ def test_subagent_idea_awaiting_confirm():
 
 
 def test_subagent_finalize_finished():
-    """finalize 子 Agent：产出 PostCard → CAS running→finished（不走 awaiting_confirm）。"""
+    """finalize 子 Agent：产出 PostCard → 翻转 running→finished（不走 awaiting_confirm）。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
     card = {"title": "夏日晚风", "cover": {"url": "http://x/a.jpg"},
@@ -205,7 +205,7 @@ def test_subagent_react_with_tool():
 
 
 def test_subagent_failed_on_persistent_bad_output():
-    """连续产物解析失败撞步数上限 → CAS running→failed。
+    """连续产物解析失败撞步数上限 → 翻转 running→failed。
 
     每轮坏产出喂回自纠，模型仍坏，撞步数上限才判死。
     """

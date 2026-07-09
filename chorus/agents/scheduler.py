@@ -71,13 +71,8 @@ class TaskScheduler:
         if not task.can_schedule(deps):
             return
 
-        # 占槽：翻转为运行中并写入租约归属标识
+        # 占槽：设为运行中并写租约归属，行已不存在则跳过
         if not self._task_repo.claim(task.id, time.time()):
-            self._trace_schedule(task.session_id, Schedule(
-                event="cas_conflict", task_id=task.id,
-                from_status=TaskStatus.PENDING, to_status=TaskStatus.RUNNING,
-                detail="CAS 失败（状态已漂移）",
-            ))
             return
 
         self._trace_schedule(task.session_id, Schedule(

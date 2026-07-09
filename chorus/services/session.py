@@ -62,13 +62,14 @@ class SessionService:
         return session is not None and session.title_generated
 
     def set_title(self, session_id: str, title: str) -> bool:
-        """落自动标题：宽容归一化，空则跳过超长则截断。SQL 原子复检+写入防抢先定名覆盖。"""
+        """落自动标题：宽容归一化，空则跳过超长则截断。"""
         title = normalize_title(title)
         if not title:
             return False
-        return self._session_repo.set_title_if_unset(
-            session_id, title=title, updated_at=time.time()
+        self._session_repo.set_title(
+            session_id, title=title, title_generated=True, updated_at=time.time()
         )
+        return True
 
     def touch(self, session_id: str) -> None:
         """刷新会话更新时间，列表排序依据，由编排层在消息落库后调用。"""

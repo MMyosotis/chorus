@@ -115,7 +115,7 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo
     hooks.register("PostToolUse", trace.on_tool_result)
     loop = AgentLoop(hooks, disp, 1024)
     return SubAgentService(
-        conn, msg_svc, task_repo, art_repo, act_repo, content_repo,
+        msg_svc, task_repo, art_repo, act_repo, content_repo,
         disp, stub_chat_model_provider(client), loop,
     )
 
