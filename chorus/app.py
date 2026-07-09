@@ -75,7 +75,7 @@ def create_app() -> FastAPI:
     aside_generator = AsideGenerator(title_entry.client, title_entry.model_id)
 
     tool_dispatcher = build_tool_dispatch(
-        settings_service, task_repo, task_content_repo, conn, skill_loader, intent_state_service,
+        settings_service, task_repo, task_content_repo, skill_loader, intent_state_service,
     )
 
     hooks = HookRegistry()
