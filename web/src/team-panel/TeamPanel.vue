@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 
-import RoleCard from './RoleCard.vue'
+import TocCard from './TocCard.vue'
 import IntentStateCard from './IntentStateCard.vue'
 
 const props = defineProps({
@@ -35,24 +35,15 @@ function onFocus(id) {
     <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
     <template v-if="tasks.length">
       <div class="team-head">
-        <div class="h">创作团队</div>
-        <div class="sub">{{ tasks.length }} 个角色 · 流水线协作中</div>
+        <div class="h">目录</div>
       </div>
-      <section class="role-list">
-        <RoleCard
-          v-for="t in tasks"
-          :key="t.id"
-          :task="t"
-          :focused="t.id === focusedTaskId"
-          @focus="onFocus(t.id)"
+      <section class="toc-wrap">
+        <TocCard
+          :tasks="tasks"
+          :focused-task-id="focusedTaskId"
+          @focus="onFocus"
         />
       </section>
-      <div class="legend">
-        <span><i class="dot-running"></i>工作中</span>
-        <span><i class="dot-waiting"></i>待确认</span>
-        <span><i class="dot-done"></i>已完成</span>
-        <span><i class="dot-idle"></i>排队</span>
-      </div>
     </template>
   </aside>
 </template>
@@ -94,43 +85,12 @@ function onFocus(id) {
   margin-top: 2px;
 }
 
-.role-list {
+.toc-wrap {
   flex: 1;
   overflow-y: auto;
-  padding: 0 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding: 4px 18px 18px;
   scrollbar-width: thin;
 }
-
-.legend {
-  flex-shrink: 0;
-  padding: 10px 16px;
-  border-top: 1px solid var(--ch-border);
-  font-size: 11px;
-  color: var(--ch-faint);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.dot-running { background: var(--ch-orange); }
-.dot-waiting { background: var(--ch-primary); }
-.dot-done { background: var(--ch-green); }
-.dot-idle { background: var(--ch-faint); }
 
 .team-empty {
   color: var(--ch-faint);
