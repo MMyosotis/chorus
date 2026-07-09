@@ -1,6 +1,6 @@
 """系统提示词纯函数断言：supervisor / subagent prompt 拼装规则。
 
-锚定 prompt 含关键锚点（create_plan 工具、profiles 注入、ARTIFACTS/NARRATIVE 段标记、禁 emoji）。
+锚定 prompt 含关键锚点（create_plan 工具、profiles 注入、Markdown 产出协议与 chorus 注释话术、禁 emoji）。
 """
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from chorus.domain.prompt import (
 def test_subagent_prompts():
     for at in ("idea", "script", "image", "finalize"):
         p = build_subagent_system_prompt(at)
-        assert "<<<ARTIFACTS:json>>>" in p
-        assert "<<<NARRATIVE:json>>>" in p
+        assert "<!-- chorus:awaiting=" in p
+        assert "<!-- chorus:done=" in p
+        assert "<<<ARTIFACTS" not in p
         assert "禁用任何 emoji" in p
 
 

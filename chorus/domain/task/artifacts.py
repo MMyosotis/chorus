@@ -43,7 +43,7 @@ class IdeaArtifacts:
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ScriptBlock:
-    kind: str
+    kind: Literal["heading", "paragraph", "list", "quote"]
     text: str
 
 

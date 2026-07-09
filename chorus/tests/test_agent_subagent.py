@@ -4,7 +4,6 @@
 """
 from __future__ import annotations
 
-import json
 import tempfile
 import types
 from pathlib import Path
@@ -143,12 +142,7 @@ def test_subagent_idea_awaiting_confirm():
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     # 一轮文本回复（产出协议）
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": "定了"}
-    content = (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
-    )
+    content = "<!-- chorus:awaiting=y -->\n<!-- chorus:done=定了 -->\n\n### t\n- 视角：a\n- 理由：r"
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
@@ -164,14 +158,7 @@ def test_subagent_finalize_finished():
     """finalize 子 Agent：产出 PostCard → 翻转 running→finished（不走 awaiting_confirm）。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
-    card = {"title": "夏日晚风", "cover": {"url": "http://x/a.jpg"},
-            "sections": [{"kind": "paragraph", "text": "一段"}],
-            "tags": ["#夏天"], "summary": "摘要"}
-    narrative = {"awaiting_line": "", "done_line": "汇总完成"}
-    content = (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(card)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
-    )
+    content = "<!-- chorus:awaiting= -->\n<!-- chorus:done=汇总完成 -->\n\n# 夏日晚风\n\n一段\n\n#标签：#夏天"
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
@@ -183,12 +170,7 @@ def test_subagent_react_with_tool():
     """子 Agent 先调工具再产出：两轮 ReAct，trace 留两条 model_response。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": "z"}
-    content = (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
-    )
+    content = "<!-- chorus:awaiting=y -->\n<!-- chorus:done=z -->\n\n### t\n- 视角：a\n- 理由：r"
     # 第 1 轮工具调用，第 2 轮产出
     client = FakeClient([
         FakeStream([({"tool_calls": [types.SimpleNamespace(
@@ -228,12 +210,7 @@ def test_subagent_self_corrects_on_bad_output():
     """首次解析错 → correction 喂回 → 模型重出正确产物 → awaiting_confirm。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": "定了"}
-    good = (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
-    )
+    good = "<!-- chorus:awaiting=y -->\n<!-- chorus:done=定了 -->\n\n### t\n- 视角：a\n- 理由：r"
     # 第 1 轮坏产出，第 2 轮正确产出
     client = FakeClient([
         FakeStream([({"content": "乱七八糟没有段"}, "stop")]),
@@ -249,13 +226,8 @@ def test_subagent_self_corrects_on_bad_output():
 
 
 def _idea_content(done_line="DONE_MARKER"):
-    """构造合法 idea 产出文本（artifacts + narrative 两段）。"""
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": done_line}
-    return (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
-    )
+    """构造合法 idea 产出文本。"""
+    return f"<!-- chorus:awaiting=y -->\n<!-- chorus:done={done_line} -->\n\n### t\n- 视角：a\n- 理由：r"
 
 
 def _cancel_to(task_repo, tid, to_status="cancelled"):

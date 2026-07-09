@@ -2,7 +2,6 @@
 新增角色只需加一条档案，文案禁 emoji，切段校验还原随档案内聚。"""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Any, Type
 
@@ -16,6 +15,14 @@ from chorus.domain.task.artifacts import (
     ScriptArtifacts,
 )
 from chorus.domain.task.errors import ValidationError
+from chorus.domain.task.markdown import (
+    parse_idea_md,
+    parse_image_md,
+    parse_meta,
+    parse_postcard_md,
+    parse_script_md,
+    strip_markdown_meta,
+)
 
 
 @dataclass(frozen=True)
@@ -33,17 +40,24 @@ class AgentProfile:
         return self.artifacts_model(**raw)
 
     def parse_output(self, content: str) -> tuple[Any, Narrative]:
-        """切段、解析、按本角色模型校验。失败抛异常并精确定位缺段或字段错。"""
-        sections = parse_sections(content)
-        if "artifacts" not in sections:
-            raise ValidationError("缺 ARTIFACTS 段", f"请在 <<<ARTIFACTS:json>>>...<<<ARTIFACTS_END>>> 段内输出产物")
-        if "narrative" not in sections:
-            raise ValidationError("缺 NARRATIVE 段", f"请在 <<<NARRATIVE:json>>>...<<<NARRATIVE_END>>> 段内输出角色话术")
-        artifacts = _parse_json(sections["artifacts"], "ARTIFACTS")
-        artifacts = self._validate_artifacts(artifacts)
-        narrative = _parse_json(sections["narrative"], "NARRATIVE")
-        narrative = _validate_narrative(narrative)
+        """抽注释元信息与 markdown 正文，按角色解析校验。"""
+        meta = parse_meta(content)
+        if "awaiting" not in meta or "done" not in meta:
+            raise ValidationError(
+                "缺话术注释",
+                "请用 <!-- chorus:awaiting=... --> 和 <!-- chorus:done=... --> 注释给出话术",
+            )
+        body = strip_markdown_meta(content)
+        artifacts = self._parse_artifacts_md(body)
+        narrative = self._validate_narrative(meta["awaiting"], meta["done"])
         return artifacts, narrative
+
+    def _parse_artifacts_md(self, body: str) -> Any:
+        """按角色调对应 markdown 解析，再按本角色模型构造校验。"""
+        raw = _MD_PARSERS[self.artifacts_schema](body)
+        if self.artifacts_schema == "script":
+            raw = {"blocks": raw}
+        return self._validate_artifacts(raw)
 
     def _validate_artifacts(self, artifacts: Any) -> Any:
         """用本角色模型构造即校验，失败转异常并附修正提示。"""
@@ -53,6 +67,16 @@ class AgentProfile:
             raise ValidationError(
                 f"ARTIFACTS 校验失败: {e}",
                 f"{self.display_name}产物须符合 {self.artifacts_model.__name__} 结构",
+            ) from e
+
+    def _validate_narrative(self, awaiting: str, done: str) -> Narrative:
+        """构造即校验，失败转异常并附修正提示。"""
+        try:
+            return Narrative(awaiting_line=awaiting, done_line=done)
+        except PydValidationError as e:
+            raise ValidationError(
+                f"话术校验失败: {e}",
+                "话术须为 awaiting_line/done_line 字符串",
             ) from e
 
 
@@ -96,51 +120,9 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
 }
 
 
-_SECTION_OPEN = "<<<"
-_SECTION_CLOSE = ">>>"
-
-
-def parse_sections(content: str) -> dict[str, str]:
-    """按分隔符切段，容忍段外杂文，重复标签后者覆盖。
-
-    段格式：``<<<TAG:fmt>>>正文<<<TAG_END>>>``，``:fmt`` 可省。
-    """
-    sections: dict[str, str] = {}
-    pos = 0
-    while pos < len(content):
-        open_at = content.find(_SECTION_OPEN, pos)
-        if open_at == -1:
-            break
-        header_close = content.find(_SECTION_CLOSE, open_at)
-        if header_close == -1:
-            break
-        header = content[open_at + len(_SECTION_OPEN):header_close]
-        tag = header.split(":", 1)[0]
-
-        end_marker = f"{_SECTION_OPEN}{tag}_END{_SECTION_CLOSE}"
-        body_start = header_close + len(_SECTION_CLOSE)
-        body_end = content.find(end_marker, body_start)
-        if body_end == -1:
-            break
-
-        sections[tag.strip().lower()] = content[body_start:body_end].strip()
-        pos = body_end + len(end_marker)
-    return sections
-
-
-def _parse_json(raw: str, tag: str) -> Any:
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise ValidationError(f"{tag} 段 JSON 解析失败: {e}", f"请把 {tag} 段内容写成合法 JSON") from e
-
-
-def _validate_narrative(data: Any) -> Narrative:
-    """构造即校验，失败转异常并附修正提示。"""
-    try:
-        return Narrative(**data)
-    except PydValidationError as e:
-        raise ValidationError(
-            f"NARRATIVE 校验失败: {e}",
-            "NARRATIVE 须含 awaiting_line/done_line(字符串)",
-        ) from e
+_MD_PARSERS = {
+    "idea": parse_idea_md,
+    "script": parse_script_md,
+    "image": parse_image_md,
+    "postcard": parse_postcard_md,
+}

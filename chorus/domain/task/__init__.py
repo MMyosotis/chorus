@@ -43,7 +43,7 @@ from chorus.domain.task.pipeline import (
     StepSpec,
     validate_steps,
 )
-from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile, parse_sections
+from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.state import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
@@ -89,7 +89,6 @@ __all__ = [
     "is_legal_transition",
     "select_display_pipeline",
     "topological_order",
-    "parse_sections",
     "validate_steps",
     "PAYLOAD_TYPES",
     "build_payload",

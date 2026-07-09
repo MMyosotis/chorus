@@ -63,33 +63,12 @@ class FakeClient:
         return self._scripts.pop(0)
 
 
-def _wrap_sections(artifacts, narrative) -> str:
-    return (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts, ensure_ascii=False)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative, ensure_ascii=False)}\n<<<NARRATIVE_END>>>"
-    )
-
-
 def _idea_content() -> str:
-    artifacts = {
-        "candidates": [{"index": 0, "title": "夏日晚风", "angle": "清凉", "reason": "应季"}],
-        "selected": None,
-    }
-    narrative = {"awaiting_line": "等你挑一个", "done_line": "选题定了"}
-    return _wrap_sections(artifacts, narrative)
+    return "<!-- chorus:awaiting=等你挑一个 -->\n<!-- chorus:done=选题定了 -->\n\n### 夏日晚风\n- 视角：清凉\n- 理由：应季"
 
 
 def _finalize_content() -> str:
-    # PostCard 结构
-    card = {
-        "title": "夏日晚风",
-        "cover": {"url": "http://x/a.jpg"},
-        "sections": [{"kind": "paragraph", "text": "蝉鸣与晚风。"}],
-        "tags": ["#夏天"],
-        "summary": "一篇夏日博文",
-    }
-    narrative = {"awaiting_line": "", "done_line": "成品出炉"}
-    return _wrap_sections(card, narrative)
+    return "<!-- chorus:awaiting= -->\n<!-- chorus:done=成品出炉 -->\n\n# 夏日晚风\n\n蝉鸣与晚风。\n\n#标签：#夏天"
 
 
 def _plan_args() -> dict:

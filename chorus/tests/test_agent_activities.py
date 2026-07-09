@@ -4,7 +4,6 @@
 """
 from __future__ import annotations
 
-import json
 import types
 from pathlib import Path
 
@@ -132,18 +131,14 @@ def _mk_image_task(task_repo, content_repo, owner_id=100.0, status="running", ag
     return t
 
 
-def _image_artifacts(n=3):
-    """合法 image 产出（n 张图）+ narrative。"""
-    artifacts = {"images": [{"url": f"http://x/{i}.jpg", "caption": ""} for i in range(n)]}
-    narrative = {"awaiting_line": "图好了", "done_line": "配图完成"}
-    return artifacts, narrative
+def _idea_md(done_line="定了", awaiting_line="y"):
+    """构造合法 idea 产出 markdown。"""
+    return f"<!-- chorus:awaiting={awaiting_line} -->\n<!-- chorus:done={done_line} -->\n\n### t\n- 视角：a\n- 理由：r"
 
 
-def _content(artifacts, narrative):
-    return (
-        f"<<<ARTIFACTS:json>>>\n{json.dumps(artifacts)}\n<<<ARTIFACTS_END>>>\n"
-        f"<<<NARRATIVE:json>>>\n{json.dumps(narrative)}\n<<<NARRATIVE_END>>>"
-    )
+def _image_md(done_line="配图完成", awaiting_line="图好了"):
+    """构造合法 image 产出 markdown。"""
+    return f"<!-- chorus:awaiting={awaiting_line} -->\n<!-- chorus:done={done_line} -->\n\n### 图 1\ncaption："
 
 
 def test_started_and_awaiting_activities_written():
@@ -156,9 +151,7 @@ def test_started_and_awaiting_activities_written():
         created_at=0.0, updated_at=0.0, owner_id=100.0,
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x"))
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": "定了"}
-    client = FakeClient([FakeStream([({"content": _content(artifacts, narrative)}, "stop")])])
+    client = FakeClient([FakeStream([({"content": _idea_md()}, "stop")])])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
     acts = act_repo.list_by_task("t1")
@@ -175,7 +168,6 @@ def test_generate_image_writes_progressive_tool_done_activities():
     """
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
     _mk_image_task(task_repo, content_repo)
-    artifacts, narrative = _image_artifacts(3)
     tool_delta = {"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(name="generate_image", arguments="{}"))]}
     # 3 轮工具调用 + 1 轮产出
@@ -183,7 +175,7 @@ def test_generate_image_writes_progressive_tool_done_activities():
         FakeStream([(tool_delta, "tool_calls")]),
         FakeStream([(tool_delta, "tool_calls")]),
         FakeStream([(tool_delta, "tool_calls")]),
-        FakeStream([({"content": _content(artifacts, narrative)}, "stop")]),
+        FakeStream([({"content": _image_md()}, "stop")]),
     ])
     tool = FakeImageTool(["http://x/1.jpg", "http://x/2.jpg", "http://x/3.jpg"])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [tool])
@@ -245,8 +237,6 @@ def test_lease_takeover_prevents_stale_finalize():
     """
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
     _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": "定了"}
 
     def _takeover():
         # 新 worker 抢占：zombie 回收 + 重派
@@ -254,7 +244,7 @@ def test_lease_takeover_prevents_stale_finalize():
         task_repo.claim("t1", 999.0)
 
     client = _SideClient([
-        (_takeover, FakeStream([({"content": _content(artifacts, narrative)}, "stop")])),
+        (_takeover, FakeStream([({"content": _idea_md()}, "stop")])),
     ])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")
@@ -304,8 +294,6 @@ def test_finalize_drift_writes_no_done_activity():
     from chorus.domain.task import Task
     conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo = _setup()
     _mk_image_task(task_repo, content_repo, owner_id=100.0, agent_type="idea")
-    artifacts = {"candidates": [{"index": 0, "title": "t", "angle": "a", "reason": "r"}], "selected": None}
-    narrative = {"awaiting_line": "y", "done_line": "DONE_MARKER"}
     # 单轮：副作用取消任务 + 合法产出流；终态 CAS 必失败
     task_repo.transition("t1", "running", "cancelled")
     # cancelled→pending 不合法，用直接 SQL 重置为 running 以便进入循环
@@ -315,7 +303,7 @@ def test_finalize_drift_writes_no_done_activity():
         task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.CANCELLED)
 
     client = _SideClient([
-        (_cancel, FakeStream([({"content": _content(artifacts, narrative)}, "stop")])),
+        (_cancel, FakeStream([({"content": _idea_md(done_line="DONE_MARKER")}, "stop")])),
     ])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, act_repo, content_repo, client, [])
     sub.run("t1")

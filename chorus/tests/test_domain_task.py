@@ -23,7 +23,6 @@ from chorus.domain.task import (
     StepSpec,
     ValidationError,
     is_legal_transition,
-    parse_sections,
     select_display_pipeline,
     topological_order,
     validate_steps,
@@ -199,55 +198,31 @@ def test_render_invoke_message_injects_deps_and_feedback():
     assert bare.render_invoke({}, None) == "骨架"
 
 
-def test_parse_sections():
-    content = "引导语\n<<<ARTIFACTS:json>>>\n{\"a\":1}\n<<<ARTIFACTS_END>>>\n中间\n<<<NARRATIVE:json>>>\n{\"b\":2}\n<<<NARRATIVE_END>>>"
-    secs = parse_sections(content)
-    assert secs["artifacts"].strip() == '{"a":1}'
-    assert secs["narrative"].strip() == '{"b":2}'
-
-
 def test_parse_output_idea_ok():
     content = (
-        '<<<ARTIFACTS:json>>>\n{"candidates":[{"index":0,"title":"t","angle":"a","reason":"r"}],"selected":null}\n<<<ARTIFACTS_END>>>\n'
-        '<<<NARRATIVE:json>>>\n{"awaiting_line":"y","done_line":"z"}\n<<<NARRATIVE_END>>>'
+        "<!-- chorus:awaiting=等你挑 -->\n<!-- chorus:done=选定方向 -->\n\n"
+        "### 阳台慢时光\n- 视角：物候\n- 理由：光线挪动"
     )
     artifacts, narrative = AGENT_PROFILES["idea"].parse_output(content)
     assert len(artifacts.candidates) == 1
-    assert artifacts.candidates[0].title == "t"
-    assert narrative.done_line == "z"
-    assert narrative.awaiting_line == "y"
+    assert artifacts.candidates[0].title == "阳台慢时光"
+    assert narrative.awaiting_line == "等你挑"
+    assert narrative.done_line == "选定方向"
 
 
-def test_parse_output_narrative_bad_type():
-    """narrative 字段类型错（done_line 非 str）→ ValidationError。"""
-    content = (
-        '<<<ARTIFACTS:json>>>\n{"candidates":[]}\n<<<ARTIFACTS_END>>>\n'
-        '<<<NARRATIVE:json>>>\n{"awaiting_line":"y","done_line":123}\n<<<NARRATIVE_END>>>'
-    )
+def test_parse_output_narrative_missing():
+    """缺 awaiting/done 注释 -> ValidationError。"""
     with pytest.raises(ValidationError):
-        AGENT_PROFILES["idea"].parse_output(content)
+        AGENT_PROFILES["idea"].parse_output("### t\n- 视角：a\n- 理由：r")
 
 
 def test_parse_output_finalize_postcard():
-    import json as _json
-    card = {
-        "title": "夏日晚风",
-        "cover": {"url": "http://x/a.jpg"},
-        "sections": [{"kind": "paragraph", "text": "一段"}],
-        "tags": ["#夏天"],
-        "summary": "摘要",
-    }
     content = (
-        f'<<<ARTIFACTS:json>>>\n{_json.dumps(card)}\n<<<ARTIFACTS_END>>>\n'
-        f'<<<NARRATIVE:json>>>\n{{"awaiting_line":"","done_line":""}}\n<<<NARRATIVE_END>>>'
+        "<!-- chorus:awaiting= -->\n<!-- chorus:done= -->\n\n"
+        "# 夏日晚风\n\n一段正文"
     )
     artifacts, _ = AGENT_PROFILES["finalize"].parse_output(content)
     assert artifacts.title == "夏日晚风"
-
-
-def test_parse_output_missing_section():
-    with pytest.raises(ValidationError):
-        AGENT_PROFILES["idea"].parse_output("<<<ARTIFACTS:json>>>\n{}\n<<<ARTIFACTS_END>>>")  # 缺 NARRATIVE
 
 
 def _task(tid, deps=None, created_at=0.0):
