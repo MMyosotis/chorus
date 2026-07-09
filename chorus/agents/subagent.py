@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
+from time import perf_counter
 from typing import Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
@@ -17,6 +18,8 @@ from chorus.domain.task import (
     TaskStatus,
     ValidationError,
 )
+from chorus.domain.task.aside import AsideGenerator
+from chorus.domain.task.markdown import UnitCounter
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -26,6 +29,7 @@ from chorus.services.message import MessageService
 from chorus.tools import ToolDispatch
 
 _MAX_STEPS = 8
+_UNIT_MARKER = {"idea": "### ", "script": "## ", "image": "### ", "finalize": "## "}
 
 
 class SubagentLoopStrategy:
@@ -60,7 +64,21 @@ class SubagentLoopStrategy:
         return [{"role": "system", "content": prompt}] + self.history
 
     def consume(self, stream):
-        return silent_consume(stream)
+        chars = [0]
+        last_flush = [perf_counter()]
+        last_flush_chars = [0]
+        counter = UnitCounter(_UNIT_MARKER.get(self.task.agent_type, "## "))
+
+        def on_token(content):
+            chars[0] += len(content)
+            counter.feed(content)
+            now = perf_counter()
+            if chars[0] - last_flush_chars[0] >= 16 or now - last_flush[0] >= 0.5:
+                self._progress_repo.upsert_progress(
+                    self.task.id, composing_chars=chars[0], composing_units=counter.count)
+                last_flush_chars[0] = chars[0]
+                last_flush[0] = now
+        return silent_consume(stream, on_token=on_token)
 
     def before_dispatch(self, call):
         pass
@@ -111,6 +129,7 @@ class SubAgentService:
         tool_dispatcher: ToolDispatch,
         chat_model_provider: ChatModelProvider,
         loop: AgentLoop,
+        aside_generator: AsideGenerator,
     ):
         self._message = message_service
         self._task_repo = task_repo
@@ -120,6 +139,7 @@ class SubAgentService:
         self._tools = tool_dispatcher
         self._models = chat_model_provider
         self._loop = loop
+        self._aside = aside_generator
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
@@ -135,6 +155,10 @@ class SubAgentService:
         if not self._lease_valid(task.id, owner_id):
             return
 
+        invoke = self._build_invoke(task, content)
+        aside = self._aside.generate(task.agent_type, invoke)
+        if aside:
+            self._progress.upsert_progress(task.id, aside=aside)
         self._progress.upsert_progress(
             task.id, composing_label=AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
@@ -151,7 +175,7 @@ class SubAgentService:
             progress_total=content.progress_total if content else None,
             owner_id=owner_id,
             profile=AGENT_PROFILES[task.agent_type],
-            invoke=self._build_invoke(task, content),
+            invoke=invoke,
             task_repo=self._task_repo,
             progress_repo=self._progress,
             finalize=self._finalize,

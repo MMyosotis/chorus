@@ -140,6 +140,7 @@ def _build_assembly():
         TaskProgressRepository(conn), content_repo,
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
+        types.SimpleNamespace(generate=lambda agent_type, invoke: None),
     )
 
     task_service = TaskService(

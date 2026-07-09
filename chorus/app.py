@@ -22,6 +22,7 @@ from chorus.config import (
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
 from chorus.domain.title import TitleGenerationService
+from chorus.domain.task.aside import AsideGenerator
 from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter, emit_message_start
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     # 标题生成固定用默认模型，不随用户当前设置变动
     title_entry = chat_models.title_entry()
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
+    aside_generator = AsideGenerator(title_entry.client, title_entry.model_id)
 
     tool_dispatcher = build_tool_dispatch(
         settings_service, task_repo, task_content_repo, conn, skill_loader, intent_state_service,
@@ -97,7 +99,7 @@ def create_app() -> FastAPI:
         message_service, task_repo, task_artifacts_repo,
         task_progress_repo, task_content_repo,
         tool_dispatcher, chat_models,
-        agent_loop,
+        agent_loop, aside_generator,
     )
     task_service = TaskService(
         task_repo, task_artifacts_repo,

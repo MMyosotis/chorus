@@ -109,7 +109,7 @@ def _stub_settings():
     return _S()
 
 
-def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client):
+def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client, aside=None):
     from chorus.repo.task_progress import TaskProgressRepository
     hooks = HookRegistry()
     tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
@@ -121,10 +121,12 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo,
 
     _provider = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)
+    if aside is None:
+        aside = types.SimpleNamespace(generate=lambda agent_type, invoke: None)
     return SubAgentService(
         msg_svc, task_repo, art_repo, TaskProgressRepository(conn),
         content_repo, tool_dispatcher,
-        _provider, loop,
+        _provider, loop, aside,
     )
 
 

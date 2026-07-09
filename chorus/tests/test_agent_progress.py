@@ -86,7 +86,7 @@ def _stub_settings():
     return _S()
 
 
-def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client):
+def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=None):
     hooks = HookRegistry()
     disp = ToolDispatch([], _stub_settings())
     trace = TraceEmitter(trace_svc, disp, max_tokens=1024)
@@ -95,9 +95,11 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     loop = AgentLoop(hooks, disp, 1024)
+    if aside is None:
+        aside = types.SimpleNamespace(generate=lambda agent_type, invoke: None)
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo, content_repo,
-        disp, stub_chat_model_provider(client), loop,
+        disp, stub_chat_model_provider(client), loop, aside,
     )
 
 
@@ -237,6 +239,32 @@ def test_finalize_drift_writes_no_terminal():
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.CANCELLED
     assert art_repo.load("t1") is None
+
+
+def test_progress_chars_units_written_during_stream():
+    """产出轮逐字累计 chars + 数 ### 行得 units,节流后落进度。"""
+    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, agent_type="idea")
+    body = ("<!-- chorus:awaiting=y -->\n<!-- chorus:done=定了 -->\n\n"
+            "### 候选一\n- 视角：a\n- 理由：r\n\n### 候选二\n- 视角：b\n- 理由：s")
+    client = FakeClient([FakeStream([({"content": body}, "stop")])])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub.run("t1")
+    progress = progress_repo.load("t1")
+    assert progress.composing_chars == len(body)
+    assert progress.composing_units == 2
+
+
+def test_progress_aside_written_on_entry():
+    """入口调旁白生成器,非空则写进度 aside 字段。"""
+    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, agent_type="idea")
+    body = _idea_md(done_line="定了", awaiting_line="y")
+    aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "打算用光线串起一杯咖啡的时间")
+    client = FakeClient([FakeStream([({"content": body}, "stop")])])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=aside)
+    sub.run("t1")
+    assert progress_repo.load("t1").aside == "打算用光线串起一杯咖啡的时间"
 
 
 def main():
