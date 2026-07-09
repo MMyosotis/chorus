@@ -34,11 +34,11 @@ defineEmits(['confirm', 'revise'])
 <style scoped>
 .intent-confirm {
   width: min(100%, 640px);
-  border: 1px solid var(--ch-border);
+  border: none;
   border-radius: var(--ch-radius-md);
-  background: var(--ch-surface);
+  background: transparent;
   padding: 18px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 
 .confirm-head {
@@ -97,29 +97,20 @@ defineEmits(['confirm', 'revise'])
 }
 
 button {
-  height: 38px;
-  border-radius: var(--ch-radius-sm);
-  padding: 0 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
   font-size: 14px;
   font-weight: 600;
-  cursor: pointer;
+  color: var(--ch-faint);
 }
 
-.primary {
-  border: 1px solid var(--ch-orange);
-  background: var(--ch-orange);
-  color: #ffffff;
-}
+button:hover:not(:disabled) { text-decoration: underline; }
 
-.primary:hover { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
+.primary { color: var(--ch-primary); }
 
-.secondary {
-  border: 1px solid var(--ch-border-2);
-  background: var(--ch-surface);
-  color: var(--ch-body);
-}
-
-.secondary:hover { background: var(--ch-bg-cool); }
+.secondary { color: var(--ch-faint); }
 
 @media (max-width: 720px) {
   .confirm-grid {

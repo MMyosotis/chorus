@@ -113,12 +113,12 @@ async function onCancel() {
 
 <style scoped>
 .hil-card {
-  border: 1px solid color-mix(in srgb, var(--ch-primary) 28%, var(--ch-border));
+  border: none;
   border-radius: var(--ch-radius-md);
-  background: var(--ch-surface);
+  background: transparent;
   padding: 20px 22px;
   margin: 4px 0;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 .hil-title {
   font-size: 17px;
@@ -132,9 +132,9 @@ async function onCancel() {
   border: 1px solid var(--ch-border); border-radius: var(--ch-radius-sm); padding: 12px 14px;
   cursor: pointer; background: var(--ch-surface); transition: border-color 0.15s;
 }
-.candidate.selected { border-color: var(--ch-orange); box-shadow: 0 0 0 3px var(--ch-orange-soft); }
+.candidate.selected { border-color: var(--ch-primary); box-shadow: 0 0 0 3px var(--ch-primary-soft); }
 .cand-title { font-weight: 600; color: var(--ch-text); }
-.cand-angle { font-size: 13px; color: var(--ch-orange); margin-top: 2px; }
+.cand-angle { font-size: 13px; color: var(--ch-primary); margin-top: 2px; }
 .cand-reason { font-size: 12px; color: var(--ch-muted); margin-top: 4px; }
 .hil-preview .block { margin: 4px 0; }
 .hil-preview .block.heading { font-weight: 500; color: var(--ch-text); }
@@ -145,15 +145,17 @@ async function onCancel() {
 .img-item figcaption { font-size: 11px; color: var(--ch-muted); }
 .hil-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 .btn {
-  border: 1px solid var(--ch-border-2); background: var(--ch-surface); color: var(--ch-muted);
-  padding: 8px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; padding: 0; color: var(--ch-faint);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: var(--ch-orange); border-color: var(--ch-orange); color: #fff; }
-.btn.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
-.btn.danger { color: var(--ch-red); border-color: color-mix(in srgb, var(--ch-red) 40%, var(--ch-border)); }
+.btn:hover:not(:disabled) { text-decoration: underline; }
+.btn.primary { color: var(--ch-primary); }
+.btn.danger { color: var(--ch-red); }
 .hil-feedback {
-  width: 100%; margin-top: 10px; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-sm);
+  width: 100%; margin-top: 10px;
+  border: none; border-bottom: 1px solid var(--ch-border);
+  border-radius: 0; background: transparent;
   padding: 6px 8px; font-size: 13px; resize: vertical; box-sizing: border-box;
 }
 .hil-error { color: var(--ch-red); font-size: 12px; margin-top: 6px; }

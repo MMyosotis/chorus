@@ -52,12 +52,12 @@ async function onCancel() {
 
 <style scoped>
 .recovery-card {
-  border: 1px solid color-mix(in srgb, var(--ch-red) 30%, var(--ch-border));
+  border: none;
   border-radius: var(--ch-radius-md);
-  background: var(--ch-red-soft);
+  background: transparent;
   padding: 20px 22px;
   margin: 4px 0;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 .rc-title {
   font-size: 17px;
@@ -76,17 +76,18 @@ async function onCancel() {
 }
 .rc-feedback {
   width: 100%; box-sizing: border-box;
-  border: 1px solid var(--ch-border); border-radius: var(--ch-radius-sm);
+  border: none; border-bottom: 1px solid var(--ch-border);
+  border-radius: 0; background: transparent;
   padding: 6px 8px; font-size: 13px; resize: vertical; margin-bottom: 8px;
 }
 .rc-actions { display: flex; gap: 8px; }
 .btn {
-  border: 1px solid var(--ch-border-2); background: var(--ch-surface); color: var(--ch-muted);
-  padding: 8px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; padding: 0; color: var(--ch-faint);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: var(--ch-orange); border-color: var(--ch-orange); color: #fff; }
-.btn.primary:hover:not(:disabled) { background: var(--ch-orange-2); border-color: var(--ch-orange-2); }
-.btn.danger { color: var(--ch-red); border-color: color-mix(in srgb, var(--ch-red) 40%, var(--ch-border)); }
+.btn:hover:not(:disabled) { text-decoration: underline; }
+.btn.primary { color: var(--ch-primary); }
+.btn.danger { color: var(--ch-red); }
 .rc-error { color: var(--ch-red); font-size: 12px; margin-top: 6px; }
 </style>

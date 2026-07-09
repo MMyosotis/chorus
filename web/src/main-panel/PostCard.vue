@@ -39,12 +39,12 @@ const card = computed(() => props.task.artifacts || {})
 
 <style scoped>
 .post-card {
-  border: 1px solid var(--ch-border);
+  border: none;
   border-radius: var(--ch-radius-md);
-  background: var(--ch-surface);
+  background: transparent;
   overflow: hidden;
   margin: 4px 0;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
 }
 .pc-cover { width: 100%; max-height: 320px; object-fit: cover; display: block; }
 .pc-title {
@@ -59,15 +59,15 @@ const card = computed(() => props.task.artifacts || {})
 .pc-paragraph { font-size: 14px; color: var(--ch-body); line-height: 1.75; margin: 6px 0; }
 .pc-list { font-size: 13px; color: var(--ch-body); white-space: pre-wrap; margin: 6px 0; font-family: inherit; }
 .pc-quote {
-  border-left: 3px solid var(--ch-orange); padding: 8px 12px; margin: 10px 0;
-  color: var(--ch-body); font-size: 14px; background: var(--ch-orange-soft); border-radius: 0 var(--ch-radius-sm) var(--ch-radius-sm) 0;
+  border-left: 3px solid var(--ch-primary); padding: 8px 12px; margin: 10px 0;
+  color: var(--ch-body); font-size: 14px; background: var(--ch-primary-soft); border-radius: 0 var(--ch-radius-sm) var(--ch-radius-sm) 0;
 }
 .pc-image { margin: 8px 0; }
 .pc-image img { width: 100%; border-radius: var(--ch-radius-lg); }
 .pc-image figcaption { font-size: 12px; color: var(--ch-faint); margin-top: 4px; }
 .pc-tags { padding: 4px 22px 10px; display: flex; flex-wrap: wrap; gap: 6px; }
 .pc-tag {
-  font-size: 12px; color: var(--ch-orange-2); background: var(--ch-orange-soft);
+  font-size: 12px; color: var(--ch-primary-2); background: var(--ch-primary-soft);
   padding: 2px 10px; border-radius: 999px;
 }
 .pc-summary { padding: 10px 22px 16px; font-size: 13px; color: var(--ch-faint); border-top: 1px solid var(--ch-border); margin: 0; }
