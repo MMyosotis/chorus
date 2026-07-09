@@ -76,11 +76,12 @@ export function confirmIntent(id, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/intent:confirm`, { method: 'POST' }, onEvent)
 }
 
-export async function reopenIntent(id) {
-  const res = await fetch(`${BASE}/${id}/intent:reopen`, { method: 'POST' })
-  if (!res.ok) throw new Error(`reopen intent failed: ${res.status}`)
-  const data = await res.json()
-  return data.state || null
+export function reopenIntent(id, onEvent) {
+  return streamSessionEventSource(`${BASE}/${id}/intent:reopen`, { method: 'POST' }, onEvent)
+}
+
+export function resumeSession(id, onEvent) {
+  return streamSessionEventSource(`${BASE}/${id}/resume`, { method: 'POST' }, onEvent)
 }
 
 export function streamChat(id, message, onEvent) {

@@ -130,5 +130,5 @@ class CreatePlanTool(Tool):
         roles = ", ".join(f"{task.agent_type}#{i}" for i, (task, _) in enumerate(pairs, 1))
         return Terminal(
             f"已创建创作任务图：pipeline={pairs[0][0].pipeline_id}，"
-            f"{len(pairs)} 个任务 [{roles}]，调度器将自动执行"
+            f"{len(pairs)} 个任务 [{roles}]，等待计划完成"
         )

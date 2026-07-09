@@ -250,11 +250,10 @@ def test_new_plan_blocked_by_active_task():
 
 
 def test_update_intent_state_does_not_finish():
-    """update_intent_state 返 Reply 不杀轮次：文本+工具同轮 → after_tools CONTINUE → 下一轮纯文本 done。
+    """非 ready_to_confirm 状态返 Reply 不杀轮次：文本+工具同轮 -> after_tools CONTINUE -> 下一轮纯文本 done。
 
-    甲方案：工具纯记状态，终止权交还模型。模型同轮出文本 + 调 update_intent_state 后，
-    loop 不在工具层 FINISH，须等下一轮模型纯文本（无 tool_call）走 after_text 才 done。
-    锚定"工具不替模型决定流程"的机制契约。
+    empty/capturing/needs_clarification 只记状态，终止权交还模型，须等下一轮模型纯文本走
+    after_text 才 done。锚定非终止状态工具不替模型决定流程的契约；ready_to_confirm 终止另测。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     intent_args = {
@@ -291,6 +290,49 @@ def test_update_intent_state_does_not_finish():
     assert msgs[2].tool_call_id == "c1"
     assert msgs[3].content == "很高兴帮你"
     assert (msgs[3].tool_calls or []) == []
+
+
+def test_update_intent_state_ready_to_confirm_finishes():
+    """ready_to_confirm 返 Terminal 杀轮次：单轮即 done，助手气泡取 friendly_reply。
+
+    继 create_plan 之后第二个终止型工具。模型调 update_intent_state(ready_to_confirm) 后，
+    after_tools 命中 Terminal -> FINISH -> 同轮 done，不再有后续纯文本轮。
+    助手气泡 content 来自 friendly_reply 参数（模型本轮无正文），与 create_plan 同构。
+    """
+    conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
+    intent_args = {
+        "intent_status": "ready_to_confirm",
+        "goal": "种草精品咖啡豆",
+        "known_slots": {"主题": "精品咖啡豆"},
+        "missing_slots": [],
+        "confirmation_summary": {
+            "title": "创作方向确认",
+            "items": [{"label": "主题", "value": "精品咖啡豆"}],
+        },
+        "friendly_reply": "我整理了这次创作方向，请确认后开始",
+    }
+    tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
+        index=0, id="c1", function=types.SimpleNamespace(
+            name="update_intent_state", arguments=json.dumps(intent_args)))]}, "tool_calls")])
+    client = FakeClient([tool_stream])
+    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    s = session_svc.create("test")
+    events = list(sup.stream(s.id, "精品咖啡豆，轻松种草风格，3张图"))
+    types_seq = [e.type for e in events]
+    # 单轮一个 message_start：Terminal 即终止，无第二轮
+    assert types_seq.count("message_start") == 1
+    assert types_seq[-1] == "done"
+    # 意图状态事件在 done 之前下发，驱动前端注入确认卡
+    assert "intent_state" in types_seq
+    # 历史：user + assistant(friendly_reply, tool_calls) + tool(占位)，无后续纯文本轮
+    msgs = msg_svc.list_messages(s.id)
+    assert [m.role for m in msgs] == ["user", "assistant", "tool"]
+    assert msgs[1].content == "我整理了这次创作方向，请确认后开始"
+    assert len(msgs[1].tool_calls) == 1
+    assert msgs[1].tool_calls[0].name == "update_intent_state"
+    assert msgs[2].role == "tool"
+    assert msgs[2].tool_call_id == "c1"
+    assert "等待用户拍板" in msgs[2].content
 
 
 def main():

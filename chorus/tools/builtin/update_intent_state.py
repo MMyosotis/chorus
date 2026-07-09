@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from chorus.domain.intent import IntentStatePatch
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Tool, ToolContext
+from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
 
 
 class UpdateIntentStateTool(Tool):
@@ -66,6 +66,10 @@ class UpdateIntentStateTool(Tool):
                 "required": ["title", "items"],
                 "description": "ready_to_confirm 时给用户确认的摘要；未就绪可为 null",
             },
+            "friendly_reply": {
+                "type": "string",
+                "description": "ready_to_confirm 时的确认引导文案，作为本轮节拍气泡展示；其余状态忽略",
+            },
         },
         "required": [
             "intent_status",
@@ -92,9 +96,13 @@ class UpdateIntentStateTool(Tool):
             patch = IntentStatePatch(**arguments)
         except ValidationError as e:
             return Reply(f"update_intent_state 参数格式错: {e}")
+
         state = self._intent.update_from_tool(ctx.session_id, patch)
-        # 返 Reply 不杀轮次：记状态只是规划辅助，终止权交还模型 + after_text nag 兜底，
-        # 让模型接着把追问/确认的话说出来，而非工具擅自终结回合。
+        if state.intent_status == "ready_to_confirm":
+            return Terminal(
+                f"intent_state updated: status=ready_to_confirm, "
+                f"version={state.version}. 等待用户拍板。"
+            )
         return Reply(
             "intent_state updated: "
             f"status={state.intent_status}, version={state.version}"

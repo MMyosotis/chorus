@@ -170,12 +170,12 @@ def _build_assembly():
         task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999,
     )
-    return supervisor, subagent, task_service, scheduler, task_repo, session_svc
+    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, conn
 
 
 def test_end_to_end_pipeline():
     """4 链路全跑通：supervisor 建图 → idea awaiting_confirm → confirm finished → scheduler 派发 finalize。"""
-    sup, sub, task_service, scheduler, task_repo, session_svc = _build_assembly()
+    sup, sub, task_service, scheduler, task_repo, session_svc, conn = _build_assembly()
     session = session_svc.create("集成测试")
     sid = session.id
 

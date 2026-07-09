@@ -68,6 +68,11 @@ class MessageService:
         self._msg_repo.append(msg)
         return msg
 
+    def rewrite_last_tool_result(self, session_id: str, name: str, content: str) -> None:
+        """改写会话内最后一条该名工具的结果，供用户拍板后补全真实结局。"""
+        target = self._msg_repo.find_last_tool_by_name(session_id, name)
+        self._msg_repo.update_content(target.id, content)
+
     def history_view(self, session_id: str) -> list[MessageView]:
         """前端视图：滤掉工具消息，助手消息挂回思考与工具摘要，轨迹批量预取。"""
         msgs = self._msg_repo.list_by_session(session_id)

@@ -105,6 +105,7 @@ def confirm_intent(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
     intent: IntentStateService = Depends(provide_intent_state_service),
+    message: MessageService = Depends(provide_message_service),
     supervisor: SupervisorService = Depends(provide_supervisor_service),
 ):
     if not session.exists(session_id):
@@ -113,6 +114,10 @@ def confirm_intent(
     if current.intent_status != "ready_to_confirm":
         raise HTTPException(status_code=409, detail="intent is not ready to confirm")
     state = intent.confirm(session_id)
+    message.rewrite_last_tool_result(
+        session_id, "update_intent_state",
+        "用户已同意，意图进入 confirmed，等待建图",
+    )
 
     def event_generator():
         yield _sse(IntentStateEvent(state=state.public_dict()))
@@ -131,10 +136,47 @@ def reopen_intent(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
     intent: IntentStateService = Depends(provide_intent_state_service),
+    message: MessageService = Depends(provide_message_service),
+    supervisor: SupervisorService = Depends(provide_supervisor_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"state": intent.reopen(session_id).public_dict()}
+    state = intent.reopen(session_id)
+    message.rewrite_last_tool_result(
+        session_id, "update_intent_state",
+        "用户要求继续调整，意图回到 needs_clarification",
+    )
+
+    def event_generator():
+        yield _sse(IntentStateEvent(state=state.public_dict()))
+        for event in supervisor.stream(session_id, "用户希望继续调整方案"):
+            yield _sse(event)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/{session_id}/resume")
+def resume_session(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    supervisor: SupervisorService = Depends(provide_supervisor_service),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+
+    def event_generator():
+        for event in supervisor.resume(session_id):
+            yield _sse(event)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
 
 
 def _view_to_dict(view: MessageView) -> dict:

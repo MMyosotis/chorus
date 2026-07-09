@@ -15,6 +15,7 @@ import {
   confirmIntent,
   reopenIntent,
   cancelPipeline,
+  resumeSession,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
@@ -234,6 +235,10 @@ watch(activeIntentState, () => {
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
   reloadMessages: forceReloadMessages,
+  onPipelineFinished: (sid) => {
+    if (streamingBySession[sid]) return
+    runAssistantStream(sid, (onEvent) => resumeSession(sid, onEvent))
+  },
 })
 
 function onHilConfirmed(taskId) {
@@ -507,13 +512,10 @@ async function onIntentConfirm() {
 
 async function onIntentRevise() {
   const sessionId = activeId.value
-  if (!sessionId || streamingBySession[sessionId]) return
-  try {
-    intentStateBySession[sessionId] = await reopenIntent(sessionId)
-    inputBarRef.value?.focus()
-  } catch (e) {
-    alert(`打开意图修改失败: ${e.message}`)
-  }
+  if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
+  const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
+  list.push({ role: 'user', content: '用户希望继续调整方案' })
+  await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
 }
 
 async function onIntentStopAndRevise() {
@@ -522,9 +524,9 @@ async function onIntentStopAndRevise() {
   try {
     await cancelPipeline(sessionId)
     taskPolling.stop()
-    intentStateBySession[sessionId] = await reopenIntent(sessionId)
-    await forceReloadMessages(sessionId)
-    inputBarRef.value?.focus()
+    const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
+    list.push({ role: 'user', content: '用户希望继续调整方案' })
+    await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
   } catch (e) {
     alert(`停止并修改失败: ${e.message}`)
   }

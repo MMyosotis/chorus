@@ -12,15 +12,17 @@ const pollingSession = ref(null)
 let timer = null
 let isStreamingFn = () => false
 let reloadMessagesFn = () => Promise.resolve()
+let onPipelineFinishedFn = () => {}
 
 export function useTaskPolling() {
   return {
     graphBySession,
     pollingSession,
 
-    configure({ isStreaming, reloadMessages }) {
+    configure({ isStreaming, reloadMessages, onPipelineFinished }) {
       isStreamingFn = isStreaming || isStreamingFn
       reloadMessagesFn = reloadMessages || reloadMessagesFn
+      onPipelineFinishedFn = onPipelineFinished || onPipelineFinishedFn
     },
 
     getGraph(sessionId) {
@@ -53,19 +55,30 @@ function stopInternal() {
   }
 }
 
+function isPipelineFinished(graph) {
+  const tasks = graph.tasks || []
+  if (!tasks.length) return false
+  const last = tasks[tasks.length - 1]
+  return last.agent_type === 'finalize' && last.status === 'finished'
+}
+
 async function tick() {
   const sid = pollingSession.value
   if (!sid) return
   try {
     const graph = await getTaskGraph(sid)
+    const wasActive = graphBySession[sid]?.active
     graphBySession[sid] = graph
     // 非流式时刷新消息，取回流式外落库的进度气泡
     if (!isStreamingFn(sid)) {
       await reloadMessagesFn(sid)
     }
-    if (!graph.active) {
+    if (wasActive && !graph.active) {
       stopInternal()
       pollingSession.value = null
+      if (isPipelineFinished(graph)) {
+        onPipelineFinishedFn(sid)
+      }
     }
   } catch {
     // 网络抖动忽略，下轮重试

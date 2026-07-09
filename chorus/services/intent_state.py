@@ -43,6 +43,9 @@ class IntentStateService:
     def mark_dispatched(self, session_id: str) -> IntentState:
         return self._patch_status(session_id, "dispatched")
 
+    def mark_finished(self, session_id: str) -> IntentState:
+        return self._patch_status(session_id, "empty")
+
     def is_confirmed(self, session_id: str) -> bool:
         return self.get(session_id).intent_status == "confirmed"
 

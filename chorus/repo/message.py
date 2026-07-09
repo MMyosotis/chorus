@@ -129,3 +129,18 @@ class MessageRepository:
             (message_id,),
         ).fetchone()
         return MessageRow(**dict(row)).to_domain() if row else None
+
+    def find_last_tool_by_name(self, session_id: str, name: str) -> Optional[ToolMessage]:
+        row = self._conn.get().execute(
+            f"SELECT {_COLS} FROM messages "
+            "WHERE session_id=? AND role='tool' AND tool_name=? "
+            "ORDER BY id DESC LIMIT 1",
+            (session_id, name),
+        ).fetchone()
+        return MessageRow(**dict(row)).to_domain() if row else None
+
+    def update_content(self, message_id: str, content: str) -> None:
+        self._conn.get().execute(
+            "UPDATE messages SET content=? WHERE id=?",
+            (content, message_id),
+        )

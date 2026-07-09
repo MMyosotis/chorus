@@ -187,3 +187,29 @@ class SupervisorService:
         except Exception as e:
             ctx.outcome.exception = e
             yield from strategy.on_error(ctx, e).events
+
+    def resume(self, session_id: str) -> Iterator[SseEvent]:
+        """pipeline 完成后续跑：不补用户消息，让模型读改写后的工具结果自行收尾。"""
+        # 收尾：补全 create_plan 工具结果并复位意图，让 loop 读到真实结局
+        self._message.rewrite_last_tool_result(
+            session_id, "create_plan", "计划已完成，所有创作步骤均已落地"
+        )
+        self._intent_state.mark_finished(session_id)
+
+        entry = self._models.get_entry()
+        schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
+        ctx = AgentContext(
+            session_id=session_id, user_message=None,
+            tool_schemas=schemas, chat_model=entry.model_id,
+        )
+        strategy = SupervisorLoopStrategy(
+            session_id, self._message, self._session, self._hooks, self._skill,
+            intent_state=self._intent_state,
+        )
+
+        try:
+            self._session.touch(session_id)
+            yield from self._loop.run(ctx, entry=entry, strategy=strategy)
+        except Exception as e:
+            ctx.outcome.exception = e
+            yield from strategy.on_error(ctx, e).events
