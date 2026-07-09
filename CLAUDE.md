@@ -233,6 +233,10 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 - 我提问时，优先用直白简洁的语言给出结论，不主动铺陈代码细节与文件引用。
 - 只有当我明确要求结合代码 / 详细解释时，再附代码、行号与逐段说明。
 
+## 模型能力边界
+
+- **本会话模型无图像识别能力，严禁调用截图功能**：不使用 `preview_screenshot` 等截图工具，也不以截图作为判读依据；验证前端改动改用文本类工具（`preview_snapshot` 无障碍树 / `preview_inspect` DOM 与计算样式 / `preview_console_logs` / `preview_logs`）配合源码阅读。
+
 ## 开发约定
 
 在本项目的所有代码开发工作中，请严格遵守以下协作规则：
