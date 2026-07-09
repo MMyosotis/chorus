@@ -35,6 +35,7 @@ from chorus.domain.task.activity import (
     PAYLOAD_TYPES,
     SearchResultsPayload,
     TaskActivity,
+    TaskProgress,
     build_payload,
     dump_activity,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "TaskContent",
     "TaskGraph",
     "TaskNodeView",
+    "TaskProgress",
     "TaskStatus",
     "PostCard",
     "PostImage",

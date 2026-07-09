@@ -233,3 +233,15 @@ _DONE_TRANSLATORS: dict[str, Callable[..., ActivityDraft]] = {
 def image_progress(total: Optional[int], done_images: list[str]) -> tuple[int, Optional[int]]:
     """配图进度：返回已生成数与总数，总数未知时为空。"""
     return len(done_images), total
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class TaskProgress:
+    """一个任务的运行期进度快照,一任务一行,覆盖更新。"""
+
+    task_id: str
+    composing_chars: int = 0
+    composing_units: int = 0
+    composing_label: str = ""
+    last_signal: str = ""
+    aside: str = ""
