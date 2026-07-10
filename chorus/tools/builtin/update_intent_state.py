@@ -40,12 +40,12 @@ class UpdateIntentStateTool(Tool):
             "goal": {"type": "string", "description": "一句话概括用户目标"},
             "known_slots": {
                 "type": "object",
-                "description": "已识别的关键槽位，key 用中文短词（平台/体裁/主题/风格/配图数/约束等），value 用自然语言",
+                "description": "已识别的关键槽位，key 用中文短词（平台/体裁/主题/风格/配图/约束等），value 用自然语言",
             },
             "missing_slots": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "仍缺失、会影响执行派发的槽位，用中文短词（主题/风格/配图数等）",
+                "description": "仍缺失、会影响执行派发的槽位，用中文短词（主题/风格/配图等）",
             },
             "confirmation_summary": {
                 "type": ["object", "null"],

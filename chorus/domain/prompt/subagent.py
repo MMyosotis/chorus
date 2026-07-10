@@ -22,7 +22,7 @@ _BASE = (
 
 _SHAPES = {
     "idea": (
-        "### 候选标题\n- 视角：切入角度\n- 理由：为何能爆\n\n"
+        "### 候选标题\n- 视角：切入\n- 理由：为何能爆\n\n"
         "（重复三到五个 ### 候选）"
     ),
     "script": (
@@ -37,7 +37,7 @@ _SHAPES = {
 }
 
 _GUIDANCE = {
-    "idea": "给出 3-5 个候选标题与切入角度，每个用 ### 分开，配视角和理由。",
+    "idea": "给出 3-5 个候选标题与切入，每个用 ### 分开，配视角和理由。",
     "script": "用 Markdown 标题/段落/列表/引用组织正文，不要塞成单个长字符串。",
     "image": "调用 generate_image 生成配图，为每张写 caption，用 ### 图 N 分组。",
     "postcard": "你是唯一成品出口：从 idea 选标题、从 script 整理 sections、从 image 选封面并散布进 sections。"

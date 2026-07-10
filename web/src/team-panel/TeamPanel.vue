@@ -32,14 +32,11 @@ function onFocus(id) {
       </template>
       <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
       <template v-if="tasks.length">
-        <div class="r-eyebrow">目 录</div>
-        <section class="toc-wrap">
-          <TocCard
-            :tasks="tasks"
-            :focused-task-id="focusedTaskId"
-            @focus="onFocus"
-          />
-        </section>
+        <TocCard
+          :tasks="tasks"
+          :focused-task-id="focusedTaskId"
+          @focus="onFocus"
+        />
       </template>
     </div>
   </aside>
@@ -65,19 +62,6 @@ function onFocus(id) {
   flex-direction: column;
   gap: 24px;
   scrollbar-width: thin;
-}
-
-.r-eyebrow {
-  font-family: var(--ch-serif);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ch-faint);
-  letter-spacing: 1.4px;
-  margin-bottom: 12px;
-}
-
-.toc-wrap {
-  flex: 0 0 auto;
 }
 
 .team-empty {

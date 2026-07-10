@@ -36,7 +36,7 @@ SYSTEM_PROMPT = (
     "  · needs_clarification：信息不足以执行，需要自然语言追问用户。\n"
     "  · ready_to_confirm：信息齐全，填好 confirmation_summary（标题 + 各槽位摘要），等用户拍板。此态本轮即终止，填 friendly_reply 作为确认引导节拍气泡，等用户在确认卡片上确认或调整。\n"
     "  · confirmed / dispatched：由系统在用户确认或建图后翻转，你不要主动填这两个状态。\n"
-    "- known_slots 的 key 与 missing_slots 用中文短词（平台/体裁/主题/风格/配图数/约束等），不要用英文标识符。\n"
+    "- known_slots 的 key 与 missing_slots 用中文短词（平台/体裁/主题/风格/配图/约束等），不要用英文标识符。\n"
     "- 信息不足时不要调用 create_plan；先用自然语言追问，update_intent_state 设为 needs_clarification。\n"
     "- 信息足够执行时设为 ready_to_confirm 并填 confirmation_summary 与 friendly_reply，本轮即终止，等用户确认。\n"
     "- 用户没有确认前调用 create_plan 会被工具返回失败；不要试图绕过确认。\n"
