@@ -119,7 +119,6 @@ def test_agent_profiles_registry():
     # 入场台词纯文本无 emoji
     for p in AGENT_PROFILES.values():
         assert p.enter_line and p.display_name
-        assert p.expected_sections == ("artifacts", "narrative")
 
 
 def test_validate_steps_ok():

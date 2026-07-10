@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Type
+from typing import Any, Callable, Type
 
 from pydantic import ValidationError as PydValidationError
 
@@ -32,8 +32,8 @@ class AgentProfile:
     role_desc: str
     enter_line: str
     artifacts_schema: str
-    expected_sections: tuple[str, ...]
     artifacts_model: Type[Any]
+    artifacts_parser: Callable[[str], Any]
     composing_label: str
 
     def build_artifacts(self, raw: Any) -> Any:
@@ -55,7 +55,7 @@ class AgentProfile:
 
     def _parse_artifacts_md(self, body: str) -> Any:
         """按角色调对应 markdown 解析,再按本角色模型构造校验。"""
-        raw = _MD_PARSERS[self.artifacts_schema](body)
+        raw = self.artifacts_parser(body)
         return self._validate_artifacts(raw)
 
     def _validate_artifacts(self, artifacts: Any) -> Any:
@@ -86,8 +86,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         role_desc="调研热点、琢磨选题，给出多个候选标题与切入角度",
         enter_line="选题官接单啦，先去翻翻最近的热点",
         artifacts_schema="idea",
-        expected_sections=("artifacts", "narrative"),
         artifacts_model=IdeaArtifacts,
+        artifacts_parser=parse_idea_md,
         composing_label="个候选",
     ),
     "script": AgentProfile(
@@ -96,8 +96,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         role_desc="依据选题撰写图文博文正文，拆成有序块草稿",
         enter_line="文案官接单啦，开始码字",
         artifacts_schema="script",
-        expected_sections=("artifacts", "narrative"),
         artifacts_model=ScriptArtifacts,
+        artifacts_parser=parse_script_md,
         composing_label="段",
     ),
     "image": AgentProfile(
@@ -106,8 +106,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         role_desc="为博文生成配图，给出图片列表与图注",
         enter_line="配图官接单啦，准备出图",
         artifacts_schema="image",
-        expected_sections=("artifacts", "narrative"),
         artifacts_model=ImageArtifacts,
+        artifacts_parser=parse_image_md,
         composing_label="张",
     ),
     "finalize": AgentProfile(
@@ -116,16 +116,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         role_desc="装配前三步原料成整棵 PostCard 成品，作为唯一成品出口",
         enter_line="汇总官接单啦，开始组装成品",
         artifacts_schema="postcard",
-        expected_sections=("artifacts", "narrative"),
         artifacts_model=PostCard,
+        artifacts_parser=parse_postcard_md,
         composing_label="节",
     ),
-}
-
-
-_MD_PARSERS = {
-    "idea": parse_idea_md,
-    "script": parse_script_md,
-    "image": parse_image_md,
-    "postcard": parse_postcard_md,
 }
