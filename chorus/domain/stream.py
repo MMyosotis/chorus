@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Generator, Iterator, Optional
+from typing import Generator, Optional
 
 from chorus.domain.events import (
     ReasoningDoneEvent,
@@ -51,7 +51,7 @@ def parse_tool_arguments(raw: str) -> dict:
         return {}
 
 
-def _accumulate(stream) -> Iterator[SseEvent]:
+def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
     """逐块累积，发出思考与正文事件，返回累积结果。"""
     accumulated: dict[int, ToolCallAccumulator] = {}
     text_parts: list[str] = []
@@ -60,7 +60,6 @@ def _accumulate(stream) -> Iterator[SseEvent]:
 
     cur_parts: list[str] = []
     started_at: Optional[float] = None
-    in_progress = False
 
     for chunk in stream:
         choice = chunk.choices[0]
@@ -70,28 +69,27 @@ def _accumulate(stream) -> Iterator[SseEvent]:
 
         reasoning: Optional[str] = getattr(delta, "reasoning_content", None)
         if reasoning:
-            if not in_progress:
+            if started_at is None:
                 started_at = perf_counter()
-                in_progress = True
             cur_parts.append(reasoning)
             yield ReasoningEvent(content=reasoning)
 
         # 思考结束出现正文
-        if in_progress and (delta.content or delta.tool_calls):
+        if started_at is not None and (delta.content or delta.tool_calls):
             duration = _close_thinking(cur_parts, started_at, thinking_segments)
             yield ReasoningDoneEvent(duration_ms=duration)
-            in_progress = False
+            started_at = None
 
         if delta.content:
             text_parts.append(delta.content)
             yield TokenEvent(content=delta.content)
 
         if delta.tool_calls:
-            for tc in delta.tool_calls:
-                _merge_tool_call(accumulated, tc)
+            for call in delta.tool_calls:
+                _merge_tool_call(accumulated, call)
 
     # 处理只有思考没有正文场景
-    if in_progress:
+    if started_at is not None:
         duration = _close_thinking(cur_parts, started_at, thinking_segments)
         yield ReasoningDoneEvent(duration_ms=duration)
 
@@ -103,34 +101,22 @@ def _accumulate(stream) -> Iterator[SseEvent]:
     )
 
 
-def consume_stream(stream) -> Iterator[SseEvent]:
+def consume_stream(stream) -> Generator[SseEvent, None, StreamResult]:
     """消费流式响应，发出思考与正文事件，返回累积结果。"""
     return (yield from _accumulate(stream))
 
 
-def drain_stream(stream) -> StreamResult:
-    """消费流式响应但丢弃事件，仅返回累积结果。供不连事件流的调用方使用。"""
+def silent_consume(stream, on_token=lambda content: None) -> Generator[SseEvent, None, StreamResult]:
+    """静默消费，正文 token 经回调透出，返回累积结果。"""
     gen = _accumulate(stream)
-    try:
-        while True:
-            next(gen)
-    except StopIteration as stop:
-        return stop.value
-
-
-def silent_consume(stream, on_token=None) -> Generator[SseEvent, None, StreamResult]:
-    """静默消费,可选 on_token 回调透出正文 token,仅返回累积结果。"""
-    gen = _accumulate(stream)
-    result = None
-    try:
-        while True:
+    while True:
+        try:
             event = next(gen)
-            if on_token is not None and isinstance(event, TokenEvent):
-                on_token(event.content)
-    except StopIteration as stop:
-        result = stop.value
-    yield from ()  # 不产出事件,仅满足生成器形态以让 return 走 StopIteration.value
-    return result
+        except StopIteration as stop:
+            return stop.value
+        yield event
+        if isinstance(event, TokenEvent):
+            on_token(event.content)
 
 
 def _close_thinking(
@@ -145,20 +131,20 @@ def _close_thinking(
     return duration
 
 
-def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], tc_delta) -> None:
+def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], delta) -> None:
     """合并工具调用分片，按序号归拢拼装。"""
-    idx = tc_delta.index
-    entry = accumulated.get(idx)
+    index = delta.index
+    entry = accumulated.get(index)
     if entry is None:
         entry = ToolCallAccumulator()
-        accumulated[idx] = entry
+        accumulated[index] = entry
 
     # 工具首包带标识，将其与序号绑定，后续包只有序号
-    if tc_delta.id:
-        entry.id = tc_delta.id
+    if delta.id:
+        entry.id = delta.id
 
-    if tc_delta.function:
-        if tc_delta.function.name:
-            entry.name = tc_delta.function.name
-        if tc_delta.function.arguments:
-            entry.arguments += tc_delta.function.arguments
+    if delta.function:
+        if delta.function.name:
+            entry.name = delta.function.name
+        if delta.function.arguments:
+            entry.arguments += delta.function.arguments

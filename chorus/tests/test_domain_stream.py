@@ -1,6 +1,6 @@
 """流式响应消费纯函数断言：增量累积与事件翻译。
 
-主消费函数边发事件边回传结果；静默消费同逻辑但不发事件，供后台 agent 用。
+主消费函数边发事件边回传结果；静默消费透传事件并以回调透出正文 token，供后台 agent 用。
 以命名元组模拟流式分片，纯函数零外部依赖。
 """
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import types
 
 from chorus.domain.events import ReasoningDoneEvent, ReasoningEvent, TokenEvent
-from chorus.domain.stream import StreamResult, consume_stream, drain_stream, silent_consume
+from chorus.domain.stream import StreamResult, consume_stream, silent_consume
 
 
 class _Delta(types.SimpleNamespace):
@@ -116,28 +116,7 @@ def test_empty_stream_yields_nothing():
     assert result.finish_reason is None
 
 
-def test_drain_stream_returns_result_without_yielding():
-    stream = [_chunk({"reasoning_content": "想"}, None), _chunk({"content": "hi"}, "stop")]
-    result = drain_stream(stream)
-    assert isinstance(result, StreamResult)
-    assert result.text_parts == ["hi"]
-    # 收尾时复位进度，只产出一个思考段
-    assert len(result.thinking_segments) == 1
-    assert result.thinking_segments[0].text == "想"
-    assert result.finish_reason == "stop"
-
-
-def test_drain_stream_accumulates_tool_calls():
-    tc = _Delta(index=0, id="c1", function=_Delta(name="search", arguments='{"q":"猫"}'))
-    result = drain_stream([_chunk({"tool_calls": [tc]}, "tool_calls")])
-    assert result.tool_calls[0].arguments == '{"q":"猫"}'
-    assert result.tool_calls[0].name == "search"
-    assert result.finish_reason == "tool_calls"
-    assert result.text_parts == []
-
-
-def test_silent_consume_is_generator_returning_result_without_events():
-    # 同为生成器但不发事件，靠 yield from 驱动并取返回值
+def test_silent_consume_yields_events_and_returns_result():
     stream = [_chunk({"reasoning_content": "想"}, None), _chunk({"content": "hi"}, "stop")]
     gen = silent_consume(stream)
     events = []
@@ -146,7 +125,7 @@ def test_silent_consume_is_generator_returning_result_without_events():
             events.append(next(gen))
     except StopIteration as si:
         result = si.value
-    assert events == []
+    assert [e.type for e in events] == ["reasoning", "reasoning_done", "token"]
     assert isinstance(result, StreamResult)
     assert result.text_parts == ["hi"]
     assert result.finish_reason == "stop"
