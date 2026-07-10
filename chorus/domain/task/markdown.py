@@ -67,15 +67,13 @@ class BlockCollector:
             self.add_para_line(stripped)
 
 
-def parse_script_md(body: str) -> list[dict[str, Any]]:
+def parse_script_md(body: str) -> dict[str, Any]:
     """文案解析:标题/段落/列表/引用四种块。"""
-    if not body.strip():
-        return []
     collector = BlockCollector()
     for line in body.splitlines():
         collector.handle_block_line(line.strip())
     collector.flush_all()
-    return collector.blocks
+    return {"blocks": collector.blocks}
 
 
 def parse_idea_md(body: str) -> dict[str, Any]:

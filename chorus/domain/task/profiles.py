@@ -54,10 +54,8 @@ class AgentProfile:
         return artifacts, narrative
 
     def _parse_artifacts_md(self, body: str) -> Any:
-        """按角色调对应 markdown 解析，再按本角色模型构造校验。"""
+        """按角色调对应 markdown 解析,再按本角色模型构造校验。"""
         raw = _MD_PARSERS[self.artifacts_schema](body)
-        if self.artifacts_schema == "script":
-            raw = {"blocks": raw}
         return self._validate_artifacts(raw)
 
     def _validate_artifacts(self, artifacts: Any) -> Any:

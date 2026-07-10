@@ -32,8 +32,8 @@ def test_strip_keeps_blank_structure():
 
 def test_parse_script_md_heading_paragraph_list_quote():
     body = "## 阳台上的光\n\n阳台上的光，是慢慢挪过来的。\n\n- 粗陶杯\n- 粗砂糖\n\n> 秋天不是用来赶的。"
-    blocks = parse_script_md(body)
-    assert blocks == [
+    out = parse_script_md(body)
+    assert out["blocks"] == [
         {"kind": "heading", "text": "阳台上的光"},
         {"kind": "paragraph", "text": "阳台上的光，是慢慢挪过来的。"},
         {"kind": "list", "text": "粗陶杯\n粗砂糖"},
@@ -43,13 +43,13 @@ def test_parse_script_md_heading_paragraph_list_quote():
 
 def test_parse_script_md_consecutive_paragraphs():
     body = "第一段。\n\n第二段。"
-    blocks = parse_script_md(body)
-    assert [b["kind"] for b in blocks] == ["paragraph", "paragraph"]
-    assert blocks[0]["text"] == "第一段。"
+    out = parse_script_md(body)
+    assert [b["kind"] for b in out["blocks"]] == ["paragraph", "paragraph"]
+    assert out["blocks"][0]["text"] == "第一段。"
 
 
 def test_parse_script_md_empty_body():
-    assert parse_script_md("") == []
+    assert parse_script_md("") == {"blocks": []}
 
 
 def test_parse_idea_md_candidates():
