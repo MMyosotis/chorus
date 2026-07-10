@@ -36,36 +36,40 @@ class TaskProgressRepository:
         self._conn = conn
         self._conn.ensure_schema(_DDL)
 
-    def upsert_progress(
-        self, task_id: str, *,
-        composing_chars: Optional[int] = None,
-        composing_units: Optional[int] = None,
-        composing_label: Optional[str] = None,
-        last_signal: Optional[str] = None,
-        aside: Optional[str] = None,
-    ) -> None:
-        """覆盖更新非 None 字段,不存在则插入。"""
-        cols: list[str] = []
-        params: list = [task_id]
-        for col, val in [
-            ("composing_chars", composing_chars),
-            ("composing_units", composing_units),
-            ("composing_label", composing_label),
-            ("last_signal", last_signal),
-            ("aside", aside),
-        ]:
-            if val is not None:
-                cols.append(col)
-                params.append(val)
-        if not cols:
-            return
-        all_cols = ", ".join(["task_id"] + cols)
-        placeholders = ", ".join("?" * (1 + len(cols)))
-        set_clause = ", ".join(f"{col}=excluded.{col}" for col in cols)
+    def set_composing(self, task_id: str, chars: int, units: int) -> None:
+        """覆盖正文量与结构单元数。"""
         self._conn.get().execute(
-            f"INSERT INTO task_progress({all_cols}) VALUES({placeholders}) "
-            f"ON CONFLICT(task_id) DO UPDATE SET {set_clause}",
-            params,
+            "INSERT INTO task_progress(task_id, composing_chars, composing_units) "
+            "VALUES(?, ?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET "
+            "composing_chars=excluded.composing_chars, "
+            "composing_units=excluded.composing_units",
+            (task_id, chars, units),
+        )
+
+    def set_composing_label(self, task_id: str, label: str) -> None:
+        """覆盖单位标签。"""
+        self._conn.get().execute(
+            "INSERT INTO task_progress(task_id, composing_label) VALUES(?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET "
+            "composing_label=excluded.composing_label",
+            (task_id, label),
+        )
+
+    def set_aside(self, task_id: str, aside: str) -> None:
+        """覆盖意图旁白。"""
+        self._conn.get().execute(
+            "INSERT INTO task_progress(task_id, aside) VALUES(?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET aside=excluded.aside",
+            (task_id, aside),
+        )
+
+    def set_signal(self, task_id: str, signal: str) -> None:
+        """覆盖临时信号（纠错提示或失败标记）。"""
+        self._conn.get().execute(
+            "INSERT INTO task_progress(task_id, last_signal) VALUES(?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET last_signal=excluded.last_signal",
+            (task_id, signal),
         )
 
     def load(self, task_id: str) -> Optional[TaskProgress]:

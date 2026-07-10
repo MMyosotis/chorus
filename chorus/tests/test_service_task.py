@@ -164,7 +164,8 @@ def test_get_graph_includes_progress_and_timestamps():
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", progress_total=3))
     progress_repo = TaskProgressRepository(conn)
-    progress_repo.upsert_progress("t1", composing_chars=120, composing_units=2, composing_label="张")
+    progress_repo.set_composing("t1", 120, 2)
+    progress_repo.set_composing_label("t1", "张")
     graph = svc.get_graph("s1")
     t = graph.nodes[0]
     assert t.updated_at == 10.0

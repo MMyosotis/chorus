@@ -49,9 +49,7 @@ class ProgressSink:
         now = perf_counter()
         if self._chars - self._last_flush_chars < 16 and now - self._last_flush_at < 0.5:
             return
-        self._repo.upsert_progress(
-            self._task_id,
-            composing_chars=self._chars, composing_units=self._counter.count)
+        self._repo.set_composing(self._task_id, self._chars, self._counter.count)
         self._last_flush_chars = self._chars
         self._last_flush_at = now
 
@@ -113,8 +111,7 @@ class SubagentLoopStrategy:
             artifacts, narrative = self.profile.parse_output(content)
         except ValidationError as e:
             # 纠错提示喂回模型继续自纠，撞上限才判失败
-            self._progress_repo.upsert_progress(
-                self.task.id, last_signal="刚才格式没对齐，重新理一理")
+            self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
             self.history.append({"role": "assistant", "content": content or None})
             self.history.append({"role": "user", "content": e.correction})
             return LoopAction(LoopSignal.CONTINUE, [])
@@ -171,9 +168,8 @@ class SubAgentService:
         invoke = self._build_invoke(task, content)
         aside = self._aside.generate(task.agent_type, invoke)
         if aside:
-            self._progress.upsert_progress(task.id, aside=aside)
-        self._progress.upsert_progress(
-            task.id, composing_label=AGENT_PROFILES[task.agent_type].composing_label)
+            self._progress.set_aside(task.id, aside)
+        self._progress.set_composing_label(task.id, AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
         ctx = AgentContext(
@@ -206,7 +202,7 @@ class SubAgentService:
         """翻转为失败并写错误信息。"""
         self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.FAILED)
         self._content_repo.set_error(task.id, error)
-        self._progress.upsert_progress(task.id, last_signal="这步失败了")
+        self._progress.set_signal(task.id, "这步失败了")
 
     def _lease_valid(self, task_id: str, owner_id: Optional[float]) -> bool:
         """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""

@@ -22,30 +22,32 @@ def _repo():
     return TaskProgressRepository(conn), conn
 
 
-def test_upsert_and_load():
+def test_set_and_load():
     repo, conn = _repo()
     tid = _seed_task(conn)
-    repo.upsert_progress(tid, composing_chars=100, composing_units=2, composing_label="段")
+    repo.set_composing(tid, 100, 2)
+    repo.set_composing_label(tid, "段")
     prog = repo.load(tid)
     assert prog.composing_chars == 100
     assert prog.composing_units == 2
     assert prog.composing_label == "段"
 
 
-def test_upsert_partial_update():
+def test_set_composing_does_not_clobber_label():
     repo, conn = _repo()
     tid = _seed_task(conn)
-    repo.upsert_progress(tid, composing_chars=100, composing_label="段")
-    repo.upsert_progress(tid, composing_chars=200)
+    repo.set_composing_label(tid, "段")
+    repo.set_composing(tid, 100, 0)
+    repo.set_composing(tid, 200, 0)
     prog = repo.load(tid)
     assert prog.composing_chars == 200
     assert prog.composing_label == "段"
 
 
-def test_upsert_aside():
+def test_set_aside():
     repo, conn = _repo()
     tid = _seed_task(conn)
-    repo.upsert_progress(tid, aside="打算用光线挪动串起一杯咖啡的时间")
+    repo.set_aside(tid, "打算用光线挪动串起一杯咖啡的时间")
     prog = repo.load(tid)
     assert prog.aside == "打算用光线挪动串起一杯咖啡的时间"
 
@@ -60,8 +62,8 @@ def test_load_many():
     repo, conn = _repo()
     t1 = _seed_task(conn, "t1")
     t2 = _seed_task(conn, "t2")
-    repo.upsert_progress(t1, composing_chars=10)
-    repo.upsert_progress(t2, composing_chars=20)
+    repo.set_composing(t1, 10, 0)
+    repo.set_composing(t2, 20, 0)
     out = repo.load_many([t1, t2, "t3"])
     assert out[t1].composing_chars == 10
     assert out[t2].composing_chars == 20
