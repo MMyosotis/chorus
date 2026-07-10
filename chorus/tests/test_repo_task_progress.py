@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from chorus.domain.task import Task
-from chorus.domain.task.activity import TaskProgress
+from chorus.domain.task.progress import TaskProgress
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.tests._helpers import fresh_conn, seed_session

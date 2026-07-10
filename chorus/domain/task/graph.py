@@ -7,7 +7,7 @@ from typing import Optional, Union
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydataclass
 
-from chorus.domain.task.activity import TaskProgress, dump_progress
+from chorus.domain.task.progress import TaskProgress, dump_progress
 from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     ImageArtifacts,

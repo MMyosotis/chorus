@@ -129,8 +129,7 @@ def silent_consume(stream, on_token=None) -> Generator[SseEvent, None, StreamRes
                 on_token(event.content)
     except StopIteration as stop:
         result = stop.value
-    if False:  # 不可达,仅用于让本函数成为生成器
-        yield
+    yield from ()  # 不产出事件,仅满足生成器形态以让 return 走 StopIteration.value
     return result
 
 

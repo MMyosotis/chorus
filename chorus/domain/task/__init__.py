@@ -28,7 +28,7 @@ from chorus.domain.task.artifacts import (
     ScriptBlock,
     TaskArtifacts,
 )
-from chorus.domain.task.activity import (
+from chorus.domain.task.progress import (
     TaskProgress,
     dump_progress,
 )

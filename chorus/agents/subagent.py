@@ -32,6 +32,30 @@ _MAX_STEPS = 8
 _UNIT_MARKER = {"idea": "### ", "script": "## ", "image": "### ", "finalize": "## "}
 
 
+class ProgressSink:
+    """逐字累计正文量与结构单元,节流覆盖写进度快照。"""
+
+    def __init__(self, task_id: str, repo: TaskProgressRepository, marker: str):
+        self._task_id = task_id
+        self._repo = repo
+        self._counter = UnitCounter(marker)
+        self._chars = 0
+        self._last_flush_at = perf_counter()
+        self._last_flush_chars = 0
+
+    def feed(self, content: str) -> None:
+        self._chars += len(content)
+        self._counter.feed(content)
+        now = perf_counter()
+        if self._chars - self._last_flush_chars < 16 and now - self._last_flush_at < 0.5:
+            return
+        self._repo.upsert_progress(
+            self._task_id,
+            composing_chars=self._chars, composing_units=self._counter.count)
+        self._last_flush_chars = self._chars
+        self._last_flush_at = now
+
+
 class SubagentLoopStrategy:
     """subagent 的回合自动机差异面：内存历史、静默消费、进度写入与租约终态校验。
 
@@ -64,21 +88,10 @@ class SubagentLoopStrategy:
         return [{"role": "system", "content": prompt}] + self.history
 
     def consume(self, stream):
-        chars = [0]
-        last_flush = [perf_counter()]
-        last_flush_chars = [0]
-        counter = UnitCounter(_UNIT_MARKER.get(self.task.agent_type, "## "))
-
-        def on_token(content):
-            chars[0] += len(content)
-            counter.feed(content)
-            now = perf_counter()
-            if chars[0] - last_flush_chars[0] >= 16 or now - last_flush[0] >= 0.5:
-                self._progress_repo.upsert_progress(
-                    self.task.id, composing_chars=chars[0], composing_units=counter.count)
-                last_flush_chars[0] = chars[0]
-                last_flush[0] = now
-        return silent_consume(stream, on_token=on_token)
+        sink = ProgressSink(
+            self.task.id, self._progress_repo,
+            _UNIT_MARKER.get(self.task.agent_type, "## "))
+        return silent_consume(stream, on_token=sink.feed)
 
     def before_dispatch(self, call):
         pass

@@ -5,7 +5,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from chorus.domain.task.activity import TaskProgress
+from chorus.domain.task.progress import TaskProgress
 from chorus.repo.connection import ConnectionFactory
 
 
