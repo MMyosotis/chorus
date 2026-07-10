@@ -17,14 +17,44 @@ const props = defineProps({
 defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
 
 const container = ref(null)
+// 用户是否贴在底部（贴底时才自动跟随新内容滚底）
+const stickToBottom = ref(true)
 
-const dateline = computed(() => {
+function onScroll() {
+  const el = container.value
+  if (!el) return
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+}
+
+function scrollToBottom() {
+  const el = container.value
+  if (!el) return
+  el.scrollTop = el.scrollHeight
+  stickToBottom.value = true
+}
+
+const datelineDate = computed(() => {
   const ts = props.sessionUpdatedAt
   if (!ts) return ''
   const d = new Date(ts * 1000)
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}.${m}.${day}`
+  const digits = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  const year = String(d.getFullYear()).split('').map((n) => digits[Number(n)]).join('')
+  const month = d.getMonth() + 1
+  const day = d.getDate()
+  const cnMonth = month < 10 ? digits[month] : `十${month === 10 ? '' : digits[month - 10]}`
+  const cnDay = day < 10 ? digits[day] : day < 20 ? `十${day === 10 ? '' : digits[day - 10]}` : `${digits[Math.floor(day / 10)]}十${day % 10 === 0 ? '' : digits[day % 10]}`
+  return `${year} · ${cnMonth}月${cnDay}日`
+})
+
+const datelineTime = computed(() => {
+  const ts = props.sessionUpdatedAt
+  if (!ts) return ''
+  const d = new Date(ts * 1000)
+  const hour = d.getHours()
+  const minute = d.getMinutes()
+  const period = hour < 6 ? '凌晨' : hour < 12 ? '上午' : hour < 14 ? '中午' : hour < 18 ? '午后' : '入夜'
+  const h12 = hour % 12 === 0 ? 12 : hour % 12
+  return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
 watch(
@@ -47,6 +77,7 @@ watch(
       )
     }),
   () => {
+    if (!stickToBottom.value) return
     nextTick(() => {
       if (container.value) {
         container.value.scrollTop = container.value.scrollHeight
@@ -55,17 +86,32 @@ watch(
   },
   { deep: true }
 )
+
+// 切换会话：重置跟随态并滚到底
+watch(
+  () => props.sessionId,
+  () => {
+    stickToBottom.value = true
+    nextTick(() => {
+      if (container.value) container.value.scrollTop = container.value.scrollHeight
+    })
+  }
+)
 </script>
 
 <template>
-  <div ref="container" class="chat-window">
+  <div ref="container" class="chat-window" @scroll="onScroll">
     <div class="chat-inner">
-      <div v-if="dateline" class="dateline">
-        <span>{{ dateline }}</span>
-        <span class="sep">·</span>
-        <span>讨论</span>
+      <div v-if="datelineDate" class="letterhead">
+        <div class="lh-date">{{ datelineDate }}</div>
+        <div v-if="datelineTime" class="lh-sub">{{ datelineTime }} · 致 稿搭</div>
       </div>
       <template v-for="(msg, idx) in messages" :key="msg.id || idx">
+        <div
+          v-if="msg.role === 'user' && !msg.kind"
+          class="round-divider"
+          aria-hidden="true"
+        ></div>
         <HilCard
           v-if="msg.kind === 'hil'"
           :task="msg.task"
@@ -122,24 +168,33 @@ watch(
   gap: var(--ch-turn-gap);
 }
 
-.dateline {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.round-divider {
+  height: 1px;
+  border-top: 1px dashed var(--ch-border-2);
+  margin: -12px 0;
+}
+
+.letterhead {
+  text-align: center;
+  margin-bottom: 52px;
+  font-family: var(--ch-serif);
+}
+
+.lh-date {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ch-primary-2);
+  letter-spacing: 2px;
+  line-height: 1.4;
+}
+
+.lh-sub {
   font-size: 12px;
   color: var(--ch-faint);
-  letter-spacing: 0.3px;
-}
-
-.dateline .sep {
-  color: var(--ch-border-2);
-}
-
-.dateline::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--ch-hair);
+  letter-spacing: 1.5px;
+  margin-top: 6px;
+  font-feature-settings: "onum" 1;
+  line-height: 1;
 }
 
 .empty-hint {

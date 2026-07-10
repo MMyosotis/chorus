@@ -53,10 +53,11 @@ const runningTool = computed(() => {
 })
 
 const activityLabel = computed(() => {
-  if (activityState.value === 'thinking') return '思考中'
+  if (activityState.value === 'thinking') return '酝酿中'
   if (activityState.value === 'tools') {
-    return runningTool.value?.running_label || '工具调用中'
+    return runningTool.value?.running_label || '落笔中'
   }
+  if (activityState.value === 'preparing') return '铺纸中'
   return ''
 })
 
@@ -138,17 +139,17 @@ function closePreview() {
   <div :class="['bubble-row', role, { bare: bareMode }]">
     <div :class="['sender', role]">{{ role === 'user' ? '我' : '助手' }}</div>
     <div :class="['bubble', role, { bare: bareMode }]">
-      <div v-if="role === 'user'" class="u-bar"></div>
-      <div v-if="planItems.length" class="plan-list">
-        <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
-          <div class="plan-header">执行计划</div>
-          <ol class="plan-steps">
-            <li v-for="(step, i) in (item.arguments?.steps || [])" :key="i">{{ step }}</li>
-          </ol>
+      <div :class="role === 'user' ? 'u-body' : 'a-body'">
+        <div v-if="planItems.length" class="plan-list">
+          <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
+            <div class="plan-header">执行计划</div>
+            <ol class="plan-steps">
+              <li v-for="(step, i) in (item.arguments?.steps || [])" :key="i">{{ step }}</li>
+            </ol>
+          </div>
         </div>
+        <div v-if="content" class="text" v-html="formattedContent"></div>
       </div>
-
-      <div v-if="content" class="text" v-html="formattedContent"></div>
 
       <div v-if="imageItems.length" class="image-list">
         <div v-for="(item, idx) in imageItems" :key="`img-${idx}`" class="image-item">
@@ -168,11 +169,14 @@ function closePreview() {
     </div>
 
     <div v-if="content && activityState === 'tools'" class="tool-running-line" aria-hidden="true">
-      <span v-if="runningTool?.running_label" class="tool-running-label">{{ runningTool.running_label }}</span>
-      <span class="tool-dots">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
+      <span class="dot-wrap" aria-hidden="true">
+        <span class="halo"></span>
+        <span class="core"></span>
+      </span>
+      <span class="label-stage">
+        <Transition name="label-swap">
+          <span class="tool-running-label" :key="runningTool?.running_label">{{ runningTool?.running_label || '落笔中' }}</span>
+        </Transition>
       </span>
     </div>
 
@@ -188,11 +192,14 @@ function closePreview() {
       :class="activityState"
     >
       <div class="status-header">
-        <span v-if="activityLabel" class="status-text">{{ activityLabel }}</span>
-        <span class="dots" aria-hidden="true">
-          <span class="dot"></span>
-          <span class="dot"></span>
-          <span class="dot"></span>
+        <span class="dot-wrap" aria-hidden="true">
+          <span class="halo"></span>
+          <span class="core"></span>
+        </span>
+        <span class="label-stage">
+          <Transition name="label-swap">
+            <span class="status-text" :key="activityLabel">{{ activityLabel }}</span>
+          </Transition>
         </span>
       </div>
     </div>
@@ -213,7 +220,7 @@ function closePreview() {
 }
 
 .bubble-row.user {
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .bubble-row.assistant {
@@ -221,16 +228,26 @@ function closePreview() {
 }
 
 .sender {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--ch-serif);
   font-size: 12px;
-  color: var(--ch-muted);
-  letter-spacing: 0.3px;
-  margin: 0 0 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  height: 24px;
+  padding: 0 8px;
+  margin: 0 0 14px;
+  line-height: 1;
 }
 
 .sender.assistant {
+  background: var(--ch-primary-soft);
   color: var(--ch-primary-2);
-  font-family: var(--ch-serif);
-  letter-spacing: 0.4px;
+}
+
+.sender.user {
+  background: #eef0f2;
+  color: var(--ch-muted);
 }
 
 .bubble {
@@ -240,23 +257,22 @@ function closePreview() {
 }
 
 .bubble.user {
-  display: flex;
-  gap: 14px;
+  max-width: 82%;
   color: var(--ch-text);
-  font-size: 14.5px;
-  line-height: 1.8;
+  font-family: var(--ch-serif);
+  font-size: 15px;
+  line-height: 1.82;
+  letter-spacing: 0.2px;
 }
 
-.u-bar {
-  width: 3px;
-  background: var(--ch-primary);
-  border-radius: 1.5px;
-  flex-shrink: 0;
+.u-body {
+  min-width: 0;
+  padding: 1px 0;
+  text-align: left;
 }
 
 .bubble.user .text {
-  flex: 1;
-  min-width: 0;
+  margin: 0;
 }
 
 .bubble.assistant {
@@ -266,9 +282,10 @@ function closePreview() {
   background: transparent;
   border: none;
   color: var(--ch-text);
-  font-size: 14.5px;
-  line-height: 1.85;
-  letter-spacing: 0.2px;
+  font-family: var(--ch-serif);
+  font-size: 15px;
+  line-height: 1.95;
+  letter-spacing: 0.25px;
 }
 
 .bubble.assistant.bare {
@@ -292,11 +309,11 @@ function closePreview() {
 .bubble.assistant .text :deep(h2),
 .bubble.assistant .text :deep(h3),
 .bubble.assistant .text :deep(h4) {
-  margin: 14px 0 8px;
+  margin: 28px 0 14px;
   font-family: var(--ch-serif);
   font-weight: 600;
-  line-height: 1.35;
-  letter-spacing: 0.2px;
+  line-height: 1.4;
+  letter-spacing: 0.4px;
 }
 .bubble.assistant .text :deep(h1) { font-size: 20px; }
 .bubble.assistant .text :deep(h2) { font-size: 18px; }
@@ -363,18 +380,21 @@ function closePreview() {
 }
 .bubble.assistant .text :deep(hr) {
   border: none;
-  border-top: 1px solid var(--ch-border);
-  margin: 12px 0;
+  border-top: 1px dashed var(--ch-border);
+  margin: 18px 0;
 }
 
-/* ===== 极简内联状态条（思考 / 工具调用）===== */
+/* ===== 过程态:墨色呼吸点 + 文案自下而上切换 ===== */
 .status-card {
   margin: 8px 0 0;
-  font-size: 13px;
   user-select: none;
   background: transparent;
   border-radius: 0;
-  transition: opacity 0.15s;
+  color: var(--ch-body);
+  font-family: var(--ch-serif);
+  font-size: 14px;
+  line-height: 1.95;
+  letter-spacing: 0.3px;
 }
 
 .bubble-row.bare .status-card {
@@ -384,33 +404,66 @@ function closePreview() {
 .status-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 2px 0;
-  line-height: 1;
+  gap: 9px;
 }
 
 .status-text {
   font-weight: 500;
-  letter-spacing: 0.1px;
-  line-height: 1;
 }
 
-.status-card.thinking {
-  color: var(--ch-primary);
-  animation: pulseRow 1.6s ease-in-out infinite;
+.dot-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-left: -1px;
 }
-.status-card.tools {
-  color: var(--ch-primary);
-  animation: pulseRow 1.6s ease-in-out infinite;
+.halo {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ch-primary) 0%, rgba(59, 90, 114, 0.32) 55%, transparent 100%);
+  animation: breath 1.4s ease-in-out infinite;
 }
-.status-card.preparing {
-  color: var(--ch-primary);
-  animation: pulseRow 1.6s ease-in-out infinite;
+.core {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ch-primary-2);
+  opacity: 0.9;
+}
+@keyframes breath {
+  0%, 100% { transform: scale(0.7); opacity: 0.55; }
+  50%      { transform: scale(1.9); opacity: 0.18; }
 }
 
-@keyframes pulseRow {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.65; }
+.label-stage {
+  display: inline-grid;
+  grid-template-areas: "stack";
+  height: 1.95em;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+.status-text,
+.tool-running-label {
+  grid-area: stack;
+  white-space: nowrap;
+  transition: transform 0.4s ease, opacity 0.4s ease;
+}
+.label-swap-enter-from {
+  transform: translateY(8px);
+  opacity: 0;
+}
+.label-swap-leave-to {
+  transform: translateY(-8px);
+  opacity: 0;
+}
+.label-swap-leave-active {
+  transition: transform 0.2s ease, opacity 0.18s ease;
 }
 
 /* 已完成工具的紧凑留痕 */
@@ -424,30 +477,17 @@ function closePreview() {
 .tool-running-line {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   margin: 10px 0 0;
-  line-height: 1;
+  font-family: var(--ch-serif);
+  font-size: 14px;
+  line-height: 1.95;
+  color: var(--ch-body);
+  letter-spacing: 0.3px;
 }
 .tool-running-label {
-  color: var(--ch-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
 }
-.tool-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.tool-dots .dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--ch-primary);
-  opacity: 0.3;
-  animation: dotWave 1.2s ease-in-out infinite;
-}
-.tool-dots .dot:nth-child(2) { animation-delay: 0.2s; }
-.tool-dots .dot:nth-child(3) { animation-delay: 0.4s; }
 .tool-chip {
   display: inline-flex;
   align-items: center;
@@ -469,33 +509,6 @@ function closePreview() {
   color: var(--ch-primary);
   font-weight: 600;
   flex-shrink: 0;
-}
-
-.dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 4px;
-  flex-shrink: 0;
-}
-.dots .dot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.25;
-  animation: dotWave 1.2s ease-in-out infinite;
-}
-.dots .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.dots .dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes dotWave {
-  0%, 60%, 100% { opacity: 0.25; }
-  30%           { opacity: 1; }
 }
 
 /* ===== 执行计划卡片 ===== */

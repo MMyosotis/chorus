@@ -636,21 +636,23 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   padding: 0 34px;
-  height: 64px;
+  height: 60px;
   background: #ffffff;
   color: var(--ch-text);
-  border-bottom: 1px solid var(--ch-border);
+  border-bottom: 1px solid var(--ch-hair);
   flex-shrink: 0;
 }
 
 .session-title {
-  font-size: 18px;
+  font-size: 19px;
   font-family: var(--ch-serif);
   font-weight: 600;
   color: var(--ch-text);
+  letter-spacing: 0.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: calc(100% - 80px);
 }
 
 .header-console-btn {
