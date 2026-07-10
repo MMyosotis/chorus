@@ -13,7 +13,7 @@ const textarea = ref(null)
 
 const disabled = computed(() => props.streaming || props.hasActiveTask)
 const placeholder = computed(() =>
-  props.hasActiveTask ? '执行中，暂时不能输入；确认节点或完成后恢复。' : '输入消息...'
+  props.hasActiveTask ? '执行中，暂时不能输入；确认节点或完成后恢复。' : '写一句想法……'
 )
 
 function handleKeydown(e) {
@@ -59,19 +59,16 @@ defineExpose({ focus })
         @keydown="handleKeydown"
         @input="adjustHeight"
       ></textarea>
-      <div class="input-footer">
-        <span class="input-spacer"></span>
-        <button
-          class="send-btn"
-          :disabled="disabled || !inputText.trim()"
-          @click="send"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="19" x2="12" y2="5"></line>
-            <polyline points="5 12 12 5 19 12"></polyline>
-          </svg>
-        </button>
-      </div>
+      <button
+        class="send-btn"
+        :disabled="disabled || !inputText.trim()"
+        @click="send"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="19" x2="12" y2="5"></line>
+          <polyline points="5 12 12 5 19 12"></polyline>
+        </svg>
+      </button>
     </div>
   </div>
 </template>
@@ -79,7 +76,7 @@ defineExpose({ focus })
 <style scoped>
 .input-bar {
   flex-shrink: 0;
-  padding: 0 16px 20px;
+  padding: 28px 16px 22px;
   background: transparent;
   position: relative;
   z-index: 10;
@@ -90,12 +87,11 @@ defineExpose({ focus })
 }
 
 .input-inner {
-  position: relative;
   max-width: var(--ch-runtime-width);
   margin: 0 auto;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 10px;
   padding: 4px 0 8px;
   border-bottom: 1px solid var(--ch-border-2);
   background: transparent;
@@ -108,12 +104,10 @@ defineExpose({ focus })
 
 .input-bar.locked .input-inner {
   border-color: var(--ch-border-2);
-  padding: 4px 0 8px;
 }
 
 .input-field {
-  display: block;
-  width: 100%;
+  flex: 1;
   border: none;
   outline: none;
   background: transparent;
@@ -121,7 +115,7 @@ defineExpose({ focus })
   line-height: 1.5;
   resize: none;
   font-family: inherit;
-  min-height: 38px;
+  min-height: 24px;
   max-height: 180px;
   overflow-y: auto;
   scrollbar-width: none;
@@ -129,8 +123,7 @@ defineExpose({ focus })
 }
 
 .input-bar.locked .input-field {
-  min-height: 28px;
-  height: 28px !important;
+  min-height: 24px;
   font-size: 12px;
   color: var(--ch-muted);
 }
@@ -151,14 +144,7 @@ defineExpose({ focus })
   100% { opacity: 0.5; }
 }
 
-.input-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.input-bar.locked .input-footer {
+.input-bar.locked .send-btn {
   display: none;
 }
 

@@ -11,7 +11,6 @@ defineEmits(['stop-and-revise'])
 const status = computed(() => props.state?.intent_status || 'empty')
 const goal = computed(() => props.state?.goal || '')
 
-// 已识别槽位：过滤空值，最多 8 条
 const knownEntries = computed(() => {
   const slots = props.state?.known_slots || {}
   return Object.entries(slots)
@@ -19,7 +18,7 @@ const knownEntries = computed(() => {
     .slice(0, 8)
 })
 const missing = computed(() => props.state?.missing_slots || [])
-const title = computed(() => props.state?.confirmation_summary?.title || goal.value || '等待识别意图')
+const summaryTitle = computed(() => props.state?.confirmation_summary?.title || goal.value || '正在理解你的需求')
 
 const progress = computed(() => ({
   empty: 0,
@@ -28,236 +27,188 @@ const progress = computed(() => ({
   ready_to_confirm: 86,
 }[status.value] ?? 100))
 
-const statusLabel = computed(() => ({
-  empty: '待开始',
-  capturing: '识别中',
-  needs_clarification: '待补充',
-  ready_to_confirm: '待你确认',
-  confirmed: '已确认',
-  dispatched: '执行中',
-}[status.value] || '识别中'))
-
-// capturing / needs_clarification 才展开脚手架卡
-const expanded = computed(() =>
+// 脚手架态：识别中 / 待补充
+const scaffold = computed(() =>
   status.value === 'capturing' || status.value === 'needs_clarification'
 )
+// 题旨态：已确认 / 执行中（详情在此展示）
+const brief = computed(() =>
+  status.value === 'confirmed' || status.value === 'dispatched'
+)
+// 待确认：中间已有确认单，右栏只作等待提示
+const awaiting = computed(() => status.value === 'ready_to_confirm')
+const showStop = computed(() => props.hasActiveTask && status.value === 'dispatched')
 </script>
 
 <template>
-  <!-- 折叠态：已确认 / 执行中，一行带停止入口 -->
-  <section v-if="status === 'confirmed' || status === 'dispatched'" class="intent-card collapsed">
-    <span class="dot done"></span>
-    <span class="collapse-text">已确认：{{ goal || '开始执行' }}</span>
-    <button v-if="hasActiveTask" class="link-danger" @click="$emit('stop-and-revise')">停止并修改</button>
+  <!-- 脚手架态：意图识别中 / 待补充 -->
+  <section v-if="scaffold" class="intent-scaffold">
+    <div class="r-eyebrow">意 图</div>
+    <div class="intent-goal">{{ summaryTitle }}</div>
+    <div class="progress-track"><i :style="{ width: `${progress}%` }"></i></div>
+
+    <div v-if="knownEntries.length" class="sec-title">已识别</div>
+    <div v-if="knownEntries.length" class="slots">
+      <template v-for="[key, value] in knownEntries" :key="key">
+        <span class="sk">{{ key }}</span>
+        <span class="sv">{{ Array.isArray(value) ? value.join('、') : value }}</span>
+      </template>
+    </div>
+
+    <div v-if="missing.length" class="sec-title">还想了解</div>
+    <p v-if="missing.length" class="missing">{{ missing.join(' · ') }}</p>
   </section>
 
-  <!-- ready_to_confirm：锚点提示，确认单在对话区 -->
-  <section v-else-if="status === 'ready_to_confirm'" class="intent-card anchor">
-    <span class="dot pulse"></span>
-    <span>待你确认</span>
-    <span class="anchor-hint">请在对话区查看确认单</span>
+  <!-- 题旨态：待确认 / 已确认 / 执行中 -->
+  <section v-else-if="brief" class="intent-brief">
+    <div class="r-eyebrow">题 旨</div>
+    <div class="intent-goal">{{ summaryTitle }}</div>
+    <div v-if="knownEntries.length" class="intent-items">
+      <template v-for="[key, value] in knownEntries" :key="key">
+        <span class="label">{{ key }}</span>
+        <span class="value">{{ Array.isArray(value) ? value.join('、') : value }}</span>
+      </template>
+    </div>
+    <button v-if="showStop" class="intent-stop" @click="$emit('stop-and-revise')">停止并修改</button>
   </section>
 
-  <!-- empty：极简占位 -->
-  <section v-else-if="status === 'empty'" class="intent-card minimal">
-    <span class="dot"></span>
-    <span>{{ goal || '正在理解你的需求' }}</span>
+  <!-- 待确认态：中间已出确认单，右栏只作等待提示 -->
+  <section v-else-if="awaiting" class="intent-awaiting">
+    <div class="r-eyebrow">题 旨</div>
+    <div class="awaiting-text">
+      <span class="dot pulse"></span>
+      <span>等待你确认</span>
+    </div>
   </section>
 
-  <!-- capturing / needs_clarification：脚手架卡 -->
-  <section v-else class="intent-card" :class="status">
-    <div class="intent-top">
-      <div>
-        <p class="eyebrow">意图</p>
-        <h2>{{ title }}</h2>
-      </div>
-      <span class="status-pill">{{ statusLabel }}</span>
-    </div>
-
-    <div class="progress-track">
-      <span :style="{ width: `${progress}%` }"></span>
-    </div>
-
-    <div v-if="knownEntries.length" class="section">
-      <div class="section-title">已识别</div>
-      <div class="slot-grid">
-        <div v-for="[key, value] in knownEntries" :key="key" class="slot-item">
-          <span>{{ key }}</span>
-          <strong>{{ Array.isArray(value) ? value.join('、') : value }}</strong>
-        </div>
-      </div>
-    </div>
-
-    <div v-if="missing.length" class="section">
-      <div class="section-title">还想了解</div>
-      <p class="missing-line">{{ missing.join('、') }}</p>
-    </div>
+  <!-- 极简态：尚无意图 -->
+  <section v-else class="intent-minimal">
+    <div class="r-eyebrow">意 图</div>
+    <div class="intent-goal muted">{{ goal || '正在理解你的需求' }}</div>
   </section>
 </template>
 
 <style scoped>
-.intent-card {
-  background: var(--ch-surface);
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-md);
-  padding: 18px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
-  color: var(--ch-text);
-}
-
-/* 折叠 / 锚点 / 极简 三态：单行布局 */
-.collapsed,
-.anchor,
-.minimal {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 16px;
-  font-size: 13px;
-}
-
-.collapse-text {
-  flex: 1;
-  overflow-wrap: anywhere;
-}
-
-.link-danger {
-  margin-left: auto;
-  border: none;
-  background: transparent;
-  color: var(--ch-red);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-}
-
-.link-danger:hover { text-decoration: underline; }
-
-.anchor-hint {
-  margin-left: auto;
-  color: var(--ch-faint);
-  font-size: 12px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--ch-faint);
-}
-
-.minimal .dot { background: var(--ch-primary); }
-.anchor .dot { background: var(--ch-orange); }
-.done { background: var(--ch-green); }
-
-.pulse {
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
-/* 脚手架卡：原丰富布局 */
-.intent-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.eyebrow {
-  margin-bottom: 6px;
-  color: var(--ch-muted);
+/* 眉题：serif 小字，宽字距 */
+.r-eyebrow {
+  font-family: var(--ch-serif);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
+  color: var(--ch-faint);
+  letter-spacing: 1.4px;
+  margin-bottom: 12px;
 }
 
-h2 {
-  font-size: 17px;
-  line-height: 1.35;
+/* 题旨 / 目标行 */
+.intent-goal {
   font-family: var(--ch-serif);
+  font-size: 14.5px;
   font-weight: 600;
   color: var(--ch-text);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+.intent-goal.muted {
+  color: var(--ch-muted);
+  font-weight: 500;
 }
 
-.status-pill {
-  flex-shrink: 0;
-  border-radius: 999px;
-  padding: 5px 10px;
-  background: var(--ch-primary-soft);
-  color: var(--ch-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.needs_clarification .status-pill,
-.capturing .status-pill {
-  background: var(--ch-orange-soft);
-  color: var(--ch-orange-2);
-}
-
+/* 脚手架态：2px 细进度条 */
 .progress-track {
-  height: 7px;
-  margin: 18px 0 14px;
-  border-radius: 999px;
-  background: var(--ch-border);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ch-hair);
   overflow: hidden;
+  margin-bottom: 16px;
 }
-
-.progress-track span {
+.progress-track i {
   display: block;
   height: 100%;
-  border-radius: inherit;
   background: var(--ch-primary);
   transition: width 0.24s ease;
 }
 
-.section {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--ch-border);
+.sec-title {
+  font-family: var(--ch-serif);
+  font-size: 11px;
+  color: var(--ch-faint);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
 }
 
-.section-title {
-  margin-bottom: 10px;
-  color: var(--ch-muted);
+/* 已识别槽位：auto 1fr 两列 */
+.slots {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  row-gap: 7px;
   font-size: 12px;
-  font-weight: 600;
+  margin-bottom: 14px;
+}
+.slots .sk { color: var(--ch-muted); }
+.slots .sv { color: var(--ch-text); font-family: var(--ch-serif); }
+
+.missing {
+  font-size: 12px;
+  color: var(--ch-orange-2);
+  line-height: 1.6;
+  margin: 0;
 }
 
-.slot-grid {
+/* 题旨态：label / value 两列 */
+.intent-items {
   display: grid;
-  gap: 8px;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 9px;
+  font-size: 12.5px;
 }
-
-.slot-item {
-  display: grid;
-  grid-template-columns: minmax(64px, 0.42fr) 1fr;
-  gap: 10px;
-  align-items: start;
-  font-size: 13px;
+.intent-items .label {
+  color: var(--ch-faint);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  align-self: center;
 }
-
-.slot-item span {
-  color: var(--ch-muted);
-  overflow-wrap: anywhere;
-}
-
-.slot-item strong {
-  color: var(--ch-text);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.missing-line {
+.intent-items .value {
   color: var(--ch-body);
+  font-family: var(--ch-serif);
+}
+
+.intent-stop {
+  margin-top: 12px;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font-family: var(--ch-serif);
+  font-size: 11.5px;
+  color: var(--ch-red);
+  cursor: pointer;
+  padding: 0;
+  align-self: flex-start;
+}
+.intent-stop:hover { border-bottom-color: var(--ch-red); }
+
+/* 待确认态：脉冲点 + 文字 */
+.awaiting-text {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ch-serif);
   font-size: 13px;
-  line-height: 1.55;
-  overflow-wrap: anywhere;
+  color: var(--ch-primary-2);
+}
+
+.awaiting-text .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ch-orange);
+  flex-shrink: 0;
+  animation: awaitingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes awaitingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 </style>

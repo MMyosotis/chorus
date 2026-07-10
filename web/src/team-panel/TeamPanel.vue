@@ -22,29 +22,26 @@ function onFocus(id) {
 
 <template>
   <aside class="team-panel">
-    <template v-if="hasIntent">
-      <div class="team-head">
-        <div class="h">意图识别</div>
-      </div>
-      <IntentStateCard
-        :state="intentState"
-        :has-active-task="hasActiveTask"
-        @stop-and-revise="$emit('stop-and-revise')"
-      />
-    </template>
-    <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
-    <template v-if="tasks.length">
-      <div class="team-head">
-        <div class="h">目录</div>
-      </div>
-      <section class="toc-wrap">
-        <TocCard
-          :tasks="tasks"
-          :focused-task-id="focusedTaskId"
-          @focus="onFocus"
+    <div class="team-body">
+      <template v-if="hasIntent">
+        <IntentStateCard
+          :state="intentState"
+          :has-active-task="hasActiveTask"
+          @stop-and-revise="$emit('stop-and-revise')"
         />
-      </section>
-    </template>
+      </template>
+      <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
+      <template v-if="tasks.length">
+        <div class="r-eyebrow">目 录</div>
+        <section class="toc-wrap">
+          <TocCard
+            :tasks="tasks"
+            :focused-task-id="focusedTaskId"
+            @focus="onFocus"
+          />
+        </section>
+      </template>
+    </div>
   </aside>
 </template>
 
@@ -60,36 +57,27 @@ function onFocus(id) {
   overflow: hidden;
 }
 
-/* 意图卡紧跟标题，左右对齐角色列表 */
-.team-panel > :deep(.intent-card) {
-  flex-shrink: 0;
-  margin: 0 14px;
+.team-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  scrollbar-width: thin;
 }
 
-.team-head {
-  flex-shrink: 0;
-  padding: 18px 18px 12px;
-}
-
-.team-head .h {
+.r-eyebrow {
   font-family: var(--ch-serif);
+  font-size: 11px;
   font-weight: 600;
-  font-size: 16px;
-  color: var(--ch-text);
-  letter-spacing: 0.02em;
-}
-
-.team-head .sub {
-  font-size: 11.5px;
   color: var(--ch-faint);
-  margin-top: 2px;
+  letter-spacing: 1.4px;
+  margin-bottom: 12px;
 }
 
 .toc-wrap {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 18px 18px;
-  scrollbar-width: thin;
+  flex: 0 0 auto;
 }
 
 .team-empty {
