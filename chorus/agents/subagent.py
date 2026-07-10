@@ -166,9 +166,7 @@ class SubAgentService:
             return
 
         invoke = self._build_invoke(task, content)
-        aside = self._aside.generate(task.agent_type, invoke)
-        if aside:
-            self._progress.set_aside(task.id, aside)
+        self._progress.set_aside(task.id, self._aside.generate(task.agent_type, invoke))
         self._progress.set_composing_label(task.id, AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])

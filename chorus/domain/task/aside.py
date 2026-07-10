@@ -1,7 +1,5 @@
-"""运行期意图旁白:读 invoke 调小模型生成一句进行态描述,fail-open。"""
+"""运行期意图旁白:读任务说明调小模型生成一句进行态描述,失败兜默认文案。"""
 from __future__ import annotations
-
-from typing import Optional
 
 from openai import OpenAI
 
@@ -12,17 +10,23 @@ _ROLE_HINT = {
     "image": "配图官",
     "finalize": "汇总官",
 }
+_DEFAULT_ASIDE = {
+    "idea": "我在琢磨一个好选题",
+    "script": "我在打磨这段文案",
+    "image": "我在构思一张画面",
+    "finalize": "我在收拢这篇成稿",
+}
 
 
 class AsideGenerator:
-    """围绕旁白概念的单概念 infra service:调外部模型,非流式短输出。"""
 
     def __init__(self, client: OpenAI, model_id: str):
         self._client = client
         self._model = model_id
 
-    def generate(self, agent_type: str, invoke: str) -> Optional[str]:
-        """基于 invoke 生成一句任务级意图旁白,失败返回 None。"""
+    def generate(self, agent_type: str, invoke: str) -> str:
+        """基于任务说明生成一句任务级意图旁白,失败兜默认文案。"""
+        fallback = _DEFAULT_ASIDE.get(agent_type, "我正在准备中")
         role = _ROLE_HINT.get(agent_type, agent_type)
         prompt = (
             f"你是{role}。请基于以下任务说明，用一句话（不超过20字）描述你接下来打算怎么写，"
@@ -38,5 +42,5 @@ class AsideGenerator:
             )
             raw = (resp.choices[0].message.content or "").strip().strip("\"'`")
         except Exception:
-            return None
-        return raw[:_ASIDE_MAX_LEN] if raw else None
+            return fallback
+        return raw[:_ASIDE_MAX_LEN] if raw else fallback

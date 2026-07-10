@@ -96,7 +96,7 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content
     hooks.register("PostToolUse", trace.on_tool_result)
     loop = AgentLoop(hooks, disp, 1024)
     if aside is None:
-        aside = types.SimpleNamespace(generate=lambda agent_type, invoke: None)
+        aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo, content_repo,
         disp, stub_chat_model_provider(client), loop, aside,
@@ -256,7 +256,7 @@ def test_progress_chars_units_written_during_stream():
 
 
 def test_progress_aside_written_on_entry():
-    """入口调旁白生成器,非空则写进度 aside 字段。"""
+    """入口调旁白生成器,写进度 aside 字段。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
     body = _idea_md(done_line="定了", awaiting_line="y")
