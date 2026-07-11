@@ -58,8 +58,8 @@ const datelineTime = computed(() => {
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
-// 确认意图后建图：以第一条含 create_plan 工具调用的助手消息为锚点。
-// 锚点及之前折叠成「与助手的讨论」；但锚点正在流式吐字时先正常显示，流式结束再折叠。
+// 确认意图后建图：以第一条含 create_plan 工具调用的助手消息为锚点，锚点及之前折叠成「与助手的讨论」。
+// 锚点正在流式吐字时先正常显示；流式结束或历史拉回时即折叠，一旦折叠不再展开。
 const anchorIdx = computed(() =>
   props.messages.findIndex(
     (m) =>
@@ -68,7 +68,6 @@ const anchorIdx = computed(() =>
   )
 )
 
-// 锚点是否已收进折叠区（流式结束后才置 true）
 const anchorFolded = ref(false)
 
 const foldGroup = computed(() => {
@@ -79,20 +78,13 @@ const foldGroup = computed(() => {
   return { folded: msgs.slice(0, idx), rest: msgs.slice(idx) }
 })
 
-// 锚点首次出现：非流式（历史会话拉回）直接折叠；流式中等结束再折叠
+// 锚点存在且非流式即折叠：同步触发，流式翻转当下就收，避开重拉消息异步替换的时序；只置真保证粘性
 watch(
-  anchorIdx,
-  (idx) => {
-    if (idx > 0 && !props.streaming && !anchorFolded.value) anchorFolded.value = true
-  }
-)
-
-// 建图流式结束：把锚点也收进折叠区
-watch(
-  () => props.streaming,
-  (streaming, prev) => {
-    if (prev && !streaming && anchorIdx.value > 0) anchorFolded.value = true
-  }
+  () => anchorIdx.value > 0 && !props.streaming,
+  (shouldFold) => {
+    if (shouldFold) anchorFolded.value = true
+  },
+  { flush: 'sync' }
 )
 
 watch(
