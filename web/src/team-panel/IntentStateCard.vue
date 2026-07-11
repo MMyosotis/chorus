@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({
   state: { type: Object, default: null },
@@ -46,6 +46,30 @@ const brief = computed(() =>
 )
 const awaiting = computed(() => status.value === 'ready_to_confirm')
 const showStop = computed(() => props.hasActiveTask && status.value === 'dispatched')
+
+const slotText = (value) => (Array.isArray(value) ? value.join('、') : value)
+
+const floating = ref(null)
+let hideTimer = null
+
+const showTip = (event) => {
+  const trunc = event.currentTarget.querySelector('.trunc')
+  if (!trunc || trunc.scrollWidth <= trunc.clientWidth) return
+  clearTimeout(hideTimer)
+  const rect = trunc.getBoundingClientRect()
+  floating.value = {
+    text: trunc.textContent,
+    left: rect.left,
+    top: rect.top - 6,
+  }
+}
+const hideTip = () => {
+  hideTimer = setTimeout(() => { floating.value = null }, 120)
+}
+onBeforeUnmount(() => {
+  clearTimeout(hideTimer)
+  floating.value = null
+})
 </script>
 
 <template>
@@ -56,18 +80,18 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
       <span>题旨</span>
       <span class="stage" :class="stageClass"><i class="stage-dot"></i>{{ stageLabel }}</span>
     </div>
-    <div class="intent-goal">{{ summaryTitle }}</div>
+    <div class="intent-goal tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ summaryTitle }}</span></div>
 
     <div v-if="knownEntries.length" class="sec-title">已知</div>
     <div v-if="knownEntries.length" class="slots">
       <template v-for="[key, value] in knownEntries" :key="key">
         <span class="sk">{{ key }}</span>
-        <span class="sv">{{ Array.isArray(value) ? value.join('、') : value }}</span>
+        <span class="sv tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ slotText(value) }}</span></span>
       </template>
     </div>
 
     <div v-if="missing.length" class="sec-title">待问</div>
-    <p v-if="missing.length" class="missing">{{ missing.join(' · ') }}</p>
+    <p v-if="missing.length" class="missing tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ missing.join(' · ') }}</span></p>
   </section>
 
   <!-- 题旨态：已确认 / 执行中 -->
@@ -77,13 +101,13 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
       <span>题旨</span>
       <span class="stage" :class="stageClass"><i class="stage-dot"></i>{{ stageLabel }}</span>
     </div>
-    <div class="intent-goal">{{ summaryTitle }}</div>
+    <div class="intent-goal tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ summaryTitle }}</span></div>
 
     <div v-if="knownEntries.length" class="sec-title">已知</div>
     <div v-if="knownEntries.length" class="slots">
       <template v-for="[key, value] in knownEntries" :key="key">
         <span class="sk">{{ key }}</span>
-        <span class="sv">{{ Array.isArray(value) ? value.join('、') : value }}</span>
+        <span class="sv tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ slotText(value) }}</span></span>
       </template>
     </div>
 
@@ -97,19 +121,19 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
       <span>题旨</span>
       <span class="stage" :class="stageClass"><i class="stage-dot"></i>{{ stageLabel }}</span>
     </div>
-    <div class="intent-goal">{{ summaryTitle }}</div>
+    <div class="intent-goal tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ summaryTitle }}</span></div>
 
     <div class="sec-title">已知</div>
     <div class="slots" v-if="knownEntries.length">
       <template v-for="[key, value] in knownEntries" :key="key">
         <span class="sk">{{ key }}</span>
-        <span class="sv">{{ Array.isArray(value) ? value.join('、') : value }}</span>
+        <span class="sv tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ slotText(value) }}</span></span>
       </template>
     </div>
     <div class="slots-placeholder" v-else>待识别</div>
 
     <div class="sec-title">待问</div>
-    <div class="missing" v-if="missing.length">{{ missing.join(' · ') }}</div>
+    <div class="missing tip" v-if="missing.length" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ missing.join(' · ') }}</span></div>
     <div class="missing-placeholder" v-else>待补充</div>
   </section>
 
@@ -120,7 +144,7 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
       <span>题旨</span>
       <span class="stage" :class="stageClass"><i class="stage-dot"></i>{{ stageLabel }}</span>
     </div>
-    <div class="intent-goal muted">{{ goal || '正在理解你的需求' }}</div>
+    <div class="intent-goal muted tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ goal || '正在理解你的需求' }}</span></div>
 
     <div class="sec-title">已知</div>
     <div class="slots-placeholder">待识别</div>
@@ -128,6 +152,12 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
     <div class="sec-title">待问</div>
     <div class="missing-placeholder">待补充</div>
   </section>
+
+  <Teleport to="body">
+    <div v-if="floating" class="intent-tip" :style="{ left: floating.left + 'px', top: floating.top + 'px' }">
+      {{ floating.text }}
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -207,6 +237,7 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
   color: var(--ch-text);
   line-height: 1.55;
   margin-bottom: 14px;
+  position: relative;
 }
 .intent-goal.muted {
   color: var(--ch-muted);
@@ -245,8 +276,12 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
   margin: 0 0 16px 14px;
   font-family: var(--ch-serif);
 }
-.slots .sk { color: var(--ch-muted); }
-.slots .sv { color: var(--ch-text); }
+.slots .sk { color: var(--ch-muted); white-space: nowrap; }
+.slots .sv {
+  color: var(--ch-text);
+  position: relative;
+  min-width: 0;
+}
 
 /* 空 slot / 空 missing：淡省略号占位，保持框架不塌 */
 .slots-placeholder,
@@ -256,6 +291,9 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
   color: var(--ch-faint);
   margin: 0 0 16px 14px;
   opacity: 0.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .missing-placeholder { margin-bottom: 0; }
 
@@ -265,6 +303,7 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
   font-family: var(--ch-serif);
   line-height: 1.7;
   margin: 0 0 0 14px;
+  position: relative;
 }
 
 .intent-stop {
@@ -280,4 +319,32 @@ const showStop = computed(() => props.hasActiveTask && status.value === 'dispatc
   align-self: flex-start;
 }
 .intent-stop:hover { border-bottom-color: var(--ch-red); }
+
+/* 截断层：内层单行省略 */
+.trunc {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+</style>
+
+<style>
+.intent-tip {
+  position: fixed;
+  transform: translate(0, -100%);
+  max-width: 280px;
+  padding: 6px 9px;
+  background: var(--ch-text);
+  color: var(--ch-surface);
+  font-family: var(--ch-serif);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  word-break: break-word;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 9999;
+}
 </style>
