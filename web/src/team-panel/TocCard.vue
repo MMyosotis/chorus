@@ -45,7 +45,7 @@ const CN_NUM = ['一', '二', '三', '四', '五']
 <style scoped>
 .slip {
   position: relative;
-  background: #ffffff;
+  background: var(--ch-bg-warm);
   border: 1px solid var(--ch-hair);
   padding: 22px 14px 14px;
   box-shadow:

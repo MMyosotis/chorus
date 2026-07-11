@@ -15,6 +15,14 @@ const slotItems = computed(() => {
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
     .slice(0, 8)
 })
+
+const seqNo = computed(() => {
+  const source = props.state?.goal || props.state?.confirmation_summary?.title || ''
+  let hash = 0
+  for (let i = 0; i < source.length; i++) hash = (hash * 31 + source.charCodeAt(i)) >>> 0
+  return 'No.' + String(hash % 10000).padStart(4, '0')
+})
+
 const locking = ref(false)
 
 function approve() {
@@ -34,7 +42,12 @@ function reject() {
 
 <template>
   <section class="intent-confirm" :class="[stamp && 'stamped', stamp]">
-    <span class="seal">题旨·待确认</span>
+    <span class="knob" aria-hidden="true"></span>
+    <div class="receipt-spine" aria-hidden="true">
+      <span class="spine-tag">CONFIRM</span>
+      <span class="spine-no">{{ seqNo }}</span>
+      <span class="spine-seam"></span>
+    </div>
     <div class="confirm-title">
       {{ state?.confirmation_summary?.title || state?.goal || '请确认这次创作方向' }}
     </div>
@@ -49,7 +62,8 @@ function reject() {
       <span class="gap">·</span>
       <button class="secondary" :disabled="locking" @click="reject">继续调整</button>
     </div>
-    <span v-if="stamp" class="stamp-mark stamp-c" :class="stamp">
+    <div class="stamp-clip" aria-hidden="true">
+      <span class="stamp-mark stamp-c" :class="stamp">
         <svg viewBox="0 0 158 158" aria-hidden="true">
           <defs>
             <filter id="stamp-ink">
@@ -72,32 +86,88 @@ function reject() {
           </g>
         </svg>
       </span>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .intent-confirm {
-  width: 100%;
-  border-top: 3px double var(--ch-border-2);
-  border-bottom: 3px double var(--ch-border-2);
-  padding: 38px 0 14px;
   position: relative;
+  align-self: center;
+  width: calc(100% - 96px);
+  background: #fffdf7;
+  border: 1px solid var(--ch-border-2);
+  padding: 22px 60px 22px 22px;
+  box-shadow:
+    0 6px 16px -6px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.02);
+  background-image:
+    radial-gradient(rgba(120, 100, 70, 0.035) 1px, transparent 1px);
+  background-size: 3px 3px;
 }
 
-.seal {
+.knob {
   position: absolute;
-  top: -11px;
+  top: -7px;
   left: 50%;
   transform: translateX(-50%);
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--ch-primary);
+  box-shadow:
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.55),
+    inset 0 -1px 1.5px rgba(0, 0, 0, 0.18),
+    0 2px 3px rgba(0, 0, 0, 0.25);
+  z-index: 3;
+}
+
+/* 凭证脊:右侧竖排抬头+骑缝撕线连成一条,印章压在中段 */
+.receipt-spine {
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  right: 14px;
+  width: 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.receipt-spine .spine-tag {
   font-family: var(--ch-serif);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 2px;
   color: var(--ch-primary-2);
-  letter-spacing: 1px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
   line-height: 1;
-  padding: 5px 14px;
-  border: 1px solid var(--ch-primary);
-  background: var(--ch-surface);
+  padding-bottom: 6px;
+}
+
+.receipt-spine .spine-no {
+  font-family: var(--ch-serif);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--ch-muted);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding-bottom: 8px;
+}
+
+.receipt-spine .spine-seam {
+  flex: 1;
+  width: 1px;
+  background-image: linear-gradient(to bottom, var(--ch-border-2) 50%, transparent 0);
+  background-size: 1px 5px;
+  background-repeat: repeat-y;
+  opacity: 0.8;
 }
 
 .confirm-title {
@@ -106,6 +176,7 @@ function reject() {
   font-weight: 600;
   color: var(--ch-text);
   line-height: 1.5;
+  text-align: center;
   margin-bottom: 14px;
 }
 
@@ -185,23 +256,30 @@ function reject() {
   margin: 0 10px;
 }
 
-/* 盖章标记：斜放、SVG 圆印压在右侧，盖完不消失 */
-.stamp-mark {
+/* 盖章裁切层:覆盖整卡裁掉斜印溢出,不挡按钮 */
+.stamp-clip {
   position: absolute;
-  top: 44%;
-  right: 6%;
-  width: 158px;
-  height: 158px;
-  transform: translateY(-50%) rotate(-13deg) scale(2.2);
-  opacity: 0;
+  inset: 0;
+  overflow: hidden;
   pointer-events: none;
   z-index: 2;
+}
+
+/* 盖章标记:压在右侧骑缝撕线上,半探出右边被裁,常驻隐形,盖章时过渡显形 */
+.stamp-mark {
+  position: absolute;
+  top: 55%;
+  right: 28px;
+  width: 116px;
+  height: 116px;
+  transform: translate(50%, -50%) rotate(-13deg) scale(2.2);
+  opacity: 0;
   transition: opacity 0.16s ease-out, transform 0.4s cubic-bezier(0.18, 0.7, 0.3, 1);
 }
 
 .intent-confirm.stamped .stamp-mark {
   opacity: 1;
-  transform: translateY(-50%) rotate(-13deg) scale(1);
+  transform: translate(50%, -50%) rotate(-13deg) scale(1);
 }
 
 .stamp-c {

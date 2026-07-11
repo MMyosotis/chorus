@@ -625,7 +625,7 @@ onMounted(async () => {
   min-width: 0;
   overflow: hidden;
   height: 100%;
-  background: #ffffff;
+  background: var(--ch-bg-warm);
   border: none;
   box-shadow: none;
 }
@@ -637,7 +637,7 @@ onMounted(async () => {
   justify-content: center;
   padding: 0 34px;
   height: 60px;
-  background: #ffffff;
+  background: var(--ch-bg-warm);
   color: var(--ch-text);
   border-bottom: 1px solid var(--ch-hair);
   flex-shrink: 0;

@@ -6,6 +6,7 @@ import PostCard from './PostCard.vue'
 import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
+import ConvFold from './ConvFold.vue'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -57,6 +58,43 @@ const datelineTime = computed(() => {
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
+// 确认意图后建图：以第一条含 create_plan 工具调用的助手消息为锚点。
+// 锚点及之前折叠成「与助手的讨论」；但锚点正在流式吐字时先正常显示，流式结束再折叠。
+const anchorIdx = computed(() =>
+  props.messages.findIndex(
+    (m) =>
+      m.role === 'assistant' &&
+      (m.tools?.items || []).some((it) => it.name === 'create_plan')
+  )
+)
+
+// 锚点是否已收进折叠区（流式结束后才置 true）
+const anchorFolded = ref(false)
+
+const foldGroup = computed(() => {
+  const msgs = props.messages
+  const idx = anchorIdx.value
+  if (idx <= 0) return { folded: [], rest: msgs }
+  if (anchorFolded.value) return { folded: msgs.slice(0, idx + 1), rest: msgs.slice(idx + 1) }
+  return { folded: msgs.slice(0, idx), rest: msgs.slice(idx) }
+})
+
+// 锚点首次出现：非流式（历史会话拉回）直接折叠；流式中等结束再折叠
+watch(
+  anchorIdx,
+  (idx) => {
+    if (idx > 0 && !props.streaming && !anchorFolded.value) anchorFolded.value = true
+  }
+)
+
+// 建图流式结束：把锚点也收进折叠区
+watch(
+  () => props.streaming,
+  (streaming, prev) => {
+    if (prev && !streaming && anchorIdx.value > 0) anchorFolded.value = true
+  }
+)
+
 watch(
   () =>
     props.messages.map((m) => {
@@ -92,6 +130,7 @@ watch(
   () => props.sessionId,
   () => {
     stickToBottom.value = true
+    anchorFolded.value = false
     nextTick(() => {
       if (container.value) container.value.scrollTop = container.value.scrollHeight
     })
@@ -106,7 +145,9 @@ watch(
         <div class="lh-date">{{ datelineDate }}</div>
         <div v-if="datelineTime" class="lh-sub">{{ datelineTime }} · 致 稿搭</div>
       </div>
-      <template v-for="(msg, idx) in messages" :key="msg.id || idx">
+      <ConvFold v-if="foldGroup.folded.length" :messages="foldGroup.folded" />
+      <div v-if="foldGroup.folded.length" class="rule" aria-hidden="true"></div>
+      <template v-for="(msg, idx) in foldGroup.rest" :key="msg.id || idx">
         <div
           v-if="msg.role === 'user' && !msg.kind"
           class="round-divider"
@@ -141,7 +182,7 @@ watch(
           :content="msg.content"
           :thinking="msg.thinking"
           :tools="msg.tools"
-          :active="streaming && idx === messages.length - 1 && msg.role === 'assistant'"
+          :active="streaming && idx === foldGroup.rest.length - 1 && msg.role === 'assistant'"
         />
       </template>
       <div v-if="messages.length === 0" class="empty-hint">
@@ -165,18 +206,21 @@ watch(
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--ch-turn-gap);
 }
 
 .round-divider {
+  display: none;
+}
+
+.rule {
   height: 1px;
-  border-top: 1px dashed var(--ch-border-2);
-  margin: -12px 0;
+  background: var(--ch-hair);
+  margin: var(--ch-turn-gap, 24px) 0;
 }
 
 .letterhead {
   text-align: center;
-  margin-bottom: 52px;
+  margin-bottom: 16px;
   font-family: var(--ch-serif);
 }
 
@@ -207,5 +251,16 @@ watch(
   color: var(--ch-faint);
   font-size: 16px;
   letter-spacing: 0.5px;
+}
+
+.chat-inner :deep(.hil-card) {
+  margin: 4px 0;
+}
+
+.chat-inner :deep(.post-card),
+.chat-inner :deep(.recovery-card),
+.chat-inner :deep(.intent-confirm),
+.chat-inner :deep(.running) {
+  margin: 18px 0;
 }
 </style>

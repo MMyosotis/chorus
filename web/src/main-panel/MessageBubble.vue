@@ -137,7 +137,7 @@ function closePreview() {
 
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
-    <div :class="['sender', role]">{{ role === 'user' ? '我' : '助手' }}</div>
+    <div :class="['sender', role]">{{ role === 'user' ? '我' : '稿' }}</div>
     <div :class="['bubble', role, { bare: bareMode }]">
       <div :class="role === 'user' ? 'u-body' : 'a-body'">
         <div v-if="planItems.length" class="plan-list">
@@ -215,39 +215,56 @@ function closePreview() {
 
 <style scoped>
 .bubble-row {
-  display: flex;
-  flex-direction: column;
-}
-
-.bubble-row.user {
-  align-items: flex-end;
-}
-
-.bubble-row.assistant {
-  align-items: flex-start;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 26px 0;
+  border-top: 1px dashed var(--ch-border-2);
 }
 
 .sender {
+  position: absolute;
+  top: 26px;
+  align-self: start;
   display: inline-flex;
   align-items: center;
-  font-family: var(--ch-serif);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
+  justify-content: center;
+  min-width: 34px;
   height: 24px;
-  padding: 0 8px;
-  margin: 0 0 14px;
+  padding: 0 4px;
+  font-family: var(--ch-serif);
+  font-size: 13px;
+  font-weight: 700;
   line-height: 1;
+  letter-spacing: 0.5px;
+  z-index: 1;
 }
 
 .sender.assistant {
+  left: 0;
   background: var(--ch-primary-soft);
   color: var(--ch-primary-2);
 }
 
 .sender.user {
-  background: #eef0f2;
+  right: 0;
+  background: #f0f0ed;
   color: var(--ch-muted);
+}
+
+.bubble-row.user .bubble {
+  text-align: right;
+}
+
+.bubble {
+  grid-column: 1;
+}
+
+.tool-running-line,
+.tool-chips,
+.status-card {
+  grid-column: 1;
+  padding-left: 48px;
 }
 
 .bubble {
@@ -257,18 +274,20 @@ function closePreview() {
 }
 
 .bubble.user {
-  max-width: 82%;
+  max-width: 100%;
+  padding: 0 48px;
   color: var(--ch-text);
   font-family: var(--ch-serif);
   font-size: 15px;
-  line-height: 1.82;
+  font-weight: 500;
+  line-height: 1.85;
   letter-spacing: 0.2px;
 }
 
 .u-body {
   min-width: 0;
   padding: 1px 0;
-  text-align: left;
+  text-align: right;
 }
 
 .bubble.user .text {
@@ -278,14 +297,15 @@ function closePreview() {
 .bubble.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 0;
+  padding: 0 48px;
   background: transparent;
   border: none;
   color: var(--ch-text);
   font-family: var(--ch-serif);
   font-size: 15px;
-  line-height: 1.95;
-  letter-spacing: 0.25px;
+  font-weight: 500;
+  line-height: 1.85;
+  letter-spacing: 0.2px;
 }
 
 .bubble.assistant.bare {

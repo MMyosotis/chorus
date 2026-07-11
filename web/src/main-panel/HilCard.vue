@@ -116,7 +116,7 @@ async function onCancel() {
   border: none;
   border-radius: var(--ch-radius-md);
   background: transparent;
-  padding: 20px 22px;
+  padding: 8px 22px;
   margin: 4px 0;
   box-shadow: none;
 }

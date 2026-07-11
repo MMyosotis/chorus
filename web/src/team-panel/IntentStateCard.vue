@@ -163,7 +163,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .slip {
   position: relative;
-  background: #ffffff;
+  background: var(--ch-bg-warm);
   border: 1px solid var(--ch-border);
   padding: 22px 14px 14px;
   min-height: 120px;
