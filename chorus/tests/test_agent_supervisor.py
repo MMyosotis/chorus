@@ -307,7 +307,6 @@ def test_update_intent_state_ready_to_confirm_finishes():
         "missing_slots": [],
         "confirmation_summary": {
             "title": "创作方向确认",
-            "items": [{"label": "主题", "value": "精品咖啡豆"}],
         },
         "friendly_reply": "我整理了这次创作方向，请确认后开始",
     }

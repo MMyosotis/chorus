@@ -1,13 +1,20 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-defineProps({
+const props = defineProps({
   state: { type: Object, default: null },
 })
 
 const emit = defineEmits(['confirm', 'revise'])
 
 const stamp = ref('')
+
+const slotItems = computed(() => {
+  const slots = props.state?.known_slots || {}
+  return Object.entries(slots)
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+    .slice(0, 8)
+})
 const locking = ref(false)
 
 function approve() {
@@ -31,10 +38,10 @@ function reject() {
     <div class="confirm-title">
       {{ state?.confirmation_summary?.title || state?.goal || '请确认这次创作方向' }}
     </div>
-    <div v-if="(state?.confirmation_summary?.items || []).length" class="confirm-items">
-      <template v-for="(item, idx) in state.confirmation_summary.items" :key="idx">
-        <span class="label">{{ item.label }}</span>
-        <span class="value">{{ item.value }}</span>
+    <div v-if="slotItems.length" class="confirm-items">
+      <template v-for="([label, value], idx) in slotItems" :key="idx">
+        <span class="label">{{ label }}</span>
+        <span class="value">{{ value }}</span>
       </template>
     </div>
     <div class="confirm-actions">

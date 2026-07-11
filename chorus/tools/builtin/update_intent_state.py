@@ -33,7 +33,7 @@ class UpdateIntentStateTool(Tool):
                     "empty=刚打招呼无创作意图；"
                     "capturing=用户已提创作需求，正在识别槽位（创作必须从此态开始，不要停 empty）；"
                     "needs_clarification=信息不足需追问；"
-                    "ready_to_confirm=信息齐全，填好 confirmation_summary 等用户拍板；"
+                    "ready_to_confirm=信息齐全，填好 confirmation_summary 标题等用户拍板；"
                     "confirmed/dispatched 由系统翻转，模型不要主动填"
                 ),
             },
@@ -51,20 +51,9 @@ class UpdateIntentStateTool(Tool):
                 "type": ["object", "null"],
                 "properties": {
                     "title": {"type": "string"},
-                    "items": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "label": {"type": "string"},
-                                "value": {"type": "string"},
-                            },
-                            "required": ["label", "value"],
-                        },
-                    },
                 },
-                "required": ["title", "items"],
-                "description": "ready_to_confirm 时给用户确认的摘要；未就绪可为 null",
+                "required": ["title"],
+                "description": "ready_to_confirm 时给用户看的一句话确认标题；槽位展示由系统从 known_slots 自动投影，不要在此填 items",
             },
             "friendly_reply": {
                 "type": "string",

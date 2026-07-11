@@ -41,18 +41,10 @@ def derive_next_action(status: str) -> NextAction:
     return _STATUS_TO_NEXT_ACTION.get(status, "reply_only")
 
 
-class ConfirmationItem(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    label: str
-    value: str
-
-
 class ConfirmationSummary(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     title: str = ""
-    items: list[ConfirmationItem] = Field(default_factory=list)
 
 
 class IntentState(BaseModel):
