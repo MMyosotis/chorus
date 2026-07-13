@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from itertools import chain
 from typing import Iterator
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
@@ -99,7 +100,7 @@ class SupervisorLoopStrategy:
         self._pending_intent_events = []
 
         if terminal is not None:
-            return LoopAction(LoopSignal.FINISH, events + list(self._handle_terminal(ctx)))
+            return LoopAction(LoopSignal.FINISH, chain(events, self._handle_terminal(ctx)))
         return LoopAction(LoopSignal.CONTINUE, events)
 
     def after_text(self, ctx, result):
@@ -110,8 +111,7 @@ class SupervisorLoopStrategy:
         )
         self._session.touch(self.session_id)
 
-        events = [DoneEvent()] + list(self._hooks.trigger("Stop", ctx))
-        return LoopAction(LoopSignal.FINISH, events)
+        return LoopAction(LoopSignal.FINISH, chain([DoneEvent()], self._hooks.trigger("Stop", ctx)))
 
     def on_exhausted(self):
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content="主 Agent 未能完成本轮必要动作，请再试一次")])
