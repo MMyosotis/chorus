@@ -106,7 +106,6 @@ def _plan_args(topic="夏日晚风", steps=None):
         ]
     return {
         "thought": "想了一下",
-        "friendly_reply": "好的，我来帮你创作",
         "intent": {"topic": topic, "style": "轻松", "image_count": 2},
         "steps": steps,
     }
@@ -144,10 +143,10 @@ def test_new_plan():
     assert types_seq[-1] == "done"
     # tasks 落库
     assert task_repo.count_by_session_statuses(s.id, ACTIVE_STATUSES) == 2
-    # 历史如实：user + assistant(friendly_reply, tool_calls=[create_plan]) + tool(result)
+    # 历史如实：user + assistant(无正文, tool_calls=[create_plan]) + tool(result)
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]
-    assert msgs[1].content == "好的，我来帮你创作"
+    assert msgs[1].content is None
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "create_plan"
     assert msgs[2].tool_call_id == "c1"
@@ -295,11 +294,11 @@ def test_update_intent_state_does_not_finish():
 
 
 def test_update_intent_state_ready_to_confirm_finishes():
-    """ready_to_confirm 返 Terminal 杀轮次：单轮即 done，助手气泡取 friendly_reply。
+    """ready_to_confirm 返 Terminal 杀轮次：单轮即 done，助手无正文。
 
     继 create_plan 之后第二个终止型工具。模型调 update_intent_state(ready_to_confirm) 后，
     after_tools 命中 Terminal -> FINISH -> 同轮 done，不再有后续纯文本轮。
-    助手气泡 content 来自 friendly_reply 参数（模型本轮无正文），与 create_plan 同构。
+    模型本轮无正文，content 如实为 None，与 create_plan 同构。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     intent_args = {
@@ -310,7 +309,6 @@ def test_update_intent_state_ready_to_confirm_finishes():
         "confirmation_summary": {
             "title": "创作方向确认",
         },
-        "friendly_reply": "我整理了这次创作方向，请确认后开始",
     }
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
@@ -325,10 +323,10 @@ def test_update_intent_state_ready_to_confirm_finishes():
     assert types_seq[-1] == "done"
     # 意图状态事件在 done 之前下发，驱动前端注入确认卡
     assert "intent_state" in types_seq
-    # 历史：user + assistant(friendly_reply, tool_calls) + tool(占位)，无后续纯文本轮
+    # 历史：user + assistant(无正文, tool_calls) + tool(占位)，无后续纯文本轮
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]
-    assert msgs[1].content == "我整理了这次创作方向，请确认后开始"
+    assert msgs[1].content is None
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "update_intent_state"
     assert msgs[2].role == "tool"

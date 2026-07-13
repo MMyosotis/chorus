@@ -78,7 +78,6 @@ class IntentStatePatch(BaseModel):
     known_slots: dict[str, Any] = Field(default_factory=dict)
     missing_slots: list[str] = Field(default_factory=list)
     confirmation_summary: Optional[ConfirmationSummary] = None
-    friendly_reply: Optional[str] = None
 
 
 def empty_intent_state(session_id: str) -> IntentState:

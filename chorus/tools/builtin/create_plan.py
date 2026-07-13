@@ -29,10 +29,6 @@ class CreatePlanTool(Tool):
         "type": "object",
         "properties": {
             "thought": {"type": "string", "description": "内部思考，不展示给用户"},
-            "friendly_reply": {
-                "type": "string",
-                "description": "建任务前对用户的友好回复，会作为流程节拍气泡展示",
-            },
             "intent": {
                 "type": "object",
                 "properties": {
@@ -64,7 +60,7 @@ class CreatePlanTool(Tool):
                 },
             },
         },
-        "required": ["thought", "friendly_reply", "intent", "steps"],
+        "required": ["thought", "intent", "steps"],
     }
     running_label = "编排创作任务"
 

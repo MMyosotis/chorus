@@ -82,7 +82,7 @@ class SupervisorLoopStrategy:
     def after_tools(self, ctx, result, pairs):
         """成对落库，据是否命中终止决定继续或结束。"""
         terminal = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Terminal)), None)
-        content = self._turn_content(ctx, terminal)
+        content = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
 
         self._message.append_assistant_message(
             self.session_id, message_id=ctx.turn.message_id,
@@ -119,14 +119,6 @@ class SupervisorLoopStrategy:
     def on_error(self, ctx, error):
         events = list(self._hooks.trigger("Error", ctx)) + [ErrorEvent(content=str(error))]
         return LoopAction(LoopSignal.FINISH, events)
-
-    def _turn_content(self, ctx, terminal):
-        """助手内容：模型同轮文本，或建图工具自带的友好回复。"""
-        text = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
-        if terminal is None:
-            return text
-        call, _ = terminal
-        return text or call.arguments.get("friendly_reply")
 
     def _handle_terminal(self, ctx):
         """终止分支：工具副作用已在工具内完成，主流程只做收尾。"""

@@ -25,7 +25,7 @@ def _args(topic="夏日晚风", steps=None, intent_extras=None):
     intent = {"topic": topic, "style": "轻松", "image_count": 2}
     if intent_extras:
         intent.update(intent_extras)
-    return {"thought": "x", "friendly_reply": "好的", "intent": intent, "steps": steps}
+    return {"thought": "x", "intent": intent, "steps": steps}
 
 
 def _build():
@@ -74,7 +74,7 @@ def test_unconfirmed_intent_blocks_plan_creation():
 
 def test_missing_intent_key_returns_reply():
     _, _, _, tool, ctx = _build()
-    outcome = tool.run({"thought": "x", "friendly_reply": "y", "steps": []}, ctx)
+    outcome = tool.run({"thought": "x", "steps": []}, ctx)
     assert isinstance(outcome, Reply)
     assert "create_plan" in outcome.content or "参数" in outcome.content
 

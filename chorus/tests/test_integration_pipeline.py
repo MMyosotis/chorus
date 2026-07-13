@@ -74,7 +74,6 @@ def _finalize_content() -> str:
 def _plan_args() -> dict:
     return {
         "thought": "想了一下",
-        "friendly_reply": "好的，开始为你创作",
         "intent": {"topic": "夏日博文", "style": "轻松", "image_count": 2},
         "steps": [
             {"agent_type": "idea", "deps": [], "focus": "选题"},

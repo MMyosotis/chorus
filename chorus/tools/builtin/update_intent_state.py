@@ -55,10 +55,6 @@ class UpdateIntentStateTool(Tool):
                 "required": ["title"],
                 "description": "ready_to_confirm 时给用户看的一句话确认标题；槽位展示由系统从 known_slots 自动投影，不要在此填 items",
             },
-            "friendly_reply": {
-                "type": "string",
-                "description": "ready_to_confirm 时的确认引导文案，作为本轮节拍气泡展示；其余状态忽略",
-            },
         },
         "required": [
             "intent_status",
