@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""E2E：真实 LLM 跑 idea 子 agent，验证选题候选标题/视角/理由均有实际内容。
+
+直插 idea 任务由调度器真实派发，跑完读产物校验候选数量与内容，不自动清理。
+"""
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import chorus.app as _app
+from chorus.config import DATA_DIR
+from chorus.domain.task import CreationIntent, StepSpec
+from chorus.repo.connection import ConnectionFactory
+from chorus.repo.task import TaskRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.repo.task_content import TaskContentRepository
+from chorus.startup import run_startup
+
+_TOPIC = "2026年春节档电影票房预测"
+_STYLE = "小红书图文笔记"
+_TIMEOUT = 120
+
+
+def main() -> None:
+    session_service = _app.app.state.session_service
+    scheduler = _app.app.state.scheduler
+    run_startup(scheduler)
+
+    conn = ConnectionFactory(DATA_DIR / "chorus.db")
+    task_repo = TaskRepository(conn)
+    content_repo = TaskContentRepository(conn)
+    artifacts_repo = TaskArtifactsRepository(conn)
+
+    session = session_service.create("E2E-idea-candidates")
+    sid = session.id
+    now = time.time()
+    intent = CreationIntent(topic=_TOPIC, style=_STYLE, image_count=3)
+    steps = [StepSpec(agent_type="idea", deps=[], focus="调研近期热点，给出3到5个候选标题与切入视角与理由")]
+    pairs = intent.expand_to_tasks(steps, sid, now)
+    idea_task_id = pairs[0][0].id
+    for task, content in pairs:
+        task_repo.insert(task)
+        content_repo.insert(content)
+
+    print(f"[session] {sid}")
+    print(f"[idea task] {idea_task_id}")
+    print(f"[invoke]\n{pairs[0][1].invoke_message}\n")
+    print("等待调度器派发与子 agent 跑 ReAct...")
+
+    deadline = time.time() + _TIMEOUT
+    status = task_repo.get(idea_task_id).status
+    while time.time() < deadline and status not in ("awaiting_confirm", "failed", "cancelled"):
+        time.sleep(1)
+        status = task_repo.get(idea_task_id).status
+
+    print(f"[最终状态] {status}")
+    if status != "awaiting_confirm":
+        content = content_repo.load(idea_task_id)
+        print(f"[FAIL] idea 未到待确认，error={content.error}")
+        sys.exit(1)
+
+    candidates = artifacts_repo.load(idea_task_id).artifacts.candidates
+    print(f"\n[候选数量] {len(candidates)}")
+    all_pass = len(candidates) >= 1
+    for idx, cand in enumerate(candidates):
+        title_ok = cand.title.strip() != "" and "候选标题" not in cand.title
+        angle_ok = cand.angle.strip() != ""
+        reason_ok = cand.reason.strip() != ""
+        passed = title_ok and angle_ok and reason_ok
+        all_pass = all_pass and passed
+        mark = "OK" if passed else "FAIL"
+        print(f"  [{mark}] #{idx} title={cand.title!r}")
+        print(f"        angle={cand.angle!r}")
+        print(f"        reason={cand.reason!r}")
+
+    print()
+    if all_pass:
+        print(f"[PASS] {len(candidates)} 个候选均有实际标题/视角/理由，无占位词")
+    else:
+        print("[FAIL] 存在候选内容缺失或占位词未消除")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
