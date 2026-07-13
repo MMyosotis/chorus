@@ -38,9 +38,11 @@ const hasRunningTool = computed(() =>
 const bareMode = computed(() => props.role === 'assistant' && props.active && !props.content)
 
 const activityState = computed(() => {
-  if (props.thinking.state === 'running') return 'thinking'
   if (props.tools.state === 'running' && hasRunningTool.value) return 'tools'
-  if (props.active && !props.content && !hasRunningTool.value) return 'preparing'
+  // 正文一出状态条即消失，让位正文；正文未出期间，思考过则持续酝酿中
+  if (props.active && !props.content) {
+    return props.thinking.state === 'running' ? 'thinking' : 'preparing'
+  }
   return 'idle'
 })
 

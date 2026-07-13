@@ -426,8 +426,7 @@ function createStreamHandler(sessionId) {
     } else if (payload.type === 'reasoning_done') {
       const c = cur()
       if (!c) return
-      // 思考结束即消失状态条
-      if (c.thinking.state === 'running') c.thinking.state = 'idle'
+      // 思考段结束不翻转状态：酝酿中持续到正文出现，避免回跳铺纸中
     } else if (payload.type === 'token') {
       const c = ensureAssistant()
       // 按 Unicode code point 拆字，避免拆坏中文/emoji 代理对
