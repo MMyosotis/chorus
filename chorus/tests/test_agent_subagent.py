@@ -11,6 +11,7 @@ from pathlib import Path
 from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService
 from chorus.domain.session import Session
+from chorus.domain.skill import SkillLoader
 from chorus.domain.task import Task, TaskContent, TaskStatus
 from chorus.domain.trace import ModelResponse, TracePhase
 from chorus.hooks import HookRegistry, TraceEmitter
@@ -126,7 +127,7 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo,
     return SubAgentService(
         msg_svc, task_repo, art_repo, TaskProgressRepository(conn),
         content_repo, tool_dispatcher,
-        _provider, loop, aside,
+        _provider, loop, aside, SkillLoader(skills_dir=Path("/nonexistent-skills")),
     )
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService, _MAX_STEPS
 from chorus.domain.session import Session
+from chorus.domain.skill import SkillLoader
 from chorus.domain.task import Task, TaskContent, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
@@ -100,6 +101,7 @@ def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo, content_repo,
         disp, stub_chat_model_provider(client), loop, aside,
+        SkillLoader(skills_dir=Path("/nonexistent-skills")),
     )
 
 

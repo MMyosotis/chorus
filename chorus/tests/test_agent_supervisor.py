@@ -92,8 +92,8 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
     entry = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)
     sup = SupervisorService(
-        session_svc, msg_svc, skill_loader, hooks, entry,
-        task_repo, tool_dispatcher, loop, intent_state,
+        session_svc, msg_svc, hooks, entry,
+        task_repo, tool_dispatcher, loop, intent_state, skill_loader,
     )
     return sup, intent_state
 

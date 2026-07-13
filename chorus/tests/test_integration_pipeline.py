@@ -125,9 +125,9 @@ def _build_assembly():
         )]}, "tool_calls"),
     ])])
     supervisor = SupervisorService(
-        session_svc, msg_svc, skill_loader, hooks,
+        session_svc, msg_svc, hooks,
         stub_chat_model_provider(sup_client), task_repo, tool_dispatcher, agent_loop,
-        intent_state,
+        intent_state, skill_loader,
     )
 
     # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
@@ -141,6 +141,7 @@ def _build_assembly():
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
         types.SimpleNamespace(generate=lambda agent_type, invoke: ""),
+        skill_loader,
     )
 
     task_service = TaskService(

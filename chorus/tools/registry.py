@@ -15,7 +15,6 @@ from chorus.tools.builtin import (
     BaiduSearchTool,
     CreatePlanTool,
     LoadSkillTool,
-    OutputPlanTool,
     UpdateIntentStateTool,
 )
 from chorus.tools.builtin.generate_image import GenerateImageTool, ImageModelProvider
@@ -35,7 +34,6 @@ def build_tool_dispatch(
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     return ToolDispatch([
         LoadSkillTool(skill_loader),
-        OutputPlanTool(),
         GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
         UpdateIntentStateTool(intent_state),

@@ -10,7 +10,7 @@ from chorus.tools.framework import Reply, Tool, ToolContext
 
 class LoadSkillTool(Tool):
     name = "load_skill"
-    description = "按名称加载技能（skill）的完整内容。当用户的请求与某个技能的描述匹配时使用。"
+    description = "按名称加载技能（skill）的完整内容。可用技能见 system prompt 的技能清单；需要某技能的完整方法时调用。"
     parameters = {
         "type": "object",
         "properties": {

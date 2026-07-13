@@ -62,11 +62,11 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
 )
 
 TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
-    "supervisor": ("update_intent_state", "create_plan", "load_skill", "baidu_search", "output_plan"),
-    "idea": ("baidu_search", "load_skill"),
-    "script": ("baidu_search", "load_skill"),
-    "image": ("baidu_search", "generate_image", "load_skill"),
-    "finalize": ("baidu_search", "load_skill"),
+    "supervisor": ("update_intent_state", "create_plan"),
+    "idea": ("baidu_search",),
+    "script": ("baidu_search",),
+    "image": ("generate_image", "load_skill"),
+    "finalize": (),
 }
 
 SCHEDULER_INTERVAL = 1.0

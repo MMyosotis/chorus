@@ -10,7 +10,8 @@ from typing import Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
-from chorus.domain.prompt import build_subagent_system_prompt
+from chorus.domain.prompt import PromptContext, build_system_prompt, subagent_base
+from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import StreamResult, silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
@@ -63,7 +64,7 @@ class SubagentLoopStrategy:
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, progress_total, owner_id, profile, invoke,
-                 task_repo, progress_repo, finalize, guarded_fail):
+                 task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names):
         self.task = task
         self.progress_total = progress_total
         self.owner_id = owner_id
@@ -73,6 +74,8 @@ class SubagentLoopStrategy:
         self._progress_repo = progress_repo
         self._finalize = finalize
         self._guarded_fail = guarded_fail
+        self._skill_loader = skill_loader
+        self._tool_names = tool_names
 
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
@@ -82,8 +85,12 @@ class SubagentLoopStrategy:
         return True
 
     def provider_messages(self):
-        prompt = build_subagent_system_prompt(self.task.agent_type)
-        return [{"role": "system", "content": prompt}] + self.history
+        ctx = PromptContext(
+            base=subagent_base(self.task.agent_type),
+            tool_names=self._tool_names,
+            skill_loader=self._skill_loader,
+        )
+        return [{"role": "system", "content": build_system_prompt(ctx)}] + self.history
 
     def consume(self, stream):
         sink = ProgressSink(
@@ -140,6 +147,7 @@ class SubAgentService:
         chat_model_provider: ChatModelProvider,
         loop: AgentLoop,
         aside_generator: AsideGenerator,
+        skill_loader: SkillLoader,
     ):
         self._message = message_service
         self._task_repo = task_repo
@@ -150,6 +158,7 @@ class SubAgentService:
         self._models = chat_model_provider
         self._loop = loop
         self._aside = aside_generator
+        self._skill = skill_loader
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
@@ -187,6 +196,8 @@ class SubAgentService:
             progress_repo=self._progress,
             finalize=self._finalize,
             guarded_fail=self._guarded_fail,
+            skill_loader=self._skill,
+            tool_names=TOOL_WHITELISTS[task.agent_type],
         )
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))

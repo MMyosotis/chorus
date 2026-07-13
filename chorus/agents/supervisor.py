@@ -18,7 +18,7 @@ from chorus.domain.events import (
     SseEvent,
 )
 from chorus.domain.message import ToolCallSpec
-from chorus.domain.prompt import PromptContext, build_system_prompt
+from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
 from chorus.config import TOOL_WHITELISTS
@@ -44,13 +44,14 @@ class SupervisorLoopStrategy:
     max_steps = _SUPERVISOR_MAX_STEPS
 
     def __init__(self, session_id, message_service, session_service, hooks,
-                 skill_loader, intent_state: IntentStateService):
+                 intent_state: IntentStateService, skill_loader, tool_names: tuple):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
         self._hooks = hooks
-        self._skill = skill_loader
         self._intent_state = intent_state
+        self._skill_loader = skill_loader
+        self._tool_names = tool_names
         self._pending_intent_events: list = []
 
     def before_turn(self):
@@ -59,8 +60,10 @@ class SupervisorLoopStrategy:
 
     def _prompt_context(self) -> PromptContext:
         return PromptContext(
-            skill_hints=self._skill.format_hints(),
+            base=SYSTEM_PROMPT,
             intent_state=self._intent_state.get(self.session_id),
+            tool_names=self._tool_names,
+            skill_loader=self._skill_loader,
         )
 
     def provider_messages(self):
@@ -132,23 +135,23 @@ class SupervisorService:
         self,
         session_service: SessionService,
         message_service: MessageService,
-        skill_loader: SkillLoader,
         hooks: HookRegistry,
         chat_model_provider: ChatModelProvider,
         task_repo: TaskRepository,
         tool_dispatcher: ToolDispatch,
         loop: AgentLoop,
         intent_state: IntentStateService,
+        skill_loader: SkillLoader,
     ):
         self._session = session_service
         self._message = message_service
-        self._skill = skill_loader
         self._hooks = hooks
         self._models = chat_model_provider
         self._task_repo = task_repo
         self._tools = tool_dispatcher
         self._loop = loop
         self._intent_state = intent_state
+        self._skill = skill_loader
 
     def stream(
         self, session_id: str, user_message: str,
@@ -186,8 +189,10 @@ class SupervisorService:
             tool_schemas=schemas, chat_model=entry.model_id,
         )
         strategy = SupervisorLoopStrategy(
-            session_id, self._message, self._session, self._hooks, self._skill,
+            session_id, self._message, self._session, self._hooks,
             intent_state=self._intent_state,
+            skill_loader=self._skill,
+            tool_names=TOOL_WHITELISTS["supervisor"],
         )
 
         try:

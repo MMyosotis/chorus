@@ -4,7 +4,7 @@ from __future__ import annotations
 from chorus.agents.supervisor import SupervisorLoopStrategy
 from chorus.config import TOOL_WHITELISTS
 from chorus.tools import ToolDispatch
-from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, OutputPlanTool, UpdateIntentStateTool
+from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, UpdateIntentStateTool
 from chorus.tools.builtin.generate_image import GenerateImageTool
 
 
@@ -29,7 +29,6 @@ def _registry() -> ToolDispatch:
     # 不需真实 client/repo，只为 schema 筛选
     return ToolDispatch([
         LoadSkillTool(None),
-        OutputPlanTool(),
         UpdateIntentStateTool(None),
         CreatePlanTool(None, None, None),
         BaiduSearchTool(None),
@@ -45,25 +44,24 @@ def test_supervisor_whitelist_excludes_generate_image():
 
 
 def test_supervisor_schemas_filtered_by_whitelist():
-    """registry.select_schemas 按 supervisor 白名单筛后，喂 LLM 的 schemas 不含
-    generate_image（领导不碰产物），output_plan 是独立展示计划工具故暴露；web_search
-    关闭时再剔除 baidu_search。"""
+    """registry.select_schemas 按 supervisor 白名单筛后，喂 LLM 的 schemas 只含
+    update_intent_state / create_plan（领导只做对话与编排，不碰产物也不搜索）。"""
     reg = _registry()
     sup_names = {s["function"]["name"] for s in reg.select_schemas(TOOL_WHITELISTS["supervisor"])}
-    assert sup_names == set(TOOL_WHITELISTS["supervisor"])  # web_search 开 → 全白名单命中
+    assert sup_names == set(TOOL_WHITELISTS["supervisor"])
     assert "generate_image" not in sup_names
-    assert "output_plan" in sup_names
+    assert "baidu_search" not in sup_names
+    assert "load_skill" not in sup_names
 
 
 def test_web_search_disabled_drops_baidu_search():
-    """web_search 关闭时 select_schemas 从结果里剔除 baidu_search。"""
+    """web_search 关闭时 select_schemas 从结果里剔除 baidu_search（idea 白名单含搜索故用其验证）。"""
     class _OffSettings:
         def get_web_search(self):
             return False
     reg = ToolDispatch([BaiduSearchTool(None), LoadSkillTool(None)], _OffSettings())
-    got = {s["function"]["name"] for s in reg.select_schemas(TOOL_WHITELISTS["supervisor"])}
+    got = {s["function"]["name"] for s in reg.select_schemas(TOOL_WHITELISTS["idea"])}
     assert "baidu_search" not in got
-    assert "load_skill" in got
 
 
 def test_loop_does_not_reference_tool_name_literals():

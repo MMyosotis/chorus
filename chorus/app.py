@@ -91,15 +91,15 @@ def create_app() -> FastAPI:
     agent_loop = AgentLoop(hooks, tool_dispatcher, MAX_TOKENS)
 
     supervisor_service = SupervisorService(
-        session_service, message_service, skill_loader, hooks,
+        session_service, message_service, hooks,
         chat_models, task_repo,
-        tool_dispatcher, agent_loop, intent_state_service,
+        tool_dispatcher, agent_loop, intent_state_service, skill_loader,
     )
     subagent_service = SubAgentService(
         message_service, task_repo, task_artifacts_repo,
         task_progress_repo, task_content_repo,
         tool_dispatcher, chat_models,
-        agent_loop, aside_generator,
+        agent_loop, aside_generator, skill_loader,
     )
     task_service = TaskService(
         task_repo, task_artifacts_repo,
