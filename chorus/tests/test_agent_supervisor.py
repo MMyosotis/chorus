@@ -77,7 +77,7 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
     hooks = HookRegistry()
     intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
     tool_dispatcher = ToolDispatch([
-        CreatePlanTool(task_repo, content_repo),
+        CreatePlanTool(task_repo, content_repo, intent_state),
         LoadSkillTool(skill_loader),
         UpdateIntentStateTool(intent_state),
     ], _stub_settings())
@@ -91,10 +91,11 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_
 
     entry = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher, 1024)
-    return SupervisorService(
+    sup = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks, entry,
         task_repo, tool_dispatcher, loop, intent_state,
     )
+    return sup, intent_state
 
 
 def _plan_args(topic="夏日晚风", steps=None):
@@ -115,7 +116,7 @@ def test_only_reply():
     """无 tool_call → only_reply：事件 [message_start, token+, done]，落 user+assistant。"""
     conn, session_svc, msg_svc, trace_svc, task_repo, content_repo = _setup()
     client = FakeClient([FakeStream([({"content": "你好呀"}, "stop")])])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "hi"))
     types_seq = [e.type for e in events]
@@ -134,8 +135,9 @@ def test_new_plan():
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, intent_state = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
+    intent_state.patch_status(s.id, "confirmed")
     events = list(sup.stream(s.id, "帮我写一篇夏日博文"))
     types_seq = [e.type for e in events]
     assert "task_plan_created" not in types_seq   # 不发此事件
@@ -168,7 +170,7 @@ def test_reply_outcome_pairs_and_continues():
     # 第二轮：纯文本回复（loop 继续）
     text_stream = FakeStream([({"content": "已为你查到"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 技能"))
     types_seq = [e.type for e in events]
@@ -210,7 +212,7 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
     # 第二轮：纯文本回复（loop 继续）
     text_stream = FakeStream([({"content": "两个技能都没找到"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 和 phantom 技能"))
     types_seq = [e.type for e in events]
@@ -235,7 +237,7 @@ def test_new_plan_blocked_by_active_task():
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     task_repo.insert(Task(id="active1", session_id=s.id, pipeline_id="p1", agent_type="idea",
                           status="running", dependencies=[],
@@ -273,7 +275,7 @@ def test_update_intent_state_does_not_finish():
     # 第二轮：模型纯文本（不再调工具）→ after_text → done
     text_stream = FakeStream([({"content": "很高兴帮你"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "你好"))
     types_seq = [e.type for e in events]
@@ -314,7 +316,7 @@ def test_update_intent_state_ready_to_confirm_finishes():
         index=0, id="c1", function=types.SimpleNamespace(
             name="update_intent_state", arguments=json.dumps(intent_args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
+    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "精品咖啡豆，轻松种草风格，3张图"))
     types_seq = [e.type for e in events]

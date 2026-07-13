@@ -107,7 +107,8 @@ def _build_assembly():
     # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo)], _stub_settings())
+    intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, intent_state)], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
@@ -127,7 +128,7 @@ def _build_assembly():
     supervisor = SupervisorService(
         session_svc, msg_svc, skill_loader, hooks,
         stub_chat_model_provider(sup_client), task_repo, tool_dispatcher, agent_loop,
-        IntentStateService(IntentStateRepository(conn), session_svc),
+        intent_state,
     )
 
     # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
@@ -150,14 +151,15 @@ def _build_assembly():
         task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999,
     )
-    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, conn
+    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, conn, intent_state
 
 
 def test_end_to_end_pipeline():
     """4 链路全跑通：supervisor 建图 → idea awaiting_confirm → confirm finished → scheduler 派发 finalize。"""
-    sup, sub, task_service, scheduler, task_repo, session_svc, conn = _build_assembly()
+    sup, sub, task_service, scheduler, task_repo, session_svc, conn, intent_state = _build_assembly()
     session = session_svc.create("集成测试")
     sid = session.id
+    intent_state.patch_status(sid, "confirmed")
 
     # —— 链路 1：supervisor 建图 ——
     events = list(sup.stream(sid, "帮我写一篇夏日博文"))

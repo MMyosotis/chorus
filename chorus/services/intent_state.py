@@ -34,22 +34,13 @@ class IntentStateService:
         self._session.touch(session_id)
         return state
 
-    def confirm(self, session_id: str) -> IntentState:
-        return self._patch_status(session_id, "confirmed")
-
-    def reopen(self, session_id: str) -> IntentState:
-        return self._patch_status(session_id, "needs_clarification")
-
     def mark_dispatched(self, session_id: str) -> IntentState:
-        return self._patch_status(session_id, "dispatched")
-
-    def mark_finished(self, session_id: str) -> IntentState:
-        return self._patch_status(session_id, "empty")
+        return self.patch_status(session_id, "dispatched")
 
     def is_confirmed(self, session_id: str) -> bool:
         return self.get(session_id).intent_status == "confirmed"
 
-    def _patch_status(self, session_id: str, status: str) -> IntentState:
+    def patch_status(self, session_id: str, status: str) -> IntentState:
         current = self.get(session_id)
         state = current.model_copy(
             update={

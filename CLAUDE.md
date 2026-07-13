@@ -252,6 +252,8 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 
 - **控制流嵌套不得超过 3 层**（if/for/while/with/try 各算一层，elif 同级不加深）。
 
+- **减少不必要的防御分支**：写 `if`/`raise` 前先判断该分支是否真有路径到达，针对走不到的路径写防御是死代码。判据是追踪参数来源：上游已保证非空（如 `ToolContext.session_id` 来自非 Optional 的 `AgentContext.session_id`、路由已 404 校验）、调用方硬编码字面量（如路由传的 signal 不可能是非法值）、生产装配总注入的依赖，这些路径上不要写 `if`/`raise`。但真实业务分支保留：测试场景下 Optional 依赖的 None 守卫、工具内可预料失败返 `Reply` 让模型重试、校验失败返 correction、lease 校验等。
+
 ### 代码风格
 
 **注释规范**：

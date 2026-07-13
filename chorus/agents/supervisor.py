@@ -161,14 +161,32 @@ class SupervisorService:
     def stream(
         self, session_id: str, user_message: str,
     ) -> Iterator[SseEvent]:
+        """用户真实发话入口：先落用户消息，再跑 loop。"""
         if not self._session.exists(session_id):
             yield ErrorEvent(content="session not found")
             return
-        # 会话级创作准入：有活跃任务则拒绝，不回传模型
         if self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES) > 0:
             yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
             return
 
+        self._message.append_user_message(session_id, user_message)
+        self._session.touch(session_id)
+        yield from self._run(session_id, user_message)
+
+    def resume(self, session_id: str, tool_name: str, result_text: str) -> Iterator[SseEvent]:
+        """解开挂起 loop 的通用原语：改写指定工具结果后续跑，不补用户消息、不碰意图。"""
+        if not self._session.exists(session_id):
+            yield ErrorEvent(content="session not found")
+            return
+        if self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES) > 0:
+            yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
+            return
+
+        self._message.rewrite_last_tool_result(session_id, tool_name, result_text)
+        yield from self._run(session_id, None)
+
+    def _run(self, session_id: str, user_message) -> Iterator[SseEvent]:
+        """共用续跑内核：取模型、构造上下文与策略、跑 loop、异常收尾。"""
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
         ctx = AgentContext(
@@ -181,34 +199,6 @@ class SupervisorService:
         )
 
         try:
-            self._message.append_user_message(session_id, user_message)
-            self._session.touch(session_id)
-            yield from self._loop.run(ctx, entry=entry, strategy=strategy)
-        except Exception as e:
-            ctx.outcome.exception = e
-            yield from strategy.on_error(ctx, e).events
-
-    def resume(self, session_id: str) -> Iterator[SseEvent]:
-        """pipeline 完成后续跑：不补用户消息，让模型读改写后的工具结果自行收尾。"""
-        # 收尾：补全 create_plan 工具结果并复位意图，让 loop 读到真实结局
-        self._message.rewrite_last_tool_result(
-            session_id, "create_plan", "计划已完成，所有创作步骤均已落地"
-        )
-        self._intent_state.mark_finished(session_id)
-
-        entry = self._models.get_entry()
-        schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
-        ctx = AgentContext(
-            session_id=session_id, user_message=None,
-            tool_schemas=schemas, chat_model=entry.model_id,
-        )
-        strategy = SupervisorLoopStrategy(
-            session_id, self._message, self._session, self._hooks, self._skill,
-            intent_state=self._intent_state,
-        )
-
-        try:
-            self._session.touch(session_id)
             yield from self._loop.run(ctx, entry=entry, strategy=strategy)
         except Exception as e:
             ctx.outcome.exception = e

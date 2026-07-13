@@ -33,7 +33,9 @@ def _build():
     seed_session(conn, sid="s1")
     repo = TaskRepository(conn)
     content_repo = TaskContentRepository(conn)
-    tool = CreatePlanTool(repo, content_repo)
+    intent = IntentStateService(IntentStateRepository(conn), SessionService(SessionRepository(conn)))
+    intent.patch_status("s1", "confirmed")
+    tool = CreatePlanTool(repo, content_repo, intent)
     ctx = ToolContext(session_id="s1")
     return conn, repo, content_repo, tool, ctx
 

@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     app.state.task_service = task_service
     app.state.scheduler = scheduler
     app.state.settings_service = settings_service
+    app.state.tool_dispatch = tool_dispatcher
 
     app.add_middleware(
         CORSMiddleware,

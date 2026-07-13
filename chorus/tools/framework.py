@@ -74,11 +74,19 @@ class Tool(ABC):
     @abstractmethod
     def run(self, arguments: dict, ctx: ToolContext) -> "ToolOutcome | ToolRunResult": ...
 
+    def resolve_external(self, session_id: str, signal: str) -> str:
+        """工具挂起后被外部信号解开时的语义：翻状态、返灌回工具结果的文案。默认未实现。"""
+        raise NotImplementedError(f"{self.name} 不支持外部信号解开")
+
 
 class ToolDispatch:
     def __init__(self, tools: list[Tool], settings_service: SettingsService):
         self._tools: dict[str, Tool] = {tool.name: tool for tool in tools}
         self._settings = settings_service
+
+    def get_tool(self, name: str) -> Optional[Tool]:
+        """按名字取工具实例，供编排层调用挂起型工具的外部解开语义。"""
+        return self._tools.get(name)
 
     def select_schemas(self, names: Iterable[str]) -> list[dict]:
         """按名字白名单筛工具 schema，联网搜索关闭时剔除搜索工具。未注册名字静默跳过。"""

@@ -43,6 +43,7 @@ const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
+const awaitingConfirm = computed(() => activeIntentState.value?.intent_status === 'ready_to_confirm')
 const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
@@ -516,16 +517,12 @@ async function onSend(text) {
 async function onIntentConfirm() {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
-  const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
-  list.push({ role: 'user', content: '确认并开始' })
   await runAssistantStream(sessionId, (onEvent) => confirmIntent(sessionId, onEvent))
 }
 
 async function onIntentRevise() {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
-  const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
-  list.push({ role: 'user', content: '用户希望继续调整方案' })
   await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
 }
 
@@ -535,8 +532,6 @@ async function onIntentStopAndRevise() {
   try {
     await cancelPipeline(sessionId)
     taskPolling.stop()
-    const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
-    list.push({ role: 'user', content: '用户希望继续调整方案' })
     await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
   } catch (e) {
     alert(`停止并修改失败: ${e.message}`)
@@ -593,7 +588,7 @@ onMounted(async () => {
         @intent-confirm="onIntentConfirm"
         @intent-revise="onIntentRevise"
       />
-      <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" @send="onSend" />
+      <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" @send="onSend" />
     </div>
     <TeamPanel
       :graph="activeGraph"

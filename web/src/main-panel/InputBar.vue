@@ -4,6 +4,7 @@ import { ref, nextTick, computed } from 'vue'
 const props = defineProps({
   streaming: { type: Boolean, default: false },
   hasActiveTask: { type: Boolean, default: false },
+  awaitingConfirm: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['send'])
@@ -11,10 +12,12 @@ const emit = defineEmits(['send'])
 const inputText = ref('')
 const textarea = ref(null)
 
-const disabled = computed(() => props.streaming || props.hasActiveTask)
-const placeholder = computed(() =>
-  props.hasActiveTask ? '执行中，暂时不能输入；确认节点或完成后恢复。' : '写一句想法……'
-)
+const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm)
+const placeholder = computed(() => {
+  if (props.awaitingConfirm) return '请先确认或调整上方意图卡片'
+  if (props.hasActiveTask) return '执行中，暂时不能输入；确认节点或完成后恢复。'
+  return '写一句想法……'
+})
 
 function handleKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -47,7 +50,7 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="input-bar" :class="{ locked: hasActiveTask }">
+  <div class="input-bar" :class="{ locked: hasActiveTask || awaitingConfirm }">
     <div class="input-inner">
       <textarea
         ref="textarea"

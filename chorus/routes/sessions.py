@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
-from typing import Optional
+from typing import Iterator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from chorus.agents.supervisor import SupervisorService
@@ -18,12 +16,15 @@ from chorus.routes.providers import (
     provide_message_service,
     provide_session_service,
     provide_supervisor_service,
+    provide_tool_dispatch,
     provide_trace_service,
 )
+from chorus.routes.sse import sse, sse_stream
 from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
+from chorus.tools import ToolDispatch
 
 router = APIRouter(prefix="/api/sessions")
 
@@ -100,35 +101,34 @@ def get_intent_state(
     return {"state": intent.get(session_id).public_dict()}
 
 
+def _resume_with_tool(
+    session_id: str,
+    tool_name: str,
+    signal: str,
+    intent: IntentStateService,
+    supervisor: SupervisorService,
+    tools: ToolDispatch,
+) -> Iterator[str]:
+    """外部信号解开挂起的工具：让工具翻状态拿回执文案，再续跑 loop。"""
+    result_text = tools.get_tool(tool_name).resolve_external(session_id, signal)
+    yield sse(IntentStateEvent(state=intent.get(session_id).public_dict()))
+    for event in supervisor.resume(session_id, tool_name, result_text):
+        yield sse(event)
+
+
 @router.post("/{session_id}/intent:confirm")
 def confirm_intent(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
     intent: IntentStateService = Depends(provide_intent_state_service),
-    message: MessageService = Depends(provide_message_service),
     supervisor: SupervisorService = Depends(provide_supervisor_service),
+    tools: ToolDispatch = Depends(provide_tool_dispatch),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    current = intent.get(session_id)
-    if current.intent_status != "ready_to_confirm":
+    if intent.get(session_id).intent_status != "ready_to_confirm":
         raise HTTPException(status_code=409, detail="intent is not ready to confirm")
-    state = intent.confirm(session_id)
-    message.rewrite_last_tool_result(
-        session_id, "update_intent_state",
-        "用户已同意，意图进入 confirmed，等待建图",
-    )
-
-    def event_generator():
-        yield _sse(IntentStateEvent(state=state.public_dict()))
-        for event in supervisor.stream(session_id, "确认并开始"):
-            yield _sse(event)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return sse_stream(_resume_with_tool(session_id, "update_intent_state", "confirm", intent, supervisor, tools))
 
 
 @router.post("/{session_id}/intent:reopen")
@@ -136,47 +136,25 @@ def reopen_intent(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
     intent: IntentStateService = Depends(provide_intent_state_service),
-    message: MessageService = Depends(provide_message_service),
     supervisor: SupervisorService = Depends(provide_supervisor_service),
+    tools: ToolDispatch = Depends(provide_tool_dispatch),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    state = intent.reopen(session_id)
-    message.rewrite_last_tool_result(
-        session_id, "update_intent_state",
-        "用户要求继续调整，意图回到 needs_clarification",
-    )
-
-    def event_generator():
-        yield _sse(IntentStateEvent(state=state.public_dict()))
-        for event in supervisor.stream(session_id, "用户希望继续调整方案"):
-            yield _sse(event)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return sse_stream(_resume_with_tool(session_id, "update_intent_state", "reopen", intent, supervisor, tools))
 
 
 @router.post("/{session_id}/resume")
 def resume_session(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
+    intent: IntentStateService = Depends(provide_intent_state_service),
     supervisor: SupervisorService = Depends(provide_supervisor_service),
+    tools: ToolDispatch = Depends(provide_tool_dispatch),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-
-    def event_generator():
-        for event in supervisor.resume(session_id):
-            yield _sse(event)
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
-    )
+    return sse_stream(_resume_with_tool(session_id, "create_plan", "finish", intent, supervisor, tools))
 
 
 def _view_to_dict(view: MessageView) -> dict:
@@ -197,7 +175,3 @@ def _trace_to_dict(entry: TraceEntry) -> dict:
         "created_at": entry.created_at,
         "payload": entry.payload.model_dump(),
     }
-
-
-def _sse(event) -> str:
-    return f"data: {json.dumps(event.model_dump(mode='json'), ensure_ascii=False)}\n\n"

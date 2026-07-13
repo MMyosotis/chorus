@@ -79,8 +79,6 @@ class UpdateIntentStateTool(Tool):
         return f"意图状态：{status} / {goal[:36]}"
 
     def run(self, arguments: dict, ctx: ToolContext):
-        if not ctx.session_id:
-            return Reply("update_intent_state 需要 session_id")
         try:
             patch = IntentStatePatch(**arguments)
         except ValidationError as e:
@@ -96,3 +94,11 @@ class UpdateIntentStateTool(Tool):
             "intent_state updated: "
             f"status={state.intent_status}, version={state.version}"
         )
+
+    def resolve_external(self, session_id: str, signal: str) -> str:
+        """用户对确认卡的两类回应：同意进入 confirmed，要求调整回到澄清。"""
+        if signal == "confirm":
+            state = self._intent.patch_status(session_id, "confirmed")
+            return f"用户已同意，意图进入 confirmed（version={state.version}），等待建图"
+        state = self._intent.patch_status(session_id, "needs_clarification")
+        return f"用户要求继续调整，意图回到 needs_clarification（version={state.version}）"
