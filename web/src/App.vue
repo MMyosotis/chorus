@@ -85,25 +85,9 @@ function mergeAssistantHistory(raw) {
   const result = []
   let pendingTools = []
 
-  // 把累积的无正文工具调用合并到最近一条助手消息，无目标才落独立气泡兜底
+  // 尾部无正文工具消息保留为独立气泡，不往前跨 user 合并：避免建图轮工具被挂到上一轮回复上、破坏折叠锚点
   const flushPending = () => {
     if (!pendingTools.length) return
-    for (let i = result.length - 1; i >= 0; i--) {
-      if (result[i].role === 'assistant') {
-        const target = result[i]
-        for (const t of pendingTools) {
-          target.tools.items.push({
-            name: t.name,
-            arguments: t.arguments || {},
-            duration_ms: t.duration_ms ?? null,
-            content: t.content || '',
-            display: t.display || t.name,
-          })
-        }
-        pendingTools = []
-        return
-      }
-    }
     result.push(
       normalizeAssistant({
         role: 'assistant',
@@ -380,7 +364,7 @@ function createStreamHandler(sessionId) {
   function dropTrailingEmptyBubble() {
     if (list.length < 2) return
     const last = list[list.length - 1]
-    if (last.role !== 'assistant') return
+    if (last.role !== 'assistant' || last.kind) return
     if (last.content && last.content.trim()) return
     let prev = null
     for (let i = list.length - 2; i >= 0; i--) {
@@ -402,7 +386,7 @@ function createStreamHandler(sessionId) {
       }
     }
     list.splice(list.length - 1, 1)
-    assistantIdx = list.length - 1
+    assistantIdx = -1
   }
 
   const onEvent = (payload) => {
