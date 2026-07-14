@@ -15,6 +15,7 @@ from chorus.domain.events import (
     DoneEvent,
     ErrorEvent,
     IntentStateEvent,
+    MessageStartEvent,
     SseEvent,
 )
 from chorus.domain.message import ToolCallSpec
@@ -57,6 +58,9 @@ class SupervisorLoopStrategy:
     def before_turn(self):
         self._pending_intent_events = []
         return True
+
+    def message_start(self, ctx):
+        return [MessageStartEvent(id=ctx.turn.message_id)]
 
     def _prompt_context(self) -> PromptContext:
         return PromptContext(
@@ -120,8 +124,14 @@ class SupervisorLoopStrategy:
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content="主 Agent 未能完成本轮必要动作，请再试一次")])
 
     def on_error(self, ctx, error):
-        events = list(self._hooks.trigger("Error", ctx)) + [ErrorEvent(content=str(error))]
-        return LoopAction(LoopSignal.FINISH, events)
+        try:
+            self._message.append_assistant_message(
+                ctx.session_id, message_id=ctx.turn.message_id,
+                content=f"[Error] {error}", tool_calls=[],
+            )
+        except Exception:
+            pass
+        return LoopAction(LoopSignal.FINISH, [ErrorEvent(content=str(error))])
 
     def _handle_terminal(self, ctx):
         """终止分支：工具副作用已在工具内完成，主流程只做收尾。"""
@@ -181,7 +191,7 @@ class SupervisorService:
         yield from self._run(session_id, None)
 
     def _run(self, session_id: str, user_message) -> Iterator[SseEvent]:
-        """共用续跑内核：取模型、构造上下文与策略、跑 loop、异常收尾。"""
+        """共用续跑内核：取模型、构造上下文与策略、跑 loop。"""
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
         ctx = AgentContext(
@@ -195,8 +205,4 @@ class SupervisorService:
             tool_names=TOOL_WHITELISTS["supervisor"],
         )
 
-        try:
-            yield from self._loop.run(ctx, entry=entry, strategy=strategy)
-        except Exception as e:
-            ctx.outcome.exception = e
-            yield from strategy.on_error(ctx, e).events
+        yield from self._loop.run(ctx, entry=entry, strategy=strategy)

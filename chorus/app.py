@@ -23,7 +23,7 @@ from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
 from chorus.domain.title import TitleGenerationService
 from chorus.domain.task.aside import AsideGenerator
-from chorus.hooks import ErrorFinalizer, HookRegistry, TitlePostProcessor, TraceEmitter, emit_message_start
+from chorus.hooks import HookRegistry, TitlePostProcessor, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
 from chorus.repo.intent_state import IntentStateRepository
@@ -80,13 +80,11 @@ def create_app() -> FastAPI:
 
     hooks = HookRegistry()
     trace = TraceEmitter(trace_service, tool_dispatcher, MAX_TOKENS)
-    hooks.register("TurnStart", emit_message_start, source="supervisor")
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop)
-    hooks.register("Error", ErrorFinalizer(message_service).on_error)
+    hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop, source="supervisor")
 
     agent_loop = AgentLoop(hooks, tool_dispatcher, MAX_TOKENS)
 

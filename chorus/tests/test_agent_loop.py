@@ -75,6 +75,9 @@ class _SpyStrategy:
     def before_turn(self):
         self.log.append("before_turn"); return True
 
+    def message_start(self, ctx):
+        return []
+
     def provider_messages(self):
         self.log.append("provider_messages"); return [{"role": "user", "content": "hi"}]
 

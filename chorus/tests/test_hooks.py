@@ -1,15 +1,17 @@
-"""hooks 子系统 smoke：异常收尾 + trace 多来源传播 + 标题收尾。
+"""hooks 子系统 smoke：trace 多来源传播 + 标题收尾 + supervisor 异常占位。
 
-覆盖 ErrorFinalizer 关闭失败轮、TraceEmitter 传播 source/task_id、TitlePostProcessor 首轮生成标题。
+覆盖 TraceEmitter 传播 source/task_id、TitlePostProcessor 首轮生成标题、
+supervisor strategy on_error 补占位消息。
 """
 from __future__ import annotations
 
 import types
 
 from chorus.agents import AgentContext
+from chorus.agents.supervisor import SupervisorLoopStrategy
 from chorus.domain.events import TitleUpdateEvent
 from chorus.domain.trace import TracePhase
-from chorus.hooks import ErrorFinalizer, TitlePostProcessor, TraceEmitter
+from chorus.hooks import TitlePostProcessor, TraceEmitter
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.trace import TraceRepository
@@ -38,16 +40,16 @@ class _StubDispatcher:
         return "工具调用中"
 
 
-def test_error_finalizer_appends_error_message_when_message_id_allocated():
+def test_supervisor_on_error_appends_error_message():
     msg_svc, trace_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
+    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, None, ())
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")
 
-    result = ErrorFinalizer(msg_svc).on_error(ctx)
+    action = strategy.on_error(ctx, ValueError("boom"))
 
-    assert result is None                             # on_error 不 yield 事件
     msgs = msg_svc.list_messages("s1")
     assert len(msgs) == 2
     err = msgs[1]
@@ -55,19 +57,10 @@ def test_error_finalizer_appends_error_message_when_message_id_allocated():
     assert err.id == "m-err"
     assert err.content == "[Error] boom"
     assert err.tool_calls == []
-
-
-def test_error_finalizer_skips_when_message_id_not_allocated():
-    msg_svc, trace_svc, _ = _setup()
-    msg_svc.append_user_message("s1", "hi")
-    ctx = AgentContext(session_id="s1")
-    ctx.turn.message_id = ""                          # 异常发生在分配 message_id 之前
-    ctx.outcome.exception = RuntimeError("early")
-
-    result = ErrorFinalizer(msg_svc).on_error(ctx)
-
-    assert result is None
-    assert len(msg_svc.list_messages("s1")) == 1      # 未追加任何消息
+    events = list(action.events)
+    assert len(events) == 1
+    assert events[0].type == "error"
+    assert events[0].content == "boom"
 
 
 def test_trace_propagates_subagent_source_and_task_id():

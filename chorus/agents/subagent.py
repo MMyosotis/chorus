@@ -89,6 +89,9 @@ class SubagentLoopStrategy:
         self._progress_repo.set_activity(self.task.id, "thinking", "", wall_clock())
         return True
 
+    def message_start(self, ctx):
+        return []
+
     def provider_messages(self):
         ctx = PromptContext(
             base=subagent_base(self.task.agent_type),

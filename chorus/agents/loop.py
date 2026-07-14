@@ -36,6 +36,7 @@ class LoopStrategy(Protocol):
     max_steps: Optional[int]
 
     def before_turn(self) -> bool: ...
+    def message_start(self, ctx: AgentContext) -> Iterable[SseEvent]: ...
     def provider_messages(self) -> list[dict]: ...
     def consume(self, stream) -> Generator[SseEvent, None, StreamResult]: ...
     def before_dispatch(self, call: ToolCall) -> None: ...
@@ -74,7 +75,7 @@ class AgentLoop:
         if not strategy.before_turn():
             return LoopSignal.FINISH
         ctx.turn.reset(message_id=str(uuid6.uuid7()))
-        yield from self._hooks.trigger("TurnStart", ctx)
+        yield from strategy.message_start(ctx)
 
         ctx.turn.provider_messages = strategy.provider_messages()
 

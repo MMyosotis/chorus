@@ -16,7 +16,7 @@ from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, TaskStatus
-from chorus.hooks import ErrorFinalizer, HookRegistry, TraceEmitter
+from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
@@ -103,7 +103,7 @@ def _build_assembly():
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
 
-    # 扁平 hook 注册表：4 个 trace 观测点 + Error 恢复
+    # 扁平 hook 注册表：4 个 trace 观测点
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
@@ -113,7 +113,6 @@ def _build_assembly():
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    hooks.register("Error", ErrorFinalizer(msg_svc).on_error)
 
     agent_loop = AgentLoop(hooks, tool_dispatcher, 1024)
 

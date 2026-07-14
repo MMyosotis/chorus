@@ -13,13 +13,11 @@ from chorus.domain.events import SseEvent
 HookFn = Callable[..., Any]
 
 EVENTS = (
-    "TurnStart",
     "BeforeModelRequest",
     "AfterModelResponse",
     "PreToolUse",
     "PostToolUse",
     "Stop",
-    "Error",
 )
 
 
