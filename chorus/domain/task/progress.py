@@ -1,4 +1,4 @@
-"""任务运行期进度快照：字数、结构单元、临时信号与意图旁白。
+"""任务运行期进度快照：字数、结构单元、临时信号、意图旁白与活动态。
 
 易失状态，一任务一行覆盖更新，为将来迁 KV 留路。纯数据形状，不碰数据库。
 """
@@ -18,6 +18,9 @@ class TaskProgress:
     composing_label: str = ""
     last_signal: str = ""
     aside: str = ""
+    activity_kind: str = ""
+    activity_detail: str = ""
+    activity_started_at: float = 0.0
 
 
 _PROGRESS_ADAPTER = TypeAdapter(TaskProgress)

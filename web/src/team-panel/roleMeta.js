@@ -16,6 +16,13 @@ export const ROLE_TAG = {
   finalize: '成品整合',
 }
 
+export const ROLE_FULL = {
+  idea: '选题官',
+  script: '文案官',
+  image: '配图官',
+  finalize: '汇总官',
+}
+
 export function stepOf(agentType) {
   return ROLE_ORDER.indexOf(agentType) + 1
 }

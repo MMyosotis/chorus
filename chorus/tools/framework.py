@@ -64,6 +64,8 @@ class Tool(ABC):
     description: str = ""
     parameters: dict = {}
     running_label: Optional[str] = None
+    activity_kind: str = ""
+    activity_detail_arg: str = ""
 
     def schema(self) -> ToolSchema:
         return ToolSchema(name=self.name, description=self.description, parameters=self.parameters)
@@ -111,6 +113,16 @@ class ToolDispatch:
     def running_label(self, name: str) -> str:
         tool = self._tools.get(name)
         return (tool and tool.running_label) or "工具调用中"
+
+    def activity(self, name: str, arguments: dict) -> tuple[str, str]:
+        """工具运行时的活动态:类型与明细(从声明参数取)。未声明则空。"""
+        tool = self._tools.get(name)
+        if tool is None or not tool.activity_kind:
+            return "", ""
+        detail = ""
+        if tool.activity_detail_arg:
+            detail = str(arguments.get(tool.activity_detail_arg) or "")
+        return tool.activity_kind, detail
 
     def dispatch(self, call: ToolCall, ctx: ToolContext) -> DispatchResult:
         """统一执行入口：找工具、计时包错、归一返回。意外异常兜底转回传。"""

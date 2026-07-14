@@ -15,7 +15,6 @@ router = APIRouter(prefix="/api/agents")
 
 class ProfileView(BaseModel):
     display_name: str
-    enter_line: str
 
 
 @router.get("/profiles", response_model=dict[str, ProfileView])
@@ -23,7 +22,6 @@ def get_profiles():
     return {
         agent_type: ProfileView(
             display_name=profile.display_name,
-            enter_line=profile.enter_line,
         )
         for agent_type, profile in AGENT_PROFILES.items()
     }

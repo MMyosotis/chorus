@@ -16,9 +16,14 @@ CREATE TABLE IF NOT EXISTS task_progress (
     composing_units  INTEGER NOT NULL DEFAULT 0,
     composing_label  TEXT NOT NULL DEFAULT '',
     last_signal      TEXT NOT NULL DEFAULT '',
-    aside            TEXT NOT NULL DEFAULT ''
+    aside            TEXT NOT NULL DEFAULT '',
+    activity_kind    TEXT NOT NULL DEFAULT '',
+    activity_detail  TEXT NOT NULL DEFAULT '',
+    activity_started_at REAL NOT NULL DEFAULT 0
 );
 """
+
+_COLUMNS = "task_id, composing_chars, composing_units, composing_label, last_signal, aside, activity_kind, activity_detail, activity_started_at"
 
 
 class TaskProgressRow(BaseModel):
@@ -29,6 +34,9 @@ class TaskProgressRow(BaseModel):
     composing_label: str = ""
     last_signal: str = ""
     aside: str = ""
+    activity_kind: str = ""
+    activity_detail: str = ""
+    activity_started_at: float = 0.0
 
 
 class TaskProgressRepository:
@@ -72,11 +80,21 @@ class TaskProgressRepository:
             (task_id, signal),
         )
 
+    def set_activity(self, task_id: str, kind: str, detail: str = "", started_at: float = 0.0) -> None:
+        """覆盖当前活动态：类型、明细（提示词或查询）、起始时间。"""
+        self._conn.get().execute(
+            "INSERT INTO task_progress(task_id, activity_kind, activity_detail, activity_started_at) "
+            "VALUES(?, ?, ?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET "
+            "activity_kind=excluded.activity_kind, "
+            "activity_detail=excluded.activity_detail, "
+            "activity_started_at=excluded.activity_started_at",
+            (task_id, kind, detail, started_at),
+        )
+
     def load(self, task_id: str) -> Optional[TaskProgress]:
         row = self._conn.get().execute(
-            "SELECT task_id, composing_chars, composing_units, "
-            "composing_label, last_signal, aside "
-            "FROM task_progress WHERE task_id=?",
+            f"SELECT {_COLUMNS} FROM task_progress WHERE task_id=?",
             (task_id,),
         ).fetchone()
         return TaskProgress(**dict(row)) if row else None
@@ -86,9 +104,7 @@ class TaskProgressRepository:
             return {}
         placeholders = ",".join("?" * len(task_ids))
         rows = self._conn.get().execute(
-            "SELECT task_id, composing_chars, composing_units, "
-            "composing_label, last_signal, aside "
-            f"FROM task_progress WHERE task_id IN ({placeholders})",
+            f"SELECT {_COLUMNS} FROM task_progress WHERE task_id IN ({placeholders})",
             tuple(task_ids),
         ).fetchall()
         return {row["task_id"]: TaskProgress(**dict(row)) for row in rows}

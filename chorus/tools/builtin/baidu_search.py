@@ -63,6 +63,8 @@ class BaiduSearchTool(Tool):
         "required": ["query"],
     }
     running_label = "百度搜索中"
+    activity_kind = "searching"
+    activity_detail_arg = "query"
 
     def __init__(self, client: BaiduSearchClient):
         self._client = client

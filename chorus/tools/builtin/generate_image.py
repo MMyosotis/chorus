@@ -79,6 +79,8 @@ class GenerateImageTool(Tool):
         "required": ["prompt"],
     }
     running_label = "图片生成中"
+    activity_kind = "drawing"
+    activity_detail_arg = "prompt"
 
     def __init__(self, settings_service: SettingsService, provider: ImageModelProvider):
         self._settings = settings_service

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
-from time import perf_counter
+from time import perf_counter, time as wall_clock
 from typing import Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
@@ -45,8 +45,11 @@ class ProgressSink:
         self._last_flush_chars = 0
 
     def feed(self, content: str) -> None:
+        was_empty = self._chars == 0
         self._chars += len(content)
         self._counter.feed(content)
+        if was_empty:
+            self._repo.set_activity(self._task_id, "composing", "", wall_clock())
         now = perf_counter()
         if self._chars - self._last_flush_chars < 16 and now - self._last_flush_at < 0.5:
             return
@@ -64,7 +67,7 @@ class SubagentLoopStrategy:
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, progress_total, owner_id, profile, invoke,
-                 task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names):
+                 task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names, tool_dispatch):
         self.task = task
         self.progress_total = progress_total
         self.owner_id = owner_id
@@ -76,12 +79,14 @@ class SubagentLoopStrategy:
         self._guarded_fail = guarded_fail
         self._skill_loader = skill_loader
         self._tool_names = tool_names
+        self._tool_dispatch = tool_dispatch
 
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
         latest = self._task_repo.get(self.task.id)
         if latest is None or latest.status != TaskStatus.RUNNING:
             return False
+        self._progress_repo.set_activity(self.task.id, "thinking", "", wall_clock())
         return True
 
     def provider_messages(self):
@@ -99,7 +104,9 @@ class SubagentLoopStrategy:
         return silent_consume(stream, on_token=sink.feed)
 
     def before_dispatch(self, call):
-        pass
+        kind, detail = self._tool_dispatch.activity(call.name, call.arguments)
+        if kind:
+            self._progress_repo.set_activity(self.task.id, kind, detail, wall_clock())
 
     def after_dispatch(self, call, dispatch):
         pass
@@ -198,6 +205,7 @@ class SubAgentService:
             guarded_fail=self._guarded_fail,
             skill_loader=self._skill,
             tool_names=TOOL_WHITELISTS[task.agent_type],
+            tool_dispatch=self._tools,
         )
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))

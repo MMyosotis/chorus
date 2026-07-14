@@ -18,10 +18,13 @@ from chorus.domain.task import (
     TERMINAL_STATUSES,
     Task,
     TaskContent,
+    TaskProgress,
     TaskStatus,
     CreationIntent,
     StepSpec,
     ValidationError,
+    build_task_graph,
+    dump_task_graph,
     is_legal_transition,
     select_display_pipeline,
     topological_order,
@@ -116,9 +119,25 @@ def test_agent_profiles_registry():
     # 前三步不含生图
     for at in ("idea", "script", "finalize"):
         assert "generate_image" not in TOOL_WHITELISTS[at]
-    # 入场台词纯文本无 emoji
+    # 展示名非空
     for p in AGENT_PROFILES.values():
-        assert p.enter_line and p.display_name
+        assert p.display_name
+
+
+def test_activity_line_injected_into_graph():
+    """角色活动台词经 graph 序列化注入 progress，前端直接取 activity_line。"""
+    task = _mk(TaskStatus.RUNNING, agent_type="image")
+    prog = TaskProgress(task_id="t", activity_kind="drawing")
+    graph = build_task_graph("p", [task], {}, {"t": prog}, {}, True)
+    data = dump_task_graph(graph)
+    node = data["tasks"][0]
+    assert node["progress"]["activity_kind"] == "drawing"
+    assert node["progress"]["activity_line"] == "作画"
+    # 角色差异：选题官思考态台词与配图官不同
+    idea_task = _mk(TaskStatus.RUNNING, id="idea", agent_type="idea")
+    idea_prog = TaskProgress(task_id="idea", activity_kind="thinking")
+    idea_graph = build_task_graph("p", [idea_task], {}, {"idea": idea_prog}, {}, True)
+    assert dump_task_graph(idea_graph)["tasks"][0]["progress"]["activity_line"] == "先翻翻最近的热点"
 
 
 def test_validate_steps_ok():

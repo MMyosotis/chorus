@@ -8,6 +8,7 @@ from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydataclass
 
 from chorus.domain.task.progress import TaskProgress, dump_progress
+from chorus.domain.task.profiles import AGENT_PROFILES
 from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     ImageArtifacts,
@@ -77,9 +78,18 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "agent_type": node.agent_type,
             "status": node.status,
             "updated_at": node.updated_at,
-            "progress": dump_progress(node.progress) if node.progress else None,
+            "progress": _dump_progress_with_line(node) if node.progress else None,
             "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
             "narrative": dataclasses.asdict(node.narrative) if node.narrative else None,
             "error": node.error,
         } for node in graph.nodes],
     }
+
+
+def _dump_progress_with_line(node: TaskNodeView) -> dict:
+    """序列化进度快照，并按角色补活动台词。"""
+    data = dump_progress(node.progress)
+    profile = AGENT_PROFILES.get(node.agent_type)
+    if profile:
+        data["activity_line"] = profile.activity_line(node.progress.activity_kind)
+    return data
