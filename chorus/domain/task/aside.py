@@ -34,10 +34,11 @@ class AsideGenerator:
             f"{invoke[:500]}"
         )
         try:
+            # 推理模型先吐推理段再作答，预算须覆盖推理段
             resp = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=48,
+                max_tokens=512,
                 stream=False,
             )
             raw = (resp.choices[0].message.content or "").strip().strip("\"'`")

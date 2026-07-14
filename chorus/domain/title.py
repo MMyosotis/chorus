@@ -48,10 +48,11 @@ class TitleGenerationService:
             f"用户：{first_user[:200]}\n助手：{first_assistant[:200]}"
         )
         try:
+            # 推理模型先吐推理段再作答，预算须覆盖推理段
             resp = self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=32,
+                max_tokens=512,
                 stream=False,
             )
             raw = (resp.choices[0].message.content or "").strip()
