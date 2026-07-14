@@ -1,4 +1,4 @@
-"""subagent system prompt 模板：角色各自的职责、输入来源、边界与产出协议。
+"""subagent system prompt 模板：角色各自的职责、输入来源与产出协议。
 
 条件段由装配入口统一拼入，本文件只提供基础文案。
 """
@@ -12,8 +12,6 @@ _BASE = (
     "## 你的输入\n"
     "首轮调用消息里会有本步 focus 指令，以及前置步骤的产物（JSON）。"
     "基于它们展开工作，不要重做上游已完成的事。\n\n"
-    "## 职责边界\n"
-    "{boundary}\n\n"
     "## 产出协议\n"
     "完成创作后，在最后一轮（不再调用工具时）按以下 Markdown 格式输出：\n\n"
     "先写两行注释话术（等用户确认时的引导语、完成总结一句话）：\n"
@@ -51,15 +49,6 @@ _GUIDANCE = {
     "tags 用 #标签： 行，给 2-4 个话题标签。",
 }
 
-_BOUNDARY = {
-    "idea": "你只负责选题：调研热点、琢磨切入角度、给出候选标题。"
-    "搜索只为找选题方向与热点，不要把正文素材备齐。不写正文、不出图。",
-    "script": "选题已由选题官确定，你基于 idea 产物给的选题展开正文。"
-    "搜索只为找支撑正文的论据、数据、案例，不要重新选题。不出图。",
-    "image": "你只负责配图：按正文需要生成图片并配图注。不写正文、不重新选题。",
-    "postcard": "你只负责装配成品：把前三步的标题、正文、配图组装成完整 PostCard。不新增内容，不搜索。",
-}
-
 
 def subagent_base(agent_type: str) -> str:
     """按角色返回 system prompt 基础文案，技能段由装配入口按白名单拼入。"""
@@ -67,7 +56,6 @@ def subagent_base(agent_type: str) -> str:
     return _BASE.format(
         role_name=profile.display_name,
         role_desc=profile.role_desc,
-        boundary=_BOUNDARY[profile.artifacts_schema],
         artifacts_shape=_SHAPES[profile.artifacts_schema],
         task_guidance=_GUIDANCE[profile.artifacts_schema],
     )

@@ -87,7 +87,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
     "idea": AgentProfile(
         agent_type="idea",
         display_name="选题官",
-        role_desc="调研热点、琢磨选题，给出多个候选标题与切入角度",
+        role_desc="调研热点、琢磨选题，给出候选标题与切入角度；只找选题方向，不备正文素材、不写正文、不出图",
         artifacts_schema="idea",
         artifacts_model=IdeaArtifacts,
         artifacts_parser=parse_idea_md,
@@ -101,7 +101,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
     "script": AgentProfile(
         agent_type="script",
         display_name="文案官",
-        role_desc="依据选题撰写图文博文正文，拆成有序块草稿",
+        role_desc="基于选题产物展开图文博文正文；只写正文，不重新选题、不出图",
         artifacts_schema="script",
         artifacts_model=ScriptArtifacts,
         artifacts_parser=parse_script_md,
@@ -115,7 +115,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
     "image": AgentProfile(
         agent_type="image",
         display_name="配图官",
-        role_desc="为博文生成配图，给出图片列表与图注",
+        role_desc="按正文需要生成配图并配图注；只配图，不写正文、不重新选题",
         artifacts_schema="image",
         artifacts_model=ImageArtifacts,
         artifacts_parser=parse_image_md,
@@ -129,7 +129,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
     "finalize": AgentProfile(
         agent_type="finalize",
         display_name="汇总官",
-        role_desc="装配前三步原料成整棵 PostCard 成品，作为唯一成品出口",
+        role_desc="装配前三步原料成整棵 PostCard 成品，是唯一成品出口；不新增内容、不搜索",
         artifacts_schema="postcard",
         artifacts_model=PostCard,
         artifacts_parser=parse_postcard_md,
