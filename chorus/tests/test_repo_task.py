@@ -91,13 +91,14 @@ def test_find_count_by_session_statuses():
 def test_cancel_pipeline():
     repo, _ = _repo()
     repo.insert(_mk("a", status="pending", pipeline_id="p1"))
-    repo.insert(_mk("b", status="running", pipeline_id="p1"))
+    repo.insert(_mk("b", status="running", pipeline_id="p1"))        # 运行中不可中途停
     repo.insert(_mk("c", status="awaiting_confirm", pipeline_id="p1"))
     repo.insert(_mk("d", status="finished", pipeline_id="p1"))  # 终态不动
     repo.insert(_mk("e", status="pending", pipeline_id="p2"))    # 别的 pipeline 不动
     n = repo.cancel_pipeline("p1", CANCELLABLE_STATUSES)
-    assert n == 3
+    assert n == 2  # 仅 pending + awaiting_confirm
     assert repo.get("a").status == "cancelled"
+    assert repo.get("b").status == "running"  # 运行中保留
     assert repo.get("d").status == "finished"
     assert repo.get("e").status == "pending"
     # 空集合不翻转（防误调）

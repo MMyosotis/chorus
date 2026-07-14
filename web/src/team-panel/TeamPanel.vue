@@ -8,9 +8,8 @@ const props = defineProps({
   graph: { type: Object, default: null },
   focusedTaskId: { type: String, default: null },
   intentState: { type: Object, default: null },
-  hasActiveTask: { type: Boolean, default: false },
 })
-const emit = defineEmits(['focus', 'stop-and-revise'])
+const emit = defineEmits(['focus'])
 
 const tasks = computed(() => props.graph?.tasks || [])
 const hasIntent = computed(() => !!props.intentState)
@@ -26,8 +25,6 @@ function onFocus(id) {
       <template v-if="hasIntent">
         <IntentStateCard
           :state="intentState"
-          :has-active-task="hasActiveTask"
-          @stop-and-revise="$emit('stop-and-revise')"
         />
       </template>
       <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>

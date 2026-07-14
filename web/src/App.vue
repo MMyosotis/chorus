@@ -14,7 +14,6 @@ import {
   getIntentState,
   confirmIntent,
   reopenIntent,
-  cancelPipeline,
   resumeSession,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
@@ -509,18 +508,6 @@ async function onIntentRevise() {
   await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
 }
 
-async function onIntentStopAndRevise() {
-  const sessionId = activeId.value
-  if (!sessionId || streamingBySession[sessionId]) return
-  try {
-    await cancelPipeline(sessionId)
-    taskPolling.stop()
-    await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
-  } catch (e) {
-    alert(`停止并修改失败: ${e.message}`)
-  }
-}
-
 onMounted(async () => {
   try {
     const list = await listSessions()
@@ -577,9 +564,7 @@ onMounted(async () => {
       :graph="activeGraph"
       :focused-task-id="focusedTaskId"
       :intent-state="activeIntentState"
-      :has-active-task="hasActiveTask"
       @focus="onTaskFocus"
-      @stop-and-revise="onIntentStopAndRevise"
     />
   </div>
   <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />

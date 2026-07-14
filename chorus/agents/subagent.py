@@ -61,7 +61,7 @@ class ProgressSink:
 class SubagentLoopStrategy:
     """subagent 的回合自动机差异面：内存历史、静默消费、进度写入与租约终态校验。
 
-    每轮顶部做协作式取消（状态复查与心跳），四个终态写入点拦截陈旧工作线程。
+    每轮顶部做僵死回收早退（状态复查与心跳），四个终态写入点拦截陈旧工作线程。
     """
 
     max_steps = _MAX_STEPS

@@ -3,10 +3,7 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 
 const props = defineProps({
   state: { type: Object, default: null },
-  hasActiveTask: { type: Boolean, default: false },
 })
-
-defineEmits(['stop-and-revise'])
 
 const status = computed(() => props.state?.intent_status || 'empty')
 const goal = computed(() => props.state?.goal || '')
@@ -45,7 +42,6 @@ const brief = computed(() =>
   status.value === 'confirmed' || status.value === 'dispatched'
 )
 const awaiting = computed(() => status.value === 'ready_to_confirm')
-const showStop = computed(() => props.hasActiveTask && status.value === 'dispatched')
 
 const slotText = (value) => (Array.isArray(value) ? value.join('、') : value)
 
@@ -110,8 +106,6 @@ onBeforeUnmount(() => {
         <span class="sv tip" @mouseenter="showTip" @mouseleave="hideTip"><span class="trunc">{{ slotText(value) }}</span></span>
       </template>
     </div>
-
-    <button v-if="showStop" class="intent-stop" @click="$emit('stop-and-revise')">停止并修改</button>
   </section>
 
   <!-- 待确认态：中间已出确认单，右栏只作等待提示 -->
@@ -305,20 +299,6 @@ onBeforeUnmount(() => {
   margin: 0 0 0 14px;
   position: relative;
 }
-
-.intent-stop {
-  margin-top: 12px;
-  border: none;
-  border-bottom: 1px solid transparent;
-  background: transparent;
-  font-family: var(--ch-serif);
-  font-size: 11.5px;
-  color: var(--ch-red);
-  cursor: pointer;
-  padding: 0;
-  align-self: flex-start;
-}
-.intent-stop:hover { border-bottom-color: var(--ch-red); }
 
 /* 截断层：内层单行省略 */
 .trunc {

@@ -233,28 +233,28 @@ def _idea_content(done_line="DONE_MARKER"):
     return f"<!-- chorus:awaiting=y -->\n<!-- chorus:done={done_line} -->\n\n### t\n- 视角：a\n- 理由：r"
 
 
-def _cancel_to(task_repo, tid, to_status="cancelled"):
+def _drift_to(task_repo, tid, to_status="pending"):
     def _side():
         task_repo.transition(tid, TaskStatus.RUNNING, to_status)
     return _side
 
 
 def test_subagent_cooperative_cancel_between_iterations():
-    """I-1：第 1 轮(工具调用)中途被 cancel_pipeline，第 2 轮迭代顶部复查到 cancelled
+    """I-1：第 1 轮(工具调用)中途任务被僵死回收翻回待执行，第 2 轮迭代顶部复查到非运行即退出。
     即退出——不 _finalize、不 append done 气泡、不落 artifacts。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     tool_call_delta = {"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}
-    # 第 1 轮：副作用取消任务 + 工具调用流；第 2 轮：合法产出流（不应被消费）
+    # 第 1 轮：副作用漂移任务 + 工具调用流；第 2 轮：合法产出流（不应被消费）
     client = SideEffectClient([
-        (_cancel_to(task_repo, "t1"), FakeStream([(tool_call_delta, "tool_calls")])),
+        (_drift_to(task_repo, "t1"), FakeStream([(tool_call_delta, "tool_calls")])),
         (None, FakeStream([({"content": _idea_content("DONE_MARKER_I1")}, "stop")])),
     ])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    # 任务仍 cancelled（_finalize 未成功 CAS 到 awaiting_confirm）
-    assert task_repo.get("t1").status == TaskStatus.CANCELLED
+    # 任务已漂移回待执行（_finalize 未成功 CAS 到 awaiting_confirm）
+    assert task_repo.get("t1").status == TaskStatus.PENDING
     # 不落产物
     assert art_repo.load("t1") is None
     # 第 2 个脚本未消费——证明第 2 轮迭代在 _call_model 前就退出
@@ -265,17 +265,17 @@ def test_subagent_cooperative_cancel_between_iterations():
 
 
 def test_subagent_finalize_drift_no_orphan():
-    """I-2：最终产出轮的 _call_model 中途任务被取消，_finalize 的 owning CAS
-    (running→awaiting_confirm) 漂移失败——不 upsert 产物、不 append done 气泡。"""
+    """I-2：最终产出轮的 _call_model 中途任务被僵死回收，_finalize 的 owning CAS
+    (running→awaiting_confirm) 漂移失败：不 upsert 产物、不 append done 气泡。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
-    # 单轮：副作用取消任务 + 合法产出流；_finalize 的 CAS 必失败
+    # 单轮：副作用漂移任务 + 合法产出流；_finalize 的 CAS 必失败
     client = SideEffectClient([
-        (_cancel_to(task_repo, "t1"), FakeStream([({"content": _idea_content("DONE_MARKER_I2")}, "stop")])),
+        (_drift_to(task_repo, "t1"), FakeStream([({"content": _idea_content("DONE_MARKER_I2")}, "stop")])),
     ])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.CANCELLED
+    assert task_repo.get("t1").status == TaskStatus.PENDING
     # 不落产物（CAS 漂移→跳过 upsert）
     assert art_repo.load("t1") is None
     # 无 done 气泡

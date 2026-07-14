@@ -93,11 +93,12 @@ def test_retry_from_failed():
 def test_cancel_pipeline():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="pending")
-    _mk(task_repo, content_repo, "b", status="running")
+    _mk(task_repo, content_repo, "b", status="running")  # 运行中不可中途停
     _mk(task_repo, content_repo, "c", status="finished")
     res = svc.cancel_pipeline("s1")
-    assert res["cancelled"] == 2  # a+b 非终态
+    assert res["cancelled"] == 1  # 仅 pending
     assert task_repo.get("a").status == TaskStatus.CANCELLED
+    assert task_repo.get("b").status == TaskStatus.RUNNING  # 运行中保留
     assert task_repo.get("c").status == TaskStatus.FINISHED
 
 
@@ -114,15 +115,14 @@ def test_cancel_pipeline_writes_terminal_updated_at():
     """批量取消至 cancelled 后，结束时刻写入时间戳。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="pending", updated_at=0.0)
-    _mk(task_repo, content_repo, "b", status="running", updated_at=0.0)
+    _mk(task_repo, content_repo, "b", status="running", updated_at=0.0)  # 运行中不可中途停
     _mk(task_repo, content_repo, "c", status="finished")
     svc.cancel_pipeline("s1")
     a = task_repo.get("a")
     b = task_repo.get("b")
     assert a.status == TaskStatus.CANCELLED
-    assert b.status == TaskStatus.CANCELLED
+    assert b.status == TaskStatus.RUNNING  # 运行中保留
     assert a.updated_at > 0.0
-    assert b.updated_at > 0.0
 
 
 def test_get_graph_active():

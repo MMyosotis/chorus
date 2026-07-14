@@ -74,10 +74,10 @@ def test_legal_transitions_table():
     assert is_legal_transition("awaiting_confirm", "finished")
     assert is_legal_transition("awaiting_confirm", "pending")  # retry
     assert is_legal_transition("failed", "pending")  # retry 复活
-    # 批量取消须支持运行中转取消
-    assert is_legal_transition("running", "cancelled")
+    # 批量取消只翻非运行态：运行中不可中途停
     assert is_legal_transition("pending", "cancelled")
     assert is_legal_transition("awaiting_confirm", "cancelled")
+    assert not is_legal_transition("running", "cancelled")
     # 非法
     assert not is_legal_transition("finished", "running")
     assert not is_legal_transition("finished", "pending")
@@ -100,7 +100,7 @@ def test_can_schedule():
 def test_status_sets():
     assert ACTIVE_STATUSES == frozenset({"pending", "running", "awaiting_confirm"})
     assert TERMINAL_STATUSES == frozenset({"finished", "failed", "cancelled"})
-    assert CANCELLABLE_STATUSES == ACTIVE_STATUSES  # cancel 可翻转全部非终态
+    assert CANCELLABLE_STATUSES == frozenset({"pending", "awaiting_confirm"})  # 运行中不可中途停
     assert ACTIVE_STATUSES.isdisjoint(TERMINAL_STATUSES)
 
 

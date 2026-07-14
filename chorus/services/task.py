@@ -53,7 +53,7 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.PENDING}
 
     def cancel_pipeline(self, session_id: str) -> dict:
-        """放弃整条流水线：批量取消进行中流水线的非终态任务。无进行中则幂等返 0。"""
+        """放弃整条流水线：批量取消待执行与待确认任务，运行中保留。无进行中则幂等返 0。"""
         pipeline_id = self._active_pipeline_id(session_id)
         count = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
         return {"pipeline_id": pipeline_id, "cancelled": count}
