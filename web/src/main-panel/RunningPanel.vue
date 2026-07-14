@@ -95,7 +95,6 @@ const recordPrefix = computed(() => {
 .sheet {
   position: relative;
   padding: 26px 0;
-  border-top: 1px dashed var(--ch-border-2);
 }
 .rp-role {
   position: absolute;

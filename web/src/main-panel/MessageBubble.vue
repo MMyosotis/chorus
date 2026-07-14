@@ -76,14 +76,17 @@ const planItems = computed(() =>
 // 流式期间不显示已完成工具 chip，等本轮结束再留痕
 const doneToolChips = computed(() => {
   if (props.active) return []
-  return (props.tools.items || [])
-    .filter((it) =>
-      it.duration_ms != null &&
-      it.name !== 'generate_image' &&
-      it.name !== 'output_plan' &&
-      it.name !== 'update_intent_state'
-    )
-    .map((it) => it.display || it.name)
+  const labels = []
+  for (const it of props.tools.items || []) {
+    if (it.duration_ms == null) continue
+    if (it.name === 'generate_image' || it.name === 'output_plan' || it.name === 'update_intent_state') continue
+    // 建图失败重试不显示，只留成功回执
+    if (it.name === 'create_plan' && !(it.content || '').startsWith('已创建创作任务图')) continue
+    const label = it.display || it.name
+    if (labels.length && labels[labels.length - 1] === label) continue
+    labels.push(label)
+  }
+  return labels
 })
 
 function extractImageUrl(content) {
@@ -139,7 +142,7 @@ function closePreview() {
 
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
-    <div :class="['sender', role]">{{ role === 'user' ? '我' : '稿' }}</div>
+    <div v-if="!bareMode" :class="['sender', role]">{{ role === 'user' ? '我' : '稿' }}</div>
     <div :class="['bubble', role, { bare: bareMode }]">
       <div :class="role === 'user' ? 'u-body' : 'a-body'">
         <div v-if="planItems.length" class="plan-list">

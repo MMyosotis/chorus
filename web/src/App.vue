@@ -61,39 +61,35 @@ function makeEmptyAssistant() {
   }
 }
 
+function mapToolItem(it) {
+  return {
+    name: it.name,
+    arguments: it.arguments || {},
+    duration_ms: it.duration_ms ?? null,
+    content: it.content || '',
+    display: it.display || it.name,
+  }
+}
+
 function normalizeAssistant(msg) {
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
   return {
     role: 'assistant',
     content: msg.content || '',
     thinking: { state: 'idle' },
-    tools: {
-      state: 'idle',
-      items: toolItems.map((it) => ({
-        name: it.name,
-        arguments: it.arguments || {},
-        duration_ms: it.duration_ms ?? null,
-        content: it.content || '',
-        display: it.display || it.name,
-      })),
-    },
+    tools: { state: 'idle', items: toolItems.map(mapToolItem) },
   }
 }
 
 function mergeAssistantHistory(raw) {
+  // 同一回合的助手轮次合并进一个气泡，与流式一气泡一回合对齐
   const result = []
   let pendingTools = []
+  let segBubble = null
 
-  // 尾部无正文工具消息保留为独立气泡，不往前跨 user 合并：避免建图轮工具被挂到上一轮回复上、破坏折叠锚点
   const flushPending = () => {
     if (!pendingTools.length) return
-    result.push(
-      normalizeAssistant({
-        role: 'assistant',
-        content: '',
-        tools: pendingTools,
-      })
-    )
+    result.push(normalizeAssistant({ role: 'assistant', content: '', tools: pendingTools }))
     pendingTools = []
   }
 
@@ -101,22 +97,21 @@ function mergeAssistantHistory(raw) {
     if (m.role !== 'assistant') {
       flushPending()
       result.push({ role: m.role, content: m.content })
+      segBubble = null
       continue
     }
-    const ts = Array.isArray(m.tools) ? m.tools : []
+    const tools = Array.isArray(m.tools) ? m.tools : []
     const hasContent = !!(m.content && m.content.trim())
-    if (!hasContent) {
-      pendingTools.push(...ts)
-      continue
+    if (segBubble) {
+      for (const it of tools) segBubble.tools.items.push(mapToolItem(it))
+      if (hasContent) segBubble.content += '\n\n' + m.content
+    } else if (hasContent) {
+      segBubble = normalizeAssistant({ role: 'assistant', content: m.content, tools: [...pendingTools, ...tools] })
+      result.push(segBubble)
+      pendingTools = []
+    } else {
+      pendingTools.push(...tools)
     }
-    result.push(
-      normalizeAssistant({
-        role: 'assistant',
-        content: m.content,
-        tools: [...pendingTools, ...ts],
-      })
-    )
-    pendingTools = []
   }
   flushPending()
   return result
@@ -316,6 +311,8 @@ function createStreamHandler(sessionId) {
   // 打字机队列：token 按字入队，rAF 每帧逐字追加，避免三四个字一起蹦出
   const charQueue = []
   let typingRaf = null
+  // 同回合后续轮次正文前的空行分隔，待首个 token 落地再吐，避免提前空行
+  let pendingRoundSep = false
 
   function drainQueue() {
     typingRaf = null
@@ -402,7 +399,9 @@ function createStreamHandler(sessionId) {
     if (payload.type === 'message_start') {
       finalizeCurrent()
       const c = cur()
-      if (!c || c.content) startNewAssistant()
+      // 同回合复用当前气泡：纯工具轮不新建，工具挂到本回合气泡上
+      if (!c) startNewAssistant()
+      else if (c.content) pendingRoundSep = true
     } else if (payload.type === 'reasoning') {
       const c = ensureAssistant()
       if (c.thinking.state !== 'running') c.thinking.state = 'running'
@@ -411,7 +410,11 @@ function createStreamHandler(sessionId) {
       if (!c) return
       // 思考段结束不翻转状态：酝酿中持续到正文出现，避免回跳铺纸中
     } else if (payload.type === 'token') {
-      const c = ensureAssistant()
+      ensureAssistant()
+      if (pendingRoundSep) {
+        charQueue.push('\n\n')
+        pendingRoundSep = false
+      }
       // 按 Unicode code point 拆字，避免拆坏中文/emoji 代理对
       charQueue.push(...Array.from(payload.content || ''))
       scheduleTyping()

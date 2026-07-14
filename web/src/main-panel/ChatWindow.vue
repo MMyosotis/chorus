@@ -205,8 +205,7 @@ watch(
 }
 
 .rule {
-  height: 1px;
-  background: var(--ch-hair);
+  border-top: 1px dashed var(--ch-border-2);
   margin: var(--ch-turn-gap, 24px) 0;
 }
 

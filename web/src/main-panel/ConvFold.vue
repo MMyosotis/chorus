@@ -11,10 +11,10 @@ const open = ref(false)
 
 marked.setOptions({ breaks: true, gfm: true })
 
-// 仅渲染普通对话消息，跳过注入的虚拟卡
+// 仅渲染普通对话消息，跳过注入的虚拟卡与无正文轮
 const turns = computed(() =>
   props.messages
-    .filter((msg) => msg.role && !msg.kind)
+    .filter((msg) => msg.role && !msg.kind && (msg.content || '').trim())
     .map((msg) => ({
       speaker: msg.role === 'user' ? '我' : '助手',
       cls: msg.role === 'user' ? 'user' : 'asst',
