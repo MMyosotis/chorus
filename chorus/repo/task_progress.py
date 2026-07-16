@@ -55,6 +55,22 @@ class TaskProgressRepository:
             (task_id, chars, units),
         )
 
+    def set_composing_chars(self, task_id: str, chars: int) -> None:
+        """仅覆盖正文字符数,不碰结构单元。"""
+        self._conn.get().execute(
+            "INSERT INTO task_progress(task_id, composing_chars) VALUES(?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET composing_chars=excluded.composing_chars",
+            (task_id, chars),
+        )
+
+    def set_composing_units(self, task_id: str, units: int) -> None:
+        """仅覆盖结构单元数,不碰正文字符。"""
+        self._conn.get().execute(
+            "INSERT INTO task_progress(task_id, composing_units) VALUES(?, ?) "
+            "ON CONFLICT(task_id) DO UPDATE SET composing_units=excluded.composing_units",
+            (task_id, units),
+        )
+
     def set_composing_label(self, task_id: str, label: str) -> None:
         """覆盖单位标签。"""
         self._conn.get().execute(

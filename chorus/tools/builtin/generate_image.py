@@ -94,11 +94,11 @@ class GenerateImageTool(Tool):
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         if self._settings.get_image_test_mode():
-            return ToolRunResult(Reply(_FAKE_URL), activity_meta={"url": _FAKE_URL})
+            return ToolRunResult(Reply(_FAKE_URL), activity_meta={"url": _FAKE_URL}, units_produced=1)
         entry = self._provider.get_entry()
         url = entry.client.generate(
             arguments.get("prompt", ""),
             entry.model_id,
             arguments.get("size", "1024x1024"),
         )
-        return ToolRunResult(Reply(url), activity_meta={"url": url})
+        return ToolRunResult(Reply(url), activity_meta={"url": url}, units_produced=1)

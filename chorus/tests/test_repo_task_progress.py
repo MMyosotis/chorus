@@ -44,6 +44,21 @@ def test_set_composing_does_not_clobber_label():
     assert prog.composing_label == "段"
 
 
+def test_set_chars_units_independent():
+    """chars 与 units 分写互不覆盖:配图逐张计数不被正文写字冲掉。"""
+    repo, conn = _repo()
+    tid = _seed_task(conn)
+    repo.set_composing_units(tid, 3)
+    repo.set_composing_chars(tid, 120)
+    prog = repo.load(tid)
+    assert prog.composing_units == 3
+    assert prog.composing_chars == 120
+    repo.set_composing_chars(tid, 200)
+    assert repo.load(tid).composing_units == 3
+    repo.set_composing_units(tid, 4)
+    assert repo.load(tid).composing_chars == 200
+
+
 def test_set_aside():
     repo, conn = _repo()
     tid = _seed_task(conn)

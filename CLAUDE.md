@@ -270,6 +270,24 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 - **保留的惯用单字母**：`i`（索引）、`k`/`v`（`for k, v in d.items()` dict 解包）、`_`（丢弃占位）、`except ... as e:`（异常对象）。
 - 改名时注意不要遮蔽同函数 `Depends()` 注入的参数名——此时挑更精准的名（如 `SessionSummary` 项→`summary`、`TraceEntry` 项→`entry`）而非套映射。
 
+### 提交信息规范
+
+遵循 Conventional Commits，正文用**混合三段式**（段可缺省，简单提交留空正文）：
+
+```
+<type>(<scope>): <subject>
+
+背景：<动机 / 上下文，可缺省>
+改动：
+- <变更点，统一 - bullet>
+影响：<值得注意的后果，可缺省>
+```
+
+- **标题**：`<type>(<scope>): <subject>`，type 取 feat/fix/refactor/chore/docs/test 等，中文描述变更
+- **正文三段**：以「背景：」「改动：」「影响：」起头；「改动：」是核心（有正文则必有，`-` bullet 列变更点），「背景：」「影响：」仅在有内容时写、不凑数；标题自解释的简单提交正文留空
+- **禁写三类一次性内容**：测试结果尾巴（「N 模块全绿」「build 通过」）、一次性 DB 迁移说明（「已重建 chorus.db」）、旧 commit hash 引用（历史重写后 hash 指向错误提交，改描述性表述如「去事务那次改动」）
+- **不带 trailer**：不附加 `Co-Authored-By` 等署名 trailer
+
 ### 领域层与编排层分离
 
 后端区分**领域层**（`domain/`）与**编排层**（`services/` + `routes/` + `hooks/` + `startup.py`），新增代码按下述原则归位：

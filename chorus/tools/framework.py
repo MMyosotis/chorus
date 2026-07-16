@@ -38,10 +38,11 @@ class Terminal(ToolOutcome):
 class ToolRunResult:
     """工具运行的双通道返回：走向（模型可见）与结构化产物（活动翻译层用）。
 
-    工具可返回裸走向，视作产物为空。
+    工具可返回裸走向，视作产物为空。units_produced 声明本次贡献的结构单元数。
     """
     outcome: ToolOutcome
     activity_meta: Optional[dict] = None
+    units_produced: int = 0
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class DispatchResult:
     outcome: ToolOutcome
     duration_ms: int
     activity_meta: Optional[dict] = None
+    units_produced: int = 0
 
 
 @dataclass
@@ -147,6 +149,7 @@ class ToolDispatch:
                 outcome=raw.outcome,
                 duration_ms=int((perf_counter() - start) * 1000),
                 activity_meta=raw.activity_meta,
+                units_produced=raw.units_produced,
             )
         return DispatchResult(
             outcome=raw,

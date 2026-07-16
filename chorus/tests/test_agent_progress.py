@@ -8,10 +8,10 @@ import types
 from pathlib import Path
 
 from chorus.agents.loop import AgentLoop
-from chorus.agents.subagent import SubAgentService, _MAX_STEPS
+from chorus.agents.subagent import SubAgentService, SubagentLoopStrategy, _MAX_STEPS
 from chorus.domain.session import Session
 from chorus.domain.skill import SkillLoader
-from chorus.domain.task import Task, TaskContent, TaskStatus
+from chorus.domain.task import AGENT_PROFILES, Task, TaskContent, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
@@ -24,7 +24,8 @@ from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider
-from chorus.tools import ToolDispatch
+from chorus.tools import ToolCall, ToolDispatch
+from chorus.tools.framework import DispatchResult, Reply
 
 
 class _Delta(types.SimpleNamespace):
@@ -255,6 +256,45 @@ def test_progress_chars_units_written_during_stream():
     progress = progress_repo.load("t1")
     assert progress.composing_chars == len(body)
     assert progress.composing_units == 2
+
+
+def test_image_after_dispatch_counts_units():
+    """配图工具声明 units_produced,after_dispatch 累计,正文写字不覆盖。"""
+    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, agent_type="image")
+    strategy = SubagentLoopStrategy(
+        task=task_repo.get("t1"), progress_total=None, owner_id=100.0,
+        profile=AGENT_PROFILES["image"], invoke="骨架",
+        task_repo=task_repo, progress_repo=progress_repo,
+        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        tool_names=("generate_image",), tool_dispatch=ToolDispatch([], _stub_settings()),
+    )
+    call = ToolCall(id="c1", name="generate_image", arguments={"prompt": "窗边咖啡"})
+    strategy.after_dispatch(call, DispatchResult(Reply("http://x"), 10, units_produced=1))
+    assert progress_repo.load("t1").composing_units == 1
+    strategy.after_dispatch(call, DispatchResult(Reply("http://y"), 10, units_produced=1))
+    assert progress_repo.load("t1").composing_units == 2
+    progress_repo.set_composing_chars("t1", 200)
+    assert progress_repo.load("t1").composing_units == 2
+
+
+def test_tool_without_units_not_counted():
+    """不带 units_produced 的工具(如搜索)不误增配图张数。"""
+    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, agent_type="image")
+    strategy = SubagentLoopStrategy(
+        task=task_repo.get("t1"), progress_total=None, owner_id=100.0,
+        profile=AGENT_PROFILES["image"], invoke="骨架",
+        task_repo=task_repo, progress_repo=progress_repo,
+        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        tool_names=("generate_image",), tool_dispatch=ToolDispatch([], _stub_settings()),
+    )
+    call = ToolCall(id="c1", name="baidu_search", arguments={"query": "咖啡"})
+    progress_repo.set_composing_units("t1", 0)
+    strategy.after_dispatch(call, DispatchResult(Reply("结果"), 10, activity_meta={"refs": []}))
+    assert progress_repo.load("t1").composing_units == 0
 
 
 def test_progress_aside_written_on_entry():

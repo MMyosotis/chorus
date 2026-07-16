@@ -30,16 +30,39 @@ from chorus.services.message import MessageService
 from chorus.tools import ToolDispatch
 
 _MAX_STEPS = 8
-_UNIT_MARKER = {"idea": "### ", "script": "## ", "image": "### ", "finalize": "## "}
+_UNIT_MARKER = {"idea": "### ", "script": "## ", "finalize": "## "}
+
+
+class _MarkdownUnits:
+    """正文角色的结构单元计数:数标题标记。"""
+
+    def __init__(self, marker: str):
+        self._counter = UnitCounter(marker)
+
+    def feed(self, text: str) -> None:
+        self._counter.feed(text)
+
+    def flush(self, repo: TaskProgressRepository, task_id: str, chars: int) -> None:
+        repo.set_composing(task_id, chars, self._counter.count)
+
+
+class _CharsOnlyUnits:
+    """不数结构单元的角色计数:仅写字数。"""
+
+    def feed(self, text: str) -> None:
+        pass
+
+    def flush(self, repo: TaskProgressRepository, task_id: str, chars: int) -> None:
+        repo.set_composing_chars(task_id, chars)
 
 
 class ProgressSink:
     """逐字累计正文量与结构单元,节流覆盖写进度快照。"""
 
-    def __init__(self, task_id: str, repo: TaskProgressRepository, marker: str):
+    def __init__(self, task_id: str, repo: TaskProgressRepository, units):
         self._task_id = task_id
         self._repo = repo
-        self._counter = UnitCounter(marker)
+        self._units = units
         self._chars = 0
         self._last_flush_at = perf_counter()
         self._last_flush_chars = 0
@@ -47,13 +70,13 @@ class ProgressSink:
     def feed(self, content: str) -> None:
         was_empty = self._chars == 0
         self._chars += len(content)
-        self._counter.feed(content)
+        self._units.feed(content)
         if was_empty:
             self._repo.set_activity(self._task_id, "composing", "", wall_clock())
         now = perf_counter()
         if self._chars - self._last_flush_chars < 16 and now - self._last_flush_at < 0.5:
             return
-        self._repo.set_composing(self._task_id, self._chars, self._counter.count)
+        self._units.flush(self._repo, self._task_id, self._chars)
         self._last_flush_chars = self._chars
         self._last_flush_at = now
 
@@ -80,6 +103,7 @@ class SubagentLoopStrategy:
         self._skill_loader = skill_loader
         self._tool_names = tool_names
         self._tool_dispatch = tool_dispatch
+        self._produced_units = 0
 
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
@@ -101,9 +125,9 @@ class SubagentLoopStrategy:
         return [{"role": "system", "content": build_system_prompt(ctx)}] + self.history
 
     def consume(self, stream):
-        sink = ProgressSink(
-            self.task.id, self._progress_repo,
-            _UNIT_MARKER.get(self.task.agent_type, "## "))
+        marker = _UNIT_MARKER.get(self.task.agent_type)
+        units = _MarkdownUnits(marker) if marker else _CharsOnlyUnits()
+        sink = ProgressSink(self.task.id, self._progress_repo, units)
         return silent_consume(stream, on_token=sink.feed)
 
     def before_dispatch(self, call):
@@ -112,7 +136,8 @@ class SubagentLoopStrategy:
             self._progress_repo.set_activity(self.task.id, kind, detail, wall_clock())
 
     def after_dispatch(self, call, dispatch):
-        pass
+        self._produced_units += dispatch.units_produced
+        self._progress_repo.set_composing_units(self.task.id, self._produced_units)
 
     def after_tools(self, ctx, result, pairs):
         self.history.append(_assistant_view(result))
