@@ -270,6 +270,17 @@ watch(
   box-sizing: border-box;
 }
 
+.sess::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  background: transparent;
+  transition: background 0.12s;
+}
+
 .sess:hover {
   background: color-mix(in srgb, var(--ch-text) 4%, transparent);
 }
@@ -280,12 +291,6 @@ watch(
   background: linear-gradient(rgba(255, 254, 250, .76), rgba(255, 254, 250, .76)) center / 100% calc(100% - 16px) no-repeat;
 }
 .sess.active::before {
-  content: "";
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 0;
-  width: 3px;
   background: var(--ch-warm);
 }
 

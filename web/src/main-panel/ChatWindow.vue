@@ -19,8 +19,7 @@ const props = defineProps({
 defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
 
 const container = ref(null)
-// 用户是否贴在底部（贴底时才自动跟随新内容滚底）
-const stickToBottom = ref(true)
+const stickToBottom = ref(false)
 
 function usesPageScroll(el) {
   return el && getComputedStyle(el).overflowY === 'visible'
@@ -36,20 +35,22 @@ function onScroll() {
   stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
-function scrollToBottom() {
+function scrollToBottom(behavior = 'auto') {
   const el = container.value
   if (!el) return
-  if (usesPageScroll(el)) window.scrollTo({ top: document.documentElement.scrollHeight })
-  else el.scrollTop = el.scrollHeight
-  stickToBottom.value = true
+  if (usesPageScroll(el)) window.scrollTo({ top: document.documentElement.scrollHeight, behavior })
+  else el.scrollTo({ top: el.scrollHeight, behavior })
 }
+
+function followBottom(behavior = 'auto') {
+  stickToBottom.value = true
+  scrollToBottom(behavior)
+}
+
+defineExpose({ scrollToBottom, followBottom })
 
 function messageKey(msg, idx) {
   return msg.id || `${msg.kind || msg.role}:${msg.task?.id || idx}`
-}
-
-function prefersReducedMotion() {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 }
 
 const MONTH_EN = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
@@ -98,12 +99,15 @@ const anchorIdx = computed(() =>
 )
 
 const anchorFolded = ref(false)
+const switchingSession = ref(false)
 const STAGE_KINDS = new Set(['running', 'hil', 'recovery', 'postcard'])
 const latestStageKey = computed(() => {
   const message = [...props.messages].reverse().find((item) => STAGE_KINDS.has(item.kind))
   return message ? messageKey(message, 0) : ''
 })
-let stageFocusTimer = null
+
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+onUnmounted(() => window.removeEventListener('scroll', onScroll))
 
 function scrollToLatestStage(el, behavior = 'auto') {
   const entries = Array.from(el.querySelectorAll('.flow-entry'))
@@ -124,26 +128,6 @@ function scrollToLatestStage(el, behavior = 'auto') {
   return true
 }
 
-function scheduleStageFocus() {
-  if (stageFocusTimer) clearTimeout(stageFocusTimer)
-  stageFocusTimer = setTimeout(() => {
-    stageFocusTimer = null
-    const el = container.value
-    if (el && latestStageKey.value) scrollToLatestStage(el)
-  }, 340)
-}
-
-watch([() => props.sessionId, latestStageKey], ([, key]) => {
-  if (key) scheduleStageFocus()
-}, { flush: 'post' })
-
-onUnmounted(() => {
-  if (stageFocusTimer) clearTimeout(stageFocusTimer)
-  window.removeEventListener('scroll', onScroll)
-})
-
-onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
-
 const foldGroup = computed(() => {
   const msgs = displayMessages.value
   const idx = anchorIdx.value
@@ -158,7 +142,7 @@ watch(
   (shouldFold) => {
     if (shouldFold) anchorFolded.value = true
   },
-  { flush: 'sync' }
+  { flush: 'sync', immediate: true }
 )
 
 watch(
@@ -182,21 +166,13 @@ watch(
       )
     }).join('\u0001'),
   }),
-  (current, previous) => {
+  () => {
     if (!stickToBottom.value) return
-    const structuralChange = !!previous && current.structure !== previous.structure
     nextTick(() => {
       const el = container.value
-      if (!el) return
-      if (structuralChange && latestStageKey.value) return
-      if (usesPageScroll(el)) {
-        window.scrollTo({
-          top: document.documentElement.scrollHeight,
-          behavior: structuralChange && !prefersReducedMotion() ? 'smooth' : 'auto',
-        })
-      } else if (structuralChange && !prefersReducedMotion()) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-      } else el.scrollTop = el.scrollHeight
+      if (!el || !stickToBottom.value) return
+      if (usesPageScroll(el)) window.scrollTo({ top: document.documentElement.scrollHeight })
+      else el.scrollTop = el.scrollHeight
     })
   },
   { deep: true }
@@ -206,13 +182,17 @@ watch(
 watch(
   () => props.sessionId,
   () => {
-    stickToBottom.value = true
-    anchorFolded.value = false
+    switchingSession.value = true
+    anchorFolded.value = anchorIdx.value > 0 && !props.streaming
     nextTick(() => {
       const el = container.value
-      if (!el) return
-      if (latestStageKey.value) scheduleStageFocus()
-      else scrollToBottom()
+      if (el) {
+        if (latestStageKey.value) scrollToLatestStage(el)
+        else scrollToBottom()
+      }
+      requestAnimationFrame(() => {
+        switchingSession.value = false
+      })
     })
   }
 )
@@ -223,13 +203,13 @@ watch(
     <slot name="scroll-header"></slot>
     <div class="chat-inner">
       <div v-if="!foldGroup.folded.length" class="component-divider">会话 · CORRESPONDENCE</div>
-      <Transition name="archive-fold">
+      <Transition name="archive-fold" :css="!switchingSession">
         <div v-if="foldGroup.folded.length" class="archive-block">
           <div class="component-divider">会话 · CORRESPONDENCE</div>
           <ConvFold :messages="foldGroup.folded" :intent-state="intentState" />
         </div>
       </Transition>
-      <TransitionGroup name="flow-stage" tag="div" class="flow-list">
+      <TransitionGroup name="flow-stage" tag="div" class="flow-list" :css="!switchingSession">
         <div v-for="(msg, idx) in foldGroup.rest" :key="messageKey(msg, idx)" class="flow-entry">
           <div
             v-if="msg.role === 'user' && !msg.kind"

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted, defineAsyncComponent } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, defineAsyncComponent } from 'vue'
 import ChatWindow from './main-panel/ChatWindow.vue'
 import InputBar from './main-panel/InputBar.vue'
 import ManuscriptHeader from './main-panel/ManuscriptHeader.vue'
@@ -27,6 +27,7 @@ const FlowReviewHarness = uiReviewMode ? defineAsyncComponent(() => import('./de
 const traceStore = useTraceStore()
 const taskPolling = useTaskPolling()
 
+const chatWindowRef = ref(null)
 const sessions = ref([])
 const messagesBySession = reactive({})
 const streamingBySession = reactive({})
@@ -153,12 +154,13 @@ function mergeAssistantHistory(raw) {
 async function loadMessages(id) {
   if (messagesBySession[id]) {
     traceStore.loadFromServer(id)
-    return
+    return true
   }
   try {
     const raw = await fetchMessages(id)
     messagesBySession[id] = mergeAssistantHistory(raw)
     traceStore.loadFromServer(id)
+    return true
   } catch (e) {
     if (e.status === 404) {
       // 该会话已被后端清理
@@ -174,8 +176,10 @@ async function loadMessages(id) {
         }
         alert('该会话已过期，已自动切换')
       }
+      return false
     } else {
       messagesBySession[id] = []
+      return true
     }
   }
 }
@@ -188,15 +192,47 @@ async function loadIntentState(id) {
   }
 }
 
-async function selectSession(id) {
-  leftRailOpen.value = false
+let sessionSelectionToken = 0
+
+function pinLeavingPaper(el) {
+  if (
+    !window.matchMedia('(min-width: 781px)').matches ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ) return
+  const rect = el.getBoundingClientRect()
+  Object.assign(el.style, {
+    position: 'fixed',
+    top: `${rect.top}px`,
+    left: `${rect.left}px`,
+    width: `${rect.width}px`,
+    margin: '0',
+  })
+}
+
+async function commitSessionSwitch(id, selectionToken) {
+  if (selectionToken !== sessionSelectionToken) return
   activeId.value = id
-  await Promise.all([loadMessages(id), loadIntentState(id)])
+  focusedTaskId.value = null
+}
+
+async function selectSession(id) {
+  if (!id || id === activeId.value) return
+  const selectionToken = ++sessionSelectionToken
+  leftRailOpen.value = false
+  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id)])
+  if (selectionToken !== sessionSelectionToken) return
+  if (!messagesReady) {
+    if (sessions.value.length > 0) await selectSession(sessions.value[0].id)
+    else await onCreate()
+    alert('该会话已过期，已自动切换')
+    return
+  }
+  // 先恢复目标会话的任务图，再一次性切换稿纸，避免阶段卡延迟注入造成二次定位
+  await taskPolling.start(id)
+  if (selectionToken !== sessionSelectionToken) return
   injectTaskCards(id)
   injectIntentCard(id)
-  // 进入会话若已有活跃任务图，恢复轮询
-  taskPolling.start(id)
-  focusedTaskId.value = null
+  await commitSessionSwitch(id, selectionToken)
 }
 
 async function forceReloadMessages(id) {
@@ -540,6 +576,8 @@ async function onSend(text) {
 
   const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
   list.push({ role: 'user', content: text, created_at: Date.now() / 1000 })
+  await nextTick()
+  chatWindowRef.value?.followBottom('smooth')
   await runAssistantStream(sessionId, (onEvent) => streamChat(sessionId, text, onEvent))
 }
 
@@ -594,25 +632,30 @@ onMounted(async () => {
         <strong>{{ activeTitle || '未命名稿件' }}</strong>
         <button type="button" @click="rightRailOpen = true">题旨与目录</button>
       </nav>
-      <article class="paper-shell manuscript-paper">
-        <ChatWindow
-          :messages="messages"
-          :streaming="streaming"
-          :session-id="activeId || ''"
-          :session-updated-at="activeSessionUpdatedAt"
-          :intent-state="activeIntentState"
-          @hil-confirmed="onHilConfirmed"
-          @hil-retried="onHilRetried"
-          @hil-cancelled="onHilCancelled"
-          @intent-confirm="onIntentConfirm"
-          @intent-revise="onIntentRevise"
-        >
-          <template #scroll-header>
-            <ManuscriptHeader :date="paperDate.full" :page="paperPage" :kicker="stageKicker" :title="activeTitle || '未命名稿件'" :deck="headlineDeck" />
-          </template>
-        </ChatWindow>
+      <div class="paper-stage">
+        <Transition name="paper-swap" @before-leave="pinLeavingPaper">
+          <article :key="activeId || 'empty'" class="paper-shell manuscript-paper">
+            <ChatWindow
+              ref="chatWindowRef"
+              :messages="messages"
+              :streaming="streaming"
+              :session-id="activeId || ''"
+              :session-updated-at="activeSessionUpdatedAt"
+              :intent-state="activeIntentState"
+              @hil-confirmed="onHilConfirmed"
+              @hil-retried="onHilRetried"
+              @hil-cancelled="onHilCancelled"
+              @intent-confirm="onIntentConfirm"
+              @intent-revise="onIntentRevise"
+            >
+              <template #scroll-header>
+                <ManuscriptHeader :date="paperDate.full" :page="paperPage" :kicker="stageKicker" :title="activeTitle || '未命名稿件'" :deck="headlineDeck" />
+              </template>
+            </ChatWindow>
+          </article>
+        </Transition>
         <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" @send="onSend" />
-      </article>
+      </div>
     </main>
     <TeamPanel
       :class="{ 'is-open': rightRailOpen }"
@@ -656,10 +699,61 @@ onMounted(async () => {
 
 :global(body:has(.app-shell)) { overflow-y: auto; }
 
+.paper-stage {
+  position: relative;
+  width: min(100%, 880px);
+  margin: 0 auto;
+}
+
+.paper-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  margin: 0;
+}
+
 .paper-shell :deep(.chat-window) {
   flex: 0 0 auto;
   overflow: visible;
   scrollbar-gutter: auto;
+}
+
+@media (min-width: 781px) {
+  .paper-swap-enter-active,
+  .paper-swap-leave-active {
+    backface-visibility: hidden;
+  }
+
+  .paper-swap-enter-active {
+    z-index: 2;
+    will-change: transform, opacity;
+    transition:
+      transform 240ms cubic-bezier(.22, .72, .28, 1),
+      opacity 220ms ease-out;
+  }
+
+  .paper-swap-leave-active {
+    z-index: 1;
+    will-change: opacity;
+    transition: opacity 160ms ease-in 30ms;
+    pointer-events: none;
+  }
+
+  .paper-swap-enter-from {
+    opacity: 0;
+    transform: translate3d(-28px, 0, 0);
+  }
+
+  .paper-swap-leave-to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-swap-enter-active,
+  .paper-swap-leave-active {
+    transition: none;
+  }
 }
 
 @media (min-width: 1181px) {
@@ -670,7 +764,7 @@ onMounted(async () => {
     height: 100dvh;
   }
 
-  .paper-shell :deep(.input-bar) {
+  .paper-stage :deep(.input-bar) {
     position: fixed;
     left: 50%;
     width: min(calc(100vw - 2 * var(--ch-rail) - 104px), 828px);
@@ -684,7 +778,7 @@ onMounted(async () => {
     height: 100dvh;
   }
 
-  .paper-shell :deep(.input-bar) {
+  .paper-stage :deep(.input-bar) {
     position: fixed;
     left: calc((100vw + 224px) / 2);
     width: min(calc(100vw - 328px), 828px);

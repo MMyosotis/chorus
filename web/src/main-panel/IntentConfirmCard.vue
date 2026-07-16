@@ -24,8 +24,9 @@ const specs = computed(() => [
 ])
 const specKeys = ['平台', '体裁', '形式', '风格', '语气', '配图', '图片', '图像', '主题']
 const notes = computed(() => {
-  const rest = entries.value.filter(([key]) => !specKeys.some((word) => key.includes(word)))
-  return rest.length ? rest : entries.value.slice(0, 4)
+  const rest = entries.value
+    .filter(([key]) => !specKeys.some((word) => key.includes(word)))
+  return rest.length ? rest : [['补充', '自由发挥']]
 })
 const title = computed(() => props.state?.confirmation_summary?.title || '请确认这次创作方向')
 const deck = computed(() => props.state?.goal || '签发后，编辑部将按此建立完整创作计划。')

@@ -83,10 +83,12 @@ def parse_idea_md(body: str) -> dict[str, Any]:
         stripped = line.strip()
         if stripped.startswith("### "):
             candidates.append({"index": len(candidates), "title": stripped[4:].strip(), "angle": "", "reason": ""})
-        elif candidates and stripped.startswith("- 视角："):
-            candidates[-1]["angle"] = stripped.replace("- 视角：", "").strip()
-        elif candidates and stripped.startswith("- 理由："):
-            candidates[-1]["reason"] = stripped.replace("- 理由：", "").strip()
+        elif candidates:
+            normalized = stripped.removeprefix("- ").replace("**", "")
+            if normalized.startswith(("视角：", "视角:")):
+                candidates[-1]["angle"] = normalized.split(":" if "：" not in normalized else "：", 1)[1].strip()
+            elif normalized.startswith(("理由：", "理由:")):
+                candidates[-1]["reason"] = normalized.split(":" if "：" not in normalized else "：", 1)[1].strip()
     return {"candidates": candidates, "selected": None}
 
 

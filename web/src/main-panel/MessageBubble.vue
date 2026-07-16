@@ -325,7 +325,7 @@ function closePreview() {
   width: fit-content;
   max-width: min(540px, 88%);
   margin-left: auto;
-  padding: 16px 20px;
+  padding: 12px 20px;
   background: rgba(221, 217, 208, .62);
 }
 
@@ -478,8 +478,8 @@ function closePreview() {
   border-radius: 0;
   color: var(--ch-body);
   font-family: var(--ch-serif);
-  font-size: var(--t-body);
-  line-height: 1.95;
+  font-size: var(--ch-chat-body-size);
+  line-height: var(--ch-chat-body-line);
   letter-spacing: 0.01em;
 }
 
@@ -530,7 +530,7 @@ function closePreview() {
 .label-stage {
   display: inline-grid;
   grid-template-areas: "stack";
-  height: 1.95em;
+  height: calc(var(--ch-chat-body-line) * 1em);
   overflow: hidden;
   vertical-align: bottom;
 }
@@ -568,8 +568,8 @@ function closePreview() {
   gap: 9px;
   margin: 10px 0 0;
   font-family: var(--ch-serif);
-  font-size: var(--t-body);
-  line-height: 1.95;
+  font-size: var(--ch-chat-body-size);
+  line-height: var(--ch-chat-body-line);
   color: var(--ch-body);
   letter-spacing: 0.01em;
 }

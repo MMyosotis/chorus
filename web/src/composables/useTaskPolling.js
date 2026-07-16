@@ -30,15 +30,16 @@ export function useTaskPolling() {
     },
 
     start(sessionId) {
-      if (!sessionId) return
+      if (!sessionId) return Promise.resolve()
       // 切到新会话：停旧轮询
       if (pollingSession.value !== sessionId) {
         stopInternal()
         pollingSession.value = sessionId
       }
-      if (timer) return // 已在跑
-      tick() // 立即跑一次
+      if (timer) return Promise.resolve() // 已在跑
+      const firstTick = tick() // 立即跑一次
       timer = setInterval(tick, POLL_INTERVAL)
+      return firstTick
     },
 
     stop() {
