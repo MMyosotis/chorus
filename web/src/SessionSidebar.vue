@@ -5,6 +5,8 @@ const props = defineProps({
   sessions: { type: Array, required: true },
   activeId: { type: String, default: null },
   streamingMap: { type: Object, default: () => ({}) },
+  activeWorking: { type: Boolean, default: false },
+  activeCompleted: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['select', 'create', 'delete', 'rename'])
@@ -25,6 +27,16 @@ function formatRel(ts) {
   if (diff < 1209600) return '上周'
   const d = new Date(ts * 1000)
   return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+function formatIssueDate(ts) {
+  if (!ts) return { short: '—', full: '—' }
+  const d = new Date(ts * 1000)
+  return {
+    short: `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}`,
+    full: `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
+  }
 }
 
 function startRename(c, e) {
@@ -90,23 +102,28 @@ watch(
 <template>
   <aside class="sidebar">
     <div class="brand">
-      <div class="mark">稿</div>
-      <div class="name">稿搭</div>
+      <div class="name">稿搭<span class="en">GAODA · EDITORIAL</span></div>
     </div>
     <button class="new-btn" @click="emit('create')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M12 5v14M5 12h14" />
       </svg>
-      新建会话
+      新建稿件
     </button>
+    <div class="section-title">稿件 · COPY</div>
     <div class="session-list">
       <div
-        v-for="c in sessions"
+        v-for="(c, idx) in sessions"
         :key="c.id"
         :class="['sess', { active: c.id === activeId }]"
         @click="handleSelect(c)"
       >
         <div class="sess-main">
+          <div class="issue-meta">
+            <span>VOL. {{ String(Math.max(1, sessions.length - idx)).padStart(2, '0') }}</span>
+            <span v-if="streamingMap[c.id] || (c.id === activeId && activeWorking)" class="live"><i></i>创作中</span>
+            <span v-else>{{ c.id === activeId ? (activeCompleted ? '已完成' : '当前稿') : '已完成' }}</span>
+          </div>
           <div class="sess-row">
             <input
               v-if="editingId === c.id"
@@ -121,11 +138,8 @@ watch(
             <span v-else class="t">{{ c.title }}</span>
           </div>
           <div class="meta">
-            <template v-if="streamingMap[c.id]">
-              <span class="dot-pulse" aria-hidden="true"></span>
-              <span>创作中</span>
-            </template>
-            <span v-else>{{ formatRel(c.updated_at) }}</span>
+            <span class="date-short">{{ formatIssueDate(c.updated_at).short }}</span>
+            <span class="date-full">{{ formatIssueDate(c.updated_at).full }}</span>
           </div>
         </div>
         <div v-if="editingId !== c.id" class="session-actions">
@@ -152,10 +166,11 @@ watch(
 
 <style scoped>
 .sidebar {
-  width: 270px;
+  width: var(--ch-rail);
   flex-shrink: 0;
-  background: var(--ch-bg-cool);
-  border-right: 1px solid var(--ch-border);
+  padding: var(--ch-left-rail-padding);
+  background: var(--ch-canvas);
+  border-right: 1px solid rgba(110, 103, 93, 0.34);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -163,45 +178,44 @@ watch(
 }
 
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 18px 14px;
-  flex-shrink: 0;
-}
-
-.mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: var(--ch-primary);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-family: var(--ch-serif);
-  font-weight: 700;
-  font-size: 15px;
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--ch-primary) 30%, transparent);
+  margin: 0;
+  padding: 0 0 32px;
+  border: 0;
   flex-shrink: 0;
 }
 
 .name {
   font-family: var(--ch-serif);
-  font-weight: 600;
-  font-size: 17px;
+  font-weight: 700;
+  font-size: 34px;
+  line-height: .95;
   color: var(--ch-text);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.12em;
+}
+.name .en {
+  display: block;
+  line-height: 1.2;
+  font-family: var(--ch-sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  color: var(--ch-meta);
+  margin-top: 12px;
 }
 
 .new-btn {
-  margin: 0 14px 12px;
-  padding: 9px 12px;
-  border: 1px dashed var(--ch-border-2);
-  border-radius: var(--ch-radius-sm);
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 30px;
+  padding: 0 12px;
+  border: 2px solid var(--ch-warm);
   background: transparent;
-  color: var(--ch-body);
-  font-size: 13px;
-  font-weight: 500;
+  color: var(--ch-warm);
+  font-family: var(--ch-serif);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.06em;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -210,31 +224,48 @@ watch(
   flex-shrink: 0;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
+.new-btn svg { width: 17px; height: 17px; stroke-width: 2.4; }
 
 .new-btn:hover {
-  border-color: var(--ch-primary);
-  color: var(--ch-primary);
-  background: var(--ch-primary-soft);
+  border-color: var(--ch-warm);
+  color: var(--ch-warm);
+  background: rgba(141, 51, 37, .055);
+}
+
+.section-title {
+  height: var(--ch-rail-head-height);
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 1px 2px 10px;
+  border-bottom: 1px solid var(--ch-rail-rule);
+  color: var(--ch-warm);
+  font: var(--ch-rail-head-weight) var(--ch-rail-head-size)/var(--ch-rail-head-line) var(--ch-serif);
+  letter-spacing: var(--ch-rail-head-tracking);
 }
 
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 10px 12px;
-  scrollbar-width: thin;
+  padding: 0 0 12px;
+  scrollbar-width: none;
 }
+.session-list::-webkit-scrollbar { display: none; }
 
 .sess {
   position: relative;
+  width: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
-  border-radius: var(--ch-radius-sm);
-  border: 1px solid transparent;
+  padding: 18px 14px 19px;
+  border-top: 0;
+  border-bottom: 1px solid rgba(116, 107, 94, .45);
+  border-left: 0;
   cursor: pointer;
-  margin-bottom: 2px;
+  margin: 0;
   transition: background 0.12s, border-color 0.12s;
   box-sizing: border-box;
 }
@@ -244,19 +275,18 @@ watch(
 }
 
 .sess.active {
-  background: var(--ch-primary-soft);
-  border-color: color-mix(in srgb, var(--ch-primary) 20%, transparent);
+  margin: 0;
+  padding: 18px 14px 19px;
+  background: linear-gradient(rgba(255, 254, 250, .76), rgba(255, 254, 250, .76)) center / 100% calc(100% - 16px) no-repeat;
 }
-
 .sess.active::before {
   content: "";
   position: absolute;
-  left: -10px;
   top: 8px;
   bottom: 8px;
+  left: 0;
   width: 3px;
-  background: var(--ch-primary);
-  border-radius: 2px;
+  background: var(--ch-warm);
 }
 
 .sess-main {
@@ -264,14 +294,27 @@ watch(
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0;
 }
+
+.issue-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ch-meta);
+  font: 500 var(--ch-rail-meta-size)/1.25 var(--ch-serif);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.issue-meta .live { display: inline-flex; align-items: center; gap: 6px; color: var(--ch-warm); }
+.issue-meta .live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: breathe 1.7s ease-in-out infinite; }
 
 .sess-row {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 22px;
+  min-height: 0;
+  margin: 9px 0 9px;
 }
 
 .t {
@@ -281,23 +324,22 @@ watch(
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--ch-serif);
-  font-size: 13.5px;
-  font-weight: 500;
+  font-size: var(--ch-rail-head-size);
+  font-weight: 600;
   color: var(--ch-text);
-  letter-spacing: 0.01em;
+  line-height: 1.45;
+  letter-spacing: .025em;
 }
 
-.sess.active .t {
-  color: var(--ch-primary-2);
-}
+.sess.active .t { color: var(--ch-text); }
 
 .rename-input {
   flex: 1;
   min-width: 0;
   padding: 2px 6px;
   border: 1px solid var(--ch-border-2);
-  border-radius: 4px;
-  font-size: 13.5px;
+  border-radius: 0;
+  font-size: var(--t-meta);
   outline: none;
   font-family: inherit;
   background: var(--ch-surface);
@@ -306,10 +348,24 @@ watch(
 
 .meta {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  color: var(--ch-faint);
+  align-items: baseline;
+  gap: 10px;
+  font-family: var(--ch-serif);
+  font-size: var(--ch-rail-meta-size);
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--ch-meta);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.date-short {
+  color: var(--ch-text);
+  font: 500 11px/1.25 var(--ch-serif);
+  letter-spacing: .04em;
+}
+.date-full {
+  color: var(--ch-meta);
+  font: 500 11px/1.3 var(--ch-serif);
+  letter-spacing: .02em;
 }
 
 .dot-pulse {
@@ -321,34 +377,46 @@ watch(
   flex-shrink: 0;
 }
 
-@keyframes pulse {
+@keyframes breathe {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 1; }
 }
 
 .session-actions {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
   display: none;
   gap: 2px;
-  flex-shrink: 0;
 }
 
 .sess:hover .session-actions {
   display: flex;
 }
 
+.sess:hover .sess-row {
+  padding-right: 60px;
+}
+
 .icon-btn {
   width: 22px;
   height: 22px;
+  min-height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   background: transparent;
   color: var(--ch-muted);
   cursor: pointer;
   padding: 0;
   transition: background 0.15s, color 0.15s;
+}
+
+@media (max-width: 1180px) {
+  .sidebar { width: 224px; padding-inline: 20px; }
 }
 
 .icon-btn:hover:not(:disabled) {
@@ -365,6 +433,6 @@ watch(
   text-align: center;
   color: var(--ch-faint);
   padding: 24px 12px;
-  font-size: 13px;
+  font-size: var(--t-meta);
 }
 </style>

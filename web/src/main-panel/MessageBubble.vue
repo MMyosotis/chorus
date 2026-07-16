@@ -2,11 +2,13 @@
 import { computed, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import IntentConfirmCard from './IntentConfirmCard.vue'
 
 const props = defineProps({
   role: { type: String, required: true },
   content: { type: String, required: true },
   active: { type: Boolean, default: false },
+  createdAt: { type: Number, default: null },
   thinking: {
     type: Object,
     default: () => ({ state: 'idle' }),
@@ -15,7 +17,10 @@ const props = defineProps({
     type: Object,
     default: () => ({ state: 'idle', items: [] }),
   },
+  intentState: { type: Object, default: null },
 })
+
+const emit = defineEmits(['intent-confirm', 'intent-revise'])
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -36,6 +41,14 @@ const hasRunningTool = computed(() =>
 )
 
 const bareMode = computed(() => props.role === 'assistant' && props.active && !props.content)
+
+const timeLabel = computed(() => {
+  if (!props.createdAt) return ''
+  const d = new Date(props.createdAt * 1000)
+  const h = String(d.getHours()).padStart(2, '0')
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+})
 
 const activityState = computed(() => {
   if (props.tools.state === 'running' && hasRunningTool.value) return 'tools'
@@ -142,8 +155,18 @@ function closePreview() {
 
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
-    <div v-if="!bareMode" :class="['sender', role]">{{ role === 'user' ? '我' : '稿' }}</div>
-    <div :class="['bubble', role, { bare: bareMode }]">
+    <div class="turn-head">
+      <template v-if="role === 'user'">
+        <span v-if="timeLabel" class="time">{{ timeLabel }}</span>
+        <span v-if="timeLabel" class="sep">·</span>
+      </template>
+      <span class="role">{{ role === 'user' ? '来函' : '按语' }}</span>
+      <template v-if="role === 'assistant'">
+        <span v-if="timeLabel" class="sep">·</span>
+        <span v-if="timeLabel" class="time">{{ timeLabel }}</span>
+      </template>
+    </div>
+    <div :class="['bubble', role, { bare: bareMode, 'assistant-card': role === 'assistant' }]">
       <div :class="role === 'user' ? 'u-body' : 'a-body'">
         <div v-if="planItems.length" class="plan-list">
           <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
@@ -155,6 +178,13 @@ function closePreview() {
         </div>
         <div v-if="content" class="text" v-html="formattedContent"></div>
       </div>
+
+      <IntentConfirmCard
+        v-if="role === 'assistant' && intentState"
+        :state="intentState"
+        @confirm="emit('intent-confirm')"
+        @revise="emit('intent-revise')"
+      />
 
       <div v-if="imageItems.length" class="image-list">
         <div v-for="(item, idx) in imageItems" :key="`img-${idx}`" class="image-item">
@@ -221,77 +251,107 @@ function closePreview() {
 <style scoped>
 .bubble-row {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  padding: 26px 0;
-  border-top: 1px dashed var(--ch-border-2);
+  padding: 0;
+  margin: 0 0 28px;
 }
 
-.sender {
-  position: absolute;
-  top: 26px;
-  align-self: start;
-  display: inline-flex;
+.bubble-row + .bubble-row {
+  margin-top: 0;
+}
+
+.turn-head {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  height: 24px;
-  padding: 0 4px;
+  gap: 8px;
+  margin-bottom: 10px;
   font-family: var(--ch-serif);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.5px;
-  z-index: 1;
+  min-height: 22px;
+  font-size: var(--ch-chat-label-size);
+  font-weight: 500;
+  letter-spacing: .04em;
 }
 
-.sender.assistant {
-  left: 0;
-  background: var(--ch-primary-soft);
-  color: var(--ch-primary-2);
+.bubble-row.assistant .turn-head {
+  color: var(--ch-primary);
 }
 
-.sender.user {
-  right: 0;
-  background: #f0f0ed;
+.bubble-row.user .turn-head {
+  justify-content: flex-end;
   color: var(--ch-muted);
 }
 
+.turn-head .role {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  background: var(--ch-warm);
+  color: var(--ch-paper-bright) !important;
+  font-family: var(--ch-serif);
+  font-size: var(--ch-chat-label-size);
+  font-weight: 600;
+  letter-spacing: .06em;
+  line-height: 1;
+}
+
+.turn-head .sep {
+  display: none;
+}
+
+.turn-head .time {
+  font-family: var(--ch-serif);
+  font-size: var(--ch-chat-meta-size);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--ch-faint);
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  line-height: 22px;
+}
+
+.bubble-row.assistant .turn-head .role {
+  color: var(--ch-primary-2);
+}
+
+.bubble-row.user .turn-head .role {
+  color: var(--ch-text);
+}
+
+.bubble-row.assistant .turn-head::after,
+.bubble-row.user .turn-head::before { content: none; }
+
 .bubble-row.user .bubble {
   text-align: right;
+  width: fit-content;
+  max-width: min(540px, 88%);
+  margin-left: auto;
+  padding: 16px 20px;
+  background: rgba(221, 217, 208, .62);
 }
 
 .bubble {
   grid-column: 1;
 }
 
-.tool-running-line,
-.tool-chips,
-.status-card {
-  grid-column: 1;
-  padding-left: 48px;
-}
-
 .bubble {
-  line-height: 1.7;
-  font-size: 14px;
+  line-height: var(--ch-chat-body-line);
+  font-size: var(--ch-chat-body-size);
   word-break: break-word;
 }
 
 .bubble.user {
-  max-width: 100%;
-  padding: 0 48px;
+  max-width: min(540px, 88%);
   color: var(--ch-text);
   font-family: var(--ch-serif);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.85;
-  letter-spacing: 0.2px;
+  font-size: var(--ch-chat-body-size);
+  font-weight: var(--ch-chat-body-weight);
+  line-height: var(--ch-chat-body-line);
+  letter-spacing: 0.01em;
 }
 
 .u-body {
   min-width: 0;
-  padding: 1px 0;
+  padding: 0;
   text-align: right;
 }
 
@@ -302,15 +362,15 @@ function closePreview() {
 .bubble.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 0 48px;
   background: transparent;
   border: none;
   color: var(--ch-text);
   font-family: var(--ch-serif);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.85;
-  letter-spacing: 0.2px;
+  font-size: var(--ch-chat-body-size);
+  font-weight: var(--ch-chat-body-weight);
+  line-height: var(--ch-chat-body-line);
+  letter-spacing: 0.01em;
+  text-align: justify;
 }
 
 .bubble.assistant.bare {
@@ -325,7 +385,7 @@ function closePreview() {
 
 .bubble.assistant .text :deep(p) {
   margin: 0 0 14px;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.01em;
 }
 .bubble.assistant .text :deep(p:last-child) {
   margin-bottom: 0;
@@ -334,15 +394,15 @@ function closePreview() {
 .bubble.assistant .text :deep(h2),
 .bubble.assistant .text :deep(h3),
 .bubble.assistant .text :deep(h4) {
-  margin: 28px 0 14px;
-  font-family: var(--ch-serif);
-  font-weight: 600;
-  line-height: 1.4;
-  letter-spacing: 0.4px;
+  margin: 18px 0 8px;
+  font-family: var(--ch-sans);
+  font-size: var(--t-eyebrow);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ch-accent);
 }
-.bubble.assistant .text :deep(h1) { font-size: 20px; }
-.bubble.assistant .text :deep(h2) { font-size: 18px; }
-.bubble.assistant .text :deep(h3) { font-size: 16px; }
 .bubble.assistant .text :deep(ul),
 .bubble.assistant .text :deep(ol) {
   margin: 0 0 10px;
@@ -353,21 +413,22 @@ function closePreview() {
   letter-spacing: 0.2px;
 }
 .bubble.assistant .text :deep(code) {
-  background: var(--ch-bg-cool);
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 1px 4px;
+  border-bottom: 1px solid var(--ch-border-2);
+  background: rgba(221, 217, 208, .38);
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 13px;
 }
 .bubble.assistant .text :deep(pre) {
-  background: #1a1a1f;
-  color: #e4e4e7;
-  padding: 12px 14px;
-  border-radius: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--ch-border-2);
+  border-bottom: 1px solid var(--ch-border-2);
+  background: rgba(221, 217, 208, .42);
+  color: var(--ch-text);
   overflow-x: auto;
-  margin: 8px 0;
+  margin: 12px 0;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.7;
 }
 .bubble.assistant .text :deep(pre code) {
   background: transparent;
@@ -376,9 +437,9 @@ function closePreview() {
   font-size: inherit;
 }
 .bubble.assistant .text :deep(blockquote) {
-  margin: 8px 0;
-  padding: 4px 12px;
-  border-left: 3px solid var(--ch-border-2);
+  margin: 14px 0;
+  padding: 6px 14px;
+  border-left: 2px solid var(--ch-warm);
   color: var(--ch-body);
 }
 .bubble.assistant .text :deep(a) {
@@ -417,9 +478,9 @@ function closePreview() {
   border-radius: 0;
   color: var(--ch-body);
   font-family: var(--ch-serif);
-  font-size: 14px;
+  font-size: var(--t-body);
   line-height: 1.95;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.01em;
 }
 
 .bubble-row.bare .status-card {
@@ -462,8 +523,8 @@ function closePreview() {
   opacity: 0.9;
 }
 @keyframes breath {
-  0%, 100% { transform: scale(0.7); opacity: 0.55; }
-  50%      { transform: scale(1.9); opacity: 0.18; }
+  0%, 100% { opacity: 0.28; }
+  50%      { opacity: 1; }
 }
 
 .label-stage {
@@ -495,8 +556,10 @@ function closePreview() {
 .tool-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin: 10px 0 0;
+  gap: 12px;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--ch-border-2);
 }
 
 .tool-running-line {
@@ -505,10 +568,10 @@ function closePreview() {
   gap: 9px;
   margin: 10px 0 0;
   font-family: var(--ch-serif);
-  font-size: 14px;
+  font-size: var(--t-body);
   line-height: 1.95;
   color: var(--ch-body);
-  letter-spacing: 0.3px;
+  letter-spacing: 0.01em;
 }
 .tool-running-label {
   font-weight: 500;
@@ -518,14 +581,14 @@ function closePreview() {
   align-items: center;
   gap: 4px;
   max-width: 100%;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--ch-bg-warm);
-  border: 1px solid var(--ch-border);
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--ch-muted);
-  font-size: 12px;
-  line-height: 1.4;
-  letter-spacing: 0.1px;
+  font-family: var(--ch-serif);
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: .04em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -550,11 +613,12 @@ function closePreview() {
 }
 
 .plan-header {
-  font-family: var(--ch-serif);
-  font-weight: 600;
-  font-size: 13px;
-  color: var(--ch-muted);
-  letter-spacing: 0.4px;
+  font-family: var(--ch-sans);
+  font-weight: 700;
+  font-size: var(--t-eyebrow);
+  color: var(--ch-accent);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
   margin-bottom: 10px;
   line-height: 1;
 }
@@ -563,7 +627,7 @@ function closePreview() {
   margin: 0;
   padding-left: 20px;
   color: var(--ch-body);
-  font-size: 13.5px;
+  font-size: var(--t-body);
   line-height: 1.9;
 }
 
@@ -597,15 +661,17 @@ function closePreview() {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: var(--ch-radius-lg);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--ch-border-2);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .image-placeholder {
   position: relative;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: var(--ch-radius-lg);
+  border: 1px solid var(--ch-border-2);
+  border-radius: 0;
   overflow: hidden;
   background: var(--ch-bg-cool);
 }
@@ -634,7 +700,7 @@ function closePreview() {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: var(--t-meta);
   color: var(--ch-muted);
   letter-spacing: 0.4px;
 }
@@ -644,7 +710,7 @@ function closePreview() {
   border-radius: 8px;
   background: var(--ch-red-soft);
   color: var(--ch-red);
-  font-size: 13px;
+  font-size: var(--t-meta);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;

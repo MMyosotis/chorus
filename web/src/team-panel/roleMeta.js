@@ -2,9 +2,9 @@
 
 export const ROLE_LABELS = {
   idea: '选题官',
-  script: '文案',
-  image: '配图',
-  finalize: '汇总',
+  script: '文案编辑',
+  image: '视觉编辑',
+  finalize: '汇总编辑',
 }
 
 export const ROLE_ORDER = ['idea', 'script', 'image', 'finalize']
@@ -18,9 +18,9 @@ export const ROLE_TAG = {
 
 export const ROLE_FULL = {
   idea: '选题官',
-  script: '文案官',
-  image: '配图官',
-  finalize: '汇总官',
+  script: '文案编辑',
+  image: '视觉编辑',
+  finalize: '汇总编辑',
 }
 
 export function stepOf(agentType) {

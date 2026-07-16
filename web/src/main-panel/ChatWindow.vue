@@ -1,18 +1,19 @@
 <script setup>
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import PostCard from './PostCard.vue'
 import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
-import IntentConfirmCard from './IntentConfirmCard.vue'
 import ConvFold from './ConvFold.vue'
+import ProofRegister from './ProofRegister.vue'
 
 const props = defineProps({
   messages: { type: Array, required: true },
   streaming: { type: Boolean, default: false },
   sessionId: { type: String, default: '' },
   sessionUpdatedAt: { type: Number, default: null },
+  intentState: { type: Object, default: null },
 })
 
 defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
@@ -21,38 +22,51 @@ const container = ref(null)
 // 用户是否贴在底部（贴底时才自动跟随新内容滚底）
 const stickToBottom = ref(true)
 
+function usesPageScroll(el) {
+  return el && getComputedStyle(el).overflowY === 'visible'
+}
+
 function onScroll() {
   const el = container.value
   if (!el) return
+  if (usesPageScroll(el)) {
+    stickToBottom.value = document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 80
+    return
+  }
   stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
 }
 
 function scrollToBottom() {
   const el = container.value
   if (!el) return
-  el.scrollTop = el.scrollHeight
+  if (usesPageScroll(el)) window.scrollTo({ top: document.documentElement.scrollHeight })
+  else el.scrollTop = el.scrollHeight
   stickToBottom.value = true
 }
 
-const datelineDate = computed(() => {
+function messageKey(msg, idx) {
+  return msg.id || `${msg.kind || msg.role}:${msg.task?.id || idx}`
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+}
+
+const MONTH_EN = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+
+const datelineEn = computed(() => {
   const ts = props.sessionUpdatedAt
   if (!ts) return ''
-  const d = new Date(ts * 1000)
-  const digits = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九']
-  const year = String(d.getFullYear()).split('').map((n) => digits[Number(n)]).join('')
-  const month = d.getMonth() + 1
-  const day = d.getDate()
-  const cnMonth = month < 10 ? digits[month] : `十${month === 10 ? '' : digits[month - 10]}`
-  const cnDay = day < 10 ? digits[day] : day < 20 ? `十${day === 10 ? '' : digits[day - 10]}` : `${digits[Math.floor(day / 10)]}十${day % 10 === 0 ? '' : digits[day % 10]}`
-  return `${year} · ${cnMonth}月${cnDay}日`
+  const date = new Date(ts * 1000)
+  return `${date.getFullYear()} · ${MONTH_EN[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}`
 })
 
 const datelineTime = computed(() => {
   const ts = props.sessionUpdatedAt
   if (!ts) return ''
-  const d = new Date(ts * 1000)
-  const hour = d.getHours()
-  const minute = d.getMinutes()
+  const date = new Date(ts * 1000)
+  const hour = date.getHours()
+  const minute = date.getMinutes()
   const period = hour < 6 ? '凌晨' : hour < 12 ? '上午' : hour < 14 ? '中午' : hour < 18 ? '午后' : '入夜'
   const h12 = hour % 12 === 0 ? 12 : hour % 12
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
@@ -60,8 +74,23 @@ const datelineTime = computed(() => {
 
 // 确认意图后建图：以第一条含 create_plan 工具调用的助手消息为锚点，锚点及之前折叠成「与助手的讨论」。
 // 锚点正在流式吐字时先正常显示；流式结束或历史拉回时即折叠，一旦折叠不再展开。
+const displayMessages = computed(() => {
+  const result = []
+  for (const message of props.messages) {
+    if (message.kind === 'intent-confirm') {
+      const previous = result[result.length - 1]
+      if (previous && previous.role === 'assistant' && !previous.kind) {
+        result[result.length - 1] = { ...previous, intentState: message.state }
+        continue
+      }
+    }
+    result.push(message)
+  }
+  return result
+})
+
 const anchorIdx = computed(() =>
-  props.messages.findIndex(
+  displayMessages.value.findIndex(
     (m) =>
       m.role === 'assistant' &&
       (m.tools?.items || []).some((it) => it.name === 'create_plan')
@@ -69,9 +98,54 @@ const anchorIdx = computed(() =>
 )
 
 const anchorFolded = ref(false)
+const STAGE_KINDS = new Set(['running', 'hil', 'recovery', 'postcard'])
+const latestStageKey = computed(() => {
+  const message = [...props.messages].reverse().find((item) => STAGE_KINDS.has(item.kind))
+  return message ? messageKey(message, 0) : ''
+})
+let stageFocusTimer = null
+
+function scrollToLatestStage(el, behavior = 'auto') {
+  const entries = Array.from(el.querySelectorAll('.flow-entry'))
+  const target = entries.reverse().find((entry) => {
+    const divider = entry.querySelector(':scope > .stage-divider')
+    return !!divider
+  })
+  if (!target) return false
+  if (usesPageScroll(el)) {
+    const targetBox = target.getBoundingClientRect()
+    window.scrollTo({ top: Math.max(0, window.scrollY + targetBox.top - 26), behavior })
+    return true
+  }
+  const containerBox = el.getBoundingClientRect()
+  const targetBox = target.getBoundingClientRect()
+  const top = Math.max(0, el.scrollTop + targetBox.top - containerBox.top - 4)
+  el.scrollTo({ top, behavior })
+  return true
+}
+
+function scheduleStageFocus() {
+  if (stageFocusTimer) clearTimeout(stageFocusTimer)
+  stageFocusTimer = setTimeout(() => {
+    stageFocusTimer = null
+    const el = container.value
+    if (el && latestStageKey.value) scrollToLatestStage(el)
+  }, 340)
+}
+
+watch([() => props.sessionId, latestStageKey], ([, key]) => {
+  if (key) scheduleStageFocus()
+}, { flush: 'post' })
+
+onUnmounted(() => {
+  if (stageFocusTimer) clearTimeout(stageFocusTimer)
+  window.removeEventListener('scroll', onScroll)
+})
+
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
 
 const foldGroup = computed(() => {
-  const msgs = props.messages
+  const msgs = displayMessages.value
   const idx = anchorIdx.value
   if (idx <= 0) return { folded: [], rest: msgs }
   if (anchorFolded.value) return { folded: msgs.slice(0, idx + 1), rest: msgs.slice(idx + 1) }
@@ -88,8 +162,9 @@ watch(
 )
 
 watch(
-  () =>
-    props.messages.map((m) => {
+  () => ({
+    structure: props.messages.map((m, idx) => messageKey(m, idx)).join('|'),
+    content: props.messages.map((m) => {
       const tItems = m.tools?.items || []
       const toolsSig = tItems
         .map((t) => `${t.content?.length ?? 0}:${t.duration_ms ?? ''}`)
@@ -105,26 +180,39 @@ watch(
         '|' +
         toolsSig
       )
-    }),
-  () => {
+    }).join('\u0001'),
+  }),
+  (current, previous) => {
     if (!stickToBottom.value) return
+    const structuralChange = !!previous && current.structure !== previous.structure
     nextTick(() => {
-      if (container.value) {
-        container.value.scrollTop = container.value.scrollHeight
-      }
+      const el = container.value
+      if (!el) return
+      if (structuralChange && latestStageKey.value) return
+      if (usesPageScroll(el)) {
+        window.scrollTo({
+          top: document.documentElement.scrollHeight,
+          behavior: structuralChange && !prefersReducedMotion() ? 'smooth' : 'auto',
+        })
+      } else if (structuralChange && !prefersReducedMotion()) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      } else el.scrollTop = el.scrollHeight
     })
   },
   { deep: true }
 )
 
-// 切换会话：重置跟随态并滚到底
+// 切换会话：有阶段成品时落在阶段页首，纯对话才落到最新消息。
 watch(
   () => props.sessionId,
   () => {
     stickToBottom.value = true
     anchorFolded.value = false
     nextTick(() => {
-      if (container.value) container.value.scrollTop = container.value.scrollHeight
+      const el = container.value
+      if (!el) return
+      if (latestStageKey.value) scheduleStageFocus()
+      else scrollToBottom()
     })
   }
 )
@@ -132,51 +220,58 @@ watch(
 
 <template>
   <div ref="container" class="chat-window" @scroll="onScroll">
+    <slot name="scroll-header"></slot>
     <div class="chat-inner">
-      <div v-if="datelineDate" class="letterhead">
-        <div class="lh-date">{{ datelineDate }}</div>
-        <div v-if="datelineTime" class="lh-sub">{{ datelineTime }} · 致 稿搭</div>
-      </div>
-      <ConvFold v-if="foldGroup.folded.length" :messages="foldGroup.folded" />
-      <div v-if="foldGroup.folded.length" class="rule" aria-hidden="true"></div>
-      <template v-for="(msg, idx) in foldGroup.rest" :key="msg.id || idx">
-        <div
-          v-if="msg.role === 'user' && !msg.kind"
-          class="round-divider"
-          aria-hidden="true"
-        ></div>
-        <HilCard
-          v-if="msg.kind === 'hil'"
-          :task="msg.task"
-          :session-id="sessionId"
-          @confirmed="$emit('hil-confirmed', $event)"
-          @retried="$emit('hil-retried', $event)"
-          @cancelled="$emit('hil-cancelled', $event)"
-        />
-        <PostCard v-else-if="msg.kind === 'postcard'" :task="msg.task" />
-        <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
-        <RecoveryCard
-          v-else-if="msg.kind === 'recovery'"
-          :task="msg.task"
-          :session-id="sessionId"
-          @retried="$emit('hil-retried', $event)"
-          @cancelled="$emit('hil-cancelled', $event)"
-        />
-        <IntentConfirmCard
-          v-else-if="msg.kind === 'intent-confirm'"
-          :state="msg.state"
-          @confirm="$emit('intent-confirm')"
-          @revise="$emit('intent-revise')"
-        />
-        <MessageBubble
-          v-else
-          :role="msg.role"
-          :content="msg.content"
-          :thinking="msg.thinking"
-          :tools="msg.tools"
-          :active="streaming && idx === foldGroup.rest.length - 1 && msg.role === 'assistant'"
-        />
-      </template>
+      <div v-if="!foldGroup.folded.length" class="component-divider">会话 · CORRESPONDENCE</div>
+      <Transition name="archive-fold">
+        <div v-if="foldGroup.folded.length" class="archive-block">
+          <div class="component-divider">会话 · CORRESPONDENCE</div>
+          <ConvFold :messages="foldGroup.folded" :intent-state="intentState" />
+        </div>
+      </Transition>
+      <TransitionGroup name="flow-stage" tag="div" class="flow-list">
+        <div v-for="(msg, idx) in foldGroup.rest" :key="messageKey(msg, idx)" class="flow-entry">
+          <div
+            v-if="msg.role === 'user' && !msg.kind"
+            class="round-divider"
+            aria-hidden="true"
+          ></div>
+          <div v-if="msg.kind === 'running'" class="component-divider stage-divider">执行进度 · PRODUCTION</div>
+          <div v-else-if="msg.kind === 'hil'" class="component-divider stage-divider">校样确认 · PROOF</div>
+          <div v-else-if="msg.kind === 'recovery'" class="component-divider stage-divider">配图 · 异常恢复 / RECOVERY</div>
+          <div v-else-if="msg.kind === 'postcard'" class="component-divider stage-divider">成品 · 最终定稿 / FINAL</div>
+          <HilCard
+            v-if="msg.kind === 'hil'"
+            :task="msg.task"
+            :session-id="sessionId"
+            @confirmed="$emit('hil-confirmed', $event)"
+            @retried="$emit('hil-retried', $event)"
+            @cancelled="$emit('hil-cancelled', $event)"
+          />
+          <PostCard v-else-if="msg.kind === 'postcard'" :task="msg.task" />
+          <ProofRegister v-else-if="msg.kind === 'proof-register'" :tasks="msg.tasks" />
+          <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
+          <RecoveryCard
+            v-else-if="msg.kind === 'recovery'"
+            :task="msg.task"
+            :session-id="sessionId"
+            @retried="$emit('hil-retried', $event)"
+            @cancelled="$emit('hil-cancelled', $event)"
+          />
+          <MessageBubble
+            v-else
+            :role="msg.role"
+            :content="msg.content"
+            :created-at="msg.created_at"
+            :thinking="msg.thinking"
+            :tools="msg.tools"
+            :intent-state="msg.intentState"
+            :active="streaming && idx === foldGroup.rest.length - 1 && msg.role === 'assistant'"
+            @intent-confirm="$emit('intent-confirm')"
+            @intent-revise="$emit('intent-revise')"
+          />
+        </div>
+      </TransitionGroup>
       <div v-if="messages.length === 0" class="empty-hint">
         <p>发送消息开始对话</p>
       </div>
@@ -188,48 +283,60 @@ watch(
 .chat-window {
   flex: 1;
   overflow-y: auto;
-  padding: 34px 16px 10px;
+  padding: 20px var(--ch-paper-pad) 112px;
   background: transparent;
   scrollbar-gutter: stable both-edges;
 }
 
 .chat-inner {
-  max-width: var(--ch-runtime-width);
+  max-width: none;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
 }
 
+.flow-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.flow-entry { width: 100%; min-width: 0; }
+.flow-stage-enter-active { transition: opacity .3s cubic-bezier(.2,.72,.25,1), transform .3s cubic-bezier(.2,.72,.25,1); }
+.flow-stage-leave-active { position: absolute; width: 100%; transition: opacity .18s ease-in, transform .18s ease-in; pointer-events: none; }
+.flow-stage-enter-from { opacity: 0; transform: translateY(12px); }
+.flow-stage-leave-to { opacity: 0; transform: translateY(-7px); }
+.archive-block { min-width: 0; }
+.archive-fold-enter-active { transition: opacity .26s cubic-bezier(.2,.72,.25,1), transform .26s cubic-bezier(.2,.72,.25,1); }
+.archive-fold-leave-active { transition: opacity .16s ease-in, transform .16s ease-in; }
+.archive-fold-enter-from { opacity: 0; transform: translateY(8px); }
+.archive-fold-leave-to { opacity: 0; transform: translateY(-5px); }
+
+.component-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 40px 0 20px;
+  color: var(--ch-warm);
+  font: 600 var(--ch-chat-label-size)/1 var(--ch-serif);
+  letter-spacing: .08em;
+}
+.component-divider::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid rgba(141, 51, 37, .82);
+  transform: rotate(45deg);
+}
+.stage-divider { margin: 40px 0 20px; }
+
+@media (min-width: 781px) {
+  .component-divider,
+  .stage-divider { margin: 40px 0 13px; }
+}
+
 .round-divider {
   display: none;
-}
-
-.rule {
-  border-top: 1px dashed var(--ch-border-2);
-  margin: var(--ch-turn-gap, 24px) 0;
-}
-
-.letterhead {
-  text-align: center;
-  margin-bottom: 16px;
-  font-family: var(--ch-serif);
-}
-
-.lh-date {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ch-primary-2);
-  letter-spacing: 2px;
-  line-height: 1.4;
-}
-
-.lh-sub {
-  font-size: 12px;
-  color: var(--ch-faint);
-  letter-spacing: 1.5px;
-  margin-top: 6px;
-  font-feature-settings: "onum" 1;
-  line-height: 1;
 }
 
 .empty-hint {
@@ -240,18 +347,28 @@ watch(
   gap: 12px;
   height: 240px;
   color: var(--ch-faint);
-  font-size: 16px;
+  font-size: var(--t-title);
   letter-spacing: 0.5px;
 }
 
 .chat-inner :deep(.hil-card) {
-  margin: 4px 0;
+  margin: 36px 0 16px;
 }
 
 .chat-inner :deep(.post-card),
 .chat-inner :deep(.recovery-card),
-.chat-inner :deep(.intent-confirm),
 .chat-inner :deep(.running) {
-  margin: 18px 0;
+  margin: 36px 0 16px;
+}
+.chat-inner :deep(.intent-confirm) {
+  margin: 18px 0 0;
+}
+.flow-entry:has(> .stage-divider) :deep(.hil-card),
+.flow-entry:has(> .stage-divider) :deep(.post-card),
+.flow-entry:has(> .stage-divider) :deep(.recovery-card),
+.flow-entry:has(> .stage-divider) :deep(.running) { margin: 0 0 16px; }
+
+@media (max-width: 780px) {
+  .chat-window { padding-inline: 28px; }
 }
 </style>

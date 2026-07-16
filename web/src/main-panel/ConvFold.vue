@@ -2,9 +2,11 @@
 import { ref, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import IntentConfirmCard from './IntentConfirmCard.vue'
 
 const props = defineProps({
   messages: { type: Array, default: () => [] },
+  intentState: { type: Object, default: null },
 })
 
 const open = ref(false)
@@ -23,6 +25,13 @@ const turns = computed(() =>
 )
 
 const rounds = computed(() => turns.value.filter((t) => t.cls === 'user').length)
+const intentTurnIndex = computed(() => {
+  if (!props.intentState) return -1
+  for (let i = turns.value.length - 1; i >= 0; i -= 1) {
+    if (turns.value[i].cls === 'asst') return i
+  }
+  return -1
+})
 
 function escapeText(text) {
   return (text || '')
@@ -39,10 +48,10 @@ function renderMarkdown(text) {
 
 <template>
   <div class="conv-fold-wrap">
-    <button class="conv-fold" :class="{ open }" @click="open = !open">
-      <span class="chev">›</span>
-      <span>与助手的讨论</span>
-      <span class="round">{{ rounds }} 轮</span>
+    <button type="button" class="conv-fold" :class="{ open }" :aria-expanded="open" @click="open = !open">
+      <span class="proof-no">00</span>
+      <span class="proof-main"><strong>与助手的前期讨论</strong><small>{{ rounds }} 轮往来 · 含已签发题旨</small></span>
+      <span class="proof-mark"><b>已归档</b><em>{{ open ? '收起' : '展开' }}</em></span>
     </button>
     <div class="conv-body" :class="{ show: open }">
       <div class="conv-body-inner">
@@ -53,7 +62,17 @@ function renderMarkdown(text) {
           :class="turn.cls"
         >
           <div class="speaker">{{ turn.speaker }}</div>
-          <div class="text" v-html="turn.html"></div>
+          <template v-if="turn.cls === 'asst'">
+            <div class="assistant-card">
+              <div class="text" v-html="turn.html"></div>
+              <IntentConfirmCard
+                v-if="idx === intentTurnIndex"
+                :state="intentState"
+                archived
+              />
+            </div>
+          </template>
+          <div v-else class="text" v-html="turn.html"></div>
         </div>
       </div>
     </div>
@@ -62,54 +81,55 @@ function renderMarkdown(text) {
 
 <style scoped>
 .conv-fold-wrap {
-  margin: 4px 0 0;
+  margin: 0;
+  border-top: 1px solid rgba(27, 25, 22, .58);
+  border-bottom: 1px solid rgba(27, 25, 22, .58);
 }
 
 .conv-fold {
-  border: none;
-  background: none;
-  font-family: var(--ch-serif);
-  font-size: 13.5px;
-  color: var(--ch-muted);
-  cursor: pointer;
-  display: flex;
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  letter-spacing: 0.3px;
+  padding: 0;
+  border: none;
+  background: rgba(255, 253, 248, .34);
+  color: var(--ch-text);
+  cursor: pointer;
+  text-align: left;
 }
+.conv-fold:hover { background: rgba(239, 227, 219, .32); }
 
-.conv-fold .chev {
-  font-size: 10px;
-  color: var(--ch-faint);
-  display: inline-block;
-  transition: transform 0.2s ease;
-}
-
-.conv-fold.open .chev {
-  transform: rotate(90deg);
-}
-
-.conv-fold .round {
-  color: var(--ch-faint);
-  font-size: 12px;
-}
+.proof-no { color: var(--ch-warm); font: 500 23px/1 var(--ch-serif); }
+.proof-main strong { display: block; font: 600 14px/1.5 var(--ch-serif); }
+.proof-main small { display: block; margin-top: 3px; color: var(--ch-muted); font: 500 var(--ch-chat-meta-size)/1.4 var(--ch-serif); letter-spacing: .015em; }
+.proof-mark { display: inline-flex; align-items: center; gap: 8px; color: var(--ch-body); font: 500 var(--ch-chat-meta-size)/1.2 var(--ch-serif); letter-spacing: .02em; white-space: nowrap; }
+.proof-mark b { color: var(--ch-green); font: 600 var(--ch-chat-meta-size)/1.2 var(--ch-serif); }
+.proof-mark em { color: var(--ch-muted); font-style: normal; font-weight: 500; }
+.proof-mark::after { content: ""; width: 0; height: 0; border-top: 3px solid transparent; border-bottom: 3px solid transparent; border-left: 5px solid currentColor; transform-origin: 45% 50%; transition: transform .24s ease; }
+.conv-fold.open .proof-mark::after { transform: rotate(90deg); }
 
 .conv-body {
-  max-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 0fr);
+  min-height: 0;
   overflow: hidden;
-  transition: max-height 0.3s ease, margin-top 0.3s ease;
+  transition: grid-template-rows .3s cubic-bezier(.22,.61,.36,1);
 }
 
 .conv-body.show {
-  max-height: 700px;
-  margin-top: 18px;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .conv-body-inner {
-  padding-left: 14px;
-  border-left: 2px solid var(--ch-hair);
+  min-height: 0;
+  overflow: hidden;
+  padding: 22px 24px;
+  border-top: 1px solid var(--ch-border);
 }
+.conv-turn.asst .assistant-card > :deep(.intent-confirm) { margin: 18px 0 0; }
 
 .conv-turn {
   margin-bottom: 22px;
@@ -120,10 +140,10 @@ function renderMarkdown(text) {
 }
 
 .conv-turn .speaker {
-  font-family: var(--ch-serif);
-  font-size: 12px;
+  font-family: var(--ch-sans);
+  font-size: var(--t-eyebrow);
   font-weight: 600;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.2em;
   margin-bottom: 7px;
 }
 
@@ -136,8 +156,9 @@ function renderMarkdown(text) {
 }
 
 .conv-turn .text {
-  font-size: 14px;
-  line-height: 1.75;
+  font-family: var(--ch-serif);
+  font-size: var(--t-body);
+  line-height: 1.78;
   color: var(--ch-body);
 }
 
@@ -163,13 +184,13 @@ function renderMarkdown(text) {
 .conv-turn.asst .text :deep(h2),
 .conv-turn.asst .text :deep(h3) {
   margin: 16px 0 10px;
-  font-family: var(--ch-serif);
+  font-family: var(--ch-display);
   font-weight: 600;
   line-height: 1.4;
 }
-.conv-turn.asst .text :deep(h1) { font-size: 17px; }
-.conv-turn.asst .text :deep(h2) { font-size: 15px; }
-.conv-turn.asst .text :deep(h3) { font-size: 14px; }
+.conv-turn.asst .text :deep(h1) { font-size: var(--t-title); }
+.conv-turn.asst .text :deep(h2) { font-size: var(--t-body); }
+.conv-turn.asst .text :deep(h3) { font-size: var(--t-body); }
 .conv-turn.asst .text :deep(blockquote) {
   margin: 8px 0;
   padding: 2px 12px;

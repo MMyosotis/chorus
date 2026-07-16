@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
-import { ROLE_FULL } from '../team-panel/roleMeta.js'
+import { ROLE_FULL, stepOf } from '../team-panel/roleMeta.js'
+import StageHeader from './StageHeader.vue'
 
 const props = defineProps({ task: { type: Object, required: true } })
 
@@ -13,6 +14,7 @@ function toCN(n) {
 
 const agentType = computed(() => props.task.agent_type)
 const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
+const stepNo = computed(() => String(stepOf(agentType.value)).padStart(2, '0'))
 const prog = computed(() => props.task.progress || {})
 const aside = computed(() => prog.value.aside || '正在创作')
 
@@ -63,86 +65,80 @@ const unitLabel = computed(() => prog.value.composing_label || '')
 const hasOutput = computed(() => chars.value > 0 || units.value > 0)
 const unitText = computed(() => (units.value ? toCN(units.value) + unitLabel.value : ''))
 const charsText = computed(() => (chars.value ? toCN(chars.value) : ''))
-const recordPrefix = computed(() => {
+const verb = computed(() => (agentType.value === 'image' ? '画了' : '写下'))
+const recordLeft = computed(() => {
   if (!hasOutput.value) return ''
-  return unitText.value ? `写下 ${unitText.value} · ` : '写下 '
+  return unitText.value ? `${verb.value}${unitText.value}` : verb.value
 })
 </script>
 
 <template>
-  <div class="sheet">
-    <div class="rp-role">{{ roleLabel }}</div>
-    <div class="sheet-body">
-      <div class="aside">{{ aside }}</div>
-      <div v-if="activityPrefix" class="activity">
-        <span class="dot-wrap"><span class="halo"></span><span class="core"></span></span>
-        <span class="act-slot">
-          <Transition name="label-swap">
-            <span :key="activityKind" class="act-prefix">{{ activityPrefix }}</span>
-          </Transition>
-          <span v-if="activitySuffix" class="act-suffix">{{ activitySuffix }}</span>
-        </span>
-      </div>
-      <div class="record">
-        <template v-if="hasOutput">{{ recordPrefix }}<span class="num">{{ charsText }}</span>字</template>
-        <span v-else class="record-empty">尚无落笔</span>
+  <section class="running">
+    <StageHeader :number="stepNo" :title="roleLabel" english="PRODUCTION DESK" status="制作中" status-tone="primary" />
+    <div class="running-body">
+      <div class="running-caption">CURRENT<br>ASSIGNMENT</div>
+      <div class="running-copy">
+        <div class="aside">{{ aside }}</div>
+        <div class="running-meta">
+          <div v-if="activityPrefix" class="activity">
+            <span class="dot-wrap"><span class="halo"></span><span class="core"></span></span>
+            <span class="act-slot">
+              <Transition name="label-swap">
+                <span :key="activityKind" class="act-prefix">{{ activityPrefix }}</span>
+              </Transition>
+              <span v-if="activitySuffix" class="act-suffix">{{ activitySuffix }}</span>
+            </span>
+          </div>
+          <div class="record">
+            <template v-if="hasOutput">{{ recordLeft }}<span v-if="chars"> · <span class="num">{{ charsText }}</span>字</span></template>
+            <span v-else class="record-empty">尚无落笔</span>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.sheet {
-  position: relative;
-  padding: 26px 0;
-}
-.rp-role {
-  position: absolute;
-  top: 26px;
-  left: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  height: 24px;
-  padding: 0 4px;
-  font-family: var(--ch-serif);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: .5px;
-  background: var(--ch-primary-soft);
-  color: var(--ch-primary-2);
-  z-index: 1;
-}
-.sheet-body {
-  text-align: center;
-  margin-top: 40px;
-}
+.running { display: block; border: 0; background: rgba(255, 253, 248, .38); }
+.running-body { display: grid; grid-template-columns: 118px minmax(0, 1fr); border-top: 2px solid rgba(27, 25, 22, .9); border-bottom: 1px solid rgba(27, 25, 22, .62); }
+.running-caption { display: flex; align-items: center; justify-content: center; padding: 18px 12px; border-right: 1px dotted rgba(110, 103, 93, .48); color: var(--ch-warm); font: 600 var(--ch-chat-label-size)/1.45 var(--ch-serif); letter-spacing: .08em; text-align: center; }
+.running-copy { min-width: 0; padding: 18px 0 14px 24px; }
 .aside {
-  font-size: 18px;
-  line-height: 1.6;
+  font-family: var(--ch-serif);
+  max-width: 560px;
+  font-size: var(--ch-chat-title-size);
+  line-height: 1.72;
   color: var(--ch-text);
   font-weight: 600;
-  letter-spacing: .1em;
-  padding: 2px 8px;
+  letter-spacing: .015em;
+  padding: 0;
 }
-.activity {
-  margin-top: 26px;
-  font-size: 13.5px;
-  line-height: 1.95;
-  color: var(--ch-body);
-  letter-spacing: .3px;
+.running-meta {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dotted rgba(110, 103, 93, .46);
+  font: 500 11px/1.4 var(--ch-serif);
+}
+.activity {
+  min-width: 0;
+  color: var(--ch-body);
+  font: inherit;
+  letter-spacing: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   gap: 9px;
   min-height: 1.8em;
 }
 .dot-wrap {
   position: relative;
-  width: 9px;
-  height: 9px;
+  width: 5px;
+  height: 5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -150,23 +146,23 @@ const recordPrefix = computed(() => {
 }
 .halo {
   position: absolute;
-  width: 9px;
-  height: 9px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--ch-primary) 0%, rgba(59, 90, 114, .32) 55%, transparent 100%);
+  background: var(--ch-primary);
   animation: breath 1.4s ease-in-out infinite;
 }
 .core {
   position: absolute;
-  width: 5px;
-  height: 5px;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background: var(--ch-primary-2);
   opacity: .9;
 }
 @keyframes breath {
-  0%, 100% { transform: scale(.7); opacity: .55; }
-  50% { transform: scale(1.9); opacity: .18; }
+  0%, 100% { opacity: .28; }
+  50% { opacity: 1; }
 }
 .act-slot {
   position: relative;
@@ -188,35 +184,31 @@ const recordPrefix = computed(() => {
 .label-swap-leave-to { transform: translateY(-8px); opacity: 0; }
 .act-suffix { white-space: nowrap; }
 .record {
-  position: relative;
-  margin-top: 40px;
-  padding-top: 22px;
-  font-size: 12.5px;
+  flex: 0 0 auto;
+  min-height: 1.8em;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-family: var(--ch-serif);
+  font-size: 11px;
   color: var(--ch-muted);
   letter-spacing: .18em;
-  min-height: 1.6em;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
-.record::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 120px;
-  height: 1px;
-  background: linear-gradient(to right, var(--ch-border-2) 50%, transparent 0);
-  background-size: 5px 1px;
-  background-repeat: repeat-x;
-  opacity: .7;
-}
+.record::before { content: none; }
 .record .num {
-  color: var(--ch-orange);
+  color: var(--ch-warm);
   font-weight: 600;
 }
 .record-empty {
   color: var(--ch-faint);
   opacity: .5;
   letter-spacing: .25em;
+}
+
+@media (max-width: 700px) {
+  .running-body { grid-template-columns: 1fr; }
+  .running-caption { border-right: 0; border-bottom: 1px dotted rgba(110, 103, 93, .48); }
 }
 </style>

@@ -1,9 +1,9 @@
 <script setup>
-import { ref, reactive, computed, watch, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, defineAsyncComponent } from 'vue'
 import ChatWindow from './main-panel/ChatWindow.vue'
 import InputBar from './main-panel/InputBar.vue'
+import ManuscriptHeader from './main-panel/ManuscriptHeader.vue'
 import SessionSidebar from './SessionSidebar.vue'
-import ConsolePanel from './main-panel/ConsolePanel.vue'
 import {
   listSessions,
   createSession,
@@ -19,10 +19,13 @@ import {
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
+import { ROLE_FULL, stepOf } from './team-panel/roleMeta.js'
+
+const uiReviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has('ui-review')
+const FlowReviewHarness = uiReviewMode ? defineAsyncComponent(() => import('./dev/FlowReviewHarness.vue')) : null
 
 const traceStore = useTraceStore()
 const taskPolling = useTaskPolling()
-const consoleOpen = ref(false)
 
 const sessions = ref([])
 const messagesBySession = reactive({})
@@ -30,6 +33,8 @@ const streamingBySession = reactive({})
 const intentStateBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
+const leftRailOpen = ref(false)
+const rightRailOpen = ref(false)
 
 const focusedTaskId = ref(null)
 
@@ -41,6 +46,7 @@ const messages = computed(() => messagesBySession[activeId.value] || [])
 const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
+const activeCompleted = computed(() => (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished'))
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
 const awaitingConfirm = computed(() => activeIntentState.value?.intent_status === 'ready_to_confirm')
 const activeTitle = computed(() => {
@@ -51,6 +57,31 @@ const activeSessionUpdatedAt = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.updated_at : null
 })
+const paperDate = computed(() => {
+  const date = new Date((activeSessionUpdatedAt.value || Date.now() / 1000) * 1000)
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+  return {
+    short: `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}`,
+    full: `${date.getFullYear()} · ${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}`,
+  }
+})
+const currentTask = computed(() => (activeGraph.value?.tasks || []).find((task) => ['running', 'awaiting_confirm', 'failed'].includes(task.status)) || null)
+const stageKicker = computed(() => {
+  if (awaitingConfirm.value) return 'STORY COMMISSION'
+  const task = currentTask.value
+  if (task) {
+    if (task.status === 'failed') return `${ROLE_FULL[task.agent_type] || task.agent_type} · RECOVERY`
+    return `${ROLE_FULL[task.agent_type] || task.agent_type} · ${task.status === 'awaiting_confirm' ? 'PROOF' : 'WORKING'}`
+  }
+  const completedFinal = (activeGraph.value?.tasks || []).find((task) => task.agent_type === 'finalize' && task.status === 'finished')
+  return completedFinal ? 'FINAL COPY' : 'CONVERSATION'
+})
+const paperPage = computed(() => {
+  if (currentTask.value) return String(stepOf(currentTask.value.agent_type)).padStart(2, '0')
+  const completedFinal = (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished')
+  return String(completedFinal ? stepOf('finalize') : 1).padStart(2, '0')
+})
+const headlineDeck = computed(() => activeIntentState.value?.goal || '一份正在编辑、校样与签认的创作稿件')
 
 function makeEmptyAssistant() {
   return {
@@ -58,6 +89,7 @@ function makeEmptyAssistant() {
     content: '',
     thinking: { state: 'idle' },
     tools: { state: 'idle', items: [] },
+    created_at: Date.now() / 1000,
   }
 }
 
@@ -78,6 +110,7 @@ function normalizeAssistant(msg) {
     content: msg.content || '',
     thinking: { state: 'idle' },
     tools: { state: 'idle', items: toolItems.map(mapToolItem) },
+    created_at: msg.created_at ?? Date.now() / 1000,
   }
 }
 
@@ -96,7 +129,7 @@ function mergeAssistantHistory(raw) {
   for (const m of raw) {
     if (m.role !== 'assistant') {
       flushPending()
-      result.push({ role: m.role, content: m.content })
+      result.push({ role: m.role, content: m.content, created_at: m.created_at ?? Date.now() / 1000 })
       segBubble = null
       continue
     }
@@ -156,6 +189,7 @@ async function loadIntentState(id) {
 }
 
 async function selectSession(id) {
+  leftRailOpen.value = false
   activeId.value = id
   await Promise.all([loadMessages(id), loadIntentState(id)])
   injectTaskCards(id)
@@ -182,7 +216,7 @@ function injectTaskCards(id) {
   const graph = taskPolling.getGraph(id)
   // 去掉旧虚拟卡后重注入，避免重复
   for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].kind === 'hil' || list[i].kind === 'postcard' || list[i].kind === 'recovery') list.splice(i, 1)
+    if (list[i].kind === 'hil' || list[i].kind === 'postcard' || list[i].kind === 'recovery' || list[i].kind === 'proof-register') list.splice(i, 1)
   }
   // running 卡原地刷新进度，避免轮询每 tick 重建闪烁
   const runningTask = (graph?.tasks || []).find((t) => t.status === 'running')
@@ -194,6 +228,16 @@ function injectTaskCards(id) {
     list.splice(runningIdx, 1)
   }
   if (!graph) return
+  const confirmedProofs = (graph.tasks || []).filter((t) => t.status === 'finished' && t.agent_type !== 'finalize')
+  if (confirmedProofs.length) {
+    const insertAt = list.findIndex((m) => m.kind === 'running')
+    list.splice(insertAt >= 0 ? insertAt : list.length, 0, {
+      kind: 'proof-register',
+      tasks: confirmedProofs,
+      id: `proof-register:${confirmedProofs.map((t) => t.id).join(':')}`,
+      role: 'assistant',
+    })
+  }
   for (const t of (graph.tasks || [])) {
     if (t.status === 'awaiting_confirm') {
       list.push({ kind: 'hil', task: t, id: 'hil:' + t.id, role: 'assistant' })
@@ -495,7 +539,7 @@ async function onSend(text) {
   if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value) return
 
   const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
-  list.push({ role: 'user', content: text })
+  list.push({ role: 'user', content: text, created_at: Date.now() / 1000 })
   await runAssistantStream(sessionId, (onEvent) => streamChat(sessionId, text, onEvent))
 }
 
@@ -512,6 +556,7 @@ async function onIntentRevise() {
 }
 
 onMounted(async () => {
+  if (uiReviewMode) return
   try {
     const list = await listSessions()
     sessions.value = list
@@ -528,58 +573,67 @@ onMounted(async () => {
 </script>
 
 <template>
+  <FlowReviewHarness v-if="uiReviewMode" />
+  <template v-else>
   <div class="app-shell">
     <SessionSidebar
+      :class="{ 'is-open': leftRailOpen }"
       :sessions="sessions"
       :active-id="activeId"
       :streaming-map="streamingBySession"
+      :active-working="hasActiveTask || awaitingConfirm || streaming"
+      :active-completed="activeCompleted"
       @select="selectSession"
       @create="onCreate"
       @delete="onDelete"
       @rename="onRename"
     />
-    <div class="main-panel">
-      <header class="header">
-        <span class="session-title">{{ activeTitle }}</span>
-        <button class="header-console-btn" @click="consoleOpen = !consoleOpen"
-          :class="{ active: consoleOpen }" title="控制台">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-            stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </button>
-      </header>
-      <ChatWindow
-        :messages="messages"
-        :streaming="streaming"
-        :session-id="activeId || ''"
-        :session-updated-at="activeSessionUpdatedAt"
-        @hil-confirmed="onHilConfirmed"
-        @hil-retried="onHilRetried"
-        @hil-cancelled="onHilCancelled"
-        @intent-confirm="onIntentConfirm"
-        @intent-revise="onIntentRevise"
-      />
-      <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" @send="onSend" />
-    </div>
+    <main class="main-panel">
+      <nav class="mobile-bar" aria-label="移动端栏目导航">
+        <button type="button" @click="leftRailOpen = true">稿件</button>
+        <strong>{{ activeTitle || '未命名稿件' }}</strong>
+        <button type="button" @click="rightRailOpen = true">题旨与目录</button>
+      </nav>
+      <article class="paper-shell manuscript-paper">
+        <ChatWindow
+          :messages="messages"
+          :streaming="streaming"
+          :session-id="activeId || ''"
+          :session-updated-at="activeSessionUpdatedAt"
+          :intent-state="activeIntentState"
+          @hil-confirmed="onHilConfirmed"
+          @hil-retried="onHilRetried"
+          @hil-cancelled="onHilCancelled"
+          @intent-confirm="onIntentConfirm"
+          @intent-revise="onIntentRevise"
+        >
+          <template #scroll-header>
+            <ManuscriptHeader :date="paperDate.full" :page="paperPage" :kicker="stageKicker" :title="activeTitle || '未命名稿件'" :deck="headlineDeck" />
+          </template>
+        </ChatWindow>
+        <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" @send="onSend" />
+      </article>
+    </main>
     <TeamPanel
+      :class="{ 'is-open': rightRailOpen }"
       :graph="activeGraph"
       :focused-task-id="focusedTaskId"
       :intent-state="activeIntentState"
       @focus="onTaskFocus"
     />
+    <button v-if="leftRailOpen || rightRailOpen" class="rail-scrim" type="button" aria-label="关闭侧栏" @click="leftRailOpen = false; rightRailOpen = false"></button>
   </div>
-  <ConsolePanel :active-id="activeId" :trace-store="traceStore" v-model:open="consoleOpen" />
+  </template>
 </template>
 
 <style scoped>
 .app-shell {
   display: flex;
-  height: 100vh;
+  min-height: 100dvh;
   width: 100%;
-  overflow: hidden;
-  background: var(--ch-bg-warm);
+  overflow: visible;
+  align-items: flex-start;
+  background: var(--ch-canvas);
   padding: 0;
   gap: 0;
 }
@@ -589,72 +643,94 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow: hidden;
-  height: 100%;
-  background: var(--ch-bg-warm);
+  overflow: visible;
+  min-height: 100dvh;
+  padding: 26px;
+  background: var(--ch-canvas);
   border: none;
   box-shadow: none;
 }
 
-.header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 34px;
-  height: 60px;
-  background: var(--ch-bg-warm);
-  color: var(--ch-text);
-  border-bottom: 1px solid var(--ch-hair);
-  flex-shrink: 0;
+.mobile-bar { display: none; }
+.rail-scrim { display: none; }
+
+:global(body:has(.app-shell)) { overflow-y: auto; }
+
+.paper-shell :deep(.chat-window) {
+  flex: 0 0 auto;
+  overflow: visible;
+  scrollbar-gutter: auto;
 }
 
-.session-title {
-  font-size: 19px;
-  font-family: var(--ch-serif);
-  font-weight: 600;
-  color: var(--ch-text);
-  letter-spacing: 0.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: calc(100% - 80px);
-}
-
-.header-console-btn {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 34px;
-  height: 34px;
-  border: 1px solid var(--ch-border);
-  background: #fff;
-  color: var(--ch-muted);
-  border-radius: 8px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.18s, color 0.18s, border-color 0.18s, box-shadow 0.18s;
-}
-
-.header-console-btn:hover {
-  background: var(--ch-primary-soft);
-  color: var(--ch-primary);
-  border-color: var(--ch-border-2);
-}
-
-.header-console-btn.active {
-  background: var(--ch-bg-cool);
-  border-color: var(--ch-border-2);
-  color: var(--ch-body);
-  box-shadow: none;
-}
-
-@media (max-width: 900px) {
-  .app-shell {
-    padding: 0;
+@media (min-width: 1181px) {
+  .app-shell > :deep(.sidebar),
+  .app-shell > :deep(.team-panel) {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
   }
+
+  .paper-shell :deep(.input-bar) {
+    position: fixed;
+    left: 50%;
+    width: min(calc(100vw - 2 * var(--ch-rail) - 104px), 828px);
+  }
+}
+
+@media (min-width: 781px) and (max-width: 1180px) {
+  .app-shell > :deep(.sidebar) {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+  }
+
+  .paper-shell :deep(.input-bar) {
+    position: fixed;
+    left: calc((100vw + 224px) / 2);
+    width: min(calc(100vw - 328px), 828px);
+  }
+}
+
+@media (max-width: 780px) {
+  .main-panel { padding: 0; }
+  .paper-shell { box-shadow: none; }
+  .paper-shell::before { left: 14px; }
+}
+
+@media (max-width: 1180px) {
+  :deep(.team-panel) { display: none; }
+}
+
+@media (max-width: 780px) {
+  :deep(.team-panel) {
+    display: flex;
+    position: fixed;
+    z-index: 60;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(300px, 90vw);
+    transform: translateX(104%);
+    transition: transform .24s ease-out;
+    box-shadow: -14px 0 38px rgba(27, 25, 22, .14);
+  }
+  :deep(.team-panel.is-open) { transform: translateX(0); }
+  .mobile-bar {
+    flex: 0 0 52px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--ch-border-2);
+    background: rgba(232, 226, 215, .97);
+  }
+  .mobile-bar button { min-height: 38px; padding: 0 8px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--ch-warm); font: 600 11px/1 var(--ch-serif); cursor: pointer; }
+  .mobile-bar button:hover { border-bottom-color: currentColor; }
+  .mobile-bar strong { min-width: 0; overflow: hidden; font: 600 13px/1.3 var(--ch-serif); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+  .paper-shell { height: calc(100% - 52px); }
+  .rail-scrim { position: fixed; z-index: 55; inset: 0; display: block; min-height: 0; border: 0; background: rgba(27, 25, 22, .32); }
+  :deep(.sidebar) { position: fixed; z-index: 60; top: 0; left: 0; bottom: 0; width: min(300px, 88vw); transform: translateX(-104%); transition: transform .24s ease-out; box-shadow: 14px 0 38px rgba(27, 25, 22, .14); }
+  :deep(.sidebar.is-open) { transform: translateX(0); }
 }
 </style>
