@@ -19,7 +19,7 @@ class ConfirmRequest(BaseModel):
 
 
 class RetryRequest(BaseModel):
-    feedback: dict
+    feedback: str
 
 
 @router.get("/tasks")

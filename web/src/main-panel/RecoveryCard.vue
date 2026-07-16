@@ -19,7 +19,7 @@ const error = ref('')
 async function onRetry() {
   busy.value = true; error.value = ''
   try {
-    await retryTask(props.task.id, { feedback: feedback.value || '' })
+    await retryTask(props.task.id, feedback.value || '')
     emit('retried', props.task.id)
   } catch (e) {
     error.value = e.detail || e.message

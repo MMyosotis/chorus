@@ -29,6 +29,11 @@ from chorus.domain.task import (
     select_display_pipeline,
     topological_order,
     validate_steps,
+    IdeaArtifacts,
+    IdeaCandidate,
+    ScriptArtifacts,
+    ScriptBlock,
+    TaskArtifacts,
 )
 
 
@@ -204,7 +209,7 @@ def test_expand_pipeline_image_progress_total():
 def test_render_invoke_message_injects_deps_and_feedback():
     content = TaskContent(
         task_id="t", invoke_message="骨架",
-        feedback={"note": "改标题"},
+        feedback="改标题",
     )
     out = content.render_invoke({"d1": {"title": "x"}}, {"prev": 1})
     assert "骨架" in out
@@ -249,6 +254,39 @@ def _task(tid, deps=None, created_at=0.0):
         status="pending", dependencies=deps or [],
         created_at=created_at, updated_at=0.0,
     )
+
+
+def test_graph_node_exposes_progress_total():
+    """配图分母随内容行透进任务图节点并序列化，前端据此显示共 N 张。"""
+    task = _mk(TaskStatus.RUNNING, id="img", agent_type="image")
+    content = TaskContent(task_id="img", invoke_message="x", progress_total=3)
+    graph = build_task_graph("p", [task], {}, {}, {"img": content}, True)
+    node = graph.nodes[0]
+    assert node.progress_total == 3
+    assert dump_task_graph(graph)["tasks"][0]["progress_total"] == 3
+
+
+def test_artifact_display_title():
+    """产物模型自带展示标题属性：选题取选中候选、文案取首小标题、汇总取成品标题。"""
+    idea = IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="夏日晚风", angle="a", reason="r")], selected=0)
+    assert idea.display_title == "夏日晚风"
+    idea_none = IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="首案", angle="", reason="")], selected=None)
+    assert idea_none.display_title == "首案"
+    script = ScriptArtifacts(blocks=[ScriptBlock(kind="heading", text="开篇"), ScriptBlock(kind="paragraph", text="x")])
+    assert script.display_title == "开篇"
+    script_plain = ScriptArtifacts(blocks=[ScriptBlock(kind="paragraph", text="x")])
+    assert script_plain.display_title is None
+    post = PostCard(title="夏日晚风", sections=[])
+    assert post.display_title == "夏日晚风"
+
+
+def test_graph_node_exposes_title():
+    """校样清单标题随产物派生透进任务图节点并序列化。"""
+    task = _mk(TaskStatus.FINISHED, id="fin", agent_type="finalize")
+    art = TaskArtifacts(task_id="fin", artifacts=PostCard(title="夏日晚风", sections=[]))
+    graph = build_task_graph("p", [task], {"fin": art}, {}, {}, False)
+    assert graph.nodes[0].title == "夏日晚风"
+    assert dump_task_graph(graph)["tasks"][0]["title"] == "夏日晚风"
 
 
 def test_topological_order_linear_chain():

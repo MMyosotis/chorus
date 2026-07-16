@@ -157,15 +157,15 @@ def test_subagent_idea_awaiting_confirm():
     assert len(mrs) == 1 and mrs[0].finish_reason == "stop"
 
 
-def test_subagent_finalize_finished():
-    """finalize 子 Agent：产出 PostCard → 翻转 running→finished（不走 awaiting_confirm）。"""
+def test_subagent_finalize_awaiting_confirm():
+    """finalize 子 Agent：产出 PostCard → 翻转 running→awaiting_confirm（成品也需人工确认）。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
     content = "<!-- chorus:awaiting= -->\n<!-- chorus:done=汇总完成 -->\n\n# 夏日晚风\n\n一段\n\n#标签：#夏天"
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.FINISHED
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     assert art_repo.load("t1").artifacts.title == "夏日晚风"
 
 

@@ -8,6 +8,7 @@ import StageHeader from './StageHeader.vue'
 const props = defineProps({ task: { type: Object, required: true }, sessionId: { type: String, required: true } })
 const emit = defineEmits(['confirmed', 'retried', 'cancelled'])
 const artifacts = computed(() => props.task.artifacts || {})
+const candidates = computed(() => artifacts.value.candidates || [])
 const selectedIdx = ref(props.task.artifacts?.selected ?? null)
 const decision = ref('')
 const feedback = ref('')
@@ -46,7 +47,7 @@ async function onConfirm() {
 }
 async function onRetry() {
   busy.value = true; error.value = ''
-  try { await retryTask(props.task.id, { feedback: feedback.value || '' }); emit('retried', props.task.id) }
+  try { await retryTask(props.task.id, feedback.value || ''); emit('retried', props.task.id) }
   catch (e) { error.value = e.detail || e.message }
   finally { busy.value = false }
 }
@@ -66,10 +67,10 @@ async function onCancel() {
     <div class="proof-sheet">
       <header class="proof-furniture"><span>{{ meta.folio }}</span><span>VOL. 07 · CURRENT DRAFT</span><span>P. {{ stepNo }}</span></header>
       <div class="proof-canvas">
-        <div v-if="task.agent_type === 'idea'" class="candidates" role="radiogroup" aria-label="选题候选">
-          <button v-for="(c, idx) in artifacts.candidates || []" :key="c.index" type="button" class="cand" :class="{ selected: selectedIdx === c.index }" role="radio" :aria-checked="selectedIdx === c.index" @click="selectedIdx = c.index">
+        <div v-if="task.agent_type === 'idea'" class="candidates" :class="`count-${Math.min(candidates.length, 5)}`" role="radiogroup" aria-label="选题候选">
+          <button v-for="(c, idx) in candidates" :key="c.index" type="button" class="cand" :class="{ selected: selectedIdx === c.index }" role="radio" :aria-checked="selectedIdx === c.index" @click="selectedIdx = c.index">
             <span class="cand-no">PITCH {{ String(idx + 1).padStart(2, '0') }}</span>
-            <h4>{{ c.title }}</h4><small>{{ c.angle }}</small><p>{{ c.reason }}</p>
+            <h4>{{ c.title }}</h4><small v-if="c.angle">{{ c.angle }}</small><p v-if="c.reason">{{ c.reason }}</p>
             <span class="choice">拟采用 · EDITOR'S PICK</span>
           </button>
         </div>
@@ -124,8 +125,15 @@ async function onCancel() {
 .proof-canvas { padding: 22px 0 12px; }
 .review-idea .proof-canvas { padding: 0; }
 .review-image .proof-sheet { border-bottom: 0; }
-.candidates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.cand { min-height: 230px; display: flex; flex-direction: column; padding: 20px 18px 18px; border: 0; border-right: 1px solid var(--ch-border-2); background: rgba(255, 253, 248, .18); color: var(--ch-text); text-align: left; cursor: pointer; transition: background .2s; }
+.candidates { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.cand { grid-column: span 2; min-height: 230px; display: flex; flex-direction: column; padding: 20px 18px 18px; border: 0; border-right: 1px solid var(--ch-border-2); background: rgba(255, 253, 248, .18); color: var(--ch-text); text-align: left; cursor: pointer; transition: background .2s; }
+.candidates.count-1 .cand { grid-column: span 6; border-right: 0; }
+.candidates.count-2 .cand, .candidates.count-4 .cand { grid-column: span 3; }
+.candidates.count-2 .cand:nth-child(2n), .candidates.count-4 .cand:nth-child(2n) { border-right: 0; }
+.candidates.count-4 .cand:nth-child(n + 3) { border-top: 1px solid var(--ch-border-2); }
+.candidates.count-3 .cand:nth-child(3), .candidates.count-5 .cand:nth-child(3) { border-right: 0; }
+.candidates.count-5 .cand:nth-child(n + 4) { grid-column: span 3; border-top: 1px solid var(--ch-border-2); }
+.candidates.count-5 .cand:nth-child(5) { border-right: 0; }
 .cand:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--ch-primary); outline-offset: -3px; }
 .cand:last-child { border-right: 0; }.cand:hover { background: rgba(221, 213, 200, .2); }.cand.selected { background: var(--ch-selection-soft); box-shadow: inset 0 -2px var(--ch-warm); }
 .cand-no { color: var(--ch-muted); font: 600 var(--ch-chat-meta-size)/1.2 var(--ch-serif); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .14em; }.cand.selected .cand-no { color: var(--ch-warm); }
@@ -139,5 +147,5 @@ async function onCancel() {
 .actions, .choices, .choices label { display: flex; align-items: center; }.actions { gap: 3px; }.choices { gap: 13px; margin: 0 14px 0 0; padding: 0; border: 0; }.choices label { position: relative; height: 44px; gap: 7px; font: 500 13px/1 var(--ch-serif); white-space: nowrap; cursor: pointer; }.choices input { position: absolute; opacity: 0; }.box { position: relative; width: 16px; height: 16px; border: 1px solid rgba(27, 25, 22, .68); }.choices input:checked + .box { border-color: var(--ch-warm); }.choices input:checked + .box::after { content: ""; position: absolute; inset: 4px; background: var(--ch-warm); }.choices label:has(input:checked) { color: var(--ch-warm); font-weight: 600; }
 .choices input:focus-visible + .box { outline: 2px solid var(--ch-primary); outline-offset: 3px; }
 .submit, .cancel { height: 44px; min-height: 44px; padding: 0 5px; border: 0; background: transparent; font: 500 13px/1 var(--ch-serif); cursor: pointer; }.submit { color: var(--ch-warm); text-decoration: underline; text-underline-offset: 5px; }.submit:disabled { color: var(--ch-faint); text-decoration: none; cursor: default; }.cancel { color: var(--ch-muted); }.notes { margin-top: 10px; }.notes > div { display: flex; justify-content: space-between; margin-bottom: 6px; }.notes label { font: 600 10px/1.3 var(--ch-serif); }.notes small { color: var(--ch-muted); font: 500 9px/1.3 var(--ch-serif); }.notes textarea { width: 100%; min-height: 72px; padding: 12px 14px; border: 1px solid var(--ch-border-2); border-radius: 0; background: rgba(255, 253, 248, .65); color: var(--ch-text); font: 500 13px/1.65 var(--ch-serif); resize: vertical; }.error { margin: 8px 0 0; color: var(--ch-red); font: 500 11px/1.5 var(--ch-serif); }
-@media (max-width: 760px) { .candidates { grid-template-columns: 1fr; }.cand { min-height: 0; border-right: 0; border-bottom: 1px solid var(--ch-border-2); }.decision-main { grid-template-columns: 1fr; }.actions { flex-wrap: wrap; }.choices { flex-basis: 100%; }.proof-furniture { grid-template-columns: 1fr auto; }.proof-furniture span:nth-child(2) { display: none; } }
+@media (max-width: 760px) { .candidates { grid-template-columns: 1fr; }.candidates .cand { grid-column: auto; min-height: 0; border-top: 0; border-right: 0; border-bottom: 1px solid var(--ch-border-2); }.candidates .cand:last-child { border-bottom: 0; }.decision-main { grid-template-columns: 1fr; }.actions { flex-wrap: wrap; }.choices { flex-basis: 100%; }.proof-furniture { grid-template-columns: 1fr auto; }.proof-furniture span:nth-child(2) { display: none; } }
 </style>

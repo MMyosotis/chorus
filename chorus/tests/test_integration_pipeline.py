@@ -195,7 +195,10 @@ def test_end_to_end_pipeline():
     while fin.status in (TaskStatus.PENDING, TaskStatus.RUNNING) and time.time() < deadline:
         time.sleep(0.02)
         fin = task_repo.get(finalize.id)
-    assert fin.status == TaskStatus.FINISHED, f"finalize 链路未达 finished，实际: {fin.status}"
+    # 成品终审门：汇总先达待复核，确认后才 finished
+    assert fin.status == TaskStatus.AWAITING_CONFIRM, f"finalize 链路未达待复核，实际: {fin.status}"
+    task_service.confirm(finalize.id, None)
+    assert task_repo.get(finalize.id).status == TaskStatus.FINISHED
 
 
 def main():

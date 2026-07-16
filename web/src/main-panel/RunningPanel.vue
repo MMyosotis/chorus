@@ -62,12 +62,14 @@ const activitySuffix = computed(() => {
 const chars = computed(() => prog.value.composing_chars || 0)
 const units = computed(() => prog.value.composing_units || 0)
 const unitLabel = computed(() => prog.value.composing_label || '')
+const total = computed(() => props.task.progress_total || 0)
 const hasOutput = computed(() => chars.value > 0 || units.value > 0)
 const unitText = computed(() => (units.value ? toCN(units.value) + unitLabel.value : ''))
 const charsText = computed(() => (chars.value ? toCN(chars.value) : ''))
 const verb = computed(() => (agentType.value === 'image' ? '画了' : '写下'))
 const recordLeft = computed(() => {
   if (!hasOutput.value) return ''
+  if (total.value > 0) return `已 ${units.value} / 共 ${total.value} ${unitLabel.value}`
   return unitText.value ? `${verb.value}${unitText.value}` : verb.value
 })
 </script>

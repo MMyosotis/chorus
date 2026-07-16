@@ -63,9 +63,9 @@ def test_set_feedback_upsert():
     repo, conn = _repo()
     _seed_task(conn, "t1", status="awaiting_confirm")
     repo.insert(TaskContent(task_id="t1", invoke_message="骨架"))
-    repo.set_feedback("t1", {"note": "标题不够吸引"})
+    repo.set_feedback("t1", "标题不够吸引")
     got = repo.load("t1")
-    assert got.feedback == {"note": "标题不够吸引"}
+    assert got.feedback == "标题不够吸引"
 
 
 def main():

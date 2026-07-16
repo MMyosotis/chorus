@@ -271,12 +271,8 @@ class SubAgentService:
         if not self._lease_valid(task.id, owner_id):
             return
 
-        to_status = (
-            TaskStatus.FINISHED if task.agent_type == "finalize"
-            else TaskStatus.AWAITING_CONFIRM
-        )
-        # 先翻状态再落产物，避免孤儿产物
-        self._task_repo.transition(task.id, TaskStatus.RUNNING, to_status)
+        # 一律转待复核（成品亦然）：先翻状态再落产物，避免孤儿产物
+        self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.AWAITING_CONFIRM)
         self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
 
 

@@ -40,6 +40,12 @@ class IdeaArtifacts:
     candidates: list[IdeaCandidate]
     selected: Optional[int] = None
 
+    @property
+    def display_title(self) -> Optional[str]:
+        if self.selected is not None and 0 <= self.selected < len(self.candidates):
+            return self.candidates[self.selected].title
+        return self.candidates[0].title if self.candidates else None
+
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ScriptBlock:
@@ -52,6 +58,10 @@ class ScriptArtifacts:
     """文案官产物：正文块序列。"""
 
     blocks: list[ScriptBlock]
+
+    @property
+    def display_title(self) -> Optional[str]:
+        return next((b.text for b in self.blocks if b.kind == "heading"), None)
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -89,3 +99,7 @@ class PostCard:
     cover: Optional[PostImage] = None
     tags: list[str] = Field(default_factory=list)
     summary: str = ""
+
+    @property
+    def display_title(self) -> Optional[str]:
+        return self.title

@@ -33,6 +33,8 @@ class TaskNodeView:
     artifacts: Optional[Union[IdeaArtifacts, ScriptArtifacts, ImageArtifacts, PostCard]] = None
     narrative: Optional[Narrative] = None
     error: Optional[str] = None
+    progress_total: Optional[int] = None
+    title: Optional[str] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -54,16 +56,23 @@ def build_task_graph(
 ) -> TaskGraph:
     """拓扑序聚合任务图：纯函数，不碰数据库。"""
     ordered = topological_order(tasks)
-    nodes = [TaskNodeView(
-        id=task.id,
-        agent_type=task.agent_type,
-        status=task.status,
-        updated_at=task.updated_at,
-        progress=progress.get(task.id),
-        artifacts=arts[task.id].artifacts if task.id in arts else None,
-        narrative=arts[task.id].narrative if task.id in arts else None,
-        error=contents[task.id].error if task.id in contents else None,
-    ) for task in ordered]
+    nodes = []
+    for task in ordered:
+        content = contents.get(task.id)
+        art = arts.get(task.id)
+        artifacts = art.artifacts if art else None
+        nodes.append(TaskNodeView(
+            id=task.id,
+            agent_type=task.agent_type,
+            status=task.status,
+            updated_at=task.updated_at,
+            progress=progress.get(task.id),
+            artifacts=artifacts,
+            narrative=art.narrative if art else None,
+            error=content.error if content else None,
+            progress_total=content.progress_total if content else None,
+            title=artifacts.display_title if artifacts else None,
+        ))
 
     return TaskGraph(pipeline_id=pipeline_id, active=active, nodes=nodes)
 
@@ -82,6 +91,8 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
             "narrative": dataclasses.asdict(node.narrative) if node.narrative else None,
             "error": node.error,
+            "progress_total": node.progress_total,
+            "title": node.title,
         } for node in graph.nodes],
     }
 

@@ -224,7 +224,7 @@ export async function retryTask(taskId, feedback) {
   const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/retry`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ feedback: feedback || {} }),
+    body: JSON.stringify({ feedback: feedback || '' }),
   })
   if (!res.ok) {
     const err = new Error(`retry failed: ${res.status}`)

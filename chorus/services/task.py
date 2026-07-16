@@ -46,7 +46,7 @@ class TaskService:
             self._set_selected(task_id, task.agent_type, selected)
         return {"id": task_id, "status": TaskStatus.FINISHED}
 
-    def retry(self, task_id: str, feedback: dict) -> dict:
+    def retry(self, task_id: str, feedback: str) -> dict:
         """带反馈重跑本步：翻回待执行并写回反馈。"""
         self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM, TaskStatus.PENDING)
         self._content_repo.set_feedback(task_id, feedback)

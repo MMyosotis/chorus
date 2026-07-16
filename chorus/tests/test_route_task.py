@@ -94,7 +94,7 @@ def test_retry_ok():
     task = FakeTaskService()
     task.set("retry", "t1", {"id": "t1", "status": "pending"})
     r = _client(FakeSessionService({"s1"}), task).post(
-        "/api/tasks/t1/retry", json={"feedback": {"note": "改标题"}}
+        "/api/tasks/t1/retry", json={"feedback": "改标题"}
     )
     assert r.status_code == 200
     assert r.json()["status"] == "pending"

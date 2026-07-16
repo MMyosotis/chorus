@@ -73,19 +73,19 @@ def test_retry_writes_feedback():
     """重跑翻回待执行 + 反馈写入内容表（不在调度行）。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
-    res = svc.retry("t1", feedback={"note": "标题不够吸引"})
+    res = svc.retry("t1", feedback="标题不够吸引")
     assert res["status"] == TaskStatus.PENDING
     got = task_repo.get("t1")
     assert got.status == TaskStatus.PENDING
     # 反馈落在内容表，不在调度行
-    assert content_repo.load("t1").feedback == {"note": "标题不够吸引"}
+    assert content_repo.load("t1").feedback == "标题不够吸引"
 
 
 def test_retry_from_failed():
     """失败态也可重跑回 pending。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "script", "failed")
-    res = svc.retry("t1", feedback={"note": "重试"})
+    res = svc.retry("t1", feedback="重试")
     assert res["status"] == TaskStatus.PENDING
     assert task_repo.get("t1").status == TaskStatus.PENDING
 
@@ -173,6 +173,8 @@ def test_get_graph_includes_progress_and_timestamps():
     assert t.progress.composing_chars == 120
     assert t.progress.composing_units == 2
     assert t.progress.composing_label == "张"
+    # 配图分母（共 N 张）随内容行透进节点
+    assert t.progress_total == 3
     # error 取自内容表（此处未写 → None）
     assert t.error is None
 

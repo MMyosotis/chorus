@@ -4,9 +4,8 @@
 """
 from __future__ import annotations
 
-import json
 import time
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,7 +24,7 @@ CREATE TABLE IF NOT EXISTS task_content (
 
 
 class TaskContentRow(BaseModel):
-    """任务内容表持久化形状，与列一一对应。错误信息为纯文本，反馈为 JSON 列。"""
+    """任务内容表持久化形状，与列一一对应。错误与反馈均为纯文本。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -36,14 +35,10 @@ class TaskContentRow(BaseModel):
     feedback: Optional[str] = None
 
     def to_domain(self) -> TaskContent:
-        try:
-            feedback = json.loads(self.feedback) if self.feedback else None
-        except json.JSONDecodeError:
-            feedback = None
         return TaskContent(
             task_id=self.task_id, invoke_message=self.invoke_message,
             progress_total=self.progress_total, error=self.error,
-            feedback=feedback,
+            feedback=self.feedback,
         )
 
     @classmethod
@@ -53,7 +48,7 @@ class TaskContentRow(BaseModel):
             invoke_message=content.invoke_message,
             progress_total=content.progress_total,
             error=content.error,
-            feedback=json.dumps(content.feedback, ensure_ascii=False) if content.feedback is not None else None,
+            feedback=content.feedback,
         )
 
 
@@ -98,11 +93,10 @@ class TaskContentRepository:
             (task_id, error),
         )
 
-    def set_feedback(self, task_id: str, feedback: Any) -> None:
+    def set_feedback(self, task_id: str, feedback: str) -> None:
         """写反馈，upsert（与任务表 CAS 同事务）。"""
-        raw = json.dumps(feedback, ensure_ascii=False) if feedback is not None else None
         self._conn.get().execute(
             "INSERT INTO task_content(task_id, invoke_message, feedback) VALUES(?, '', ?) "
             "ON CONFLICT(task_id) DO UPDATE SET feedback=excluded.feedback",
-            (task_id, raw),
+            (task_id, feedback),
         )

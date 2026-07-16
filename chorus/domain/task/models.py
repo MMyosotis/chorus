@@ -56,7 +56,7 @@ class TaskContent:
     invoke_message: str
     progress_total: Optional[int] = None
     error: Optional[str] = None
-    feedback: Optional[dict] = None
+    feedback: Optional[str] = None
 
     def render_invoke(
         self, deps_outputs: dict[str, Any], self_prior: Optional[Any],
@@ -74,6 +74,6 @@ class TaskContent:
 
         if self.feedback:
             parts.append("用户反馈（请据此改进）：")
-            parts.append(json.dumps(self.feedback, ensure_ascii=False, indent=2))
+            parts.append(self.feedback)
 
         return "\n\n".join(parts)
