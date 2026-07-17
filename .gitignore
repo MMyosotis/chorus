@@ -20,3 +20,6 @@ dist
 # chorus
 /data/
 .env
+
+# prototype
+/design-prototype/
