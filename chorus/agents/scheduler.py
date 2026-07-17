@@ -12,6 +12,8 @@ from chorus.config import SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
 from chorus.domain.task import TaskStatus
 from chorus.domain.trace import Schedule, TracePhase
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_content import TaskContentRepository
+from chorus.repo.task_progress import TaskProgressRepository
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
 
@@ -23,6 +25,8 @@ class TaskScheduler:
         trace_service: TraceService,
         subagent_run,
         session_service: SessionService,
+        content_repo: TaskContentRepository,
+        progress_repo: TaskProgressRepository,
         interval: float = SCHEDULER_INTERVAL,
         zombie_timeout: int = ZOMBIE_TIMEOUT,
     ):
@@ -30,6 +34,8 @@ class TaskScheduler:
         self._trace = trace_service
         self._subagent_run = subagent_run
         self._session = session_service
+        self._content_repo = content_repo
+        self._progress_repo = progress_repo
         self._interval = interval
         self._zombie_timeout = zombie_timeout
         self._thread: Optional[threading.Thread] = None
@@ -92,13 +98,15 @@ class TaskScheduler:
             pass
 
     def _reclaim_zombies(self) -> None:
-        """回收运行且心跳超时的任务，翻回待执行。"""
+        """回收运行且心跳超时的任务，翻为失败交人工重跑。"""
         now = time.time()
         for task in self._task_repo.find_running_before(now - self._zombie_timeout):
-            self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.PENDING)
+            self._task_repo.transition(task.id, TaskStatus.FAILED)
+            self._content_repo.set_error(task.id, "运行超时未响应")
+            self._progress_repo.set_signal(task.id, "这步失败了")
             self._trace_schedule(task.session_id, Schedule(
                 event="zombie_reclaim", task_id=task.id,
-                from_status=TaskStatus.RUNNING, to_status=TaskStatus.PENDING,
+                from_status=TaskStatus.RUNNING, to_status=TaskStatus.FAILED,
                 detail=f"心跳超时 {self._zombie_timeout}s",
             ))
 

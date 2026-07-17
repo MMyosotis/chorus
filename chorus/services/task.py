@@ -41,14 +41,14 @@ class TaskService:
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
         """确认推进：翻转待确认→完成，候选角色写回选中项（在翻转之后）。"""
         task = self._task_repo.get(task_id)
-        self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM, TaskStatus.FINISHED)
+        self._task_repo.transition(task_id, TaskStatus.FINISHED)
         if task.agent_type == "idea":
             self._set_selected(task_id, task.agent_type, selected)
         return {"id": task_id, "status": TaskStatus.FINISHED}
 
     def retry(self, task_id: str, feedback: str) -> dict:
         """带反馈重跑本步：翻回待执行并写回反馈。"""
-        self._task_repo.transition(task_id, TaskStatus.AWAITING_CONFIRM, TaskStatus.PENDING)
+        self._task_repo.transition(task_id, TaskStatus.PENDING)
         self._content_repo.set_feedback(task_id, feedback)
         return {"id": task_id, "status": TaskStatus.PENDING}
 

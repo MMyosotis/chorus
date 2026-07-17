@@ -11,6 +11,7 @@ from typing import Generator, Iterable, Iterator, Optional, Protocol
 import uuid6
 
 from chorus.agents.runtime import AgentContext
+from chorus.config import MODEL_CALL_TIMEOUT
 from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
 from chorus.domain.stream import StreamResult, parse_tool_arguments
 from chorus.hooks import HookRegistry
@@ -83,7 +84,7 @@ class AgentLoop:
         stream = entry.client.chat.completions.create(
             model=entry.model_id, messages=ctx.turn.provider_messages,
             tools=ctx.tool_schemas or None,
-            max_tokens=self._max_tokens, stream=True,
+            max_tokens=self._max_tokens, stream=True, timeout=MODEL_CALL_TIMEOUT,
         )
         result = yield from strategy.consume(stream)
         ctx.turn.apply_stream(result)

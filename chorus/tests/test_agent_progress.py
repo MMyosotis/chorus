@@ -124,7 +124,7 @@ def _idea_md(done_line="定了", awaiting_line="y"):
 
 def _takeover(task_repo):
     """新 worker 抢占：僵死回收 + 重派，状态回 running 但归属漂移到 999。"""
-    task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.PENDING)
+    task_repo.transition("t1", TaskStatus.PENDING)
     task_repo.claim("t1", 999.0)
 
 
@@ -228,12 +228,12 @@ def test_finalize_drift_writes_no_terminal():
     """汇总轮被取消 -> 租约校验状态非 running 即早退：不落产物。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
-    task_repo.transition("t1", "running", "cancelled")
+    task_repo.transition("t1", "cancelled")
     # cancelled->pending 不合法，直接重置为 running 以便进入循环
     conn.get().execute("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'")
 
     def _cancel():
-        task_repo.transition("t1", TaskStatus.RUNNING, TaskStatus.CANCELLED)
+        task_repo.transition("t1", TaskStatus.CANCELLED)
 
     client = _SideClient([
         (_cancel, FakeStream([({"content": _idea_md(done_line="DONE_MARKER")}, "stop")])),

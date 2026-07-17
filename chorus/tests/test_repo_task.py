@@ -33,10 +33,10 @@ def test_insert_and_get():
 def test_transition_updates_status():
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
-    assert repo.transition("t1", "pending", "running") is True
+    assert repo.transition("t1", "running") is True
     assert repo.get("t1").status == "running"
     # 不存在的任务返回 False
-    assert repo.transition("nope", "pending", "running") is False
+    assert repo.transition("nope", "running") is False
 
 
 def test_claim_writes_owner_id():
@@ -50,8 +50,8 @@ def test_claim_writes_owner_id():
     assert repo.claim("t1", 200.0) is True
     assert repo.get("t1").owner_id == 200.0
     # running -> awaiting_confirm -> finished，updated_at 自动刷新
-    assert repo.transition("t1", "running", "awaiting_confirm") is True
-    assert repo.transition("t1", "awaiting_confirm", "finished") is True
+    assert repo.transition("t1", "awaiting_confirm") is True
+    assert repo.transition("t1", "finished") is True
     assert repo.get("t1").status == "finished"
 
 

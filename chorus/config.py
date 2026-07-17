@@ -31,6 +31,7 @@ CHAT_MODELS = [
 ]
 TITLE_MODEL = "DeepSeek V4 Flash"
 MAX_TOKENS = 2048
+MODEL_CALL_TIMEOUT = 90
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 

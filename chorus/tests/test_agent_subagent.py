@@ -235,7 +235,7 @@ def _idea_content(done_line="DONE_MARKER"):
 
 def _drift_to(task_repo, tid, to_status="pending"):
     def _side():
-        task_repo.transition(tid, TaskStatus.RUNNING, to_status)
+        task_repo.transition(tid, to_status)
     return _side
 
 

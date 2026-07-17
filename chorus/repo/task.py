@@ -91,7 +91,7 @@ class TaskRepository:
         ).fetchone()
         return TaskRow(**dict(row)).to_domain() if row else None
 
-    def transition(self, task_id: str, from_status: str, to_status: str) -> bool:
+    def transition(self, task_id: str, to_status: str) -> bool:
         """状态翻转：直接设目标状态，更新时间自动刷新。返回是否命中行。"""
         cur = self._conn.get().execute(
             "UPDATE tasks SET status=?, updated_at=? WHERE id=?",

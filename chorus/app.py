@@ -105,6 +105,7 @@ def create_app() -> FastAPI:
     )
     scheduler = TaskScheduler(
         task_repo, trace_service, subagent_service.run, session_service,
+        task_content_repo, task_progress_repo,
         SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT,
     )
 

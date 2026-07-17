@@ -245,7 +245,7 @@ class SubAgentService:
 
     def _fail(self, task, error: str) -> None:
         """翻转为失败并写错误信息。"""
-        self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.FAILED)
+        self._task_repo.transition(task.id, TaskStatus.FAILED)
         self._content_repo.set_error(task.id, error)
         self._progress.set_signal(task.id, "这步失败了")
 
@@ -272,7 +272,7 @@ class SubAgentService:
             return
 
         # 一律转待复核（成品亦然）：先翻状态再落产物，避免孤儿产物
-        self._task_repo.transition(task.id, TaskStatus.RUNNING, TaskStatus.AWAITING_CONFIRM)
+        self._task_repo.transition(task.id, TaskStatus.AWAITING_CONFIRM)
         self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
 
 
