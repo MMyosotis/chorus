@@ -76,15 +76,25 @@ class AgentLoop:
     def _run_turn(
         self, ctx: AgentContext, entry, strategy: LoopStrategy,
     ) -> Generator[SseEvent, None, LoopSignal]:
-        """驱动单个回合。"""
+        """驱动单轮：准入、开轮、调模型、分流结局。"""
         if not strategy.before_turn():
             return LoopSignal.FINISH
         ctx.turn.reset(message_id=str(uuid6.uuid7()))
         yield from strategy.message_start(ctx)
-
         ctx.turn.provider_messages = strategy.provider_messages()
 
         yield from self._hooks.trigger("BeforeModelRequest", ctx)
+        result = yield from self._request_model(ctx, entry, strategy)
+        yield from self._hooks.trigger("AfterModelResponse", ctx)
+
+        action = yield from self._decide(ctx, result, strategy)
+        yield from action.events
+        return action.signal
+
+    def _request_model(
+        self, ctx: AgentContext, entry, strategy: LoopStrategy,
+    ) -> Generator[SseEvent, None, StreamResult]:
+        """调模型消费流，结果落进单轮状态。"""
         stream = entry.client.chat.completions.create(
             model=entry.model_id, messages=ctx.turn.provider_messages,
             tools=ctx.tool_schemas or None,
@@ -92,18 +102,16 @@ class AgentLoop:
         )
         result = yield from strategy.consume(stream)
         ctx.turn.apply_stream(result)
-        yield from self._hooks.trigger("AfterModelResponse", ctx)
+        return result
 
+    def _decide(
+        self, ctx: AgentContext, result: StreamResult, strategy: LoopStrategy,
+    ) -> Generator[SseEvent, None, LoopAction]:
+        """据本轮有无工具调用分流，返回策略判定的回合结局。"""
         if result.tool_calls:
-            pairs = yield from self._dispatch_tool_calls(
-                ctx, result.tool_calls, strategy=strategy,
-            )
-            action = strategy.after_tools(ctx, result, pairs)
-        else:
-            action = strategy.after_text(ctx, result)
-
-        yield from action.events
-        return action.signal
+            pairs = yield from self._dispatch_tool_calls(ctx, result.tool_calls, strategy=strategy)
+            return strategy.after_tools(ctx, result, pairs)
+        return strategy.after_text(ctx, result)
 
     def _dispatch_tool_calls(
         self, ctx: AgentContext, tool_calls: dict, *, strategy: LoopStrategy,
@@ -111,24 +119,33 @@ class AgentLoop:
         """按序执行工具，发钩子与气泡工具事件。"""
         tool_ctx = ToolContext(session_id=ctx.session_id)
         pairs = []
-        for _, tc in sorted(tool_calls.items()):
-            call = ToolCall(id=tc.id, name=tc.name, arguments=parse_tool_arguments(tc.arguments))
-            call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
-
-            list(self._hooks.trigger("PreToolUse", ctx, call_view))
-
-            strategy.before_dispatch(call)
-            yield ToolCallEvent(
-                id=call.id, name=call.name, arguments=call.arguments,
-                display=self._dispatcher.format_display(call.name, call.arguments),
-                running_label=self._dispatcher.running_label(call.name),
-            )
-            result = self._dispatcher.dispatch(call, tool_ctx)
-            strategy.after_dispatch(call, result)
-            yield ToolResultEvent(
-                tool_call_id=call.id, name=call.name,
-                content=result.outcome.content, duration_ms=result.duration_ms,
-            )
-            list(self._hooks.trigger("PostToolUse", ctx, call_view, result))
+        for _, accumulator in sorted(tool_calls.items()):
+            call, result = yield from self._dispatch_one(ctx, accumulator, tool_ctx, strategy)
             pairs.append((call, result))
         return pairs
+
+    def _dispatch_one(
+        self, ctx: AgentContext, accumulator, tool_ctx: ToolContext, strategy: LoopStrategy,
+    ) -> Generator[SseEvent, None, tuple]:
+        """执行单个工具：公告->执行->回报，织入钩子与策略回调。"""
+        call = ToolCall(
+            id=accumulator.id, name=accumulator.name,
+            arguments=parse_tool_arguments(accumulator.arguments),
+        )
+        call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
+
+        list(self._hooks.trigger("PreToolUse", ctx, call_view))
+        strategy.before_dispatch(call)
+        yield ToolCallEvent(
+            id=call.id, name=call.name, arguments=call.arguments,
+            display=self._dispatcher.format_display(call.name, call.arguments),
+            running_label=self._dispatcher.running_label(call.name),
+        )
+        result = self._dispatcher.dispatch(call, tool_ctx)
+        strategy.after_dispatch(call, result)
+        yield ToolResultEvent(
+            tool_call_id=call.id, name=call.name,
+            content=result.outcome.content, duration_ms=result.duration_ms,
+        )
+        list(self._hooks.trigger("PostToolUse", ctx, call_view, result))
+        return call, result
