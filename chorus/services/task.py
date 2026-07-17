@@ -78,6 +78,15 @@ class TaskService:
         display = select_display_pipeline([], same_pipeline)
         return self._build_graph(latest.pipeline_id, display, False)
 
+    def is_finalized(self, session_id: str) -> bool:
+        """会话是否已定稿：存在 finished 的 finalize 步即视为本篇存档。"""
+        finished = self._task_repo.find_by_session_statuses(session_id, [TaskStatus.FINISHED])
+        return any(task.agent_type == "finalize" for task in finished)
+
+    def count_active(self, session_id: str) -> int:
+        """会话内活跃任务数，供入口门禁判定是否进行中。"""
+        return self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES)
+
     def _active_pipeline_id(self, session_id: str) -> Optional[str]:
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
         return active[0].pipeline_id if active else None

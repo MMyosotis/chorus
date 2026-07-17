@@ -116,6 +116,10 @@ def _build_assembly():
 
     agent_loop = AgentLoop(hooks, tool_dispatcher, 1024)
 
+    task_service = TaskService(
+        task_repo, art_repo, TaskProgressRepository(conn), content_repo, session_svc,
+    )
+
     # supervisor：一次建图工具调用流
     sup_client = FakeClient([FakeStream([
         ({"tool_calls": [types.SimpleNamespace(
@@ -125,7 +129,7 @@ def _build_assembly():
     ])])
     supervisor = SupervisorService(
         session_svc, msg_svc, hooks,
-        stub_chat_model_provider(sup_client), task_repo, tool_dispatcher, agent_loop,
+        stub_chat_model_provider(sup_client), task_service, tool_dispatcher, agent_loop,
         intent_state, skill_loader,
     )
 
@@ -143,9 +147,6 @@ def _build_assembly():
         skill_loader,
     )
 
-    task_service = TaskService(
-        task_repo, art_repo, TaskProgressRepository(conn), content_repo, session_svc,
-    )
     scheduler = TaskScheduler(
         task_repo, trace_svc, subagent.run, session_svc,
         interval=0.01, zombie_timeout=999,

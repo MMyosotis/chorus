@@ -5,11 +5,12 @@
 """
 from __future__ import annotations
 
-from typing import Iterator
+from typing import Iterator, Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import (
+    ArchivedEvent,
     BusyEvent,
     DoneEvent,
     ErrorEvent,
@@ -22,13 +23,12 @@ from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, build_system_prom
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
 from chorus.config import TOOL_WHITELISTS
-from chorus.domain.task import ACTIVE_STATUSES
 from chorus.hooks import HookRegistry
-from chorus.repo.task import TaskRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
+from chorus.services.task import TaskService
 from chorus.tools import ToolCall, ToolDispatch
 from chorus.tools.framework import Terminal
 
@@ -147,7 +147,7 @@ class SupervisorService:
         message_service: MessageService,
         hooks: HookRegistry,
         chat_model_provider: ChatModelProvider,
-        task_repo: TaskRepository,
+        task_service: TaskService,
         tool_dispatcher: ToolDispatch,
         loop: AgentLoop,
         intent_state: IntentStateService,
@@ -157,7 +157,7 @@ class SupervisorService:
         self._message = message_service
         self._hooks = hooks
         self._models = chat_model_provider
-        self._task_repo = task_repo
+        self._task = task_service
         self._tools = tool_dispatcher
         self._loop = loop
         self._intent_state = intent_state
@@ -167,11 +167,9 @@ class SupervisorService:
         self, session_id: str, user_message: str,
     ) -> Iterator[SseEvent]:
         """用户真实发话入口：先落用户消息，再跑 loop。"""
-        if not self._session.exists(session_id):
-            yield ErrorEvent(content="session not found")
-            return
-        if self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES) > 0:
-            yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
+        reject = self._admit(session_id)
+        if reject is not None:
+            yield reject
             return
 
         self._message.append_user_message(session_id, user_message)
@@ -180,15 +178,23 @@ class SupervisorService:
 
     def resume(self, session_id: str, tool_name: str, result_text: str) -> Iterator[SseEvent]:
         """解开挂起 loop 的通用原语：改写指定工具结果后续跑，不补用户消息、不碰意图。"""
-        if not self._session.exists(session_id):
-            yield ErrorEvent(content="session not found")
-            return
-        if self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES) > 0:
-            yield BusyEvent(content="该会话有创作任务进行中，请等待完成")
+        reject = self._admit(session_id)
+        if reject is not None:
+            yield reject
             return
 
         self._message.rewrite_last_tool_result(session_id, tool_name, result_text)
         yield from self._run(session_id, None)
+
+    def _admit(self, session_id: str) -> Optional[SseEvent]:
+        """入口门禁：拒收则返事件，放行则返 None。"""
+        if not self._session.exists(session_id):
+            return ErrorEvent(content="session not found")
+        if self._task.is_finalized(session_id):
+            return ArchivedEvent(content="本篇已定稿存档，请新建会话开始下一篇")
+        if self._task.count_active(session_id) > 0:
+            return BusyEvent(content="该会话有创作任务进行中，请等待完成")
+        return None
 
     def _run(self, session_id: str, user_message) -> Iterator[SseEvent]:
         """共用续跑内核：取模型、构造上下文与策略、跑 loop。"""

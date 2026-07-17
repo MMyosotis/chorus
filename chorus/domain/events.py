@@ -78,6 +78,11 @@ class BusyEvent(_EventBase):
     content: str
 
 
+class ArchivedEvent(_EventBase):
+    type: Literal["archived"] = "archived"
+    content: str
+
+
 class IntentStateEvent(_EventBase):
     type: Literal["intent_state"] = "intent_state"
     state: dict
@@ -95,6 +100,7 @@ SseEvent = Annotated[
         TitleUpdateEvent,
         DoneEvent,
         BusyEvent,
+        ArchivedEvent,
         IntentStateEvent,
         ErrorEvent,
     ],

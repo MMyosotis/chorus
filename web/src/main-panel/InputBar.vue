@@ -5,6 +5,7 @@ const props = defineProps({
   streaming: { type: Boolean, default: false },
   hasActiveTask: { type: Boolean, default: false },
   awaitingConfirm: { type: Boolean, default: false },
+  archived: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['send'])
@@ -12,8 +13,9 @@ const emit = defineEmits(['send'])
 const inputText = ref('')
 const textarea = ref(null)
 
-const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm)
+const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm || props.archived)
 const placeholder = computed(() => {
+  if (props.archived) return '本篇已定稿存档，请新建会话开始下一篇'
   if (props.awaitingConfirm) return '请先确认或调整上方意图卡片'
   if (props.hasActiveTask) return '执行中，暂时不能输入；确认节点或完成后恢复。'
   if (props.streaming) return '助手正在回复，请稍候……'
@@ -51,7 +53,7 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="input-bar" :class="{ locked: hasActiveTask || awaitingConfirm }">
+  <div class="input-bar" :class="{ locked: hasActiveTask || awaitingConfirm, archived }">
     <div class="input-inner">
       <div class="composer-label">修改<br>意见</div>
       <button class="attach-btn" type="button" aria-label="添加附件" :disabled="disabled">
@@ -152,6 +154,11 @@ defineExpose({ focus })
 .input-field:disabled::placeholder {
   color: var(--ch-meta);
   animation: busyDots 1.4s steps(4, end) infinite;
+}
+
+/* 定稿态：静态提示，不呼吸 */
+.input-bar.archived .input-field:disabled::placeholder {
+  animation: none;
 }
 
 @keyframes busyDots {

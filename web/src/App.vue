@@ -543,6 +543,9 @@ function createStreamHandler(sessionId) {
     } else if (payload.type === 'busy') {
       // 活跃任务准入拒绝的瞬时信号：不解禁输入框、不注入气泡，进度由任务图反映
       streamingBySession[sessionId] = false
+    } else if (payload.type === 'archived') {
+      // 定稿存档拒收：停流式、不建气泡，输入框由定稿态锁死
+      streamingBySession[sessionId] = false
     } else if (payload.type === 'error') {
       // 错误覆盖正文前丢弃队列、停掉打字机，避免残帧把旧字符写回
       charQueue.length = 0
@@ -572,7 +575,7 @@ async function runAssistantStream(sessionId, streamFactory) {
 async function onSend(text) {
   const sessionId = activeId.value
   if (!sessionId) return
-  if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value) return
+  if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value || activeCompleted.value) return
 
   const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
   list.push({ role: 'user', content: text, created_at: Date.now() / 1000 })
@@ -654,7 +657,7 @@ onMounted(async () => {
             </ChatWindow>
           </article>
         </Transition>
-        <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" @send="onSend" />
+        <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" :archived="activeCompleted" @send="onSend" />
       </div>
     </main>
     <TeamPanel
@@ -726,22 +729,19 @@ onMounted(async () => {
 
   .paper-swap-enter-active {
     z-index: 2;
-    will-change: transform, opacity;
-    transition:
-      transform 240ms cubic-bezier(.22, .72, .28, 1),
-      opacity 220ms ease-out;
+    will-change: opacity;
+    transition: opacity 280ms cubic-bezier(.2, .72, .25, 1);
   }
 
   .paper-swap-leave-active {
     z-index: 1;
     will-change: opacity;
-    transition: opacity 160ms ease-in 30ms;
+    transition: opacity 180ms ease-in;
     pointer-events: none;
   }
 
   .paper-swap-enter-from {
     opacity: 0;
-    transform: translate3d(-28px, 0, 0);
   }
 
   .paper-swap-leave-to {
