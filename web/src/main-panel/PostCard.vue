@@ -1,5 +1,7 @@
 <script setup>
 import { computed } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -7,6 +9,89 @@ const props = defineProps({
 })
 
 const card = computed(() => props.task.artifacts || {})
+
+function stripOuterBold(text) {
+  const match = String(text || '').trim().match(/^\*\*([\s\S]+)\*\*$/)
+  return match ? match[1].trim() : String(text || '').trim()
+}
+
+function looksLikeTitle(text) {
+  return text.length > 0 && text.length <= 60 && !/[\u3002！？!?;；:：]$/.test(text)
+}
+
+function splitLeadingTitle(text) {
+  const candidates = []
+  for (let index = text.indexOf(' '); index >= 0 && index <= 60; index = text.indexOf(' ', index + 1)) {
+    const title = text.slice(0, index).trim()
+    const rest = text.slice(index + 1).trim()
+    if (rest.length >= 12 && looksLikeTitle(title) && title !== '|') candidates.push({ title, rest })
+  }
+  return candidates.length ? candidates[candidates.length - 1] : null
+}
+
+function extractTags(text) {
+  const plain = stripOuterBold(text)
+  const tags = plain.match(/#[^\s#]+/g) || []
+  return tags.length && plain.replace(/#[^\s#]+/g, '').trim() === '' ? tags : []
+}
+
+const normalizedCard = computed(() => {
+  let title = stripOuterBold(card.value.title)
+  const sections = []
+  const tags = [...(card.value.tags || [])]
+
+  for (const [index, source] of (card.value.sections || []).entries()) {
+    const raw = String(source?.text || '').trim()
+    if (source?.kind === 'image') {
+      sections.push(source)
+      continue
+    }
+    if (!raw) continue
+
+    if (/^(---|\*\*\*|___)$/.test(raw)) {
+      sections.push({ kind: 'divider', text: '' })
+      continue
+    }
+
+    const inlineTags = extractTags(raw)
+    if (inlineTags.length) {
+      tags.push(...inlineTags)
+      continue
+    }
+
+    if (!title && index === 0 && source.kind === 'paragraph') {
+      const split = splitLeadingTitle(raw)
+      if (split) {
+        title = stripOuterBold(split.title)
+        sections.push({ kind: 'paragraph', text: split.rest })
+        continue
+      }
+      if (looksLikeTitle(stripOuterBold(raw))) {
+        title = stripOuterBold(raw)
+        continue
+      }
+    }
+
+    if (/^\*\*[\s\S]+\*\*$/.test(raw)) {
+      sections.push({ kind: 'heading', text: stripOuterBold(raw) })
+      continue
+    }
+
+    if (source.kind === 'list') {
+      sections.push({ ...source, items: raw.split('\n').map((item) => item.trim()).filter(Boolean) })
+      continue
+    }
+
+    sections.push({ ...source, text: source.kind === 'heading' ? stripOuterBold(raw) : raw })
+  }
+
+  return { title, sections, tags: [...new Set(tags)] }
+})
+
+function renderInline(text) {
+  return DOMPurify.sanitize(marked.parseInline(text || ''))
+}
+
 const issueDate = computed(() => {
   const raw = props.task.finished_at || props.task.updated_at || props.task.created_at
   const date = raw ? new Date(typeof raw === 'number' && raw < 1e12 ? raw * 1000 : raw) : new Date()
@@ -34,14 +119,17 @@ const issueDate = computed(() => {
     <div class="pc-meta"><span>FINAL COPY · VOL. 07</span><span>{{ issueDate }}</span></div>
 
     <div class="pc-copy">
-      <h2 v-if="card.title" class="pc-title">{{ card.title }}</h2>
+      <h2 v-if="normalizedCard.title" class="pc-title" v-html="renderInline(normalizedCard.title)"></h2>
 
       <div class="pc-sections">
-        <template v-for="(s, i) in card.sections || []" :key="i">
-          <h3 v-if="s.kind === 'heading'" class="pc-heading">{{ s.text }}</h3>
-          <p v-else-if="s.kind === 'paragraph'" class="pc-paragraph">{{ s.text }}</p>
-          <pre v-else-if="s.kind === 'list'" class="pc-list">{{ s.text }}</pre>
-          <blockquote v-else-if="s.kind === 'quote'" class="pc-quote">{{ s.text }}</blockquote>
+        <template v-for="(s, i) in normalizedCard.sections" :key="i">
+          <h3 v-if="s.kind === 'heading'" class="pc-heading" v-html="renderInline(s.text)"></h3>
+          <p v-else-if="s.kind === 'paragraph'" class="pc-paragraph" v-html="renderInline(s.text)"></p>
+          <ul v-else-if="s.kind === 'list'" class="pc-list">
+            <li v-for="(item, itemIndex) in s.items" :key="itemIndex" v-html="renderInline(item)"></li>
+          </ul>
+          <blockquote v-else-if="s.kind === 'quote'" class="pc-quote" v-html="renderInline(s.text)"></blockquote>
+          <hr v-else-if="s.kind === 'divider'" class="pc-divider">
           <figure v-else-if="s.kind === 'image' && s.image" class="pc-image">
             <img :src="s.image.url" :alt="s.image.caption || ''" loading="lazy" />
             <figcaption v-if="s.image.caption">{{ s.image.caption }}</figcaption>
@@ -49,8 +137,8 @@ const issueDate = computed(() => {
         </template>
       </div>
 
-      <div v-if="card.tags && card.tags.length" class="pc-tags">
-        <span v-for="(t, i) in card.tags" :key="i" class="pc-tag">{{ t }}</span>
+      <div v-if="normalizedCard.tags.length" class="pc-tags">
+        <span v-for="(t, i) in normalizedCard.tags" :key="i" class="pc-tag">{{ t }}</span>
       </div>
     </div>
   </div>
@@ -81,25 +169,28 @@ const issueDate = computed(() => {
   color: var(--ch-text);
   margin: 0 0 17px;
 }
-.pc-sections { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(0, .78fr); column-gap: 28px; align-items: start; padding: 0; }
-.pc-heading { font-family: var(--ch-display); font-size: var(--t-title); font-weight: 600; color: var(--ch-text); margin: 14px 0 6px; }
-.pc-paragraph { grid-column: 1; font-family: var(--ch-serif); font-size: 14px; color: var(--ch-body); line-height: 1.9; margin: 0 0 12px; }
-.pc-list { font-family: var(--ch-serif); font-size: var(--t-meta); color: var(--ch-body); white-space: pre-wrap; margin: 6px 0; }
+.pc-sections { max-width: 680px; display: flex; flex-direction: column; align-items: stretch; padding: 0; }
+.pc-heading { margin: 12px 0 7px; color: var(--ch-text); font: 600 16px/1.55 var(--ch-serif); }
+.pc-heading:first-child { margin-top: 0; }
+.pc-paragraph { margin: 0 0 12px; color: var(--ch-body); font: 500 14px/1.9 var(--ch-serif); letter-spacing: .005em; }
+.pc-copy :deep(strong) { color: var(--ch-text); font-weight: 600; }
+.pc-list { margin: 2px 0 15px; padding-left: 22px; color: var(--ch-body); font: 500 14px/1.85 var(--ch-serif); }
+.pc-list li { margin: 4px 0; padding-left: 2px; }
 .pc-quote {
-  grid-column: 2; grid-row: 1 / span 3; border-left: 2px solid var(--ch-warm); padding: 0 0 0 16px; margin: 0;
-  color: var(--ch-text); font-family: var(--ch-serif); font-size: 16px; line-height: 1.75; background: transparent;
+  margin: 18px 0 20px; padding: 13px 18px; border: 0; border-top: 1px solid var(--ch-border-2); border-bottom: 1px solid var(--ch-border-2);
+  color: var(--ch-text); font: 600 16px/1.75 var(--ch-serif); text-align: center; background: transparent;
 }
-.pc-image { grid-column: 1 / -1; margin: 8px 0; }
+.pc-divider { width: 100%; margin: 10px 0 18px; border: 0; border-top: 1px dashed var(--ch-border-2); }
+.pc-image { margin: 8px 0 18px; }
 .pc-image img { width: 100%; display: block; }
 .pc-image figcaption { font-family: var(--ch-sans); font-size: var(--t-eyebrow); color: var(--ch-meta); margin-top: 4px; }
-.pc-tags { margin: 10px 0 0; padding: 12px 0 0; display: flex; flex-wrap: wrap; gap: 12px; border: 0; }
+.pc-tags { max-width: 680px; margin: 4px 0 0; padding: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px 14px; border-top: 1px solid var(--ch-border-2); }
 .pc-tag {
-  font-family: var(--ch-serif); font-size: 10px; color: var(--ch-primary-2); background: transparent;
+  font-family: var(--ch-serif); font-size: 11px; line-height: 1.6; color: var(--ch-primary-2); background: transparent;
   padding: 0;
 }
 
 @media (max-width: 780px) {
-  .pc-sections { display: block; }
   .pc-quote { margin: 18px 0; padding-left: 14px; }
 }
 </style>

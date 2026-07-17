@@ -277,8 +277,21 @@ watch(
   bottom: 8px;
   left: 0;
   width: 3px;
-  background: transparent;
-  transition: background 0.12s;
+  z-index: 1;
+  background: var(--ch-warm);
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+
+.sess::after {
+  content: "";
+  position: absolute;
+  inset: 8px 0;
+  z-index: 0;
+  background: rgba(255, 254, 250, .76);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease-out;
 }
 
 .sess:hover {
@@ -288,13 +301,16 @@ watch(
 .sess.active {
   margin: 0;
   padding: 18px 14px 19px;
-  background: linear-gradient(rgba(255, 254, 250, .76), rgba(255, 254, 250, .76)) center / 100% calc(100% - 16px) no-repeat;
+  background: transparent;
 }
-.sess.active::before {
-  background: var(--ch-warm);
+.sess.active::before,
+.sess.active::after {
+  opacity: 1;
 }
 
 .sess-main {
+  position: relative;
+  z-index: 2;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -304,25 +320,33 @@ watch(
 
 .issue-meta {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  height: 14px;
   color: var(--ch-meta);
-  font: 500 var(--ch-rail-meta-size)/1.25 var(--ch-serif);
+  font: 500 var(--ch-rail-meta-size)/14px var(--ch-serif);
   font-variant-numeric: lining-nums tabular-nums;
 }
-.issue-meta .live { display: inline-flex; align-items: center; gap: 6px; color: var(--ch-warm); }
+.issue-meta > span {
+  display: inline-flex;
+  align-items: center;
+  height: 14px;
+  line-height: 14px;
+}
+.issue-meta .live { gap: 6px; color: var(--ch-warm); }
 .issue-meta .live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: breathe 1.7s ease-in-out infinite; }
 
 .sess-row {
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 0;
+  height: calc(var(--ch-rail-head-size) * 1.45);
   margin: 9px 0 9px;
 }
 
 .t {
+  display: block;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -389,6 +413,7 @@ watch(
 
 .session-actions {
   position: absolute;
+  z-index: 3;
   top: 50%;
   right: 14px;
   transform: translateY(-50%);

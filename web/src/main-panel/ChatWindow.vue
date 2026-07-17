@@ -20,6 +20,7 @@ defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 
 
 const container = ref(null)
 const stickToBottom = ref(false)
+let lastScrollPosition = null
 
 function usesPageScroll(el) {
   return el && getComputedStyle(el).overflowY === 'visible'
@@ -28,11 +29,16 @@ function usesPageScroll(el) {
 function onScroll() {
   const el = container.value
   if (!el) return
-  if (usesPageScroll(el)) {
-    stickToBottom.value = document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 80
-    return
-  }
-  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+  const pageScroll = usesPageScroll(el)
+  const currentPosition = pageScroll ? window.scrollY : el.scrollTop
+  const movedUp = lastScrollPosition !== null && currentPosition < lastScrollPosition
+  const distanceFromBottom = pageScroll
+    ? document.documentElement.scrollHeight - window.scrollY - window.innerHeight
+    : el.scrollHeight - el.scrollTop - el.clientHeight
+
+  if (movedUp) stickToBottom.value = false
+  else if (distanceFromBottom < 80) stickToBottom.value = true
+  lastScrollPosition = currentPosition
 }
 
 function scrollToBottom(behavior = 'auto') {
@@ -44,6 +50,7 @@ function scrollToBottom(behavior = 'auto') {
 
 function followBottom(behavior = 'auto') {
   stickToBottom.value = true
+  lastScrollPosition = usesPageScroll(container.value) ? window.scrollY : container.value?.scrollTop ?? 0
   scrollToBottom(behavior)
 }
 
