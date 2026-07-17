@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 """E2E 意图链路：真实 LLM 跑创作场景，验证意图状态机 + 表写入 + 卡片数据。
 
-非交互，供自动化端到端验证。跑完打印事件序列摘要 + intent_states 表内容。
+非交互，供自动化端到端验证。跑完打印事件序列摘要 + intent_states 表内容。临时库隔离，不写 data/chorus.db。
 """
 
 import sqlite3
 import sys
+import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import chorus.app as _app
+import chorus.app as app_module
 from chorus.startup import run_startup
 
-sup = _app.app.state.supervisor_service
-sess = _app.app.state.session_service
-isvc = _app.app.state.intent_state_service
-run_startup(_app.app.state.scheduler)
+_tmp = Path(tempfile.mkdtemp())
+with patch.object(app_module, "DATA_DIR", _tmp):
+    _app = app_module.create_app()
+
+sup = _app.state.supervisor_service
+sess = _app.state.session_service
+isvc = _app.state.intent_state_service
+run_startup(_app.state.scheduler)
+
+DB = _tmp / "chorus.db"
 
 
 def run_one(label: str, query: str) -> None:
@@ -71,7 +79,7 @@ def run_one(label: str, query: str) -> None:
     print(f"[正文] {full[:200]!r}{'…' if len(full)>200 else ''}")
 
     # 查表
-    conn = sqlite3.connect("data/chorus.db")
+    conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     ddl = conn.execute("SELECT sql FROM sqlite_master WHERE name='intent_states'").fetchone()
     print(f"\n[intent_states DDL]\n{ddl[0] if ddl else 'TABLE NOT FOUND'}")
@@ -120,4 +128,5 @@ run_one("创作", "帮我做一篇图文,主题是2026年春节档电影票房�
 run_one("明确创作", "帮我写一篇小红书风格的图文笔记，主题是2026年春节档电影推荐，配3张图")
 
 print("\n" + "=" * 70)
+print(f"[临时库] {DB}  (测试数据留库待清理)")
 print("E2E 完成")

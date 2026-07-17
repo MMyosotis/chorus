@@ -9,10 +9,13 @@ __pycache__/
 # node
 node_modules
 dist
+web/test-results/
+web/playwright-report/
 
 # agent
 /.claude/
 /.superpowers/
+/.playwright-mcp/
 
 # docs
 /docs
@@ -20,6 +23,3 @@ dist
 # chorus
 /data/
 .env
-
-# prototype
-/design-prototype/

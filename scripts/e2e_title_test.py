@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """E2E 标题生成：真实 LLM 跑一轮纯对话，验证 title_update 事件与入库。
 
-非交互，供自动化验证。跑完打印事件序列与会话标题字段。
+非交互，供自动化验证。跑完打印事件序列与会话标题字段。临时库隔离，不写 data/chorus.db。
 """
+import sqlite3
 import sys
+import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import sqlite3
-from chorus.config import DATA_DIR
-import chorus.app as _app
+import chorus.app as app_module
 from chorus.startup import run_startup
 
-sup = _app.app.state.supervisor_service
-sess = _app.app.state.session_service
-run_startup(_app.app.state.scheduler)
+_tmp = Path(tempfile.mkdtemp())
+with patch.object(app_module, "DATA_DIR", _tmp):
+    _app = app_module.create_app()
 
-DB = DATA_DIR / "chorus.db"
+sup = _app.state.supervisor_service
+sess = _app.state.session_service
+run_startup(_app.state.scheduler)
+
+DB = _tmp / "chorus.db"
 
 query = "用一句话告诉我，小红书爆款文案开头怎么写最抓人？"
 
@@ -61,5 +66,6 @@ conn.close()
 
 ok = title_from_event is not None and row["title_generated"] == 1
 print()
+print(f"[临时库] {DB}  (测试数据留库待清理)")
 print(">>> 通过" if ok else ">>> 失败：标题未生成")
 sys.exit(0 if ok else 1)

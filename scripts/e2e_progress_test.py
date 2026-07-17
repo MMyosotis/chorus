@@ -3,26 +3,35 @@
 
 直接种子化四步流水线（建图链路已由 e2e_intent_test 覆盖，本轮聚焦 subagent 路径），
 真实 scheduler 派发 + 真实 LLM 子 agent，逐角色程序化确认解锁，每步校验进度快照与产物落库。
+临时库隔离，不写 data/chorus.db。
 """
 
 import json
 import sqlite3
 import sys
+import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import chorus.app as _app
+import chorus.app as app_module
 from chorus.startup import run_startup
 from chorus.domain.task import CreationIntent, StepSpec
 from chorus.domain.task.profiles import AGENT_PROFILES
 
-sess = _app.app.state.session_service
-tsk = _app.app.state.task_service
+_tmp = Path(tempfile.mkdtemp())
+with patch.object(app_module, "DATA_DIR", _tmp):
+    _app = app_module.create_app()
+
+sess = _app.state.session_service
+tsk = _app.state.task_service
 task_repo = tsk._task_repo
 content_repo = tsk._content_repo
-run_startup(_app.app.state.scheduler)
+run_startup(_app.state.scheduler)
+
+DB = _tmp / "chorus.db"
 
 EXPECT_LABEL = {agent_type: AGENT_PROFILES[agent_type].composing_label
                 for agent_type in AGENT_PROFILES}
@@ -35,7 +44,7 @@ STEPS = [
 
 
 def _conn():
-    conn = sqlite3.connect("data/chorus.db")
+    conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -168,4 +177,5 @@ for agent_type, target, selected in STEPS:
         tsk.confirm(task_id, selected)
 
 print(f"\n{'=' * 60}\nE2E 结论: {'全部通过 ✓' if all_ok else '存在失败 ✗'}")
-print(f"[session] {sid}  (测试数据已留库，待用户决定是否清理)")
+print(f"[session] {sid}")
+print(f"[临时库] {DB}  (测试数据留库待清理)")

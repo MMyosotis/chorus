@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """E2E：真实 LLM 跑 idea 子 agent，验证选题候选标题/视角/理由均有实际内容。
 
-直插 idea 任务由调度器真实派发，跑完读产物校验候选数量与内容，不自动清理。
+直插 idea 任务由调度器真实派发，跑完读产物校验候选数量与内容，不自动清理。临时库隔离，不写 data/chorus.db。
 """
 import sys
+import tempfile
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import chorus.app as _app
-from chorus.config import DATA_DIR
+import chorus.app as app_module
 from chorus.domain.task import CreationIntent, StepSpec
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
@@ -22,13 +23,17 @@ _TOPIC = "2026年春节档电影票房预测"
 _STYLE = "小红书图文笔记"
 _TIMEOUT = 120
 
+_tmp = Path(tempfile.mkdtemp())
+with patch.object(app_module, "DATA_DIR", _tmp):
+    _app = app_module.create_app()
+
 
 def main() -> None:
-    session_service = _app.app.state.session_service
-    scheduler = _app.app.state.scheduler
+    session_service = _app.state.session_service
+    scheduler = _app.state.scheduler
     run_startup(scheduler)
 
-    conn = ConnectionFactory(DATA_DIR / "chorus.db")
+    conn = ConnectionFactory(_tmp / "chorus.db")
     task_repo = TaskRepository(conn)
     content_repo = TaskContentRepository(conn)
     artifacts_repo = TaskArtifactsRepository(conn)
@@ -81,6 +86,8 @@ def main() -> None:
     else:
         print("[FAIL] 存在候选内容缺失或占位词未消除")
         sys.exit(1)
+
+    print(f"\n[临时库] {_tmp / 'chorus.db'}  (测试数据留库待清理)")
 
 
 if __name__ == "__main__":
