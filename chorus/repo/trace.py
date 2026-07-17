@@ -15,7 +15,6 @@ from chorus.domain.trace import (
     MessageTrace,
     ModelRequest,
     ModelResponse,
-    Schedule,
     TraceEntry,
     TracePhase,
     TracePayload,
@@ -47,7 +46,6 @@ _PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
     TracePhase.MODEL_RESPONSE: ModelResponse,
     TracePhase.TOOL_CALL: TraceToolCall,
     TracePhase.TOOL_RESULT: TraceToolResult,
-    TracePhase.SCHEDULE: Schedule,
 }
 
 

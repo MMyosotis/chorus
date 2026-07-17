@@ -12,6 +12,7 @@ from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
 from chorus.domain.prompt import PromptContext, build_system_prompt, subagent_base
 from chorus.domain.skill import SkillLoader
+from chorus.domain.log import get_logger
 from chorus.domain.stream import StreamResult, silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
@@ -31,6 +32,8 @@ from chorus.tools import ToolDispatch
 
 _MAX_STEPS = 8
 _UNIT_MARKER = {"idea": "### ", "script": "## ", "finalize": "## "}
+
+_logger = get_logger("subagent")
 
 
 class _MarkdownUnits:
@@ -109,6 +112,7 @@ class SubagentLoopStrategy:
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
         latest = self._task_repo.get(self.task.id)
         if latest is None or latest.status != TaskStatus.RUNNING:
+            _logger.info("cooperative cancel, early exit", extra={"task_id": self.task.id})
             return False
         self._progress_repo.set_activity(self.task.id, "thinking", "", wall_clock())
         return True
@@ -153,6 +157,7 @@ class SubagentLoopStrategy:
             artifacts, narrative = self.profile.parse_output(content)
         except ValidationError as e:
             # 纠错提示喂回模型继续自纠，撞上限才判失败
+            _logger.debug("format self-correction", extra={"task_id": self.task.id})
             self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
             self.history.append({"role": "assistant", "content": content or None})
             self.history.append({"role": "user", "content": e.correction})
@@ -202,11 +207,13 @@ class SubAgentService:
         try:
             self._run_loop(task, content, task.owner_id)
         except Exception as e:
+            _logger.exception("subagent failed", extra={"task_id": task_id})
             self._guarded_fail(task, str(e), task.owner_id)
 
     def _run_loop(self, task, content, owner_id: Optional[float]) -> None:
         # 入口租约校验，被回收重抢则放弃
         if not self._lease_valid(task.id, owner_id):
+            _logger.info("entry lease invalid, abort", extra={"task_id": task.id})
             return
 
         invoke = self._build_invoke(task, content)
@@ -242,12 +249,15 @@ class SubAgentService:
         """租约校验后再失败，供入口外层与策略错误回调共享。"""
         if self._lease_valid(task.id, owner_id):
             self._fail(task, error)
+        else:
+            _logger.warning("lease invalid, drop fail write", extra={"task_id": task.id, "error": error})
 
     def _fail(self, task, error: str) -> None:
         """翻转为失败并写错误信息。"""
         self._task_repo.transition(task.id, TaskStatus.FAILED)
         self._content_repo.set_error(task.id, error)
         self._progress.set_signal(task.id, "这步失败了")
+        _logger.info("task failed", extra={"task_id": task.id, "error": error})
 
     def _lease_valid(self, task_id: str, owner_id: Optional[float]) -> bool:
         """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""
@@ -269,11 +279,13 @@ class SubAgentService:
     def _finalize(self, task, artifacts, narrative, owner_id: Optional[float]) -> None:
         """先翻转状态再落产物。"""
         if not self._lease_valid(task.id, owner_id):
+            _logger.warning("lease invalid, drop finalize", extra={"task_id": task.id})
             return
 
         # 一律转待复核（成品亦然）：先翻状态再落产物，避免孤儿产物
         self._task_repo.transition(task.id, TaskStatus.AWAITING_CONFIRM)
         self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
+        _logger.info("task awaiting confirm", extra={"task_id": task.id})
 
 
 def _assistant_view(result: StreamResult) -> dict:

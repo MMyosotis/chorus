@@ -21,6 +21,7 @@ from chorus.domain.events import (
 from chorus.domain.message import ToolCallSpec
 from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader
+from chorus.domain.log import get_logger
 from chorus.domain.stream import consume_stream
 from chorus.config import TOOL_WHITELISTS
 from chorus.hooks import HookRegistry
@@ -36,6 +37,8 @@ from chorus.tools.framework import Terminal
 _INTENT_EVENT_TOOLS = {"update_intent_state", "create_plan"}
 
 _SUPERVISOR_MAX_STEPS = 20
+
+_logger = get_logger("supervisor")
 
 
 class SupervisorLoopStrategy:
@@ -131,7 +134,7 @@ class SupervisorLoopStrategy:
                 content=f"[Error] {error}", tool_calls=[],
             )
         except Exception:
-            pass
+            _logger.exception("failed to persist error placeholder", extra={"session_id": ctx.session_id})
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content=str(error))])
 
     def _handle_terminal(self, ctx):
@@ -187,12 +190,12 @@ class SupervisorService:
         yield from self._run(session_id, None)
 
     def _admit(self, session_id: str) -> Optional[SseEvent]:
-        """入口门禁：拒收则返事件，放行则返 None。"""
-        if not self._session.exists(session_id):
-            return ErrorEvent(content="session not found")
+        """入口业务门禁：会话已定稿或有进行中任务则拒收。存在性由路由层 404 保证。"""
         if self._task.is_finalized(session_id):
+            _logger.info("reject: session finalized", extra={"session_id": session_id})
             return ArchivedEvent(content="本篇已定稿存档，请新建会话开始下一篇")
         if self._task.count_active(session_id) > 0:
+            _logger.info("reject: active task in progress", extra={"session_id": session_id})
             return BusyEvent(content="该会话有创作任务进行中，请等待完成")
         return None
 

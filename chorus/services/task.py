@@ -16,11 +16,14 @@ from chorus.domain.task import (
     build_task_graph,
     select_display_pipeline,
 )
+from chorus.domain.log import get_logger
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
+
+_logger = get_logger("service.task")
 
 
 class TaskService:
@@ -44,18 +47,21 @@ class TaskService:
         self._task_repo.transition(task_id, TaskStatus.FINISHED)
         if task.agent_type == "idea":
             self._set_selected(task_id, task.agent_type, selected)
+        _logger.info("hil confirm", extra={"task_id": task_id, "selected": selected})
         return {"id": task_id, "status": TaskStatus.FINISHED}
 
     def retry(self, task_id: str, feedback: str) -> dict:
         """带反馈重跑本步：翻回待执行并写回反馈。"""
         self._task_repo.transition(task_id, TaskStatus.PENDING)
         self._content_repo.set_feedback(task_id, feedback)
+        _logger.info("hil retry", extra={"task_id": task_id})
         return {"id": task_id, "status": TaskStatus.PENDING}
 
     def cancel_pipeline(self, session_id: str) -> dict:
         """放弃整条流水线：批量取消待执行与待确认任务，运行中保留。无进行中则幂等返 0。"""
         pipeline_id = self._active_pipeline_id(session_id)
         count = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
+        _logger.info("cancel pipeline", extra={"session_id": session_id, "cancelled": count})
         return {"pipeline_id": pipeline_id, "cancelled": count}
 
     def get_graph(self, session_id: str) -> TaskGraph:

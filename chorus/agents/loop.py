@@ -13,9 +13,12 @@ import uuid6
 from chorus.agents.runtime import AgentContext
 from chorus.config import MODEL_CALL_TIMEOUT
 from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
+from chorus.domain.log import ctx_fields, get_logger
 from chorus.domain.stream import StreamResult, parse_tool_arguments
 from chorus.hooks import HookRegistry
 from chorus.tools import ToolCall, ToolContext, ToolDispatch
+
+_logger = get_logger("loop")
 
 
 class LoopSignal(Enum):
@@ -66,6 +69,7 @@ class AgentLoop:
                     return
             yield from strategy.on_exhausted().events
         except Exception as e:
+            _logger.exception("agent loop failed", extra=ctx_fields(ctx))
             ctx.outcome.exception = e
             yield from strategy.on_error(ctx, e).events
 

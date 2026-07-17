@@ -148,7 +148,7 @@ def _build_assembly():
     )
 
     scheduler = TaskScheduler(
-        task_repo, trace_svc, subagent.run, session_svc,
+        task_repo, subagent.run, session_svc,
         content_repo, TaskProgressRepository(conn),
         interval=0.01, zombie_timeout=999,
     )

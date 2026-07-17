@@ -10,8 +10,11 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Iterable, Optional
 
+from chorus.domain.log import get_logger
 from chorus.services.settings import SettingsService
 from chorus.tools.models import ToolCall, ToolSchema
+
+_logger = get_logger("tool")
 
 _DISPLAY_MAX_LEN = 200
 
@@ -139,6 +142,7 @@ class ToolDispatch:
         try:
             raw = tool.run(call.arguments, ctx)
         except Exception as e:
+            _logger.exception("tool execution failed", extra={"tool": call.name})
             return DispatchResult(
                 outcome=Reply(f"Error executing tool '{call.name}': {e}"),
                 duration_ms=int((perf_counter() - start) * 1000),

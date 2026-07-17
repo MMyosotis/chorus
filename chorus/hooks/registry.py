@@ -9,6 +9,9 @@ from typing import Any, Callable, Iterator, Optional
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import SseEvent
+from chorus.domain.log import ctx_fields, get_logger
+
+_logger = get_logger("hook")
 
 HookFn = Callable[..., Any]
 
@@ -51,6 +54,7 @@ class HookRegistry:
             try:
                 result = fn(ctx, *args, **kwargs)
             except Exception:  # noqa: BLE001 — 扩展 hook fail-open
+                _logger.exception("hook callback failed", extra={**ctx_fields(ctx), "hook_event": event})
                 continue
             if result is not None:
                 yield from result

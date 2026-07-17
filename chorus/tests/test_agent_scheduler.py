@@ -13,16 +13,13 @@ from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.task_progress import TaskProgressRepository
-from chorus.repo.trace import TraceRepository
-from chorus.services.trace import TraceService
 
 
 def _setup():
     tmp = tempfile.mkdtemp()
     conn = ConnectionFactory(Path(tmp) / "t.db")
     SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    trace_svc = TraceService(TraceRepository(conn))
-    return conn, TaskRepository(conn), TaskContentRepository(conn), TaskProgressRepository(conn), trace_svc
+    return conn, TaskRepository(conn), TaskContentRepository(conn), TaskProgressRepository(conn)
 
 
 def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
@@ -35,11 +32,11 @@ def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
 
 def test_dispatch_pending_with_finished_deps():
     """pending + deps 全 finished → 占槽 running + 调 subagent_run。"""
-    conn, task_repo, content_repo, progress_repo, trace_svc = _setup()
+    conn, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "dep", status="finished")
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
-    sched = TaskScheduler(task_repo, trace_svc, lambda tid: ran.append(tid) or None,
+    sched = TaskScheduler(task_repo, lambda tid: ran.append(tid) or None,
                           _fake_session(), content_repo, progress_repo,
                           interval=0.01, zombie_timeout=999)
     sched._tick()
@@ -50,11 +47,11 @@ def test_dispatch_pending_with_finished_deps():
 
 def test_blocked_by_unfinished_dep():
     """pending + dep 是 running（进行中、未完成）→ t1 不调度。"""
-    conn, task_repo, content_repo, progress_repo, trace_svc = _setup()
+    conn, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "dep", status="running", updated_at=time.time())
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
-    sched = TaskScheduler(task_repo, trace_svc, lambda tid: ran.append(tid), _fake_session(),
+    sched = TaskScheduler(task_repo, lambda tid: ran.append(tid), _fake_session(),
                           content_repo, progress_repo, interval=0.01, zombie_timeout=999)
     sched._tick()
     assert ran == []
@@ -63,9 +60,9 @@ def test_blocked_by_unfinished_dep():
 
 def test_zombie_reclaim():
     """running + 心跳超时 → 翻为失败。"""
-    conn, task_repo, content_repo, progress_repo, trace_svc = _setup()
+    conn, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "t1", status="running", updated_at=0.0)  # 很久以前的心跳
-    sched = TaskScheduler(task_repo, trace_svc, lambda tid: None, _fake_session(),
+    sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
                           content_repo, progress_repo, interval=0.01, zombie_timeout=1)
     sched._reclaim_zombies()
     assert task_repo.get("t1").status == TaskStatus.FAILED
@@ -74,8 +71,8 @@ def test_zombie_reclaim():
 
 def test_tick_guarded_swallows_single_tick_exception():
     """单轮 _tick 抛异常时 _tick_guarded 吞掉，不外抛（防打死调度线程）。"""
-    _, task_repo, content_repo, progress_repo, trace_svc = _setup()
-    sched = TaskScheduler(task_repo, trace_svc, lambda tid: None, _fake_session(),
+    _, task_repo, content_repo, progress_repo = _setup()
+    sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
                           content_repo, progress_repo, interval=0.01, zombie_timeout=999)
 
     def boom():

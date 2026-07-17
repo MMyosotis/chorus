@@ -73,4 +73,12 @@ TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
 SCHEDULER_INTERVAL = 1.0
 ZOMBIE_TIMEOUT = 120
 
+# 日志：级别 / 目录 / 单文件滚动 / 跨时间清理
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
+LOG_DIR = DATA_DIR / "logs"
+LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", "5000000"))
+LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", "5"))
+LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "7"))
+LOG_CLEANUP_INTERVAL = int(os.environ.get("LOG_CLEANUP_INTERVAL", "21600"))
+
 

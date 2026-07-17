@@ -20,7 +20,6 @@ class TracePhase(str, Enum):
     MODEL_RESPONSE = "model_response"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
-    SCHEDULE = "schedule"
 
 
 class ThinkingSegment(BaseModel):
@@ -94,22 +93,11 @@ class TraceToolResult(_PayloadBase):
     duration_ms: int
 
 
-class Schedule(_PayloadBase):
-    """调度事件阶段载荷（scheduler 派发/CAS 冲突/zombie 回收）。"""
-
-    event: str
-    task_id: str
-    from_status: str
-    to_status: str
-    detail: str
-
-
 TracePayload = Union[
     ModelRequest,
     ModelResponse,
     TraceToolCall,
     TraceToolResult,
-    Schedule,
 ]
 
 

@@ -1,10 +1,9 @@
-"""TraceRepository 多来源 smoke test：来源与任务写入、按会话/任务聚合、五种 phase 载荷往返。"""
+"""TraceRepository 多来源 smoke test：来源与任务写入、按会话/任务聚合、四种 phase 载荷往返。"""
 from __future__ import annotations
 
 from chorus.domain.trace import (
     ModelRequest,
     ModelResponse,
-    Schedule,
     ThinkingSegment,
     TraceEntry,
     TracePhase,
@@ -35,32 +34,15 @@ def test_add_with_source_and_task_id():
     repo.add(TraceEntry(session_id="s1", task_id="t1", source="subagent",
                         phase=TracePhase.MODEL_RESPONSE, created_at=2.0,
                         payload=ModelResponse(content="ok", finish_reason="stop")))
-    # scheduler trace
-    repo.add(TraceEntry(session_id="s1", task_id="t1", source="scheduler",
-                        phase=TracePhase.SCHEDULE, created_at=3.0,
-                        payload=Schedule(event="dispatch", task_id="t1",
-                                         from_status="pending", to_status="running", detail="")))
     by_session = repo.list_by_session("s1")
-    assert len(by_session) == 3
+    assert len(by_session) == 2
     sources = [e.source for e in by_session]
-    assert sources == ["supervisor", "subagent", "scheduler"]
+    assert sources == ["supervisor", "subagent"]
     # 按任务查
     by_task = repo.list_by_task("t1")
-    assert len(by_task) == 2
+    assert len(by_task) == 1
     assert all(e.task_id == "t1" for e in by_task)
 
-
-def test_schedule_phase():
-    conn = _setup()
-    repo = TraceRepository(conn)
-    repo.add(TraceEntry(session_id="s1", task_id="t1", source="scheduler",
-                        phase=TracePhase.SCHEDULE, created_at=1.0,
-                        payload=Schedule(event="zombie_reclaim", task_id="t1",
-                                         from_status="running", to_status="pending", detail="x")))
-    e = repo.list_by_task("t1")[0]
-    assert e.phase is TracePhase.SCHEDULE
-    assert isinstance(e.payload, Schedule)
-    assert e.payload.event == "zombie_reclaim"
 
 
 def test_batch_aggregate_groups_by_message():
@@ -94,7 +76,7 @@ def test_batch_aggregate_groups_by_message():
 
 
 def test_payload_round_trip_all_phases():
-    """五种 phase 的 payload 入库后读回，类型与字段全保留。"""
+    """四种 phase 的 payload 入库后读回，类型与字段全保留。"""
     conn = _setup()
     repo = TraceRepository(conn)
     cases = [
@@ -106,8 +88,6 @@ def test_payload_round_trip_all_phases():
                                              display="d", running_label="跑")),
         (TracePhase.TOOL_RESULT, TraceToolResult(tool_call_id="c", name="n",
                                                  content="r", duration_ms=7)),
-        (TracePhase.SCHEDULE, Schedule(event="dispatch", task_id="t", from_status="pending",
-                                       to_status="running", detail="")),
     ]
     for i, (phase, payload) in enumerate(cases):
         repo.add(TraceEntry(session_id="s1", phase=phase, created_at=float(i), payload=payload))
@@ -121,7 +101,6 @@ def test_payload_round_trip_all_phases():
 
 def main():
     test_add_with_source_and_task_id()
-    test_schedule_phase()
     test_batch_aggregate_groups_by_message()
     test_payload_round_trip_all_phases()
     print("\n全部用例通过")

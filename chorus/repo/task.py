@@ -10,8 +10,11 @@ from typing import Iterable, Optional
 
 from pydantic import BaseModel, ConfigDict
 
+from chorus.domain.log import get_logger
 from chorus.domain.task import Task
 from chorus.repo.connection import ConnectionFactory
+
+_logger = get_logger("repo.task")
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -97,7 +100,9 @@ class TaskRepository:
             "UPDATE tasks SET status=?, updated_at=? WHERE id=?",
             (to_status, time.time(), task_id),
         )
-        return cur.rowcount > 0
+        hit = cur.rowcount > 0
+        _logger.info("transition", extra={"task_id": task_id, "to": to_status, "hit": hit})
+        return hit
 
     def claim(self, task_id: str, now: float) -> bool:
         """scheduler 派发占槽：设为运行中并写归属与更新时间。"""
@@ -105,7 +110,9 @@ class TaskRepository:
             "UPDATE tasks SET status='running', owner_id=?, updated_at=? WHERE id=?",
             (now, now, task_id),
         )
-        return cur.rowcount > 0
+        hit = cur.rowcount > 0
+        _logger.info("claim", extra={"task_id": task_id, "hit": hit})
+        return hit
 
     def touch_updated_at(self, task_id: str) -> None:
         """心跳：直接更新时间，不走翻转不校验状态，防僵死误杀。"""

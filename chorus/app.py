@@ -15,12 +15,19 @@ from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
 from chorus.config import (
     DATA_DIR,
+    LOG_BACKUP_COUNT,
+    LOG_CLEANUP_INTERVAL,
+    LOG_DIR,
+    LOG_LEVEL,
+    LOG_MAX_BYTES,
+    LOG_RETENTION_DAYS,
     MAX_TOKENS,
     SCHEDULER_INTERVAL,
     ZOMBIE_TIMEOUT,
 )
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
+from chorus.domain.log import setup_logging
 from chorus.domain.title import TitleGenerationService
 from chorus.domain.task.aside import AsideGenerator
 from chorus.hooks import HookRegistry, TitlePostProcessor, TraceEmitter
@@ -104,9 +111,11 @@ def create_app() -> FastAPI:
         agent_loop, aside_generator, skill_loader,
     )
     scheduler = TaskScheduler(
-        task_repo, trace_service, subagent_service.run, session_service,
+        task_repo, subagent_service.run, session_service,
         task_content_repo, task_progress_repo,
         SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT,
+        log_dir=LOG_DIR, log_retention_days=LOG_RETENTION_DAYS,
+        log_cleanup_interval=LOG_CLEANUP_INTERVAL,
     )
 
     app = FastAPI(
@@ -141,6 +150,10 @@ def create_app() -> FastAPI:
 def _build_lifespan(settings_service, scheduler):
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
+        setup_logging(
+            level=LOG_LEVEL, log_dir=LOG_DIR,
+            max_bytes=LOG_MAX_BYTES, backup_count=LOG_BACKUP_COUNT,
+        )
         run_startup(scheduler)
         yield
         scheduler.stop()
