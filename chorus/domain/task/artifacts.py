@@ -76,6 +76,10 @@ class ImageArtifacts:
 
     images: list[ImageItem]
 
+    @property
+    def display_title(self) -> Optional[str]:
+        return None
+
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class PostImage:

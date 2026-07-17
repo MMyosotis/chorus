@@ -13,6 +13,7 @@ let timer = null
 let isStreamingFn = () => false
 let reloadMessagesFn = () => Promise.resolve()
 let onPipelineFinishedFn = () => {}
+let lastErrorSignature = null
 
 export function useTaskPolling() {
   return {
@@ -70,6 +71,7 @@ async function tick() {
     const graph = await getTaskGraph(sid)
     const wasActive = graphBySession[sid]?.active
     graphBySession[sid] = graph
+    lastErrorSignature = null
     // 非流式时刷新消息，取回流式外落库的进度气泡
     if (!isStreamingFn(sid)) {
       await reloadMessagesFn(sid)
@@ -81,7 +83,13 @@ async function tick() {
         onPipelineFinishedFn(sid)
       }
     }
-  } catch {
-    // 网络抖动忽略，下轮重试
+  } catch (error) {
+    // 网络瞬时失败静默重试；后端错误去重暴露，不再无声吞掉
+    const message = error?.message || ''
+    if (!/failed: \d{3}/i.test(message)) return
+    const signature = `${sid}:${message}`
+    if (lastErrorSignature === signature) return
+    lastErrorSignature = signature
+    console.error('[task polling]', message)
   }
 }
