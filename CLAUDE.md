@@ -18,9 +18,6 @@ uv sync                                              # 安装依赖
 .venv/bin/uvicorn chorus.app:app --reload --port 8000 # 启动开发服务器
 ./scripts/start.sh                                   # 同时启动前后端
 
-# 不走 HTTP 的本地调试 CLI（直接调用 SupervisorService.stream，方便观察 SSE 事件）
-.venv/bin/python scripts/debug_cli.py
-
 # 意图链路端到端（真实 LLM 跑创作场景，验证拦截续跑 + intent_states 表写入 + 卡片数据）
 .venv/bin/python scripts/e2e_intent_test.py
 
@@ -66,7 +63,6 @@ cd web && npm run build                # 构建生产版本
 | `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`(CRUD + messages/traces 视图)、`chat`(SSE 流式)、`task`(任务图查询 + HIL 写 + ReAct 过程)、`agents`(/api/agents/profiles 角色档案视图)、`settings`(/api/debug/test-mode + /api/settings 模型选项) |
 | `resources/skills/` | 技能 markdown（frontmatter: name/description/tags） |
 | `tests/` | 自动化测试（前缀分组：`test_domain_*`/`test_repo_*`/`test_service_*`/`test_agent_*`/`test_tools_*`/`test_route_*`/`test_integration_*`/`test_hooks_*`，共 32 模块），共享工具 `_helpers.py`，一键入口 `__main__.py` |
-| `scripts/debug_cli.py` | 手动调试 CLI（直接调 `SupervisorService.stream`，不经 HTTP），非自动化测试 |
 | `scripts/e2e_intent_test.py` | 意图链路端到端（真实 LLM 跑创作场景，验证拦截续跑 + intent_states 表写入 + 卡片数据），非自动化测试 |
 
 ### 三 Loop 架构 (`agents/`)
@@ -234,7 +230,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 
 ## 模型能力边界
 
-- **本会话模型无图像识别能力，严禁调用截图功能**：不使用 `preview_screenshot` 等截图工具，也不以截图作为判读依据；验证前端改动改用文本类工具（`preview_snapshot` 无障碍树 / `preview_inspect` DOM 与计算样式 / `preview_console_logs` / `preview_logs`）配合源码阅读。
+- **本会话模型无图像识别能力，严禁调用截图功能**：不使用 `browser_take_screenshot` 等截图工具，也不以截图作为判读依据；验证前端改动改用 Playwright MCP 文本类工具（`browser_snapshot` 无障碍树 / `browser_click`·`browser_type` 驱动交互 / `browser_console_messages` 控制台 / `browser_network_requests` 网络）配合源码阅读。
 
 ## 开发约定
 
@@ -247,7 +243,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
   2. **重构方案**：给出具体优化思路、改动范围、重构后的效果。
 - **仅在我明确同意、确认方案后**，你再按照方案执行代码重构；若我提出修改意见，同步调整方案后再操作。
 - 若无重构必要，正常推进开发即可。
-- **E2E 等真实 LLM 端到端测试跑完后，先询问是否删除测试产生的会话与数据，不自动清理**（`scripts/e2e_intent_test.py` / `scripts/debug_cli.py` 在 `data/chorus.db` 留下的会话、消息、意图状态等产物，用户可能要回看结果或继续调试）。
+- **E2E 等真实 LLM 端到端测试跑完后，先询问是否删除测试产生的会话与数据，不自动清理**（`scripts/e2e_*.py` 现已临时库隔离，不写 `data/chorus.db`，产物留在 `tempfile` 临时目录；用户若要回看结果可指明临时库路径）。
 
 - **提交后默认合入主分支**：完成代码提交后，默认把从分支 fast-forward 合入 `main` 并删除从分支，除非我明确说保留在从分支上。
 
