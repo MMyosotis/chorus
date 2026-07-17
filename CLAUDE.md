@@ -278,8 +278,10 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 <type>(<scope>): <subject>
 
 背景：<动机 / 上下文，可缺省>
+
 改动：
 - <变更点，统一 - bullet>
+
 影响：<值得注意的后果，可缺省>
 ```
 
