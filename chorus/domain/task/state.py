@@ -27,7 +27,6 @@ LEGAL_TRANSITIONS: set[tuple[str, str]] = {
     (TaskStatus.RUNNING, TaskStatus.AWAITING_CONFIRM),
     (TaskStatus.RUNNING, TaskStatus.FINISHED),
     (TaskStatus.RUNNING, TaskStatus.FAILED),
-    (TaskStatus.RUNNING, TaskStatus.PENDING),
     (TaskStatus.AWAITING_CONFIRM, TaskStatus.FINISHED),
     (TaskStatus.AWAITING_CONFIRM, TaskStatus.PENDING),
     (TaskStatus.AWAITING_CONFIRM, TaskStatus.CANCELLED),
