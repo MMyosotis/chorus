@@ -18,6 +18,8 @@ import {
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
+import { mergeAssistantHistory } from './composables/messageHistory.js'
+import { planTaskCards, planIntentCard } from './composables/taskCardProjection.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import { ROLE_FULL, stepOf } from './team-panel/roleMeta.js'
 
@@ -92,63 +94,6 @@ function makeEmptyAssistant() {
     tools: { state: 'idle', items: [] },
     created_at: Date.now() / 1000,
   }
-}
-
-function mapToolItem(it) {
-  return {
-    name: it.name,
-    arguments: it.arguments || {},
-    duration_ms: it.duration_ms ?? null,
-    content: it.content || '',
-    display: it.display || it.name,
-  }
-}
-
-function normalizeAssistant(msg) {
-  const toolItems = Array.isArray(msg.tools) ? msg.tools : []
-  return {
-    role: 'assistant',
-    content: msg.content || '',
-    thinking: { state: 'idle' },
-    tools: { state: 'idle', items: toolItems.map(mapToolItem) },
-    created_at: msg.created_at ?? Date.now() / 1000,
-  }
-}
-
-function mergeAssistantHistory(raw) {
-  // 同一回合的助手轮次合并进一个气泡，与流式一气泡一回合对齐
-  const result = []
-  let pendingTools = []
-  let segBubble = null
-
-  const flushPending = () => {
-    if (!pendingTools.length) return
-    result.push(normalizeAssistant({ role: 'assistant', content: '', tools: pendingTools }))
-    pendingTools = []
-  }
-
-  for (const m of raw) {
-    if (m.role !== 'assistant') {
-      flushPending()
-      result.push({ role: m.role, content: m.content, created_at: m.created_at ?? Date.now() / 1000 })
-      segBubble = null
-      continue
-    }
-    const tools = Array.isArray(m.tools) ? m.tools : []
-    const hasContent = !!(m.content && m.content.trim())
-    if (segBubble) {
-      for (const it of tools) segBubble.tools.items.push(mapToolItem(it))
-      if (hasContent) segBubble.content += '\n\n' + m.content
-    } else if (hasContent) {
-      segBubble = normalizeAssistant({ role: 'assistant', content: m.content, tools: [...pendingTools, ...tools] })
-      result.push(segBubble)
-      pendingTools = []
-    } else {
-      pendingTools.push(...tools)
-    }
-  }
-  flushPending()
-  return result
 }
 
 async function loadMessages(id) {
@@ -246,56 +191,44 @@ async function forceReloadMessages(id) {
   }
 }
 
+const REMOVABLE_KINDS = new Set(['hil', 'postcard', 'recovery', 'proof-register'])
+const RUNNING_KIND = 'running'
+
 function injectTaskCards(id) {
   const list = messagesBySession[id]
   if (!list) return
-  const graph = taskPolling.getGraph(id)
-  // 去掉旧虚拟卡后重注入，避免重复
+  const plan = planTaskCards(taskPolling.getGraph(id))
   for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].kind === 'hil' || list[i].kind === 'postcard' || list[i].kind === 'recovery' || list[i].kind === 'proof-register') list.splice(i, 1)
+    if (REMOVABLE_KINDS.has(list[i].kind)) list.splice(i, 1)
   }
-  // running 卡原地刷新进度，避免轮询每 tick 重建闪烁
-  const runningTask = (graph?.tasks || []).find((t) => t.status === 'running')
-  const runningIdx = list.findIndex((m) => m.kind === 'running')
-  if (runningTask) {
-    if (runningIdx >= 0) list[runningIdx].task = runningTask
-    else list.push({ kind: 'running', task: runningTask, id: 'running:' + runningTask.id, role: 'assistant' })
+  // 运行卡原址刷新进度，避免轮询每 tick 重建闪烁
+  const runningCard = plan.find((c) => c.kind === RUNNING_KIND) || null
+  const runningIdx = list.findIndex((m) => m.kind === RUNNING_KIND)
+  if (runningCard) {
+    if (runningIdx >= 0) list[runningIdx].task = runningCard.task
+    else list.push(runningCard)
   } else if (runningIdx >= 0) {
     list.splice(runningIdx, 1)
   }
-  if (!graph) return
-  const confirmedProofs = (graph.tasks || []).filter((t) => t.status === 'finished' && t.agent_type !== 'finalize')
-  if (confirmedProofs.length) {
-    const insertAt = list.findIndex((m) => m.kind === 'running')
-    list.splice(insertAt >= 0 ? insertAt : list.length, 0, {
-      kind: 'proof-register',
-      tasks: confirmedProofs,
-      id: `proof-register:${confirmedProofs.map((t) => t.id).join(':')}`,
-      role: 'assistant',
-    })
-  }
-  for (const t of (graph.tasks || [])) {
-    if (t.status === 'awaiting_confirm') {
-      list.push({ kind: 'hil', task: t, id: 'hil:' + t.id, role: 'assistant' })
-    } else if (t.status === 'failed') {
-      list.push({ kind: 'recovery', task: t, id: 'recovery:' + t.id, role: 'assistant' })
-    } else if (t.agent_type === 'finalize' && t.status === 'finished') {
-      list.push({ kind: 'postcard', task: t, id: 'postcard:' + t.id, role: 'assistant' })
+  for (const card of plan) {
+    if (card.kind === RUNNING_KIND) continue
+    if (card.kind === 'proof-register') {
+      const idx = list.findIndex((m) => m.kind === RUNNING_KIND)
+      list.splice(idx >= 0 ? idx : list.length, 0, card)
+    } else {
+      list.push(card)
     }
   }
 }
 
-// ready_to_confirm 时把确认单作为虚拟消息注入对话区，与 hil/postcard 同机制
 function injectIntentCard(id) {
   const list = messagesBySession[id]
   if (!list) return
   for (let i = list.length - 1; i >= 0; i--) {
     if (list[i].kind === 'intent-confirm') list.splice(i, 1)
   }
-  const state = intentStateBySession[id]
-  if (state && state.intent_status === 'ready_to_confirm') {
-    list.push({ kind: 'intent-confirm', state, id: 'intent-confirm', role: 'assistant' })
-  }
+  const card = planIntentCard(intentStateBySession[id])
+  if (card) list.push(card)
 }
 
 watch(activeIntentState, () => {
