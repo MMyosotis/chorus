@@ -38,6 +38,34 @@ class StreamResult:
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
 
 
+class ThinkingTracker:
+    """思考段开合盒：逐片喂入，非思考输出出现或流结束时收口。"""
+
+    def __init__(self) -> None:
+        self._parts: list[str] = []
+        self._started_at: Optional[float] = None
+        self.segments: list[ThinkingSegment] = []
+
+    def feed(self, reasoning: str) -> ReasoningEvent:
+        """喂入思考片，记录起始时刻并回吐事件。"""
+        if self._started_at is None:
+            self._started_at = perf_counter()
+        self._parts.append(reasoning)
+        return ReasoningEvent(content=reasoning)
+
+    def close_if_open(self) -> Generator[ReasoningDoneEvent, None, None]:
+        """有打开的思考段则收口并发事件，否则什么都不做。"""
+        if self._started_at is None:
+            return
+        duration = int((perf_counter() - self._started_at) * 1000)
+        self.segments.append(
+            ThinkingSegment(text="".join(self._parts), duration_ms=duration)
+        )
+        self._parts.clear()
+        self._started_at = None
+        yield ReasoningDoneEvent(duration_ms=duration)
+
+
 def parse_tool_arguments(raw: str) -> dict:
     """把累积的 JSON 字符串解析为 dict。
 
@@ -56,10 +84,7 @@ def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
     accumulated: dict[int, ToolCallAccumulator] = {}
     text_parts: list[str] = []
     finish_reason: Optional[str] = None
-    thinking_segments: list[ThinkingSegment] = []
-
-    cur_parts: list[str] = []
-    started_at: Optional[float] = None
+    thinking = ThinkingTracker()
 
     for chunk in stream:
         choice = chunk.choices[0]
@@ -69,16 +94,11 @@ def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
 
         reasoning: Optional[str] = getattr(delta, "reasoning_content", None)
         if reasoning:
-            if started_at is None:
-                started_at = perf_counter()
-            cur_parts.append(reasoning)
-            yield ReasoningEvent(content=reasoning)
+            yield thinking.feed(reasoning)
 
-        # 思考结束出现正文
-        if started_at is not None and (delta.content or delta.tool_calls):
-            duration = _close_thinking(cur_parts, started_at, thinking_segments)
-            yield ReasoningDoneEvent(duration_ms=duration)
-            started_at = None
+        # 非思考输出出现则收口当前思考段
+        if delta.content or delta.tool_calls:
+            yield from thinking.close_if_open()
 
         if delta.content:
             text_parts.append(delta.content)
@@ -88,16 +108,14 @@ def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
             for call in delta.tool_calls:
                 _merge_tool_call(accumulated, call)
 
-    # 处理只有思考没有正文场景
-    if started_at is not None:
-        duration = _close_thinking(cur_parts, started_at, thinking_segments)
-        yield ReasoningDoneEvent(duration_ms=duration)
+    # 流结束兜底收口（只有思考没有正文场景）
+    yield from thinking.close_if_open()
 
     return StreamResult(
         text_parts=text_parts,
         tool_calls=accumulated,
         finish_reason=finish_reason,
-        thinking_segments=thinking_segments,
+        thinking_segments=thinking.segments,
     )
 
 
@@ -117,18 +135,6 @@ def silent_consume(stream, on_token=lambda content: None) -> Generator[SseEvent,
         yield event
         if isinstance(event, TokenEvent):
             on_token(event.content)
-
-
-def _close_thinking(
-    parts: list[str], started_at: Optional[float], segments: list[ThinkingSegment]
-) -> int:
-    if started_at is None:
-        duration = 0
-    else:
-        duration = int((perf_counter() - started_at) * 1000)
-    segments.append(ThinkingSegment(text="".join(parts), duration_ms=duration))
-    parts.clear()
-    return duration
 
 
 def _merge_tool_call(accumulated: dict[int, ToolCallAccumulator], delta) -> None:

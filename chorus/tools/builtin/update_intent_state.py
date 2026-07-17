@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from chorus.domain.intent import IntentStatePatch
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
+from chorus.tools.framework import Reply, Terminal, Tool, ToolContext, ToolRunResult
 
 
 class UpdateIntentStateTool(Tool):
@@ -74,22 +74,22 @@ class UpdateIntentStateTool(Tool):
         goal = (arguments.get("goal") or "").strip()
         return f"意图状态：{status} / {goal[:36]}"
 
-    def run(self, arguments: dict, ctx: ToolContext):
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         try:
             patch = IntentStatePatch(**arguments)
         except ValidationError as e:
-            return Reply(f"update_intent_state 参数格式错: {e}")
+            return ToolRunResult(Reply(f"update_intent_state 参数格式错: {e}"))
 
         state = self._intent.update_from_tool(ctx.session_id, patch)
         if state.intent_status == "ready_to_confirm":
-            return Terminal(
+            return ToolRunResult(Terminal(
                 f"intent_state updated: status=ready_to_confirm, "
                 f"version={state.version}. 等待用户拍板。"
-            )
-        return Reply(
+            ))
+        return ToolRunResult(Reply(
             "intent_state updated: "
             f"status={state.intent_status}, version={state.version}"
-        )
+        ))
 
     def resolve_external(self, session_id: str, signal: str) -> str:
         """用户对确认卡的两类回应：同意进入 confirmed，要求调整回到澄清。"""

@@ -71,7 +71,7 @@ def test_dispatch_normalizes_tool_run_result():
         description = "x"
         parameters = {"type": "object", "properties": {}}
         def run(self, arguments, ctx):
-            return Reply("裸 outcome")
+            return ToolRunResult(Reply("裸 outcome"))
 
     from chorus.tools.framework import ToolDispatch
     disp = ToolDispatch([_MetaTool(), _BareTool()], _stub_settings())
@@ -81,7 +81,7 @@ def test_dispatch_normalizes_tool_run_result():
     assert d1.activity_meta == {"refs": [{"title": "t"}]}
     assert d1.outcome.content == "可见文本"
     d2 = disp.dispatch(ToolCall(id="c2", name="load_skill", arguments={}), ToolContext())
-    assert d2.activity_meta is None  # 裸结果无活动元数据
+    assert d2.activity_meta is None  # 未带活动元数据，透传为空
 
 
 def main():

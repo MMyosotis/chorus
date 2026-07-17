@@ -36,9 +36,9 @@ class Terminal(ToolOutcome):
 
 @dataclass(frozen=True)
 class ToolRunResult:
-    """工具运行的双通道返回：走向（模型可见）与结构化产物（活动翻译层用）。
+    """工具运行的统一返回：走向（模型可见）与结构化产物（活动翻译层用）。
 
-    工具可返回裸走向，视作产物为空。units_produced 声明本次贡献的结构单元数。
+    activity_meta 缺省为空，units_produced 声明本次贡献的结构单元数。
     """
     outcome: ToolOutcome
     activity_meta: Optional[dict] = None
@@ -76,7 +76,7 @@ class Tool(ABC):
         return self.name
 
     @abstractmethod
-    def run(self, arguments: dict, ctx: ToolContext) -> "ToolOutcome | ToolRunResult": ...
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult: ...
 
     def resolve_external(self, session_id: str, signal: str) -> str:
         """工具挂起后被外部信号解开时的语义：翻状态、返灌回工具结果的文案。默认未实现。"""
@@ -144,15 +144,9 @@ class ToolDispatch:
                 duration_ms=int((perf_counter() - start) * 1000),
                 activity_meta=None,
             )
-        if isinstance(raw, ToolRunResult):
-            return DispatchResult(
-                outcome=raw.outcome,
-                duration_ms=int((perf_counter() - start) * 1000),
-                activity_meta=raw.activity_meta,
-                units_produced=raw.units_produced,
-            )
         return DispatchResult(
-            outcome=raw,
+            outcome=raw.outcome,
             duration_ms=int((perf_counter() - start) * 1000),
-            activity_meta=None,
+            activity_meta=raw.activity_meta,
+            units_produced=raw.units_produced,
         )

@@ -16,7 +16,7 @@ from chorus.domain.task import (
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Terminal, Tool, ToolContext
+from chorus.tools.framework import Reply, Terminal, Tool, ToolContext, ToolRunResult
 
 
 class CreatePlanTool(Tool):
@@ -78,18 +78,18 @@ class CreatePlanTool(Tool):
         topic = (arguments.get("intent", {}) or {}).get("topic", "")
         return f"创作：{topic or '(未指定主题)'}"
 
-    def run(self, arguments: dict, ctx: ToolContext):  # -> ToolOutcome
+    def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         blocked = self._intent_gate(ctx.session_id)
         if blocked:
-            return blocked
+            return ToolRunResult(blocked)
         try:
             pairs = self._build_pairs(arguments, ctx.session_id)
         except (KeyError, TypeError) as e:
-            return Reply(f"create_plan 参数缺失或格式错: {e}")
+            return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"))
         except ValidationError as e:
-            return Reply(e.correction)
+            return ToolRunResult(Reply(e.correction))
         self._persist(pairs)
-        return self._finalize(pairs)
+        return ToolRunResult(self._finalize(pairs))
 
     def _intent_gate(self, session_id: str):
         """意图未确认则返阻塞回执，已确认返 None。"""

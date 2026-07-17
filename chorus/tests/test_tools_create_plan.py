@@ -42,7 +42,7 @@ def _build():
 
 def test_success_returns_terminal_and_persists_tasks():
     conn, repo, content_repo, tool, ctx = _build()
-    outcome = tool.run(_args(), ctx)
+    outcome = tool.run(_args(), ctx).outcome
     assert isinstance(outcome, Terminal)
     assert isinstance(outcome.content, str) and outcome.content  # 如实建图摘要
     assert "pipeline=" in outcome.content  # 携真实流水线标识，非写死话术
@@ -66,7 +66,7 @@ def test_unconfirmed_intent_blocks_plan_creation():
     content_repo = TaskContentRepository(conn)
     intent = IntentStateService(IntentStateRepository(conn), SessionService(SessionRepository(conn)))
     tool = CreatePlanTool(repo, content_repo, intent)
-    outcome = tool.run(_args(), ToolContext(session_id="s1"))
+    outcome = tool.run(_args(), ToolContext(session_id="s1")).outcome
     assert isinstance(outcome, Reply)
     assert "blocked" in outcome.content
     assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0
@@ -74,7 +74,7 @@ def test_unconfirmed_intent_blocks_plan_creation():
 
 def test_missing_intent_key_returns_reply():
     _, _, _, tool, ctx = _build()
-    outcome = tool.run({"thought": "x", "steps": []}, ctx)
+    outcome = tool.run({"thought": "x", "steps": []}, ctx).outcome
     assert isinstance(outcome, Reply)
     assert "create_plan" in outcome.content or "参数" in outcome.content
 
@@ -83,7 +83,7 @@ def test_bad_step_returns_reply_with_correction():
     """末步非 finalize → validate_steps 抛 ValidationError → Reply(correction)，不落库。"""
     _, repo, _, tool, ctx = _build()
     bad = _args(steps=[{"agent_type": "idea", "deps": [], "focus": "选题"}])  # 末步非 finalize
-    outcome = tool.run(bad, ctx)
+    outcome = tool.run(bad, ctx).outcome
     assert isinstance(outcome, Reply)
     assert "finalize" in outcome.content
     assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0  # 校验失败不落库
@@ -96,7 +96,7 @@ def test_circular_deps_returns_reply():
         {"agent_type": "idea", "deps": [1], "focus": "x"},  # 依赖后续索引非法
         {"agent_type": "finalize", "deps": [0], "focus": "y"},
     ])
-    outcome = tool.run(bad, ctx)
+    outcome = tool.run(bad, ctx).outcome
     assert isinstance(outcome, Reply)
     assert repo.count_by_session_statuses("s1", ACTIVE_STATUSES) == 0
 

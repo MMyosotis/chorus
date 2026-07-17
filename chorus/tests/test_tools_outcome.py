@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from chorus.tools import Tool, ToolContext, ToolDispatch
-from chorus.tools.framework import Reply, Terminal, DispatchResult
+from chorus.tools.framework import Reply, Terminal, DispatchResult, ToolRunResult
 from chorus.tools.models import ToolCall
 
 
@@ -19,7 +19,7 @@ class _ReplyTool(Tool):
     parameters = {"type": "object", "properties": {}}
 
     def run(self, arguments, ctx):
-        return Reply("回传内容")
+        return ToolRunResult(Reply("回传内容"))
 
 
 class _TerminalTool(Tool):
@@ -28,7 +28,7 @@ class _TerminalTool(Tool):
     parameters = {"type": "object", "properties": {}}
 
     def run(self, arguments, ctx):
-        return Terminal("已执行")
+        return ToolRunResult(Terminal("已执行"))
 
 
 class _BoomTool(Tool):

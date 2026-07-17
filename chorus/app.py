@@ -37,8 +37,8 @@ from chorus.repo.trace import TraceRepository
 from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
 from chorus.routes.sessions import router as sessions_router
-from chorus.routes.settings import router as settings_router
-from chorus.routes.settings import settings_router as model_options_router
+from chorus.routes.settings import router as debug_router
+from chorus.routes.settings import settings_router
 from chorus.routes.task import router as task_router
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
@@ -134,7 +134,7 @@ def create_app() -> FastAPI:
     app.include_router(chat_router)
     app.include_router(task_router)
     app.include_router(settings_router)
-    app.include_router(model_options_router)
+    app.include_router(debug_router)
     return app
 
 

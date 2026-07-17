@@ -74,8 +74,8 @@ class FakeTool(Tool):
     parameters = {"type": "object", "properties": {}}
 
     def run(self, arguments, ctx):
-        from chorus.tools.framework import Reply
-        return Reply("search-result")
+        from chorus.tools.framework import Reply, ToolRunResult
+        return ToolRunResult(Reply("search-result"))
 
 
 def _setup():
