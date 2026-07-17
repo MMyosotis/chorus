@@ -35,7 +35,7 @@ html {
   --ch-warm-hover: #713024;
   --ch-on-accent: #fffefa;
   --ch-selection-soft: rgba(221, 213, 200, .34);
-  --ch-slip-soft: rgba(221, 213, 200, .22);
+  --ch-slip-soft: #f7f2ed;
   --ch-candidate-selected: var(--ch-selection-soft);
   --ch-red: #a12f24;
   --ch-red-soft: #f2d8d3;
