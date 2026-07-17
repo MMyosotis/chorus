@@ -3,7 +3,7 @@
 
 不调真实 LLM--monkeypatch supervisor.stream 注入脚本化事件序列，确定性验证
 事件经 sse() 序列化成 SSE 数据帧后字段往返无损、顺序保留。传输层契约与 LLM 无关。
-临时库隔离（patch DATA_DIR），不写 data/chorus.db。
+临时库隔离（patch DATA_DIR）且跑完自动清理，不写 data/chorus.db。
 """
 import atexit
 import json

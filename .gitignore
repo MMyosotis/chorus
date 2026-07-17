@@ -9,6 +9,8 @@ __pycache__/
 # node
 node_modules
 dist
+
+# playwright
 web/test-results/
 web/playwright-report/
 

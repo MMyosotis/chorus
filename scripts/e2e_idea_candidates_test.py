@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """E2E：真实 LLM 跑 idea 子 agent，验证选题候选标题/视角/理由均有实际内容。
 
-直插 idea 任务由调度器真实派发，跑完读产物校验候选数量与内容，不自动清理。临时库隔离，不写 data/chorus.db。
+直插 idea 任务由调度器真实派发，跑完读产物校验候选数量与内容。临时库隔离且跑完自动清理，不写 data/chorus.db。
 """
+import atexit
+import shutil
 import sys
 import tempfile
 import time
@@ -24,6 +26,7 @@ _STYLE = "小红书图文笔记"
 _TIMEOUT = 120
 
 _tmp = Path(tempfile.mkdtemp())
+atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 with patch.object(app_module, "DATA_DIR", _tmp):
     _app = app_module.create_app()
 
@@ -86,8 +89,6 @@ def main() -> None:
     else:
         print("[FAIL] 存在候选内容缺失或占位词未消除")
         sys.exit(1)
-
-    print(f"\n[临时库] {_tmp / 'chorus.db'}  (测试数据留库待清理)")
 
 
 if __name__ == "__main__":

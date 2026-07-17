@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """E2E 意图链路：真实 LLM 跑创作场景，验证意图状态机 + 表写入 + 卡片数据。
 
-非交互，供自动化端到端验证。跑完打印事件序列摘要 + intent_states 表内容。临时库隔离，不写 data/chorus.db。
+非交互，供自动化端到端验证。跑完打印事件序列摘要 + intent_states 表内容。临时库隔离且跑完自动清理，不写 data/chorus.db。
 """
 
+import atexit
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -17,6 +19,7 @@ import chorus.app as app_module
 from chorus.startup import run_startup
 
 _tmp = Path(tempfile.mkdtemp())
+atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 with patch.object(app_module, "DATA_DIR", _tmp):
     _app = app_module.create_app()
 
@@ -128,5 +131,4 @@ run_one("创作", "帮我做一篇图文,主题是2026年春节档电影票房�
 run_one("明确创作", "帮我写一篇小红书风格的图文笔记，主题是2026年春节档电影推荐，配3张图")
 
 print("\n" + "=" * 70)
-print(f"[临时库] {DB}  (测试数据留库待清理)")
 print("E2E 完成")

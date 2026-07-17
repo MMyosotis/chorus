@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """E2E 标题生成：真实 LLM 跑一轮纯对话，验证 title_update 事件与入库。
 
-非交互，供自动化验证。跑完打印事件序列与会话标题字段。临时库隔离，不写 data/chorus.db。
+非交互，供自动化验证。跑完打印事件序列与会话标题字段。临时库隔离且跑完自动清理，不写 data/chorus.db。
 """
+import atexit
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -16,6 +18,7 @@ import chorus.app as app_module
 from chorus.startup import run_startup
 
 _tmp = Path(tempfile.mkdtemp())
+atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 with patch.object(app_module, "DATA_DIR", _tmp):
     _app = app_module.create_app()
 
@@ -66,6 +69,5 @@ conn.close()
 
 ok = title_from_event is not None and row["title_generated"] == 1
 print()
-print(f"[临时库] {DB}  (测试数据留库待清理)")
 print(">>> 通过" if ok else ">>> 失败：标题未生成")
 sys.exit(0 if ok else 1)

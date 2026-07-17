@@ -3,10 +3,12 @@
 
 直接种子化四步流水线（建图链路已由 e2e_intent_test 覆盖，本轮聚焦 subagent 路径），
 真实 scheduler 派发 + 真实 LLM 子 agent，逐角色程序化确认解锁，每步校验进度快照与产物落库。
-临时库隔离，不写 data/chorus.db。
+临时库隔离且跑完自动清理，不写 data/chorus.db。
 """
 
+import atexit
 import json
+import shutil
 import sqlite3
 import sys
 import tempfile
@@ -22,6 +24,7 @@ from chorus.domain.task import CreationIntent, StepSpec
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 _tmp = Path(tempfile.mkdtemp())
+atexit.register(lambda: shutil.rmtree(_tmp, ignore_errors=True))
 with patch.object(app_module, "DATA_DIR", _tmp):
     _app = app_module.create_app()
 
@@ -178,4 +181,3 @@ for agent_type, target, selected in STEPS:
 
 print(f"\n{'=' * 60}\nE2E 结论: {'全部通过 ✓' if all_ok else '存在失败 ✗'}")
 print(f"[session] {sid}")
-print(f"[临时库] {DB}  (测试数据留库待清理)")
