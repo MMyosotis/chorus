@@ -34,7 +34,7 @@ _SHAPES = {
         "## 小标题\n\n段落正文。\n\n- 要点1\n- 要点2\n\n> 引文"
     ),
     "image": (
-        "### 图 1\ncaption：图注\n\n（按意图要求重复若干张）"
+        "### 图 1\nurl：图片url\ncaption：图注\n\n（按意图要求重复若干张）"
     ),
     "postcard": (
         "# 博文标题\n\n## 小节\n\n段落。\n\n> 引文\n\n![](图url)\n*图注*\n\n#标签：#话题1 #话题2"
@@ -44,8 +44,16 @@ _SHAPES = {
 _GUIDANCE = {
     "idea": "给出 3-5 个候选标题与切入，每个用 ### 分开，配视角和理由。",
     "script": "用 Markdown 标题/段落/列表/引用组织正文，不要塞成单个长字符串。",
-    "image": "调用 generate_image 生成配图，为每张写 caption，用 ### 图 N 分组。",
+    "image": (
+        "调用 generate_image 生成配图，为每张写 caption，用 ### 图 N 分组。"
+        "把 generate_image 返回的 url 填进对应的 url： 行，不要凭空编造。"
+        "按意图要求的张数生成，每张只调用一次；全部生成后核对张数再收尾。"
+        "若工具返回 Error，说明是图像服务故障而非提示词问题，不要反复改写重试--"
+        "最多换 1 种写法再试一次，仍失败就如实写 caption 并在图注末尾标注「图未生成」，"
+        "该张的 url： 行留空，不要把错误提示填进 url。"
+    ),
     "postcard": "你是唯一成品出口：从 idea 选标题、从 script 整理 sections、从 image 选封面并散布进 sections。"
+    "图片用 ![](url) 语法，url 从上游配图产物取，不要凭空编造。"
     "tags 用 #标签： 行，给 2-4 个话题标签。",
 }
 

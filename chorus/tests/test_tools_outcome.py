@@ -85,6 +85,49 @@ def test_format_display_known_tool():
     assert reg.format_display("reply_tool", {}) == "reply_tool"
 
 
+def test_generate_image_no_unit_on_error():
+    """生图失败（client 返 Error:）不计结构单元，成功才 +1。"""
+    from chorus.tools.builtin.generate_image import GenerateImageTool
+
+    class _FailClient:
+        def generate(self, prompt, model_id, size):
+            return "Error: 图像服务返回 HTTP 404"
+
+    class _OkClient:
+        def generate(self, prompt, model_id, size):
+            return "http://img/x.png"
+
+    class _Settings:
+        def get_image_test_mode(self):
+            return False
+
+    fail_tool = GenerateImageTool(_Settings(), _stub_provider(_FailClient()))
+    fail_res = fail_tool.run({"prompt": "暴雨"}, _ctx())
+    assert fail_res.units_produced == 0
+    assert "Error:" in fail_res.outcome.content
+
+    ok_tool = GenerateImageTool(_Settings(), _stub_provider(_OkClient()))
+    ok_res = ok_tool.run({"prompt": "暴雨"}, _ctx())
+    assert ok_res.units_produced == 1
+    assert ok_res.outcome.content == "http://img/x.png"
+
+
+def _stub_provider(client):
+    class _Entry:
+        def __init__(self, inner):
+            self.client = inner
+            self.model_id = "m"
+
+    class _Provider:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def get_entry(self):
+            return _Entry(self._inner)
+
+    return _Provider(client)
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

@@ -58,9 +58,8 @@ class ImageModelProvider:
 class GenerateImageTool(Tool):
     name = "generate_image"
     description = (
-        "使用火山方舟 Doubao Seedream 模型根据文本提示生成图像。"
-        "前端会自动从工具结果渲染图片，因此不要在正文里输出 URL、Markdown 图片（![...]()）"
-        "或对图片的描述——用户已经能直接看到图片。"
+        "使用火山方舟 Doubao Seedream 模型根据文本提示生成图像，返回图片 URL。"
+        "返回的 URL 需填进产物的 url： 行，供前端渲染图片。"
         "具体使用哪个 Seedream 模型由用户在前端选项栏选定，本工具不接受 model 参数。"
     )
     parameters = {
@@ -101,4 +100,6 @@ class GenerateImageTool(Tool):
             entry.model_id,
             arguments.get("size", "1024x1024"),
         )
-        return ToolRunResult(Reply(url), activity_meta={"url": url}, units_produced=1)
+        # 生图服务失败返 "Error: ..."，成功返 URL；失败不计结构单元
+        produced = 0 if url.startswith("Error:") else 1
+        return ToolRunResult(Reply(url), activity_meta={"url": url}, units_produced=produced)

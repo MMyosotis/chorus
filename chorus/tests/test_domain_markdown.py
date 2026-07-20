@@ -67,14 +67,31 @@ def test_parse_image_md_captions():
     assert out["images"] == [{"url": "", "caption": "阳台俯拍"}, {"url": "", "caption": "侧拍暖光"}]
 
 
+def test_parse_image_md_urls():
+    """url： 行抽进 ImageItem.url，缺 url 行留空。"""
+    body = "### 图 1\nurl：http://x/a.png\ncaption：阳台\n\n### 图 2\ncaption：侧拍"
+    out = parse_image_md(body)
+    assert out["images"][0] == {"url": "http://x/a.png", "caption": "阳台"}
+    assert out["images"][1] == {"url": "", "caption": "侧拍"}
+
+
 def test_parse_postcard_md_tree():
     body = ("# 秋日阳台\n\n## 关于这杯\n\n阳台上的光，慢慢挪过来。\n\n"
-            "> 秋天不是用来赶的。\n\n![](图2)\n*俯拍*\n\n#标签：#秋日 #阳台")
+            "> 秋天不是用来赶的。\n\n![](http://x/2.png)\n*俯拍*\n\n#标签：#秋日 #阳台")
     out = parse_postcard_md(body)
     assert out["title"] == "秋日阳台"
     assert out["tags"] == ["#秋日", "#阳台"]
     kinds = [s["kind"] for s in out["sections"]]
     assert "heading" in kinds and "quote" in kinds and "image" in kinds
+    image_block = next(s for s in out["sections"] if s["kind"] == "image")
+    assert image_block["image"]["url"] == "http://x/2.png"
+
+
+def test_parse_postcard_md_image_with_alt():
+    """![caption](url) 抽 url 与 alt caption。"""
+    out = parse_postcard_md("![俯拍](http://x/3.png)")
+    image_block = next(s for s in out["sections"] if s["kind"] == "image")
+    assert image_block["image"] == {"url": "http://x/3.png", "caption": "俯拍"}
 
 
 def test_unit_counter_counts_heading_lines():

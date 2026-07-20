@@ -5,6 +5,7 @@ import re
 from typing import Any
 
 _META_RE = re.compile(r"<!--\s*chorus:(\w+)\s*=\s*(.*?)\s*-->")
+_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 
 def parse_meta(content: str) -> dict[str, str]:
@@ -93,12 +94,14 @@ def parse_idea_md(body: str) -> dict[str, Any]:
 
 
 def parse_image_md(body: str) -> dict[str, Any]:
-    """配图按图分组,抽图注,链接留空待子 Agent 填。"""
+    """配图按图分组,抽 url 与图注。"""
     images: list[dict[str, str]] = []
     for line in body.splitlines():
         stripped = line.strip()
         if stripped.startswith("### "):
             images.append({"url": "", "caption": ""})
+        elif images and stripped.startswith("url："):
+            images[-1]["url"] = stripped.replace("url：", "").strip()
         elif images and stripped.startswith("caption："):
             images[-1]["caption"] = stripped.replace("caption：", "").strip()
     return {"images": images}
@@ -113,7 +116,12 @@ def _handle_postcard_line(
         return stripped[2:].strip(), tags
     if stripped.startswith("![") and "](" in stripped:
         collector.flush_all()
-        collector.add({"kind": "image", "text": "", "image": {"url": "", "caption": ""}})
+        match = _IMAGE_RE.match(stripped)
+        if match:
+            image = {"url": match.group(2).strip(), "caption": match.group(1).strip()}
+        else:
+            image = {"url": "", "caption": ""}
+        collector.add({"kind": "image", "text": "", "image": image})
         return title, tags
     if stripped.startswith("#标签："):
         collector.flush_all()

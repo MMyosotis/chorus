@@ -92,10 +92,9 @@ class SubagentLoopStrategy:
 
     max_steps = _MAX_STEPS
 
-    def __init__(self, *, task, progress_total, owner_id, profile, invoke,
+    def __init__(self, *, task, owner_id, profile, invoke,
                  task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names, tool_dispatch):
         self.task = task
-        self.progress_total = progress_total
         self.owner_id = owner_id
         self.profile = profile
         self.history = [{"role": "user", "content": invoke}]
@@ -230,7 +229,6 @@ class SubAgentService:
         )
         strategy = SubagentLoopStrategy(
             task=task,
-            progress_total=content.progress_total if content else None,
             owner_id=owner_id,
             profile=AGENT_PROFILES[task.agent_type],
             invoke=invoke,

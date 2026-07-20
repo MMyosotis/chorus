@@ -59,6 +59,25 @@ def test_skill_section_present_with_load_skill():
     assert p.count("可用技能") == 1
 
 
+def test_image_prompt_caps_retry():
+    """配图 prompt 软约束：按张数生成、每张一次、服务故障不反复重试、回填 url、核对后收尾、错误不进 url。"""
+    p = subagent_base("image")
+    assert "按意图要求的张数生成" in p
+    assert "每张只调用一次" in p
+    assert "全部生成后核对张数再收尾" in p
+    assert "图像服务故障" in p
+    assert "url： 行留空" in p
+    assert "不要把错误提示填进 url" in p
+    assert "### 图 1\nurl：图片url" in p
+
+
+def test_postcard_prompt_guides_image_url():
+    """汇总 prompt 指引：图片用 ![](url)，url 从上游配图取。"""
+    p = subagent_base("finalize")
+    assert "![](url)" in p
+    assert "从上游配图产物取" in p
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

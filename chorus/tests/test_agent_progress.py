@@ -122,6 +122,14 @@ def _idea_md(done_line="定了", awaiting_line="y"):
     return f"<!-- chorus:awaiting={awaiting_line} -->\n<!-- chorus:done={done_line} -->\n\n### t\n- 视角：a\n- 理由：r"
 
 
+def _image_md(done_line="图好了", awaiting_line="看下图"):
+    """构造合法 image 产出 markdown：三张图、url 留空。"""
+    return (
+        f"<!-- chorus:awaiting={awaiting_line} -->\n<!-- chorus:done={done_line} -->\n\n"
+        "### 图 1\ncaption：街景\n\n### 图 2\ncaption：人物\n\n### 图 3\ncaption：收尾"
+    )
+
+
 def _takeover(task_repo):
     """新 worker 抢占：僵死回收 + 重派，状态回 running 但归属漂移到 999。"""
     task_repo.transition("t1", TaskStatus.PENDING)
@@ -263,7 +271,7 @@ def test_image_after_dispatch_counts_units():
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     strategy = SubagentLoopStrategy(
-        task=task_repo.get("t1"), progress_total=None, owner_id=100.0,
+        task=task_repo.get("t1"), owner_id=100.0,
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
         finalize=lambda *args: None, guarded_fail=lambda *args: None,
@@ -284,7 +292,7 @@ def test_tool_without_units_not_counted():
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     strategy = SubagentLoopStrategy(
-        task=task_repo.get("t1"), progress_total=None, owner_id=100.0,
+        task=task_repo.get("t1"), owner_id=100.0,
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
         finalize=lambda *args: None, guarded_fail=lambda *args: None,
@@ -295,6 +303,17 @@ def test_tool_without_units_not_counted():
     progress_repo.set_composing_units("t1", 0)
     strategy.after_dispatch(call, DispatchResult(Reply("结果"), 10, activity_meta={"refs": []}))
     assert progress_repo.load("t1").composing_units == 0
+
+
+def test_image_unfinished_still_finalizes_for_hil():
+    """配图产物不全(无 url)不再代码判死,照常收尾交 HIL,成败交模型。"""
+    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, agent_type="image")
+    client = FakeClient([FakeStream([({"content": _image_md()}, "stop")])])
+    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
+    assert art_repo.load("t1") is not None
 
 
 def test_progress_aside_written_on_entry():
