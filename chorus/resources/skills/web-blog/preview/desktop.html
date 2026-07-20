@@ -1,0 +1,11 @@
+<section class="post-wrap">
+  <div class="post-card">
+    {{#cover_url}}<img class="pc-cover" src="{{cover_url}}" alt="" loading="lazy">{{/cover_url}}
+    <div class="pc-meta"><span>FINAL COPY · VOL. 07</span><span>CURRENT DRAFT</span></div>
+    <div class="pc-copy">
+      {{#title}}<h2 class="pc-title">{{{title}}}</h2>{{/title}}
+      <div class="pc-sections">{{{body}}}</div>
+      {{#has_tags}}<div class="pc-tags">{{#tags}}<span class="pc-tag">{{.}}</span>{{/tags}}</div>{{/has_tags}}
+    </div>
+  </div>
+</section>

@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from chorus.config import TOOL_WHITELISTS
+from chorus.domain.intent import Intent
 from chorus.domain.task import (
     ACTIVE_STATUSES,
     AGENT_PROFILES,
@@ -18,9 +19,9 @@ from chorus.domain.task import (
     TERMINAL_STATUSES,
     Task,
     TaskContent,
+    TaskPlan,
     TaskProgress,
     TaskStatus,
-    CreationIntent,
     StepSpec,
     ValidationError,
     build_task_graph,
@@ -28,7 +29,6 @@ from chorus.domain.task import (
     is_legal_transition,
     select_display_pipeline,
     topological_order,
-    validate_steps,
     IdeaArtifacts,
     IdeaCandidate,
     ScriptArtifacts,
@@ -67,7 +67,7 @@ def test_postcard_contract():
 def test_postcard_rejects_unknown_kind():
     from pydantic import ValidationError as PydValidationError
     with pytest.raises(PydValidationError):
-        PostSection(kind="table", text="x")  # type: ignore[arg-type]
+        PostSection(kind="caption", text="x")  # type: ignore[arg-type]
 
 
 def test_legal_transitions_table():
@@ -147,43 +147,49 @@ def test_activity_line_injected_into_graph():
 
 def test_validate_steps_ok():
     steps = [
-        StepSpec(agent_type="idea", deps=[], focus="选题"),
-        StepSpec(agent_type="script", deps=[0], focus="写文案"),
-        StepSpec(agent_type="image", deps=[1], focus="配图"),
-        StepSpec(agent_type="finalize", deps=[0, 1, 2], focus="汇总"),
+        StepSpec(agent_type="idea", deps=[]),
+        StepSpec(agent_type="script", deps=[0]),
+        StepSpec(agent_type="image", deps=[1]),
+        StepSpec(agent_type="finalize", deps=[0, 1, 2]),
     ]
-    validate_steps(steps)  # 不抛
+    TaskPlan(session_id="s", intent=Intent(topic="t"), steps=steps)  # 构造即校验，不抛
 
 
 def test_validate_steps_rejects():
     # 漏 finalize
     with pytest.raises(ValidationError):
-        validate_steps([StepSpec("idea", [], "x")])
+        TaskPlan(session_id="s", intent=Intent(topic="t"),
+                 steps=[StepSpec("idea", [])])
     # 杜撰角色
     with pytest.raises(ValidationError):
-        validate_steps([StepSpec("novideo", [], "x"), StepSpec("finalize", [0], "y")])
+        TaskPlan(session_id="s", intent=Intent(topic="t"),
+                 steps=[StepSpec("novideo", []), StepSpec("finalize", [0])])
     # 前向依赖
     with pytest.raises(ValidationError):
-        validate_steps([StepSpec("idea", [1], "x"), StepSpec("finalize", [0], "y")])
+        TaskPlan(session_id="s", intent=Intent(topic="t"),
+                 steps=[StepSpec("idea", [1]), StepSpec("finalize", [0])])
     # 自指
     with pytest.raises(ValidationError):
-        validate_steps([StepSpec("idea", [0], "x"), StepSpec("finalize", [0], "y")])
+        TaskPlan(session_id="s", intent=Intent(topic="t"),
+                 steps=[StepSpec("idea", [0]), StepSpec("finalize", [0])])
     # 非首步无依赖
     with pytest.raises(ValidationError):
-        validate_steps([
-            StepSpec("idea", [], "x"),
-            StepSpec("script", [], "y"),
-            StepSpec("finalize", [1], "z"),
+        TaskPlan(session_id="s", intent=Intent(topic="t"), steps=[
+            StepSpec("idea", []),
+            StepSpec("script", []),
+            StepSpec("finalize", [1]),
         ])
 
 
 def test_expand_pipeline():
-    intent = CreationIntent(topic="夏日晚风", style="轻松", image_count=2)
+    intent = Intent(topic="夏日晚风", style="轻松", image_count=2)
     steps = [
-        StepSpec("idea", [], "选题"),
-        StepSpec("finalize", [0], "汇总"),
+        StepSpec("idea", []),
+        StepSpec("finalize", [0]),
     ]
-    pairs = intent.expand_to_tasks(steps, "sess-x", 1000.0)
+    pairs = TaskPlan(
+        session_id="sess-x", intent=intent, steps=steps, created_at=1000.0,
+    ).expand()
     assert len(pairs) == 2
     tasks = [t for t, _ in pairs]
     contents = [c for _, c in pairs]
@@ -192,6 +198,8 @@ def test_expand_pipeline():
     assert tasks[0].dependencies == []
     assert tasks[1].dependencies == [tasks[0].id]
     assert all(t.pipeline_id == tasks[0].pipeline_id for t in tasks)
+    # 框架前缀 + 意图 JSON 原文注入调用消息
+    assert "创作意图：" in contents[0].invoke_message
     assert "夏日晚风" in contents[0].invoke_message
     # 内容行对齐调度行标识
     assert all(c.task_id == t.id for t, c in pairs)
@@ -199,9 +207,9 @@ def test_expand_pipeline():
 
 def test_expand_pipeline_image_progress_total():
     """image 步骤的 progress_total 落进 TaskContent，调度行不携带。"""
-    intent = CreationIntent(topic="t", image_count=4)
-    steps = [StepSpec("image", [], "配图"), StepSpec("finalize", [0], "汇总")]
-    pairs = intent.expand_to_tasks(steps, "s", 0.0)
+    intent = Intent(topic="t", image_count=4)
+    steps = [StepSpec("image", []), StepSpec("finalize", [0])]
+    pairs = TaskPlan(session_id="s", intent=intent, steps=steps).expand()
     image_task, image_content = next(p for p in pairs if p[0].agent_type == "image")
     assert image_content.progress_total == 4
 
@@ -222,29 +230,17 @@ def test_render_invoke_message_injects_deps_and_feedback():
 
 
 def test_parse_output_idea_ok():
-    content = (
-        "<!-- chorus:awaiting=等你挑 -->\n<!-- chorus:done=选定方向 -->\n\n"
-        "### 阳台慢时光\n- 视角：物候\n- 理由：光线挪动"
-    )
-    artifacts, narrative = AGENT_PROFILES["idea"].parse_output(content)
+    content = "### 阳台慢时光\n- 视角：物候\n- 理由：光线挪动"
+    artifacts = AGENT_PROFILES["idea"].parse_output(content)
     assert len(artifacts.candidates) == 1
     assert artifacts.candidates[0].title == "阳台慢时光"
-    assert narrative.awaiting_line == "等你挑"
-    assert narrative.done_line == "选定方向"
-
-
-def test_parse_output_narrative_missing():
-    """缺 awaiting/done 注释 -> ValidationError。"""
-    with pytest.raises(ValidationError):
-        AGENT_PROFILES["idea"].parse_output("### t\n- 视角：a\n- 理由：r")
 
 
 def test_parse_output_finalize_postcard():
-    content = (
-        "<!-- chorus:awaiting= -->\n<!-- chorus:done= -->\n\n"
-        "# 夏日晚风\n\n一段正文"
-    )
-    artifacts, _ = AGENT_PROFILES["finalize"].parse_output(content)
+    content = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
+               "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
+               "# 夏日晚风\n\n一段正文\n\n#标签：#夏天")
+    artifacts = AGENT_PROFILES["finalize"].parse_output(content)
     assert artifacts.title == "夏日晚风"
 
 
@@ -290,13 +286,13 @@ def test_graph_node_exposes_title():
 
 
 def test_topological_order_linear_chain():
-    """线性链：a→b→c 拓扑序即 a, b, c。"""
+    """线性链：a->b->c 拓扑序即 a, b, c。"""
     a, b, c = _task("a"), _task("b", ["a"]), _task("c", ["b"])
     assert [t.id for t in topological_order([c, b, a])] == ["a", "b", "c"]
 
 
 def test_topological_order_parallel_branches():
-    """并行分支：a→{b,c}→d，b/c 同层，d 在最后。"""
+    """并行分支：a->{b,c}->d，b/c 同层，d 在最后。"""
     a = _task("a")
     b = _task("b", ["a"], created_at=1.0)
     c = _task("c", ["a"], created_at=2.0)

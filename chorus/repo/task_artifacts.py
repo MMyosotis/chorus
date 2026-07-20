@@ -1,17 +1,15 @@
-"""任务产物表的唯一 SQL 入口：存产物和角色话术两列 JSON，读写都经行模型在裸数据和
+"""任务产物表的唯一 SQL 入口：存产物 JSON，读写都经行模型在裸数据和
 领域对象间互转。每行自带角色，读回时按角色还原成对应的产物对象。
 """
 from __future__ import annotations
 
 import dataclasses
 import json
-import time
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import TaskArtifacts
-from chorus.domain.task.artifacts import Narrative
 from chorus.domain.task.profiles import AGENT_PROFILES
 from chorus.repo.connection import ConnectionFactory
 
@@ -19,9 +17,7 @@ _DDL = """
 CREATE TABLE IF NOT EXISTS task_artifacts (
     task_id     TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
     agent_type  TEXT NOT NULL,
-    artifacts   TEXT,
-    narrative   TEXT,
-    updated_at  REAL
+    artifacts   TEXT NOT NULL
 );
 """
 
@@ -33,33 +29,21 @@ class TaskArtifactsRow(BaseModel):
 
     task_id: str
     agent_type: str
-    artifacts: Optional[str] = None
-    narrative: Optional[str] = None
-    updated_at: Optional[float] = None
+    artifacts: str
 
     def to_domain(self) -> TaskArtifacts:
         """按本行角色类型用注册表里的模型把 JSON 还原成强类型产物。"""
-        artifacts = (
-            AGENT_PROFILES[self.agent_type].build_artifacts(json.loads(self.artifacts))
-            if self.artifacts else None
-        )
-        narrative = (
-            Narrative(**json.loads(self.narrative))
-            if self.narrative else None
-        )
-        return TaskArtifacts(task_id=self.task_id, artifacts=artifacts, narrative=narrative)
+        artifacts = AGENT_PROFILES[self.agent_type].build_artifacts(json.loads(self.artifacts))
+        return TaskArtifacts(task_id=self.task_id, artifacts=artifacts)
 
     @classmethod
     def from_domain(
-        cls, task_id: str, agent_type: str,
-        artifacts: Any, narrative: Any, updated_at: Optional[float] = None,
+        cls, task_id: str, agent_type: str, artifacts: Any,
     ) -> "TaskArtifactsRow":
-        """领域对象转行模型，话术允许为空。"""
+        """领域对象转行模型。"""
         return cls(
             task_id=task_id, agent_type=agent_type,
-            artifacts=json.dumps(dataclasses.asdict(artifacts), ensure_ascii=False) if artifacts is not None else None,
-            narrative=json.dumps(dataclasses.asdict(narrative), ensure_ascii=False) if narrative is not None else None,
-            updated_at=updated_at,
+            artifacts=json.dumps(dataclasses.asdict(artifacts), ensure_ascii=False),
         )
 
 
@@ -73,14 +57,14 @@ class TaskArtifactsRepository:
         self._conn.ensure_schema(_DDL)
 
     def upsert(
-        self, task_id: str, agent_type: str, artifacts: Any, narrative: Any,
+        self, task_id: str, agent_type: str, artifacts: Any,
     ) -> None:
-        row = TaskArtifactsRow.from_domain(task_id, agent_type, artifacts, narrative, time.time())
+        row = TaskArtifactsRow.from_domain(task_id, agent_type, artifacts)
         self._conn.get().execute(
             f"INSERT INTO task_artifacts({_COLS}) VALUES ({_PH}) "
             "ON CONFLICT(task_id) DO UPDATE SET "
             "agent_type=excluded.agent_type, "
-            "artifacts=excluded.artifacts, narrative=excluded.narrative, updated_at=excluded.updated_at",
+            "artifacts=excluded.artifacts",
             row.model_dump(),
         )
 

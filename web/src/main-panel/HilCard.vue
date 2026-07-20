@@ -2,12 +2,12 @@
 import { computed, ref } from 'vue'
 import { cancelPipeline, confirmTask, retryTask } from '../api.js'
 import { stepOf } from '../team-panel/roleMeta.js'
-import PostCard from './PostCard.vue'
+import ArtifactCard from './ArtifactCard.vue'
 import ScriptProof from './ScriptProof.vue'
 import StageHeader from './StageHeader.vue'
 
 const props = defineProps({ task: { type: Object, required: true }, sessionId: { type: String, required: true } })
-const emit = defineEmits(['confirmed', 'retried', 'cancelled'])
+const emit = defineEmits(['confirmed', 'retried', 'cancelled', 'preview-task'])
 const artifacts = computed(() => props.task.artifacts || {})
 const candidates = computed(() => artifacts.value.candidates || [])
 const selectedIdx = ref(props.task.artifacts?.selected ?? null)
@@ -88,7 +88,7 @@ async function onCancel() {
           </figure>
         </div>
 
-        <PostCard v-else-if="task.agent_type === 'finalize'" :task="task" review />
+        <ArtifactCard v-else-if="task.agent_type === 'finalize'" :task="task" review @preview="$emit('preview-task', task)" />
       </div>
     </div>
 

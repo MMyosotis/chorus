@@ -5,10 +5,20 @@ const props = defineProps({ state: { type: Object, default: null } })
 const expanded = ref(false)
 
 const status = computed(() => props.state?.intent_status || 'empty')
-const goal = computed(() => props.state?.goal || '')
-const title = computed(() => props.state?.confirmation_summary?.title || goal.value || '正在理解你的需求')
-const knownEntries = computed(() => Object.entries(props.state?.known_slots || {})
-  .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ''))
+const topic = computed(() => props.state?.topic || '')
+const title = computed(() => topic.value || '正在理解你的需求')
+const keySlots = computed(() => [
+  ['主题', props.state?.topic],
+  ['平台', props.state?.platform],
+  ['体裁', props.state?.format],
+  ['风格', props.state?.style],
+  ['配图', props.state?.image_count != null ? `${props.state.image_count} 张` : ''],
+])
+const extraEntries = computed(() => Object.entries(props.state?.extra || {}))
+const knownEntries = computed(() => [
+  ...keySlots.value,
+  ...extraEntries.value,
+].filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ''))
 const missing = computed(() => props.state?.missing_slots || [])
 const stageLabel = computed(() => ({
   empty: '识别中', capturing: '识别中', needs_clarification: '待补充',

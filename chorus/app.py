@@ -43,6 +43,7 @@ from chorus.routes.chat import router as chat_router
 from chorus.routes.sessions import router as sessions_router
 from chorus.routes.settings import router as debug_router
 from chorus.routes.settings import settings_router
+from chorus.routes.skills import router as skills_router
 from chorus.routes.task import router as task_router
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
     app.state.scheduler = scheduler
     app.state.settings_service = settings_service
     app.state.tool_dispatch = tool_dispatcher
+    app.state.skill_loader = skill_loader
 
     app.add_middleware(
         CORSMiddleware,
@@ -140,6 +142,7 @@ def create_app() -> FastAPI:
     app.include_router(task_router)
     app.include_router(settings_router)
     app.include_router(debug_router)
+    app.include_router(skills_router)
     return app
 
 

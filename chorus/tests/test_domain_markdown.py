@@ -1,33 +1,14 @@
-"""Markdown 产出解析:注释元信息抽取 + 四角色解析,纯函数。"""
+"""Markdown 产出解析:四角色正文解析,纯函数。"""
+from __future__ import annotations
+
+import pytest
+
+from chorus.domain.task.errors import ValidationError
 from chorus.domain.task.markdown import (
-    parse_meta, strip_markdown_meta, parse_script_md,
-    parse_idea_md, parse_image_md, parse_postcard_md, UnitCounter,
+    parse_script_md,
+    parse_idea_md, parse_image_md, parse_postcard_md,
 )
-
-
-def test_parse_meta_extracts_awaiting_done():
-    content = "<!-- chorus:awaiting=等你过目 -->\n<!-- chorus:done=写完了 -->\n\n正文"
-    meta = parse_meta(content)
-    assert meta == {"awaiting": "等你过目", "done": "写完了"}
-
-
-def test_parse_meta_empty_when_no_comments():
-    assert parse_meta("纯正文无注释") == {}
-
-
-def test_parse_meta_skips_non_chorus_comments():
-    content = "<!-- 普通注释 -->\n<!-- chorus:cover=图1 -->"
-    assert parse_meta(content) == {"cover": "图1"}
-
-
-def test_strip_markdown_meta_removes_comment_lines():
-    content = "<!-- chorus:done=x -->\n## 标题\n正文"
-    assert strip_markdown_meta(content) == "## 标题\n正文"
-
-
-def test_strip_keeps_blank_structure():
-    content = "<!-- chorus:done=x -->\n\n## 标题"
-    assert strip_markdown_meta(content) == "\n## 标题"
+from chorus.domain.task.progress import UnitCounter
 
 
 def test_parse_script_md_heading_paragraph_list_quote():
@@ -48,8 +29,10 @@ def test_parse_script_md_consecutive_paragraphs():
     assert out["blocks"][0]["text"] == "第一段。"
 
 
-def test_parse_script_md_empty_body():
-    assert parse_script_md("") == {"blocks": []}
+def test_parse_script_md_empty_body_raises():
+    """空正文不返空块，直接抛错让模型自纠。"""
+    with pytest.raises(ValidationError):
+        parse_script_md("")
 
 
 def test_parse_idea_md_candidates():
@@ -62,22 +45,24 @@ def test_parse_idea_md_candidates():
 
 
 def test_parse_image_md_captions():
-    body = "### 图 1\ncaption：阳台俯拍\n\n### 图 2\ncaption：侧拍暖光"
+    body = "### 图 1\nurl：\ncaption：阳台俯拍\n\n### 图 2\nurl：\ncaption：侧拍暖光"
     out = parse_image_md(body)
     assert out["images"] == [{"url": "", "caption": "阳台俯拍"}, {"url": "", "caption": "侧拍暖光"}]
 
 
 def test_parse_image_md_urls():
     """url： 行抽进 ImageItem.url，缺 url 行留空。"""
-    body = "### 图 1\nurl：http://x/a.png\ncaption：阳台\n\n### 图 2\ncaption：侧拍"
+    body = "### 图 1\nurl：http://x/a.png\ncaption：阳台\n\n### 图 2\nurl：\ncaption：侧拍"
     out = parse_image_md(body)
     assert out["images"][0] == {"url": "http://x/a.png", "caption": "阳台"}
     assert out["images"][1] == {"url": "", "caption": "侧拍"}
 
 
 def test_parse_postcard_md_tree():
-    body = ("# 秋日阳台\n\n## 关于这杯\n\n阳台上的光，慢慢挪过来。\n\n"
-            "> 秋天不是用来赶的。\n\n![](http://x/2.png)\n*俯拍*\n\n#标签：#秋日 #阳台")
+    body = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
+            "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
+            "# 秋日阳台\n\n## 关于这杯\n\n阳台上的光，慢慢挪过来。\n\n"
+            "> 秋天不是用来赶的。\n\n![俯拍](http://x/2.png)\n\n#标签：#秋日 #阳台")
     out = parse_postcard_md(body)
     assert out["title"] == "秋日阳台"
     assert out["tags"] == ["#秋日", "#阳台"]
@@ -89,9 +74,22 @@ def test_parse_postcard_md_tree():
 
 def test_parse_postcard_md_image_with_alt():
     """![caption](url) 抽 url 与 alt caption。"""
-    out = parse_postcard_md("![俯拍](http://x/3.png)")
+    body = ("<!-- preview_ref: a/b -->\n<!-- stylesheet_ref: a/c -->\n\n"
+            "# t\n\n![俯拍](http://x/3.png)\n\n#标签：#x")
+    out = parse_postcard_md(body)
     image_block = next(s for s in out["sections"] if s["kind"] == "image")
     assert image_block["image"] == {"url": "http://x/3.png", "caption": "俯拍"}
+
+
+def test_parse_postcard_md_meta_refs():
+    """开头资源引用抽进 meta，不进正文 sections。"""
+    body = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
+            "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
+            "# 标题\n\n正文。\n\n#标签：#话题")
+    out = parse_postcard_md(body)
+    assert out["meta"]["preview_ref"] == "web-blog/preview/desktop.html"
+    assert out["meta"]["stylesheet_ref"] == "web-blog/preview/desktop.css"
+    assert out["title"] == "标题"
 
 
 def test_unit_counter_counts_heading_lines():

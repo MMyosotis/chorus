@@ -33,6 +33,7 @@ def provide_settings_service(request: Request) -> SettingsService:
 
 from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.supervisor import SupervisorService
+from chorus.domain.skill import SkillLoader
 from chorus.services.task import TaskService
 from chorus.tools import ToolDispatch
 
@@ -51,3 +52,7 @@ def provide_scheduler(request: Request) -> TaskScheduler:
 
 def provide_tool_dispatch(request: Request) -> ToolDispatch:
     return request.app.state.tool_dispatch
+
+
+def provide_skill_loader(request: Request) -> SkillLoader:
+    return request.app.state.skill_loader

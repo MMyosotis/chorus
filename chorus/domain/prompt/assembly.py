@@ -42,11 +42,14 @@ def _skill_section(tool_names: tuple[str, ...], skill_loader: "SkillLoader | Non
 
 
 def _intent_state_block(state: IntentState) -> str:
-    payload = state.public_dict()
+    payload = state.model_dump(
+        mode="json",
+        exclude={"session_id", "version", "updated_at"},
+    )
     return (
         "## 当前意图状态\n"
-        "下面是本会话最新的结构化意图快照。你必须基于它继续对话，"
-        "并在本轮结束前用 update_intent_state 写回新的快照。\n"
+        "下面是本会话最新的完整意图快照。基于它继续对话，"
+        "未被用户修改的字段保持原值。update_intent_state 接收完整快照，不是增量补丁。\n"
         "<current_intent_state>\n"
         f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n"
         "</current_intent_state>"

@@ -21,7 +21,7 @@ from chorus.domain.task import (
     ValidationError,
 )
 from chorus.domain.task.aside import AsideGenerator
-from chorus.domain.task.markdown import UnitCounter
+from chorus.domain.task.progress import UnitCounter
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -153,7 +153,7 @@ class SubagentLoopStrategy:
     def after_text(self, ctx, result):
         content = "".join(result.text_parts)
         try:
-            artifacts, narrative = self.profile.parse_output(content)
+            artifacts = self.profile.parse_output(content)
         except ValidationError as e:
             # 纠错提示喂回模型继续自纠，撞上限才判失败
             _logger.debug("format self-correction", extra={"task_id": self.task.id})
@@ -162,7 +162,7 @@ class SubagentLoopStrategy:
             self.history.append({"role": "user", "content": e.correction})
             return LoopAction(LoopSignal.CONTINUE, [])
 
-        self._finalize(self.task, artifacts, narrative, self.owner_id)
+        self._finalize(self.task, artifacts, self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
     def on_exhausted(self):
@@ -274,7 +274,7 @@ class SubAgentService:
             dataclasses.asdict(prior.artifacts) if prior else None,
         )
 
-    def _finalize(self, task, artifacts, narrative, owner_id: Optional[float]) -> None:
+    def _finalize(self, task, artifacts, owner_id: Optional[float]) -> None:
         """先翻转状态再落产物。"""
         if not self._lease_valid(task.id, owner_id):
             _logger.warning("lease invalid, drop finalize", extra={"task_id": task.id})
@@ -282,7 +282,7 @@ class SubAgentService:
 
         # 一律转待复核（成品亦然）：先翻状态再落产物，避免孤儿产物
         self._task_repo.transition(task.id, TaskStatus.AWAITING_CONFIRM)
-        self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts, narrative=narrative)
+        self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts)
         _logger.info("task awaiting confirm", extra={"task_id": task.id})
 
 

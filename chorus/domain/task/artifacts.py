@@ -10,19 +10,10 @@ from pydantic.dataclasses import dataclass as pydataclass
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskArtifacts:
-    """任务产物行：结构化产物与角色话术。"""
+    """任务产物行：结构化产物。"""
 
     task_id: str
     artifacts: Optional[Union["IdeaArtifacts", "ScriptArtifacts", "ImageArtifacts", "PostCard"]] = None
-    narrative: Optional["Narrative"] = None
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class Narrative:
-    """角色话术：等待确认与完成总结两句，执行完一次性产出。"""
-
-    awaiting_line: str
-    done_line: str
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -88,10 +79,25 @@ class PostImage:
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class PostTable:
+    headers: list[str]
+    rows: list[list[str]]
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class PostSection:
-    kind: Literal["paragraph", "heading", "list", "quote", "image"]
+    kind: Literal["paragraph", "heading", "list", "quote", "image", "table", "divider"]
     text: str = ""
     image: Optional[PostImage] = None
+    table: Optional[PostTable] = None
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class PostCardMeta:
+    """汇总成品使用的预览资源引用。"""
+
+    preview_ref: str = ""
+    stylesheet_ref: str = ""
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -103,6 +109,7 @@ class PostCard:
     cover: Optional[PostImage] = None
     tags: list[str] = Field(default_factory=list)
     summary: str = ""
+    meta: PostCardMeta = Field(default_factory=PostCardMeta)
 
     @property
     def display_title(self) -> Optional[str]:

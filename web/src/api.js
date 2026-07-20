@@ -243,3 +243,15 @@ export async function cancelPipeline(sessionId) {
   }
   return res.json()
 }
+
+const SKILLS_BASE = '/api/skills'
+
+export async function getSkillFile(name, path) {
+  const res = await fetch(`${SKILLS_BASE}/${encodeURIComponent(name)}/files/${path}`)
+  if (!res.ok) {
+    const err = new Error(`getSkillFile failed: ${res.status}`)
+    err.status = res.status
+    throw err
+  }
+  return res.text()
+}

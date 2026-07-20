@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
-import json
-
 from chorus.domain.skill import SkillLoader
 from chorus.tools.framework import Reply, Tool, ToolContext, ToolRunResult
 
 
 class LoadSkillTool(Tool):
     name = "load_skill"
-    description = "按名称加载技能（skill）的完整内容。可用技能见 system prompt 的技能清单；需要某技能的完整方法时调用。"
+    description = (
+        "按名称加载技能（skill）的完整内容；可选 path 读技能包内子文件"
+        "（如 references/script.md、preview/desktop.html）。可用技能见 system prompt 的技能清单。"
+    )
     parameters = {
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "要加载的技能名称"},
+            "path": {
+                "type": "string",
+                "description": "技能包内子文件相对路径，如 references/script.md；不传则返回技能完整正文",
+            },
         },
         "required": ["name"],
     }
@@ -24,12 +29,14 @@ class LoadSkillTool(Tool):
         self._skill_loader = skill_loader
 
     def display(self, arguments: dict) -> str:
-        return f"加载技能: {arguments.get('name') or '(未指定)'}"
+        name = arguments.get("name") or "(未指定)"
+        path = arguments.get("path")
+        return f"加载技能: {name} / {path}" if path else f"加载技能: {name}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         name = arguments.get("name", "")
-        skill = self._skill_loader.get(name)
-        if skill is None:
-            available = [skill.name for skill in self._skill_loader.list_summaries()]
-            return ToolRunResult(Reply(f"Error: skill '{name}' not found. Available skills: {json.dumps(available)}"))
-        return ToolRunResult(Reply(skill.full_content))
+        path = arguments.get("path") or "SKILL.md"
+        content = self._skill_loader.read_file(name, path)
+        if content is None:
+            return ToolRunResult(Reply(f"Error: skill file '{name}/{path}' not found"))
+        return ToolRunResult(Reply(content))

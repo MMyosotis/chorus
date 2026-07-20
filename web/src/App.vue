@@ -83,7 +83,7 @@ const paperPage = computed(() => {
   const completedFinal = (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished')
   return String(completedFinal ? stepOf('finalize') : 1).padStart(2, '0')
 })
-const headlineDeck = computed(() => activeIntentState.value?.goal || '一份正在编辑、校样与签认的创作稿件')
+const headlineDeck = computed(() => activeIntentState.value?.topic || '一份正在编辑、校样与签认的创作稿件')
 
 function makeEmptyAssistant() {
   return {

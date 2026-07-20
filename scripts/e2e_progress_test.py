@@ -82,7 +82,7 @@ def progress_of(task_id):
 
 def artifacts_of(task_id):
     row = _conn().execute(
-        "SELECT artifacts, narrative FROM task_artifacts WHERE task_id=?",
+        "SELECT artifacts FROM task_artifacts WHERE task_id=?",
         (task_id,)).fetchone()
     return dict(row) if row else None
 
@@ -125,8 +125,6 @@ def check_role(session_id, pipeline_id, agent_type, target):
     else:
         print(f"  产物: artifacts={art['artifacts'][:90]}…")
         verdicts.append(("产物 artifacts", "OK", "markdown 协议往返成功"))
-        verdicts.append(("产物 narrative", "OK" if art.get("narrative") else "FAIL",
-                         "" if art.get("narrative") else "缺话术注释"))
 
     # 选题额外交叉校验：流式计数与解析出的候选数应吻合
     if agent_type == "idea" and art and art.get("artifacts") and prog:

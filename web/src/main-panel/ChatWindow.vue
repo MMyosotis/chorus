@@ -2,7 +2,8 @@
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
-import PostCard from './PostCard.vue'
+import ArtifactCard from './ArtifactCard.vue'
+import PlatformPreviewShell from './PlatformPreviewShell.vue'
 import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
 import ConvFold from './ConvFold.vue'
@@ -55,6 +56,9 @@ function followBottom(behavior = 'auto') {
 }
 
 defineExpose({ scrollToBottom, followBottom })
+
+const previewTask = ref(null)
+function openPreview(task) { previewTask.value = task }
 
 function messageKey(msg, idx) {
   return msg.id || `${msg.kind || msg.role}:${msg.task?.id || idx}`
@@ -231,8 +235,9 @@ watch(
             @confirmed="$emit('hil-confirmed', $event)"
             @retried="$emit('hil-retried', $event)"
             @cancelled="$emit('hil-cancelled', $event)"
+            @preview-task="openPreview"
           />
-          <PostCard v-else-if="msg.kind === 'postcard'" :task="msg.task" />
+          <ArtifactCard v-else-if="msg.kind === 'postcard'" :task="msg.task" @preview="openPreview(msg.task)" />
           <ProofRegister v-else-if="msg.kind === 'proof-register'" :tasks="msg.tasks" />
           <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
           <RecoveryCard
@@ -260,6 +265,18 @@ watch(
         <p>发送消息开始对话</p>
       </div>
     </div>
+    <Transition name="preview-modal">
+      <div v-if="previewTask" class="preview-overlay" @click.self="previewTask = null">
+        <div class="preview-frame">
+          <button class="preview-close" type="button" aria-label="关闭预览" @click="previewTask = null">✕</button>
+          <PlatformPreviewShell
+            :card="previewTask.artifacts || {}"
+            :preview-ref="previewTask.artifacts?.meta?.preview_ref"
+            :stylesheet-ref="previewTask.artifacts?.meta?.stylesheet_ref"
+          />
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -347,6 +364,13 @@ watch(
 .chat-inner :deep(.intent-confirm) {
   margin: 18px 0 0;
 }
+
+.preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; background: rgba(27, 25, 22, .5); overflow-y: auto; }
+.preview-frame { position: relative; width: min(100%, 880px); background: var(--ch-paper, #fffdf8); padding: 28px 24px 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.preview-close { position: absolute; top: 6px; right: 6px; width: 32px; height: 32px; border: 0; background: transparent; color: var(--ch-muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.preview-close:hover { color: var(--ch-text); }
+.preview-modal-enter-active, .preview-modal-leave-active { transition: opacity .2s; }
+.preview-modal-enter-from, .preview-modal-leave-to { opacity: 0; }
 .flow-entry:has(> .stage-divider) :deep(.hil-card),
 .flow-entry:has(> .stage-divider) :deep(.post-card),
 .flow-entry:has(> .stage-divider) :deep(.recovery-card),

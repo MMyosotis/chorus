@@ -23,6 +23,25 @@ class TaskProgress:
     activity_started_at: float = 0.0
 
 
+class UnitCounter:
+    """统计流式正文中以指定标记开头的结构单元。"""
+
+    def __init__(self, marker: str):
+        self._marker = marker
+        self._buffer = ""
+        self._count = 0
+
+    def feed(self, text: str) -> None:
+        lines = (self._buffer + text).split("\n")
+        self._buffer = lines.pop()
+        self._count += sum(line.strip().startswith(self._marker) for line in lines)
+
+    @property
+    def count(self) -> int:
+        pending = 1 if self._buffer.strip().startswith(self._marker) else 0
+        return self._count + pending
+
+
 _PROGRESS_ADAPTER = TypeAdapter(TaskProgress)
 
 

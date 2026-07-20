@@ -7,18 +7,21 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from chorus.domain.intent import IntentState
+from chorus.domain.intent import IntentState, IntentStatus
 from chorus.repo.connection import ConnectionFactory
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS intent_states (
     session_id            TEXT PRIMARY KEY,
     intent_status         TEXT NOT NULL,
-    goal                  TEXT NOT NULL DEFAULT '',
-    known_slots           TEXT NOT NULL DEFAULT '{}',
-    missing_slots         TEXT NOT NULL DEFAULT '[]',
-    confirmation_summary  TEXT,
-    version               INTEGER NOT NULL DEFAULT 0,
+    topic                 TEXT NOT NULL,
+    platform              TEXT NOT NULL,
+    format                TEXT NOT NULL,
+    style                 TEXT NOT NULL,
+    image_count           INTEGER NOT NULL,
+    extra                 TEXT NOT NULL,
+    missing_slots         TEXT NOT NULL,
+    version               INTEGER NOT NULL,
     updated_at            REAL NOT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
@@ -29,41 +32,44 @@ class IntentStateRow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
     session_id: str
-    intent_status: str
-    goal: str = ""
-    known_slots: str = "{}"
-    missing_slots: str = "[]"
-    confirmation_summary: Optional[str] = None
-    version: int = 0
+    intent_status: IntentStatus
+    topic: str
+    platform: str
+    format: str
+    style: str
+    image_count: int
+    extra: str
+    missing_slots: str
+    version: int
     updated_at: float
 
     def to_domain(self) -> IntentState:
         return IntentState(
             session_id=self.session_id,
             intent_status=self.intent_status,
-            goal=self.goal,
-            known_slots=_loads(self.known_slots, {}),
-            missing_slots=_loads(self.missing_slots, []),
-            confirmation_summary=_loads(self.confirmation_summary, None),
+            topic=self.topic,
+            platform=self.platform,
+            format=self.format,
+            style=self.style,
+            image_count=self.image_count,
+            extra=json.loads(self.extra),
+            missing_slots=json.loads(self.missing_slots),
             version=self.version,
             updated_at=self.updated_at,
         )
 
     @classmethod
     def from_domain(cls, state: IntentState) -> "IntentStateRow":
-        summary = None
-        if state.confirmation_summary is not None:
-            summary = json.dumps(
-                state.confirmation_summary.model_dump(mode="json"),
-                ensure_ascii=False,
-            )
         return cls(
             session_id=state.session_id,
             intent_status=state.intent_status,
-            goal=state.goal,
-            known_slots=json.dumps(state.known_slots, ensure_ascii=False),
+            topic=state.topic,
+            platform=state.platform,
+            format=state.format,
+            style=state.style,
+            image_count=state.image_count,
+            extra=json.dumps(state.extra, ensure_ascii=False),
             missing_slots=json.dumps(state.missing_slots, ensure_ascii=False),
-            confirmation_summary=summary,
             version=state.version,
             updated_at=state.updated_at,
         )
@@ -98,12 +104,3 @@ class IntentStateRepository:
 
     def delete(self, session_id: str) -> None:
         self._conn.get().execute("DELETE FROM intent_states WHERE session_id=?", (session_id,))
-
-
-def _loads(raw: Optional[str], default):
-    if raw is None or raw == "":
-        return default
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return default

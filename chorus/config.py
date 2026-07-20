@@ -63,10 +63,10 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
 
 TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
     "supervisor": ("update_intent_state", "create_plan"),
-    "idea": ("baidu_search",),
-    "script": ("baidu_search",),
+    "idea": ("baidu_search", "load_skill"),
+    "script": ("baidu_search", "load_skill"),
     "image": ("generate_image", "load_skill"),
-    "finalize": (),
+    "finalize": ("load_skill",),
 }
 
 # 日志：级别 / 目录 / 单文件滚动 / 跨时间清理

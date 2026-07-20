@@ -145,14 +145,13 @@ def test_subagent_idea_awaiting_confirm():
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     # 一轮文本回复（产出协议）
-    content = "<!-- chorus:awaiting=y -->\n<!-- chorus:done=定了 -->\n\n### t\n- 视角：a\n- 理由：r"
+    content = "### t\n- 视角：a\n- 理由：r"
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     art = art_repo.load("t1")
     assert art.artifacts.candidates[0].title == "t"
-    assert art.narrative.done_line == "定了"
     mrs = _model_responses(trace_svc)
     assert len(mrs) == 1 and mrs[0].finish_reason == "stop"
 
@@ -161,7 +160,9 @@ def test_subagent_finalize_awaiting_confirm():
     """finalize 子 Agent：产出 PostCard → 翻转 running→awaiting_confirm（成品也需人工确认）。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
-    content = "<!-- chorus:awaiting= -->\n<!-- chorus:done=汇总完成 -->\n\n# 夏日晚风\n\n一段\n\n#标签：#夏天"
+    content = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
+               "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
+               "# 夏日晚风\n\n一段\n\n#标签：#夏天")
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
@@ -173,7 +174,7 @@ def test_subagent_react_with_tool():
     """子 Agent 先调工具再产出：两轮 ReAct，trace 留两条 model_response。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
-    content = "<!-- chorus:awaiting=y -->\n<!-- chorus:done=z -->\n\n### t\n- 视角：a\n- 理由：r"
+    content = "### t\n- 视角：a\n- 理由：r"
     # 第 1 轮工具调用，第 2 轮产出
     client = FakeClient([
         FakeStream([({"tool_calls": [types.SimpleNamespace(
@@ -189,17 +190,15 @@ def test_subagent_react_with_tool():
     assert mrs[1].finish_reason == "stop"
 
 
-def test_subagent_failed_on_persistent_bad_output():
-    """连续产物解析失败撞步数上限 → 翻转 running→failed。
+def test_subagent_failed_on_persistent_tool_calls():
+    """连续工具调用撞步数上限 -> 翻转 running->failed。
 
-    每轮坏产出喂回自纠，模型仍坏，撞步数上限才判死。
+    每轮调未知工具 Reply 喂回继续 loop,撞步数上限才判死。
     """
     from chorus.agents.subagent import _MAX_STEPS
     conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
-    bad = "乱七八糟没有段"
-    # 每轮都坏：_MAX_STEPS 轮后仍未产出 → failed
-    streams = [FakeStream([({"content": bad}, "stop")]) for _ in range(_MAX_STEPS + 1)]
+    streams = [_tool_call_stream(f"c{i}") for i in range(_MAX_STEPS + 1)]
     client = FakeClient(streams)
     sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
@@ -209,28 +208,17 @@ def test_subagent_failed_on_persistent_bad_output():
     assert len(_model_responses(trace_svc)) == _MAX_STEPS
 
 
-def test_subagent_self_corrects_on_bad_output():
-    """首次解析错 → correction 喂回 → 模型重出正确产物 → awaiting_confirm。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
-    _mk_task(task_repo, content_repo, "idea", "running")
-    good = "<!-- chorus:awaiting=y -->\n<!-- chorus:done=定了 -->\n\n### t\n- 视角：a\n- 理由：r"
-    # 第 1 轮坏产出，第 2 轮正确产出
-    client = FakeClient([
-        FakeStream([({"content": "乱七八糟没有段"}, "stop")]),
-        FakeStream([({"content": good}, "stop")]),
-    ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
-    sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
-    art = art_repo.load("t1")
-    assert art.artifacts.candidates[0].title == "t"
-    # 两轮 model_response trace（第 1 轮自纠 + 第 2 轮成功）
-    assert len(_model_responses(trace_svc)) == 2
+def _idea_content(marker=None):
+    """构造合法 idea 产出文本，marker 嵌进理由便于断言未泄漏进消息。"""
+    reason = marker or "r"
+    return f"### t\n- 视角：a\n- 理由：{reason}"
 
 
-def _idea_content(done_line="DONE_MARKER"):
-    """构造合法 idea 产出文本。"""
-    return f"<!-- chorus:awaiting=y -->\n<!-- chorus:done={done_line} -->\n\n### t\n- 视角：a\n- 理由：r"
+def _tool_call_stream(call_id):
+    """单轮工具调用流：调未知工具,Reply 喂回继续 loop,耗步数不产出。"""
+    delta = {"tool_calls": [types.SimpleNamespace(
+        index=0, id=call_id, function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}
+    return FakeStream([(delta, "tool_calls")])
 
 
 def _drift_to(task_repo, tid, to_status="pending"):
@@ -261,7 +249,7 @@ def test_subagent_cooperative_cancel_between_iterations():
     assert len(client._pairs) == 1
     # 无 done 气泡
     msgs = msg_svc.list_messages("s1")
-    assert not any(getattr(m, "content", "") == "DONE_MARKER_I1" for m in msgs)
+    assert not any("DONE_MARKER_I1" in (getattr(m, "content", "") or "") for m in msgs)
 
 
 def test_subagent_finalize_drift_no_orphan():
@@ -280,7 +268,7 @@ def test_subagent_finalize_drift_no_orphan():
     assert art_repo.load("t1") is None
     # 无 done 气泡
     msgs = msg_svc.list_messages("s1")
-    assert not any(getattr(m, "content", "") == "DONE_MARKER_I2" for m in msgs)
+    assert not any("DONE_MARKER_I2" in (getattr(m, "content", "") or "") for m in msgs)
     assert len(client._pairs) == 0  # 脚本已消费
 
 

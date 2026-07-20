@@ -8,7 +8,6 @@ from chorus.domain.session import Session
 from chorus.domain.task import (
     IdeaArtifacts,
     IdeaCandidate,
-    Narrative,
     Task,
     TaskContent,
     TaskStatus,
@@ -52,7 +51,6 @@ def test_confirm_idea_with_selected():
     TaskArtifactsRepository(_conn_of(task_repo)).upsert(
         "t1", "idea",
         IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="t", angle="a", reason="r")]),
-        Narrative(awaiting_line="y", done_line="x"),
     )
     res = svc.confirm("t1", selected=0)
     assert res["status"] == TaskStatus.FINISHED

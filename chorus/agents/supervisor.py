@@ -85,7 +85,7 @@ class SupervisorLoopStrategy:
     def after_dispatch(self, call, dispatch):
         if call.name in _INTENT_EVENT_TOOLS:
             self._pending_intent_events.append(
-                IntentStateEvent(state=self._intent_state.get(self.session_id).public_dict())
+                IntentStateEvent(state=self._intent_state.get(self.session_id).model_dump(mode="json"))
             )
 
     def after_tools(self, ctx, result, pairs):

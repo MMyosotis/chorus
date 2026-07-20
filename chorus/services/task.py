@@ -101,9 +101,7 @@ class TaskService:
         """把选中候选写回候选角色产物（子 agent 已先落，必就绪）。"""
         art = self._artifacts_repo.load(task_id)
         idea = dataclasses.replace(art.artifacts, selected=selected)
-        self._artifacts_repo.upsert(
-            task_id, agent_type, artifacts=idea, narrative=art.narrative,
-        )
+        self._artifacts_repo.upsert(task_id, agent_type, artifacts=idea)
 
     def _build_graph(self, pipeline_id: str, tasks: list, active: bool) -> TaskGraph:
         """取本图所需产物/进度/内容，交领域聚合。拓扑序在领域内。"""

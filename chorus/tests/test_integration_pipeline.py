@@ -64,11 +64,13 @@ class FakeClient:
 
 
 def _idea_content() -> str:
-    return "<!-- chorus:awaiting=等你挑一个 -->\n<!-- chorus:done=选题定了 -->\n\n### 夏日晚风\n- 视角：清凉\n- 理由：应季"
+    return "### 夏日晚风\n- 视角：清凉\n- 理由：应季"
 
 
 def _finalize_content() -> str:
-    return "<!-- chorus:awaiting= -->\n<!-- chorus:done=成品出炉 -->\n\n# 夏日晚风\n\n蝉鸣与晚风。\n\n#标签：#夏天"
+    return ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
+            "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
+            "# 夏日晚风\n\n蝉鸣与晚风。\n\n#标签：#夏天")
 
 
 def _plan_args() -> dict:
@@ -76,8 +78,8 @@ def _plan_args() -> dict:
         "thought": "想了一下",
         "intent": {"topic": "夏日博文", "style": "轻松", "image_count": 2},
         "steps": [
-            {"agent_type": "idea", "deps": [], "focus": "选题"},
-            {"agent_type": "finalize", "deps": [0], "focus": "汇总成文"},
+            {"agent_type": "idea", "deps": []},
+            {"agent_type": "finalize", "deps": [0]},
         ],
     }
 

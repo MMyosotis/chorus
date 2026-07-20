@@ -12,7 +12,6 @@ from chorus.domain.task.profiles import AGENT_PROFILES
 from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     ImageArtifacts,
-    Narrative,
     PostCard,
     ScriptArtifacts,
     TaskArtifacts,
@@ -31,7 +30,6 @@ class TaskNodeView:
     updated_at: float
     progress: Optional[TaskProgress] = None
     artifacts: Optional[Union[IdeaArtifacts, ScriptArtifacts, ImageArtifacts, PostCard]] = None
-    narrative: Optional[Narrative] = None
     error: Optional[str] = None
     progress_total: Optional[int] = None
     title: Optional[str] = None
@@ -68,7 +66,6 @@ def build_task_graph(
             updated_at=task.updated_at,
             progress=progress.get(task.id),
             artifacts=artifacts,
-            narrative=art.narrative if art else None,
             error=content.error if content else None,
             progress_total=content.progress_total if content else None,
             title=artifacts.display_title if artifacts else None,
@@ -89,7 +86,6 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "updated_at": node.updated_at,
             "progress": _dump_progress_with_line(node) if node.progress else None,
             "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
-            "narrative": dataclasses.asdict(node.narrative) if node.narrative else None,
             "error": node.error,
             "progress_total": node.progress_total,
             "title": node.title,

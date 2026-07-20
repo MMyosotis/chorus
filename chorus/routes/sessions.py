@@ -98,7 +98,7 @@ def get_intent_state(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"state": intent.get(session_id).public_dict()}
+    return {"state": intent.get(session_id).model_dump(mode="json")}
 
 
 def _resume_with_tool(
@@ -111,7 +111,7 @@ def _resume_with_tool(
 ) -> Iterator[str]:
     """外部信号解开挂起的工具：让工具翻状态拿回执文案，再续跑 loop。"""
     result_text = tools.get_tool(tool_name).resolve_external(session_id, signal)
-    yield sse(IntentStateEvent(state=intent.get(session_id).public_dict()))
+    yield sse(IntentStateEvent(state=intent.get(session_id).model_dump(mode="json")))
     for event in supervisor.resume(session_id, tool_name, result_text):
         yield sse(event)
 

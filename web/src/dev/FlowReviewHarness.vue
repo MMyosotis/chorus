@@ -37,13 +37,12 @@ watch(current, (stage) => history.replaceState(null, '', `${location.pathname}${
 
 const intentState = computed(() => ({
   intent_status: current.value.type === 'conversation' ? 'capturing' : current.value.type === 'intent' ? 'ready_to_confirm' : current.value.type === 'complete' ? 'confirmed' : 'dispatched',
-  goal: '从一个人的停留体验切入城市空间，以观察和情绪组织内容，避开广告式卖点罗列。',
-  confirmation_summary: { title: '一篇不过度种草的城市咖啡馆独处笔记' },
-  known_slots: {
-    平台: '小红书',
-    体裁: '图文探店',
-    风格: '真实、克制、有观察感',
-    配图: '3 张 · 4:5',
+  topic: '从一个人的停留体验切入城市空间，以观察和情绪组织内容，避开广告式卖点罗列。',
+  platform: '小红书',
+  format: '图文探店',
+  style: '真实、克制、有观察感',
+  image_count: 3,
+  extra: {
     感受: '一个人安静停留，不赶时间',
     店铺: '由选题编辑选择合适的小众咖啡馆',
     叙事: '从停留体验切入，以空间观察和城市情绪组织内容',
@@ -94,6 +93,10 @@ const finalTask = {
     ],
     tags: ['#上海咖啡馆', '#一个人也很好', '#城市漫游', '#松弛感'],
     summary: '最终成品已统一标题、正文、图片顺序与发布信息。',
+    meta: {
+      preview_ref: 'web-blog/preview/desktop.html',
+      stylesheet_ref: 'web-blog/preview/desktop.css',
+    },
   },
 }
 

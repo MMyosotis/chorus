@@ -117,16 +117,17 @@ def _mk_task(task_repo, content_repo, owner_id=100.0, status="running", agent_ty
     return task
 
 
-def _idea_md(done_line="定了", awaiting_line="y"):
+def _idea_md():
     """构造合法 idea 产出 markdown。"""
-    return f"<!-- chorus:awaiting={awaiting_line} -->\n<!-- chorus:done={done_line} -->\n\n### t\n- 视角：a\n- 理由：r"
+    return "### t\n- 视角：a\n- 理由：r"
 
 
-def _image_md(done_line="图好了", awaiting_line="看下图"):
+def _image_md():
     """构造合法 image 产出 markdown：三张图、url 留空。"""
     return (
-        f"<!-- chorus:awaiting={awaiting_line} -->\n<!-- chorus:done={done_line} -->\n\n"
-        "### 图 1\ncaption：街景\n\n### 图 2\ncaption：人物\n\n### 图 3\ncaption：收尾"
+        "### 图 1\nurl：\ncaption：街景\n\n"
+        "### 图 2\nurl：\ncaption：人物\n\n"
+        "### 图 3\nurl：\ncaption：收尾"
     )
 
 
@@ -149,26 +150,18 @@ def test_progress_label_written_on_start():
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
 
 
-def test_progress_retry_signal_on_bad_output():
-    """首轮解析失败 -> 写自纠信号；次轮成功 -> 信号留存（汇总不覆写）。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
-    _mk_task(task_repo, content_repo)
-    client = FakeClient([
-        FakeStream([({"content": "乱七八糟没有段"}, "stop")]),
-        FakeStream([({"content": _idea_md()}, "stop")]),
-    ])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
-    sub.run("t1")
-    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
-    assert progress_repo.load("t1").last_signal == "刚才格式没对齐，重新理一理"
+def _tool_call_stream(call_id="c1"):
+    """单轮工具调用流：调未知工具,Reply 喂回继续 loop,耗步数不产出。"""
+    delta = {"tool_calls": [types.SimpleNamespace(
+        index=0, id=call_id, function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}
+    return FakeStream([(delta, "tool_calls")])
 
 
 def test_progress_fail_signal_on_exhausted():
-    """连续坏产出撞步数上限 -> 写失败信号 + 翻 failed。"""
+    """连续工具调用撞步数上限 -> 写失败信号 + 翻 failed。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
-    bad = "乱七八糟没有段"
-    streams = [FakeStream([({"content": bad}, "stop")]) for _ in range(_MAX_STEPS + 1)]
+    streams = [_tool_call_stream(f"c{i}") for i in range(_MAX_STEPS + 1)]
     client = FakeClient(streams)
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
@@ -194,9 +187,8 @@ def test_lease_drift_at_max_steps_skips_fail():
     """撞步数上限前归属漂移 -> 租约拦下失败写入：不翻 failed、不写失败信号。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
-    bad = "乱七八糟没有段"
-    pairs = [(lambda: _takeover(task_repo), FakeStream([({"content": bad}, "stop")]))]
-    pairs += [(None, FakeStream([({"content": bad}, "stop")])) for _ in range(_MAX_STEPS)]
+    pairs = [(lambda: _takeover(task_repo), _tool_call_stream("c0"))]
+    pairs += [(None, _tool_call_stream(f"c{i+1}")) for i in range(_MAX_STEPS)]
     client = _SideClient(pairs)
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
@@ -244,7 +236,7 @@ def test_finalize_drift_writes_no_terminal():
         task_repo.transition("t1", TaskStatus.CANCELLED)
 
     client = _SideClient([
-        (_cancel, FakeStream([({"content": _idea_md(done_line="DONE_MARKER")}, "stop")])),
+        (_cancel, FakeStream([({"content": _idea_md()}, "stop")])),
     ])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
@@ -256,8 +248,7 @@ def test_progress_chars_units_written_during_stream():
     """产出轮逐字累计 chars + 数 ### 行得 units,节流后落进度。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
-    body = ("<!-- chorus:awaiting=y -->\n<!-- chorus:done=定了 -->\n\n"
-            "### 候选一\n- 视角：a\n- 理由：r\n\n### 候选二\n- 视角：b\n- 理由：s")
+    body = ("### 候选一\n- 视角：a\n- 理由：r\n\n### 候选二\n- 视角：b\n- 理由：s")
     client = FakeClient([FakeStream([({"content": body}, "stop")])])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
@@ -320,7 +311,7 @@ def test_progress_aside_written_on_entry():
     """入口调旁白生成器,写进度 aside 字段。"""
     conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
-    body = _idea_md(done_line="定了", awaiting_line="y")
+    body = _idea_md()
     aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "打算用光线串起一杯咖啡的时间")
     client = FakeClient([FakeStream([({"content": body}, "stop")])])
     sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=aside)

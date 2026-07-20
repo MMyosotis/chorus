@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,68 +17,50 @@ IntentStatus = Literal[
     "dispatched",
 ]
 
-# next_action 由 intent_status 派生，不让模型填，避免与 status 不自洽。
-NextAction = Literal[
-    "reply_only",
-    "ask_user",
-    "wait_user_confirm",
-    "create_plan_after_confirm",
-    "dispatching",
-]
 
-_STATUS_TO_NEXT_ACTION: dict[str, NextAction] = {
-    "empty": "reply_only",
-    "capturing": "ask_user",
-    "needs_clarification": "ask_user",
-    "ready_to_confirm": "wait_user_confirm",
-    "confirmed": "create_plan_after_confirm",
-    "dispatched": "dispatching",
-}
-
-
-def derive_next_action(status: str) -> NextAction:
-    """从意图成熟度派生下一步动作，单一映射集中维护。"""
-    return _STATUS_TO_NEXT_ACTION.get(status, "reply_only")
-
-
-class ConfirmationSummary(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    title: str = ""
-
-
-class IntentState(BaseModel):
-    """最新意图快照，独立于 message history 存储。"""
+class Intent(BaseModel):
+    """确认后用于执行的纯创作意图，不含会话状态。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    session_id: str
-    intent_status: IntentStatus = "empty"
-    goal: str = ""
-    known_slots: dict[str, Any] = Field(default_factory=dict)
-    missing_slots: list[str] = Field(default_factory=list)
-    confirmation_summary: Optional[ConfirmationSummary] = None
-    version: int = 0
-    updated_at: float = Field(default_factory=time.time)
+    topic: str = Field("", description="创作主题/方向")
+    platform: str = Field("", description="目标平台展示名，如 网页博客")
+    format: str = Field("", description="体裁，如 图文笔记/长文/短帖")
+    style: str = Field("", description="风格倾向，如轻松/专业/种草")
+    image_count: int = Field(3, description="配图数量，默认 3")
+    extra: dict[str, Any] = Field(default_factory=dict, description="其它要求/约束/受众等零散槽位（key 用中文短词，value 自然语言）")
 
-    def public_dict(self) -> dict:
-        """对外视图：含派生 next_action，供前端展示与 prompt 注入。"""
-        data = self.model_dump(mode="json")
-        data["next_action"] = derive_next_action(self.intent_status)
-        return data
+    @classmethod
+    def tool_schema_properties(cls, *names: str) -> dict:
+        """从模型 Schema 中提取指定字段，供工具参数复用。"""
+        model_properties = cls.model_json_schema()["properties"]
+        selected = {}
+
+        for name in names:
+            field_schema = model_properties[name].copy()
+            field_schema.pop("title", None)
+            field_schema.pop("default", None)
+            selected[name] = field_schema
+
+        return selected
 
 
-class IntentStatePatch(BaseModel):
-    """update_intent_state 工具入参，session/version 由服务端补齐。"""
+class IntentSnapshot(Intent):
+    """主 Agent 对当前创作意图的完整理解。"""
 
-    model_config = ConfigDict(extra="forbid")
+    intent_status: IntentStatus = Field("empty", description="意图成熟度")
+    missing_slots: list[str] = Field(default_factory=list, description="仍缺失、会影响执行派发的槽位，用中文短词（主题/风格/配图等）")
+
+
+class IntentStateUpdate(IntentSnapshot):
+    """意图更新工具提交的完整快照。"""
 
     intent_status: IntentStatus
-    goal: str = ""
-    known_slots: dict[str, Any] = Field(default_factory=dict)
-    missing_slots: list[str] = Field(default_factory=list)
-    confirmation_summary: Optional[ConfirmationSummary] = None
 
 
-def empty_intent_state(session_id: str) -> IntentState:
-    return IntentState(session_id=session_id)
+class IntentState(IntentSnapshot):
+    """会话级意图状态，在快照上增加持久化身份与版本。"""
+
+    session_id: str
+    version: int = 0
+    updated_at: float = Field(default_factory=time.time)

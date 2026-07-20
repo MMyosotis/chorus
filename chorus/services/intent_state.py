@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from chorus.domain.intent import IntentState, IntentStatePatch, empty_intent_state
+from chorus.domain.intent import IntentState, IntentStateUpdate
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.services.session import SessionService
 
@@ -16,17 +16,13 @@ class IntentStateService:
 
     def get(self, session_id: str) -> IntentState:
         state = self._repo.get(session_id)
-        return state if state is not None else empty_intent_state(session_id)
+        return state if state is not None else IntentState(session_id=session_id)
 
-    def update_from_tool(self, session_id: str, patch: IntentStatePatch) -> IntentState:
+    def update_from_tool(self, session_id: str, update: IntentStateUpdate) -> IntentState:
         current = self.get(session_id)
         state = IntentState(
             session_id=session_id,
-            intent_status=patch.intent_status,
-            goal=patch.goal,
-            known_slots=patch.known_slots,
-            missing_slots=patch.missing_slots,
-            confirmation_summary=patch.confirmation_summary,
+            **update.model_dump(),
             version=current.version + 1,
             updated_at=time.time(),
         )

@@ -9,27 +9,24 @@ const emit = defineEmits(['confirm', 'revise'])
 const locking = ref(false)
 const decision = ref('')
 
-const entries = computed(() => Object.entries(props.state?.known_slots || {})
-  .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== ''))
-const valueText = (value) => Array.isArray(value) ? value.join('、') : String(value)
-function findSlot(words, fallback = '待确认') {
-  const item = entries.value.find(([key]) => words.some((word) => key.includes(word)))
-  return item ? valueText(item[1]) : fallback
+const orDash = (value, fallback = '待确认') => {
+  const text = value == null ? '' : String(value).trim()
+  return text || fallback
 }
+const valueText = (value) => Array.isArray(value) ? value.join('、') : String(value)
 const specs = computed(() => [
-  ['PLATFORM / 平台', findSlot(['平台'])],
-  ['FORMAT / 体裁', findSlot(['体裁', '形式'])],
-  ['STYLE / 风格', findSlot(['风格', '语气'])],
-  ['IMAGES / 配图', findSlot(['配图', '图片', '图像'])],
+  ['PLATFORM / 平台', orDash(props.state?.platform)],
+  ['FORMAT / 体裁', orDash(props.state?.format)],
+  ['STYLE / 风格', orDash(props.state?.style)],
+  ['IMAGES / 配图', props.state?.image_count != null ? `${props.state.image_count} 张` : '待确认'],
 ])
-const specKeys = ['平台', '体裁', '形式', '风格', '语气', '配图', '图片', '图像', '主题']
 const notes = computed(() => {
-  const rest = entries.value
-    .filter(([key]) => !specKeys.some((word) => key.includes(word)))
-  return rest.length ? rest : [['补充', '自由发挥']]
+  const entries = Object.entries(props.state?.extra || {})
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+  return entries.length ? entries : [['补充', '自由发挥']]
 })
-const title = computed(() => props.state?.confirmation_summary?.title || '请确认这次创作方向')
-const deck = computed(() => props.state?.goal || '签发后，编辑部将按此建立完整创作计划。')
+const title = computed(() => props.state?.topic || '请确认这次创作方向')
+const deck = computed(() => props.state?.topic || '签发后，编辑部将按此建立完整创作计划。')
 
 function submitDecision() {
   if (locking.value || !decision.value) return

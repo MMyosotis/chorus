@@ -20,10 +20,11 @@ from chorus.domain.task.artifacts import (
     IdeaCandidate,
     ImageArtifacts,
     ImageItem,
-    Narrative,
     PostCard,
+    PostCardMeta,
     PostImage,
     PostSection,
+    PostTable,
     ScriptArtifacts,
     ScriptBlock,
     TaskArtifacts,
@@ -33,9 +34,8 @@ from chorus.domain.task.progress import (
     dump_progress,
 )
 from chorus.domain.task.pipeline import (
-    CreationIntent,
     StepSpec,
-    validate_steps,
+    TaskPlan,
 )
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.state import (
@@ -51,12 +51,10 @@ from chorus.domain.task.state import (
 __all__ = [
     "ValidationError",
     "AgentType",
-    "CreationIntent",
     "IdeaArtifacts",
     "IdeaCandidate",
     "ImageArtifacts",
     "ImageItem",
-    "Narrative",
     "ScriptArtifacts",
     "ScriptBlock",
     "StepSpec",
@@ -66,10 +64,13 @@ __all__ = [
     "TaskGraph",
     "TaskNodeView",
     "TaskProgress",
+    "TaskPlan",
     "TaskStatus",
     "PostCard",
+    "PostCardMeta",
     "PostImage",
     "PostSection",
+    "PostTable",
     "AgentProfile",
     "AGENT_PROFILES",
     "ACTIVE_STATUSES",
@@ -79,7 +80,6 @@ __all__ = [
     "is_legal_transition",
     "select_display_pipeline",
     "topological_order",
-    "validate_steps",
     "build_task_graph",
     "dump_progress",
     "dump_task_graph",

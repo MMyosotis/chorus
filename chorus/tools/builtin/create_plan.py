@@ -5,13 +5,13 @@
 """
 from __future__ import annotations
 
-import time
+from pydantic import ValidationError as PydanticValidationError
 
+from chorus.domain.intent import Intent
 from chorus.domain.task import (
-    CreationIntent,
     StepSpec,
+    TaskPlan,
     ValidationError,
-    validate_steps,
 )
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
@@ -31,12 +31,9 @@ class CreatePlanTool(Tool):
             "thought": {"type": "string", "description": "内部思考，不展示给用户"},
             "intent": {
                 "type": "object",
-                "properties": {
-                    "topic": {"type": "string", "description": "创作主题/方向"},
-                    "style": {"type": "string", "description": "风格倾向，如轻松/专业/种草"},
-                    "image_count": {"type": "integer", "description": "配图数量，默认 3"},
-                    "extra": {"type": "object", "description": "其它要求"},
-                },
+                "properties": Intent.tool_schema_properties(
+                    "topic", "platform", "format", "style", "image_count", "extra",
+                ),
                 "required": ["topic"],
             },
             "steps": {
@@ -54,9 +51,8 @@ class CreatePlanTool(Tool):
                             "items": {"type": "integer"},
                             "description": "前置步骤索引(0-based)",
                         },
-                        "focus": {"type": "string", "description": "本步针对本次任务的具体指令"},
                     },
-                    "required": ["agent_type", "deps", "focus"],
+                    "required": ["agent_type", "deps"],
                 },
             },
         },
@@ -84,7 +80,7 @@ class CreatePlanTool(Tool):
             return ToolRunResult(blocked)
         try:
             pairs = self._build_pairs(arguments, ctx.session_id)
-        except (KeyError, TypeError) as e:
+        except (KeyError, TypeError, PydanticValidationError) as e:
             return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"))
         except ValidationError as e:
             return ToolRunResult(Reply(e.correction))
@@ -103,20 +99,13 @@ class CreatePlanTool(Tool):
         )
 
     def _build_pairs(self, arguments: dict, session_id: str):
-        """解析 intent/steps、校验、展开成 (task, content) 对。"""
-        intent_in = arguments["intent"]
-        intent = CreationIntent(
-            topic=intent_in["topic"],
-            style=intent_in.get("style", ""),
-            image_count=intent_in.get("image_count", 3),
-            extra=intent_in.get("extra", {}),
-        )
+        """解析 steps、整份 intent 透传（不逐字段拆解）、校验、展开成 (task, content) 对。"""
+        intent = Intent.model_validate(arguments["intent"])
         steps = [
-            StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []), focus=step["focus"])
+            StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []))
             for step in arguments["steps"]
         ]
-        validate_steps(steps)
-        return intent.expand_to_tasks(steps, session_id, time.time())
+        return TaskPlan(session_id=session_id, intent=intent, steps=steps).expand()
 
     def _persist(self, pairs):
         """逐条落库 task 与其 content。"""

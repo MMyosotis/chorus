@@ -263,10 +263,11 @@ def test_update_intent_state_does_not_finish():
     conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     intent_args = {
         "intent_status": "empty",
-        "goal": "闲聊",
-        "known_slots": {},
+        "topic": "",
+        "style": "",
+        "image_count": 3,
+        "extra": {},
         "missing_slots": [],
-        "confirmation_summary": None,
     }
     # 第一轮：文本 + update_intent_state(Reply) → after_tools 无 Terminal → CONTINUE
     tool_stream = FakeStream([
@@ -307,12 +308,11 @@ def test_update_intent_state_ready_to_confirm_finishes():
     conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     intent_args = {
         "intent_status": "ready_to_confirm",
-        "goal": "种草精品咖啡豆",
-        "known_slots": {"主题": "精品咖啡豆"},
+        "topic": "精品咖啡豆种草",
+        "style": "轻松",
+        "image_count": 3,
+        "extra": {},
         "missing_slots": [],
-        "confirmation_summary": {
-            "title": "创作方向确认",
-        },
     }
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(

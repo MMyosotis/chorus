@@ -10,7 +10,6 @@ from pydantic import ValidationError as PydValidationError
 from chorus.domain.task.artifacts import (
     IdeaArtifacts,
     ImageArtifacts,
-    Narrative,
     PostCard,
     ScriptArtifacts,
 )
@@ -18,10 +17,8 @@ from chorus.domain.task.errors import ValidationError
 from chorus.domain.task.markdown import (
     parse_idea_md,
     parse_image_md,
-    parse_meta,
     parse_postcard_md,
     parse_script_md,
-    strip_markdown_meta,
 )
 
 
@@ -44,22 +41,9 @@ class AgentProfile:
         """把原始数据按本角色的产物形状还原成对象。"""
         return self.artifacts_model(**raw)
 
-    def parse_output(self, content: str) -> tuple[Any, Narrative]:
-        """抽注释元信息与 markdown 正文，按角色解析校验。"""
-        meta = parse_meta(content)
-        if "awaiting" not in meta or "done" not in meta:
-            raise ValidationError(
-                "缺话术注释",
-                "请用 <!-- chorus:awaiting=... --> 和 <!-- chorus:done=... --> 注释给出话术",
-            )
-        body = strip_markdown_meta(content)
-        artifacts = self._parse_artifacts_md(body)
-        narrative = self._validate_narrative(meta["awaiting"], meta["done"])
-        return artifacts, narrative
-
-    def _parse_artifacts_md(self, body: str) -> Any:
-        """按角色调对应 markdown 解析,再按本角色模型构造校验。"""
-        raw = self.artifacts_parser(body)
+    def parse_output(self, content: str) -> Any:
+        """按角色解析 Markdown 正文，并校验还原成产物对象。"""
+        raw = self.artifacts_parser(content)
         return self._validate_artifacts(raw)
 
     def _validate_artifacts(self, artifacts: Any) -> Any:
@@ -70,16 +54,6 @@ class AgentProfile:
             raise ValidationError(
                 f"ARTIFACTS 校验失败: {e}",
                 f"{self.display_name}产物须符合 {self.artifacts_model.__name__} 结构",
-            ) from e
-
-    def _validate_narrative(self, awaiting: str, done: str) -> Narrative:
-        """构造即校验，失败转异常并附修正提示。"""
-        try:
-            return Narrative(awaiting_line=awaiting, done_line=done)
-        except PydValidationError as e:
-            raise ValidationError(
-                f"话术校验失败: {e}",
-                "话术须为 awaiting_line/done_line 字符串",
             ) from e
 
 

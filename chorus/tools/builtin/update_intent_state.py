@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
-from chorus.domain.intent import IntentStatePatch
+from chorus.domain.intent import IntentStateUpdate
 from chorus.services.intent_state import IntentStateService
 from chorus.tools.framework import Reply, Terminal, Tool, ToolContext, ToolRunResult
+
+
+_INTENT_STATUS_ENUM = IntentStateUpdate.tool_schema_properties("intent_status")["intent_status"]["enum"]
 
 
 class UpdateIntentStateTool(Tool):
@@ -20,48 +23,24 @@ class UpdateIntentStateTool(Tool):
         "properties": {
             "intent_status": {
                 "type": "string",
-                "enum": [
-                    "empty",
-                    "capturing",
-                    "needs_clarification",
-                    "ready_to_confirm",
-                    "confirmed",
-                    "dispatched",
-                ],
+                "enum": _INTENT_STATUS_ENUM,
                 "description": (
                     "意图成熟度，按对话推进单调前进："
                     "empty=刚打招呼无创作意图；"
                     "capturing=用户已提创作需求，正在识别槽位（创作必须从此态开始，不要停 empty）；"
                     "needs_clarification=信息不足需追问；"
-                    "ready_to_confirm=信息齐全，填好 confirmation_summary 标题等用户拍板；"
+                    "ready_to_confirm=信息齐全，等用户拍板；"
                     "confirmed/dispatched 由系统翻转，模型不要主动填"
                 ),
             },
-            "goal": {"type": "string", "description": "一句话概括用户目标"},
-            "known_slots": {
-                "type": "object",
-                "description": "已识别的关键槽位，key 用中文短词（平台/体裁/主题/风格/配图/约束等），value 用自然语言",
-            },
-            "missing_slots": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "仍缺失、会影响执行派发的槽位，用中文短词（主题/风格/配图等）",
-            },
-            "confirmation_summary": {
-                "type": ["object", "null"],
-                "properties": {
-                    "title": {"type": "string"},
-                },
-                "required": ["title"],
-                "description": "ready_to_confirm 时给用户看的一句话确认标题；槽位展示由系统从 known_slots 自动投影，不要在此填 items",
-            },
+            **IntentStateUpdate.tool_schema_properties(
+                "topic", "platform", "format", "style",
+                "image_count", "extra", "missing_slots",
+            ),
         },
         "required": [
-            "intent_status",
-            "goal",
-            "known_slots",
-            "missing_slots",
-            "confirmation_summary",
+            "intent_status", "topic", "platform", "format", "style",
+            "image_count", "extra", "missing_slots",
         ],
     }
     running_label = "意图识别中"
@@ -71,16 +50,16 @@ class UpdateIntentStateTool(Tool):
 
     def display(self, arguments: dict) -> str:
         status = arguments.get("intent_status", "unknown")
-        goal = (arguments.get("goal") or "").strip()
-        return f"意图状态：{status} / {goal[:36]}"
+        topic = (arguments.get("topic") or "").strip()
+        return f"意图状态：{status} / {topic[:36]}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         try:
-            patch = IntentStatePatch(**arguments)
+            update = IntentStateUpdate(**arguments)
         except ValidationError as e:
             return ToolRunResult(Reply(f"update_intent_state 参数格式错: {e}"))
 
-        state = self._intent.update_from_tool(ctx.session_id, patch)
+        state = self._intent.update_from_tool(ctx.session_id, update)
         if state.intent_status == "ready_to_confirm":
             return ToolRunResult(Terminal(
                 f"intent_state updated: status=ready_to_confirm, "

@@ -20,8 +20,7 @@ from chorus.domain.skill import SkillLoader
 def test_subagent_prompts():
     for at in ("idea", "script", "image", "finalize"):
         p = subagent_base(at)
-        assert "<!-- chorus:awaiting=" in p
-        assert "<!-- chorus:done=" in p
+        assert "话术注释" not in p
         assert "<<<ARTIFACTS" not in p
         assert "禁用任何 emoji" in p
 
@@ -72,9 +71,9 @@ def test_image_prompt_caps_retry():
 
 
 def test_postcard_prompt_guides_image_url():
-    """汇总 prompt 指引：图片用 ![](url)，url 从上游配图取。"""
+    """汇总 prompt 指引：图片用 ![图注](url)，url 从上游配图取。"""
     p = subagent_base("finalize")
-    assert "![](url)" in p
+    assert "![图注](url)" in p
     assert "从上游配图产物取" in p
 
 
