@@ -14,7 +14,6 @@ import {
   getIntentState,
   confirmIntent,
   reopenIntent,
-  resumeSession,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
@@ -238,10 +237,6 @@ watch(activeIntentState, () => {
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
   reloadMessages: forceReloadMessages,
-  onPipelineFinished: (sid) => {
-    if (streamingBySession[sid]) return
-    runAssistantStream(sid, (onEvent) => resumeSession(sid, onEvent))
-  },
 })
 
 function onHilConfirmed(taskId) {

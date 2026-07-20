@@ -80,10 +80,6 @@ export function reopenIntent(id, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/intent:reopen`, { method: 'POST' }, onEvent)
 }
 
-export function resumeSession(id, onEvent) {
-  return streamSessionEventSource(`${BASE}/${id}/resume`, { method: 'POST' }, onEvent)
-}
-
 export function streamChat(id, message, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/chat`, {
     method: 'POST',
