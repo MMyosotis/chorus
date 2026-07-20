@@ -3,7 +3,7 @@
 
 直接种子化四步流水线（建图链路已由 e2e_intent_test 覆盖，本轮聚焦 subagent 路径），
 真实 scheduler 派发 + 真实 LLM 子 agent，逐角色程序化确认解锁，每步校验进度快照与产物落库。
-临时库隔离且跑完自动清理，不写 data/chorus.db。
+生图走 test_mode 假图短路不调真实 API，临时库隔离且跑完自动清理，不写 data/chorus.db。
 """
 
 import atexit
@@ -32,6 +32,7 @@ sess = _app.state.session_service
 tsk = _app.state.task_service
 task_repo = tsk._task_repo
 content_repo = tsk._content_repo
+_app.state.settings_service.set_image_test_mode(True)
 run_startup(_app.state.scheduler)
 
 DB = _tmp / "chorus.db"
@@ -42,7 +43,7 @@ STEPS = [
     ("idea", "awaiting_confirm", 0),
     ("script", "awaiting_confirm", None),
     ("image", "awaiting_confirm", None),
-    ("finalize", "finished", None),
+    ("finalize", "awaiting_confirm", None),
 ]
 
 
@@ -175,9 +176,16 @@ for agent_type, target, selected in STEPS:
     if not ok:
         all_ok = False
         break
-    if agent_type != "finalize":
-        print(f"  -> 确认 {agent_type}(selected={selected}) 解锁下游")
-        tsk.confirm(task_id, selected)
+    print(f"  -> 确认 {agent_type}(selected={selected}) 解锁下游")
+    tsk.confirm(task_id, selected)
+    if agent_type == "finalize":
+        print(f"  -> 等 finalize 转为 finished ...")
+        _, fin_status = wait_for(sid, pipeline_id, agent_type, "finished")
+        if fin_status != "finished":
+            print(f"  [✗] finalize 未到达 finished（实际 {fin_status}）")
+            all_ok = False
+        else:
+            print(f"  [✓] finalize finished")
 
 print(f"\n{'=' * 60}\nE2E 结论: {'全部通过 ✓' if all_ok else '存在失败 ✗'}")
 print(f"[session] {sid}")
