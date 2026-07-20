@@ -1,6 +1,7 @@
-"""配置常量：对话与生图模型表、标题模型、数据目录、调度参数、工具白名单与外部 API 密钥。
+"""配置常量：对话与生图模型表、标题模型、数据目录、工具白名单与外部 API 密钥。
 
 密钥值写 .env，配置表只存变量名；新增生图厂商需写客户端、注册构造器并在此标厂商。
+单组件硬编码实现参数（调度间隔与僵死超时、模型调用超时与生成令牌上限）住使用方模块，不进此文件。
 """
 import os
 from pathlib import Path
@@ -30,8 +31,6 @@ CHAT_MODELS = [
     }
 ]
 TITLE_MODEL = "DeepSeek V4 Flash"
-MAX_TOKENS = 2048
-MODEL_CALL_TIMEOUT = 90
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -69,9 +68,6 @@ TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
     "image": ("generate_image", "load_skill"),
     "finalize": (),
 }
-
-SCHEDULER_INTERVAL = 1.0
-ZOMBIE_TIMEOUT = 120
 
 # 日志：级别 / 目录 / 单文件滚动 / 跨时间清理
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")

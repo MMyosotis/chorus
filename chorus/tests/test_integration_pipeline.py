@@ -108,13 +108,13 @@ def _build_assembly():
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, intent_state)], _stub_settings())
-    trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
+    trace = TraceEmitter(trace_svc, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
 
-    agent_loop = AgentLoop(hooks, tool_dispatcher, 1024)
+    agent_loop = AgentLoop(hooks, tool_dispatcher)
 
     task_service = TaskService(
         task_repo, art_repo, TaskProgressRepository(conn), content_repo, session_svc,

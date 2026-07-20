@@ -110,7 +110,7 @@ def _tool_call_chunk(name="echo"):
 
 def _loop(hooks=None, dispatcher=None):
     """装配一个最小 AgentLoop（默认 spy dispatcher + 空 hooks）。"""
-    return AgentLoop(hooks or HookRegistry(), dispatcher or _SpyDispatcher(), 128)
+    return AgentLoop(hooks or HookRegistry(), dispatcher or _SpyDispatcher())
 
 
 def test_kernel_continues_after_tools_then_finishes_on_text():

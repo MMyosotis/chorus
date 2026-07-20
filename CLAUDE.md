@@ -37,7 +37,7 @@ cd web && npm run build                # 构建生产版本
 - `ARK_IMAGE_API_KEY` — 火山方舟图像生成 API 密钥（`IMAGE_MODELS` 各条默认用此变量，与对话密钥解耦；某条生图模型也可指向独立变量）
 - `BAIDU_SEARCH_API_KEY` / `BAIDU_SEARCH_BASE_URL` — 百度智能搜索生成 API（`baidu_search` 工具用，base_url 默认千帆 endpoint）
 
-> 对话模型表 `CHAT_MODELS`、生图模型表 `IMAGE_MODELS` 与标题生成固定模型 `TITLE_MODEL`（字面量，须是 `CHAT_MODELS` 中某条的 model_name）均在 `chorus/config.py`。`CHAT_MODELS` 每条含 `model_name`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）；`IMAGE_MODELS` 每条含 `model_name`（展示名 + 存储键）/ `provider`（选哪个 builder，见 `tools/image_model.py`）/ `options`（厂商私有：base_url / api_key_env / model_id）。新增/删除对话模型改 `CHAT_MODELS`；新增生图厂商 = 写 client + 注册 builder + config 标 provider。调度参数 `SCHEDULER_INTERVAL`/`ZOMBIE_TIMEOUT` 亦在 config.py。
+> 对话模型表 `CHAT_MODELS`、生图模型表 `IMAGE_MODELS` 与标题生成固定模型 `TITLE_MODEL`（字面量，须是 `CHAT_MODELS` 中某条的 model_name）均在 `chorus/config.py`。`CHAT_MODELS` 每条含 `model_name`（展示名 + 存储键）/ `base_url` / `api_key_env` / `model_id`（真实 API 模型名）；`IMAGE_MODELS` 每条含 `model_name`（展示名 + 存储键）/ `provider`（选哪个 builder，见 `tools/image_model.py`）/ `options`（厂商私有：base_url / api_key_env / model_id）。新增/删除对话模型改 `CHAT_MODELS`；新增生图厂商 = 写 client + 注册 builder + config 标 provider。调度实现参数 `SCHEDULER_INTERVAL`/`ZOMBIE_TIMEOUT` 住 `agents/scheduler.py`（单组件硬编码，不进 config）。
 
 ## 数据存放位置
 

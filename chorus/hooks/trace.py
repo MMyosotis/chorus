@@ -20,17 +20,15 @@ from chorus.tools import ToolDispatch
 
 
 class TraceEmitter:
-    def __init__(self, trace_service: TraceService, dispatcher: ToolDispatch, max_tokens: int):
+    def __init__(self, trace_service: TraceService, dispatcher: ToolDispatch):
         self._trace = trace_service
         self._dispatcher = dispatcher
-        self._max_tokens = max_tokens
 
     def before_model_request(self, ctx: AgentContext) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.MODEL_REQUEST, ModelRequest(
             model=ctx.chat_model,
             messages=ctx.turn.provider_messages or [],
             tools=ctx.tool_schemas,
-            max_tokens=self._max_tokens,
         ))]
 
     def after_model_response(self, ctx: AgentContext) -> Iterable[SseEvent]:

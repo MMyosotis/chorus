@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from chorus.config import SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT
 from chorus.domain.log import cleanup_old_logs, get_logger
 from chorus.domain.task import TaskStatus
 from chorus.repo.task import TaskRepository
@@ -18,6 +17,9 @@ from chorus.repo.task_progress import TaskProgressRepository
 from chorus.services.session import SessionService
 
 _logger = get_logger("scheduler")
+
+_SCHEDULER_INTERVAL = 1.0
+_ZOMBIE_TIMEOUT = 120
 
 
 class TaskScheduler:
@@ -28,8 +30,8 @@ class TaskScheduler:
         session_service: SessionService,
         content_repo: TaskContentRepository,
         progress_repo: TaskProgressRepository,
-        interval: float = SCHEDULER_INTERVAL,
-        zombie_timeout: int = ZOMBIE_TIMEOUT,
+        interval: float = _SCHEDULER_INTERVAL,
+        zombie_timeout: int = _ZOMBIE_TIMEOUT,
         *,
         log_dir: Optional[Path] = None,
         log_retention_days: int = 0,

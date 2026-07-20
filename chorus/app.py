@@ -21,9 +21,6 @@ from chorus.config import (
     LOG_LEVEL,
     LOG_MAX_BYTES,
     LOG_RETENTION_DAYS,
-    MAX_TOKENS,
-    SCHEDULER_INTERVAL,
-    ZOMBIE_TIMEOUT,
 )
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
@@ -86,14 +83,14 @@ def create_app() -> FastAPI:
     )
 
     hooks = HookRegistry()
-    trace = TraceEmitter(trace_service, tool_dispatcher, MAX_TOKENS)
+    trace = TraceEmitter(trace_service, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop, source="supervisor")
 
-    agent_loop = AgentLoop(hooks, tool_dispatcher, MAX_TOKENS)
+    agent_loop = AgentLoop(hooks, tool_dispatcher)
 
     task_service = TaskService(
         task_repo, task_artifacts_repo,
@@ -113,7 +110,6 @@ def create_app() -> FastAPI:
     scheduler = TaskScheduler(
         task_repo, subagent_service.run, session_service,
         task_content_repo, task_progress_repo,
-        SCHEDULER_INTERVAL, ZOMBIE_TIMEOUT,
         log_dir=LOG_DIR, log_retention_days=LOG_RETENTION_DAYS,
         log_cleanup_interval=LOG_CLEANUP_INTERVAL,
     )

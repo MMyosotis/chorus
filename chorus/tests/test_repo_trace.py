@@ -21,7 +21,7 @@ def _setup():
 
 
 def _request() -> ModelRequest:
-    return ModelRequest(model="m", messages=[{"role": "user"}], tools=[{"name": "t"}], max_tokens=8)
+    return ModelRequest(model="m", messages=[{"role": "user"}], tools=[{"name": "t"}])
 
 
 def test_add_with_source_and_task_id():

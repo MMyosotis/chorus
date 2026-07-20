@@ -87,14 +87,14 @@ def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc
         LoadSkillTool(skill_loader),
         UpdateIntentStateTool(intent_state),
     ], _stub_settings())
-    trace = TraceEmitter(trace_svc, tool_dispatcher, max_tokens=1024)
+    trace = TraceEmitter(trace_svc, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
 
     entry = stub_chat_model_provider(fake_client)
-    loop = AgentLoop(hooks, tool_dispatcher, 1024)
+    loop = AgentLoop(hooks, tool_dispatcher)
     sup = SupervisorService(
         session_svc, msg_svc, hooks, entry,
         task_svc, tool_dispatcher, loop, intent_state, skill_loader,

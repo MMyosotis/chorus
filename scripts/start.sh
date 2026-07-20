@@ -23,7 +23,6 @@ cd "$PROJECT_ROOT" || exit 1
 # --- 环境变量检查（多智能体需对话/生图/搜索多组 key）---
 if [ ! -f ".env" ]; then
     echo "警告：未找到 .env，将以下变量填入 .env 后再启动（缺 key 会在对话/生图时报错）："
-    echo "  DEFAULT_CHAT_MODEL_ID / DEFAULT_IMAGE_MODEL_ID"
     echo "  DEEPSEEK_API_KEY / MINIMAX_API_KEY（对话模型，按 CHAT_MODELS 用到哪个配哪个）"
     echo "  ARK_IMAGE_API_KEY（生图）"
     echo "  BAIDU_SEARCH_API_KEY / BAIDU_SEARCH_BASE_URL（联网搜索，可选）"

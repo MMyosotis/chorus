@@ -91,12 +91,12 @@ def _stub_settings():
 def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=None):
     hooks = HookRegistry()
     disp = ToolDispatch([], _stub_settings())
-    trace = TraceEmitter(trace_svc, disp, max_tokens=1024)
+    trace = TraceEmitter(trace_svc, disp)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
-    loop = AgentLoop(hooks, disp, 1024)
+    loop = AgentLoop(hooks, disp)
     if aside is None:
         aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
     return SubAgentService(

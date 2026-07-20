@@ -54,7 +54,6 @@ class ModelRequest(_PayloadBase):
     model: str
     messages: list[dict]
     tools: list[dict]
-    max_tokens: int
 
 
 class ToolCallSummary(_PayloadBase):

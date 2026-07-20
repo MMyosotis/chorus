@@ -11,7 +11,6 @@ from typing import Generator, Iterable, Iterator, Optional, Protocol
 import uuid6
 
 from chorus.agents.runtime import AgentContext
-from chorus.config import MODEL_CALL_TIMEOUT
 from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
 from chorus.domain.log import ctx_fields, get_logger
 from chorus.domain.stream import StreamResult, parse_tool_arguments
@@ -19,6 +18,9 @@ from chorus.hooks import HookRegistry
 from chorus.tools import ToolCall, ToolContext, ToolDispatch
 
 _logger = get_logger("loop")
+
+_MODEL_CALL_TIMEOUT = 90
+_MAX_TOKENS = 2048
 
 
 class LoopSignal(Enum):
@@ -55,10 +57,9 @@ class LoopStrategy(Protocol):
 class AgentLoop:
     """agent loop 共享内核：最小回合自动机，零业务分支。"""
 
-    def __init__(self, hooks: HookRegistry, dispatcher: ToolDispatch, max_tokens: int) -> None:
+    def __init__(self, hooks: HookRegistry, dispatcher: ToolDispatch) -> None:
         self._hooks = hooks
         self._dispatcher = dispatcher
-        self._max_tokens = max_tokens
 
     def run(self, ctx: AgentContext, *, entry, strategy: LoopStrategy) -> Iterator[SseEvent]:
         """驱动最小回合自动机。"""
@@ -98,7 +99,7 @@ class AgentLoop:
         stream = entry.client.chat.completions.create(
             model=entry.model_id, messages=ctx.turn.provider_messages,
             tools=ctx.tool_schemas or None,
-            max_tokens=self._max_tokens, stream=True, timeout=MODEL_CALL_TIMEOUT,
+            max_tokens=_MAX_TOKENS, stream=True, timeout=_MODEL_CALL_TIMEOUT,
         )
         result = yield from strategy.consume(stream)
         ctx.turn.apply_stream(result)
