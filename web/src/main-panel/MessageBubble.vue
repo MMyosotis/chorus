@@ -86,22 +86,6 @@ const planItems = computed(() =>
   )
 )
 
-// 流式期间不显示已完成工具 chip，等本轮结束再留痕
-const doneToolChips = computed(() => {
-  if (props.active) return []
-  const labels = []
-  for (const it of props.tools.items || []) {
-    if (it.duration_ms == null) continue
-    if (it.name === 'generate_image' || it.name === 'output_plan' || it.name === 'update_intent_state') continue
-    // 建图失败重试不显示，只留成功回执
-    if (it.name === 'create_plan' && !(it.content || '').startsWith('已创建创作任务图')) continue
-    const label = it.display || it.name
-    if (labels.length && labels[labels.length - 1] === label) continue
-    labels.push(label)
-  }
-  return labels
-})
-
 function extractImageUrl(content) {
   if (typeof content !== 'string') return ''
   const s = content.trim()
@@ -212,12 +196,6 @@ function closePreview() {
         <Transition name="label-swap">
           <span class="tool-running-label" :key="runningTool?.running_label">{{ runningTool?.running_label || '落笔中' }}</span>
         </Transition>
-      </span>
-    </div>
-
-    <div v-if="!bareMode && doneToolChips.length" class="tool-chips">
-      <span v-for="(label, idx) in doneToolChips" :key="`tc-${idx}`" class="tool-chip">
-        <span class="tool-chip-tick" aria-hidden="true">✓</span>{{ label }}
       </span>
     </div>
 
@@ -552,16 +530,6 @@ function closePreview() {
   transition: transform 0.2s ease, opacity 0.18s ease;
 }
 
-/* 已完成工具的紧凑留痕 */
-.tool-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 14px 0 0;
-  padding-top: 12px;
-  border-top: 1px dashed var(--ch-border-2);
-}
-
 .tool-running-line {
   display: inline-flex;
   align-items: center;
@@ -575,28 +543,6 @@ function closePreview() {
 }
 .tool-running-label {
   font-weight: 500;
-}
-.tool-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ch-muted);
-  font-family: var(--ch-serif);
-  font-size: 11px;
-  line-height: 1.5;
-  letter-spacing: .04em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tool-chip-tick {
-  color: var(--ch-primary);
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
 /* ===== 执行计划卡片 ===== */

@@ -1,5 +1,5 @@
 // 助手历史消息规整：后端拉回的多轮助手消息合并成单气泡，
-// 与流式一气泡一回合对齐。纯函数无依赖。
+// 与流式一气泡一回合对齐。纯工具轮（无正文）不独立成泡，直接丢弃。
 
 export function mapToolItem(it) {
   return {
@@ -23,37 +23,23 @@ export function normalizeAssistant(msg) {
 }
 
 export function mergeAssistantHistory(raw) {
-  // 同一回合的助手轮次合并进一个气泡
+  // 同一回合的助手轮次正文合并进一个气泡，纯工具轮（无正文）跳过
   const result = []
-  let pendingTools = []
   let segBubble = null
-
-  const flushPending = () => {
-    if (!pendingTools.length) return
-    result.push(normalizeAssistant({ role: 'assistant', content: '', tools: pendingTools }))
-    pendingTools = []
-  }
 
   for (const m of raw) {
     if (m.role !== 'assistant') {
-      flushPending()
       result.push({ role: m.role, content: m.content, created_at: m.created_at ?? Date.now() / 1000 })
       segBubble = null
       continue
     }
-    const tools = Array.isArray(m.tools) ? m.tools : []
     const hasContent = !!(m.content && m.content.trim())
     if (segBubble) {
-      for (const it of tools) segBubble.tools.items.push(mapToolItem(it))
       if (hasContent) segBubble.content += '\n\n' + m.content
     } else if (hasContent) {
-      segBubble = normalizeAssistant({ role: 'assistant', content: m.content, tools: [...pendingTools, ...tools] })
+      segBubble = normalizeAssistant({ role: 'assistant', content: m.content })
       result.push(segBubble)
-      pendingTools = []
-    } else {
-      pendingTools.push(...tools)
     }
   }
-  flushPending()
   return result
 }

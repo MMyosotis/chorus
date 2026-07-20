@@ -369,31 +369,12 @@ function createStreamHandler(sessionId) {
     if (c.tools.state === 'running') c.tools.state = 'idle'
   }
 
-  // 尾部无正文气泡：工具并入上一条助手消息后丢弃
+  // 尾部无正文气泡：仅流式过程态残留，直接丢弃
   function dropTrailingEmptyBubble() {
     if (list.length < 2) return
     const last = list[list.length - 1]
     if (last.role !== 'assistant' || last.kind) return
     if (last.content && last.content.trim()) return
-    let prev = null
-    for (let i = list.length - 2; i >= 0; i--) {
-      if (list[i].role === 'assistant') {
-        prev = list[i]
-        break
-      }
-    }
-    if (prev && last.tools.items.length) {
-      for (const it of last.tools.items) {
-        prev.tools.items.push({
-          id: it.id,
-          name: it.name,
-          arguments: it.arguments,
-          duration_ms: it.duration_ms ?? null,
-          content: it.content,
-          display: it.display,
-        })
-      }
-    }
     list.splice(list.length - 1, 1)
     assistantIdx = -1
   }
