@@ -80,8 +80,8 @@ const datelineTime = computed(() => {
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
-// 确认意图后建图：以首个创作阶段卡片为锚点，锚点及之前折叠成「与助手的讨论」。
-// 锚点正在流式吐字时先正常显示；流式结束或历史拉回时即折叠，一旦折叠不再展开。
+// 确认意图后建图：首张阶段卡前的最后一条普通对话为锚点，锚点及之前折叠成「与助手的前期讨论」，
+// 阶段卡本身留在主流程显示。流式中无阶段卡不折叠，结束后即折叠且不再展开。
 const displayMessages = computed(() => {
   const result = []
   for (const message of props.messages) {
@@ -97,13 +97,14 @@ const displayMessages = computed(() => {
   return result
 })
 
-const anchorIdx = computed(() =>
-  displayMessages.value.findIndex((m) => STAGE_KINDS.has(m.kind))
-)
+const anchorIdx = computed(() => {
+  const stageIdx = displayMessages.value.findIndex((m) => STAGE_KINDS.has(m.kind))
+  return stageIdx > 0 ? stageIdx - 1 : -1
+})
 
 const anchorFolded = ref(false)
 const switchingSession = ref(false)
-const STAGE_KINDS = new Set(['running', 'hil', 'recovery', 'postcard'])
+const STAGE_KINDS = new Set(['running', 'hil', 'recovery', 'postcard', 'proof-register'])
 const latestStageKey = computed(() => {
   const message = [...props.messages].reverse().find((item) => STAGE_KINDS.has(item.kind))
   return message ? messageKey(message, 0) : ''
