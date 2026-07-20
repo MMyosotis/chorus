@@ -80,7 +80,7 @@ const datelineTime = computed(() => {
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
-// 确认意图后建图：以第一条含 create_plan 工具调用的助手消息为锚点，锚点及之前折叠成「与助手的讨论」。
+// 确认意图后建图：以首个创作阶段卡片为锚点，锚点及之前折叠成「与助手的讨论」。
 // 锚点正在流式吐字时先正常显示；流式结束或历史拉回时即折叠，一旦折叠不再展开。
 const displayMessages = computed(() => {
   const result = []
@@ -98,11 +98,7 @@ const displayMessages = computed(() => {
 })
 
 const anchorIdx = computed(() =>
-  displayMessages.value.findIndex(
-    (m) =>
-      m.role === 'assistant' &&
-      (m.tools?.items || []).some((it) => it.name === 'create_plan')
-  )
+  displayMessages.value.findIndex((m) => STAGE_KINDS.has(m.kind))
 )
 
 const anchorFolded = ref(false)
