@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import os
+
 from chorus.config import (
     CHAT_MODELS,
     IMAGE_MODELS,
 )
 from chorus.repo.settings import SettingsRepository
+
+_FAKE_IMAGE = os.environ.get("FORCE_FAKE_IMAGE", "") == "1"
 
 
 class SettingsService:
@@ -14,7 +18,8 @@ class SettingsService:
         self._repo = repo
 
     def get_image_test_mode(self) -> bool:
-        return self._repo.get("image_test_mode", "false") == "true"
+        # 测试启动置 1 即全程强制假图，与 DB 内开关无关
+        return _FAKE_IMAGE or self._repo.get("image_test_mode", "false") == "true"
 
     def set_image_test_mode(self, enabled: bool) -> None:
         self._repo.set("image_test_mode", "true" if enabled else "false")
