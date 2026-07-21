@@ -32,8 +32,8 @@ class Reply(ToolOutcome):
 
 
 @dataclass(frozen=True)
-class Terminal(ToolOutcome):
-    """终止型：循环不回传模型，交编排层结束本轮。内容如实记录结果，落库与回传同路径。"""
+class Suspend(ToolOutcome):
+    """挂起型：循环关流等外部信号 resume 续跑，不回传模型。内容如实记录结果，落库与回传同路径。"""
     content: str
 
 

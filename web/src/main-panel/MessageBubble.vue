@@ -18,6 +18,7 @@ const props = defineProps({
     default: () => ({ state: 'idle', items: [] }),
   },
   intentState: { type: Object, default: null },
+  suspended: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['intent-confirm', 'intent-revise'])
@@ -86,6 +87,11 @@ const planItems = computed(() =>
   )
 )
 
+// 挂起态且无正文无计划：只留确认卡，不渲染空正文外壳
+const hideBody = computed(() =>
+  props.suspended && !props.content && !planItems.value.length
+)
+
 function extractImageUrl(content) {
   if (typeof content !== 'string') return ''
   const s = content.trim()
@@ -151,7 +157,7 @@ function closePreview() {
       </template>
     </div>
     <div :class="['bubble', role, { bare: bareMode, 'assistant-card': role === 'assistant' }]">
-      <div :class="role === 'user' ? 'u-body' : 'a-body'">
+      <div v-if="!hideBody" :class="role === 'user' ? 'u-body' : 'a-body'">
         <div v-if="planItems.length" class="plan-list">
           <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
             <div class="plan-header">执行计划</div>

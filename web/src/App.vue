@@ -85,13 +85,15 @@ const paperPage = computed(() => {
 })
 const headlineDeck = computed(() => activeIntentState.value?.topic || '一份正在编辑、校样与签认的创作稿件')
 
-function makeEmptyAssistant() {
+function makeEmptyAssistant(id) {
   return {
     role: 'assistant',
     content: '',
     thinking: { state: 'idle' },
     tools: { state: 'idle', items: [] },
     created_at: Date.now() / 1000,
+    id: id || null,
+    suspended: false,
   }
 }
 
@@ -346,8 +348,8 @@ function createStreamHandler(sessionId) {
     }
   }
 
-  function startNewAssistant() {
-    list.push(makeEmptyAssistant())
+  function startNewAssistant(id) {
+    list.push(makeEmptyAssistant(id))
     assistantIdx = list.length - 1
   }
   function ensureAssistant() {
@@ -364,12 +366,13 @@ function createStreamHandler(sessionId) {
     if (c.tools.state === 'running') c.tools.state = 'idle'
   }
 
-  // 尾部无正文气泡：仅流式过程态残留，直接丢弃
+  // 尾部无正文气泡：仅流式过程态残留才丢弃。挂起气泡（带工具/确认卡）保留作宿主
   function dropTrailingEmptyBubble() {
     if (list.length < 2) return
     const last = list[list.length - 1]
     if (last.role !== 'assistant' || last.kind) return
     if (last.content && last.content.trim()) return
+    if (last.suspended || (last.tools && last.tools.items.length)) return
     list.splice(list.length - 1, 1)
     assistantIdx = -1
   }
@@ -387,10 +390,23 @@ function createStreamHandler(sessionId) {
 
     if (payload.type === 'message_start') {
       finalizeCurrent()
+      // resume 续写挂起气泡：跳过尾部注入卡（确认卡/阶段卡），最近一条真实消息若为挂起助手气泡则复用
+      let lastIdx = list.length - 1
+      while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
+      const last = list[lastIdx]
+      if (last && last.role === 'assistant' && last.suspended) {
+        assistantIdx = lastIdx
+        last.suspended = false
+        pendingRoundSep = true
+        return
+      }
       const c = cur()
       // 同回合复用当前气泡：纯工具轮不新建，工具挂到本回合气泡上
-      if (!c) startNewAssistant()
+      if (!c) startNewAssistant(payload.id)
       else if (c.content) pendingRoundSep = true
+    } else if (payload.type === 'suspend') {
+      const c = cur()
+      if (c) c.suspended = true
     } else if (payload.type === 'reasoning') {
       const c = ensureAssistant()
       if (c.thinking.state !== 'running') c.thinking.state = 'running'

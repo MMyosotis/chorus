@@ -67,13 +67,13 @@ def test_web_search_disabled_drops_baidu_search():
 def test_loop_does_not_reference_tool_name_literals():
     """loop 分流只依赖 isinstance(outcome)，源码不出现 'create_plan' 字面量做路由判断。"""
     import inspect
-    # TOOL_WHITELISTS 里有 'create_plan'，但 after_tools/_handle_terminal 分流段不应硬判名
+    # TOOL_WHITELISTS 里有 'create_plan'，但 after_tools/_handle_suspend 分流段不应硬判名
     dispatch_src = inspect.getsource(SupervisorLoopStrategy.after_tools)
-    handle_src = inspect.getsource(SupervisorLoopStrategy._handle_terminal)
+    handle_src = inspect.getsource(SupervisorLoopStrategy._handle_suspend)
     assert "create_plan" not in dispatch_src  # 无硬编码名
     # 禁按工具名做相等路由（tc.get("name") 后比名）；tc.get("seq") 取时序字段不属此列
     assert 'tc.get("name")' not in dispatch_src and 'name == "create_plan"' not in dispatch_src
-    # handle_terminal 不认 Terminal 载荷类型——工具副作用自洽，主流程只管终止
+    # handle_suspend 不认挂起载荷类型——工具副作用自洽，主流程只管关流
     assert "isinstance" not in handle_src
     assert "payload" not in handle_src
 

@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from chorus.domain.intent import IntentStateUpdate
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Terminal, Tool, ToolContext, ToolRunResult
+from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
 
 _INTENT_STATUS_ENUM = IntentStateUpdate.tool_schema_properties("intent_status")["intent_status"]["enum"]
@@ -61,7 +61,7 @@ class UpdateIntentStateTool(Tool):
 
         state = self._intent.update_from_tool(ctx.session_id, update)
         if state.intent_status == "ready_to_confirm":
-            return ToolRunResult(Terminal(
+            return ToolRunResult(Suspend(
                 f"intent_state updated: status=ready_to_confirm, "
                 f"version={state.version}. 等待用户拍板。"
             ))

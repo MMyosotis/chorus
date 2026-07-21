@@ -1,6 +1,6 @@
 """主调度 agent：流式对话入口，普通对话直接回复，创作请求经建图工具路由。
 
-业务差异进策略，主流程不识工具名与终止载荷，有活跃创作任务时拒绝新请求。
+业务差异进策略，主流程不识工具名与挂起载荷，有活跃创作任务时拒绝新请求。
 意图记录与建图均靠 prompt 引导 + 工具内校验，不做代码层强制拦截。
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ from chorus.domain.events import (
     IntentStateEvent,
     MessageStartEvent,
     SseEvent,
+    SuspendEvent,
 )
 from chorus.domain.message import ToolCallSpec
 from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, build_system_prompt
@@ -31,7 +32,7 @@ from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.tools import ToolCall, ToolDispatch
-from chorus.tools.framework import Terminal
+from chorus.tools.framework import Suspend
 
 
 _INTENT_EVENT_TOOLS = {"update_intent_state", "create_plan"}
@@ -89,8 +90,8 @@ class SupervisorLoopStrategy:
             )
 
     def after_tools(self, ctx, result, pairs):
-        """成对落库，据是否命中终止决定继续或结束。"""
-        terminal = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Terminal)), None)
+        """成对落库，据是否命中挂起决定续跑或关流。"""
+        suspend = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
         content = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
 
         self._message.append_assistant_message(
@@ -108,9 +109,18 @@ class SupervisorLoopStrategy:
         events = list(self._pending_intent_events)
         self._pending_intent_events = []
 
-        if terminal is not None:
-            return LoopAction(LoopSignal.FINISH, events + self._handle_terminal(ctx))
+        if suspend is not None:
+            return self._handle_suspend(ctx, events)
         return LoopAction(LoopSignal.CONTINUE, events)
+
+    def _handle_suspend(self, ctx, events):
+        """挂起分支：关流但不视作完成，续写复用会话最新气泡。"""
+        self._session.touch(self.session_id)
+        return LoopAction(LoopSignal.SUSPEND, events + [
+            SuspendEvent(),
+            DoneEvent(),
+            *self._hooks.trigger("Stop", ctx),
+        ])
 
     def after_text(self, ctx, result):
         """纯文本回复：落库并发完成事件与收尾钩子。"""
@@ -136,11 +146,6 @@ class SupervisorLoopStrategy:
         except Exception:
             _logger.exception("failed to persist error placeholder", extra={"session_id": ctx.session_id})
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content=str(error))])
-
-    def _handle_terminal(self, ctx):
-        """终止分支：工具副作用已在工具内完成，主流程只做收尾。"""
-        self._session.touch(self.session_id)
-        return [DoneEvent(), *self._hooks.trigger("Stop", ctx)]
 
 
 class SupervisorService:
@@ -180,7 +185,7 @@ class SupervisorService:
         yield from self._run(session_id, user_message)
 
     def resume(self, session_id: str, tool_name: str, result_text: str) -> Iterator[SseEvent]:
-        """解开挂起 loop 的通用原语：改写指定工具结果后续跑，不补用户消息、不碰意图。"""
+        """解开挂起 loop 的通用原语：改写指定工具结果后续跑。"""
         reject = self._admit(session_id)
         if reject is not None:
             yield reject

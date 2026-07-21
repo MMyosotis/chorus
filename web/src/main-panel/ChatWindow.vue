@@ -255,6 +255,7 @@ watch(
             :thinking="msg.thinking"
             :tools="msg.tools"
             :intent-state="msg.intentState"
+            :suspended="msg.suspended"
             :active="streaming && idx === foldGroup.rest.length - 1 && msg.role === 'assistant'"
             @intent-confirm="$emit('intent-confirm')"
             @intent-revise="$emit('intent-revise')"

@@ -1,6 +1,6 @@
-"""CreatePlanTool.run 契约：成功→Terminal + 整图落库；参数错/校验错/落库失败→Reply(correction)。
+"""CreatePlanTool.run 契约：成功→Suspend + 整图落库；参数错/校验错/落库失败→Reply(correction)。
 
-建图副作用已收进工具，成功 outcome 为 Terminal，副作用验 tasks 表落库。
+建图副作用已收进工具，成功 outcome 为 Suspend，副作用验 tasks 表落库。
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
 from chorus.tests._helpers import fresh_conn, seed_session
 from chorus.tools.builtin.create_plan import CreatePlanTool
-from chorus.tools.framework import Reply, Terminal, ToolContext
+from chorus.tools.framework import Reply, Suspend, ToolContext
 
 
 def _args(topic="夏日晚风", steps=None, intent_extras=None):
@@ -43,7 +43,7 @@ def _build():
 def test_success_returns_terminal_and_persists_tasks():
     conn, repo, content_repo, tool, ctx = _build()
     outcome = tool.run(_args(), ctx).outcome
-    assert isinstance(outcome, Terminal)
+    assert isinstance(outcome, Suspend)
     assert isinstance(outcome.content, str) and outcome.content  # 如实建图摘要
     assert "pipeline=" in outcome.content  # 携真实流水线标识，非写死话术
     # 整图落库：两个活跃任务，会话标识回填

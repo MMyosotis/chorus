@@ -1,6 +1,6 @@
 """建图工具：解析、校验、整图成型与事务落库全在工具内收口。
 
-对模型是普通工具，主流程只据终止信号结束本轮。可预料失败返回传由模型自纠，
+对模型是普通工具，主流程只据挂起信号关流本轮。可预料失败返回传由模型自纠，
 仅意外异常由派发层兜底。
 """
 from __future__ import annotations
@@ -16,7 +16,7 @@ from chorus.domain.task import (
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
-from chorus.tools.framework import Reply, Terminal, Tool, ToolContext, ToolRunResult
+from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
 
 class CreatePlanTool(Tool):
@@ -117,7 +117,7 @@ class CreatePlanTool(Tool):
         """复位意图状态并返回建图完成回执。"""
         self._intent_state.mark_dispatched(pairs[0][0].session_id)
         roles = ", ".join(f"{task.agent_type}#{i}" for i, (task, _) in enumerate(pairs, 1))
-        return Terminal(
+        return Suspend(
             f"已创建创作任务图：pipeline={pairs[0][0].pipeline_id}，"
             f"{len(pairs)} 个任务 [{roles}]，等待计划完成"
         )

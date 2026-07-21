@@ -131,7 +131,7 @@ def test_only_reply():
 
 
 def test_new_plan():
-    """create_plan tool_call → dispatch Terminal → 建图落库 + done；assistant(tool_calls)+tool 成对落库。"""
+    """create_plan tool_call → dispatch Suspend → 建图落库 + done；assistant(tool_calls)+tool 成对落库。"""
     conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
@@ -257,8 +257,8 @@ def test_new_plan_blocked_by_active_task():
 def test_update_intent_state_does_not_finish():
     """非 ready_to_confirm 状态返 Reply 不杀轮次：文本+工具同轮 -> after_tools CONTINUE -> 下一轮纯文本 done。
 
-    empty/capturing/needs_clarification 只记状态，终止权交还模型，须等下一轮模型纯文本走
-    after_text 才 done。锚定非终止状态工具不替模型决定流程的契约；ready_to_confirm 终止另测。
+    empty/capturing/needs_clarification 只记状态，关流权交还模型，须等下一轮模型纯文本走
+    after_text 才 done。锚定非挂起状态工具不替模型决定流程的契约；ready_to_confirm 挂起另测。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     intent_args = {
@@ -269,7 +269,7 @@ def test_update_intent_state_does_not_finish():
         "extra": {},
         "missing_slots": [],
     }
-    # 第一轮：文本 + update_intent_state(Reply) → after_tools 无 Terminal → CONTINUE
+    # 第一轮：文本 + update_intent_state(Reply) → after_tools 无 Suspend → CONTINUE
     tool_stream = FakeStream([
         ({"content": "你好！"}, None),
         ({"tool_calls": [types.SimpleNamespace(
@@ -299,10 +299,10 @@ def test_update_intent_state_does_not_finish():
 
 
 def test_update_intent_state_ready_to_confirm_finishes():
-    """ready_to_confirm 返 Terminal 杀轮次：单轮即 done，助手无正文。
+    """ready_to_confirm 返 Suspend 关流：单轮即 done，助手无正文。
 
-    继 create_plan 之后第二个终止型工具。模型调 update_intent_state(ready_to_confirm) 后，
-    after_tools 命中 Terminal -> FINISH -> 同轮 done，不再有后续纯文本轮。
+    继 create_plan 之后第二个挂起型工具。模型调 update_intent_state(ready_to_confirm) 后，
+    after_tools 命中 Suspend -> SUSPEND -> 同轮关流 done，不再有后续纯文本轮。
     模型本轮无正文，content 如实为 None，与 create_plan 同构。
     """
     conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
@@ -322,11 +322,14 @@ def test_update_intent_state_ready_to_confirm_finishes():
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "精品咖啡豆，轻松种草风格，3张图"))
     types_seq = [e.type for e in events]
-    # 单轮一个 message_start：Terminal 即终止，无第二轮
+    # 单轮一个 message_start：Suspend 即关流，无第二轮
     assert types_seq.count("message_start") == 1
     assert types_seq[-1] == "done"
     # 意图状态事件在 done 之前下发，驱动前端注入确认卡
     assert "intent_state" in types_seq
+    # 挂起事件下发：前端把当前气泡标挂起，resume 时复用该气泡续写
+    suspend_events = [e for e in events if e.type == "suspend"]
+    assert len(suspend_events) == 1
     # 历史：user + assistant(无正文, tool_calls) + tool(占位)，无后续纯文本轮
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]

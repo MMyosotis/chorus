@@ -25,6 +25,7 @@ _MAX_TOKENS = 2048
 
 class LoopSignal(Enum):
     CONTINUE = "continue"
+    SUSPEND = "suspend"
     FINISH = "finish"
 
 
@@ -66,7 +67,7 @@ class AgentLoop:
         try:
             while strategy.max_steps is None or ctx.step < strategy.max_steps:
                 ctx.step += 1
-                if (yield from self._run_turn(ctx, entry, strategy)) is LoopSignal.FINISH:
+                if (yield from self._run_turn(ctx, entry, strategy)) in (LoopSignal.FINISH, LoopSignal.SUSPEND):
                     return
             yield from strategy.on_exhausted().events
         except Exception as e:

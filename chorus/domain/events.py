@@ -68,6 +68,10 @@ class DoneEvent(_EventBase):
     type: Literal["done"] = "done"
 
 
+class SuspendEvent(_EventBase):
+    type: Literal["suspend"] = "suspend"
+
+
 class ErrorEvent(_EventBase):
     type: Literal["error"] = "error"
     content: str
@@ -99,6 +103,7 @@ SseEvent = Annotated[
         TraceEvent,
         TitleUpdateEvent,
         DoneEvent,
+        SuspendEvent,
         BusyEvent,
         ArchivedEvent,
         IntentStateEvent,

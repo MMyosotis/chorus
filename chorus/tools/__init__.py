@@ -5,7 +5,7 @@ from __future__ import annotations
 from chorus.tools.framework import (
     DispatchResult,
     Reply,
-    Terminal,
+    Suspend,
     Tool,
     ToolContext,
     ToolDispatch,
@@ -24,7 +24,7 @@ __all__ = [
     "ToolContext",
     "ToolOutcome",
     "Reply",
-    "Terminal",
+    "Suspend",
     "DispatchResult",
     "ToolRunResult",
     "ToolDispatch",

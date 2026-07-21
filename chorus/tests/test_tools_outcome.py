@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from chorus.tools import Tool, ToolContext, ToolDispatch
-from chorus.tools.framework import Reply, Terminal, DispatchResult, ToolRunResult
+from chorus.tools.framework import Reply, Suspend, DispatchResult, ToolRunResult
 from chorus.tools.models import ToolCall
 
 
@@ -22,13 +22,13 @@ class _ReplyTool(Tool):
         return ToolRunResult(Reply("回传内容"))
 
 
-class _TerminalTool(Tool):
-    name = "terminal_tool"
+class _SuspendTool(Tool):
+    name = "suspend_tool"
     description = "d"
     parameters = {"type": "object", "properties": {}}
 
     def run(self, arguments, ctx):
-        return ToolRunResult(Terminal("已执行"))
+        return ToolRunResult(Suspend("已执行"))
 
 
 class _BoomTool(Tool):
@@ -53,10 +53,10 @@ def test_reply_dispatch_returns_reply_outcome():
     assert d.duration_ms >= 0
 
 
-def test_terminal_dispatch_returns_terminal_outcome():
-    reg = ToolDispatch([_TerminalTool()], _settings())
-    d = reg.dispatch(ToolCall(id="c1", name="terminal_tool", arguments={}), _ctx())
-    assert isinstance(d.outcome, Terminal)
+def test_suspend_dispatch_returns_suspend_outcome():
+    reg = ToolDispatch([_SuspendTool()], _settings())
+    d = reg.dispatch(ToolCall(id="c1", name="suspend_tool", arguments={}), _ctx())
+    assert isinstance(d.outcome, Suspend)
     assert d.outcome.content == "已执行"
 
 
