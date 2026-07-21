@@ -14,7 +14,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chorus.app as app_module
-from chorus.domain.task import CreationIntent, StepSpec
+from chorus.domain.intent import Intent
+from chorus.domain.task import StepSpec, TaskPlan
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -43,14 +44,18 @@ def main() -> None:
 
     session = session_service.create("E2E-idea-candidates")
     sid = session.id
-    now = time.time()
-    intent = CreationIntent(topic=_TOPIC, style=_STYLE, image_count=3)
-    steps = [StepSpec(agent_type="idea", deps=[], focus="调研近期热点，给出3到5个候选标题与切入视角与理由")]
-    pairs = intent.expand_to_tasks(steps, sid, now)
+    intent = Intent(topic=_TOPIC, style=_STYLE, image_count=3)
+    # TaskPlan 要求末步是 finalize，这里加 dummy finalize 满足校验，只插入 idea
+    steps = [
+        StepSpec(agent_type="idea", deps=[]),
+        StepSpec(agent_type="finalize", deps=[0]),
+    ]
+    pairs = TaskPlan(session_id=sid, intent=intent, steps=steps).expand()
     idea_task_id = pairs[0][0].id
-    for task, content in pairs:
-        task_repo.insert(task)
-        content_repo.insert(content)
+    # 只插 idea，不插 finalize
+    task, content = pairs[0]
+    task_repo.insert(task)
+    content_repo.insert(content)
 
     print(f"[session] {sid}")
     print(f"[idea task] {idea_task_id}")

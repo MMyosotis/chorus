@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """E2E 进度与旁白：真实 LLM 跑全四角色流水线，验证流式进度写入、入口旁白与 markdown 协议产物。
 
+对齐 6213c62 重构：
+- 建图用 Intent + TaskPlan(session_id, intent, steps).expand()，StepSpec 去 focus；
+  invoke_message 由 TaskPlan._render_skeleton 渲染（完整意图 JSON + 角色）。
+- finalize 产物 PostCard 带 meta.preview_ref/stylesheet_ref（web-blog 预览引用）；
+  task_artifacts 不再持久化 narrative。
+
 直接种子化四步流水线（建图链路已由 e2e_intent_test 覆盖，本轮聚焦 subagent 路径），
 真实 scheduler 派发 + 真实 LLM 子 agent，逐角色程序化确认解锁，每步校验进度快照与产物落库。
 生图走 test_mode 假图短路不调真实 API，临时库隔离且跑完自动清理，不写 data/chorus.db。
@@ -20,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import chorus.app as app_module
 from chorus.startup import run_startup
-from chorus.domain.task import CreationIntent, StepSpec
+from chorus.domain.intent import Intent
+from chorus.domain.task import StepSpec, TaskPlan
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 _tmp = Path(tempfile.mkdtemp())
@@ -125,6 +132,10 @@ def check_role(session_id, pipeline_id, agent_type, target):
     else:
         print(f"  产物: artifacts={art['artifacts'][:90]}…")
         verdicts.append(("产物 artifacts", "OK", "markdown 协议往返成功"))
+        parsed = json.loads(art["artifacts"])
+        # narrative 列已删：产物 JSON 不该含 narrative 键
+        verdicts.append(("无 narrative", "OK" if "narrative" not in parsed else "FAIL",
+                         "task_artifacts 不再持久化 narrative"))
 
     # 选题额外交叉校验：流式计数与解析出的候选数应吻合
     if agent_type == "idea" and art and art.get("artifacts") and prog:
@@ -134,6 +145,25 @@ def check_role(session_id, pipeline_id, agent_type, target):
                              f"units={prog['composing_units']} 候选={len(candidates)}"))
         except Exception:
             pass
+
+    # 汇总成品校验 PostCard meta 预览引用（6213c62 新增）
+    if agent_type == "finalize" and art and art.get("artifacts"):
+        parsed = json.loads(art["artifacts"])
+        meta = parsed.get("meta", {})
+        preview = meta.get("preview_ref", "")
+        stylesheet = meta.get("stylesheet_ref", "")
+        verdicts.append(("meta.preview_ref 非空", "OK" if preview else "FAIL",
+                         f"实际 {preview!r}"))
+        verdicts.append(("meta.stylesheet_ref 非空", "OK" if stylesheet else "FAIL",
+                         f"实际 {stylesheet!r}"))
+        # 引用须指向 web-blog 技能包内预览资源
+        verdicts.append(("preview_ref 指向 web-blog", "OK" if preview.startswith("web-blog/") else "WARN",
+                         f"实际 {preview!r}"))
+        verdicts.append(("stylesheet_ref 指向 web-blog", "OK" if stylesheet.startswith("web-blog/") else "WARN",
+                         f"实际 {stylesheet!r}"))
+        # 成品须含正文 sections 与标签
+        verdicts.append(("sections 非空", "OK" if parsed.get("sections") else "FAIL", ""))
+        verdicts.append(("tags 非空", "OK" if parsed.get("tags") else "FAIL", ""))
 
     for name, verdict, note in verdicts:
         line = f"  [{_mark(verdict)}] {name}"
@@ -149,24 +179,27 @@ s = sess.create("E2E-进度旁白")
 sid = s.id
 print(f"[session] {sid}")
 
-intent = CreationIntent(
+intent = Intent(
     topic="2026春节档电影推荐",
-    style="小红书种草",
+    platform="网页博客",
+    style="轻松种草",
     image_count=3,
 )
-spec = [
-    StepSpec(agent_type="idea", deps=[], focus="围绕2026春节档影片，给出3个图文选题候选，含切入角度与理由"),
-    StepSpec(agent_type="script", deps=[0], focus="依选中的选题撰写小红书风格图文正文，拆成有序段落"),
-    StepSpec(agent_type="image", deps=[1], focus="为正文生成3张配图，给每张图配图注"),
-    StepSpec(agent_type="finalize", deps=[2], focus="装配选题/文案/配图为完整 PostCard 成品"),
+steps = [
+    StepSpec(agent_type="idea", deps=[]),
+    StepSpec(agent_type="script", deps=[0]),
+    StepSpec(agent_type="image", deps=[1]),
+    StepSpec(agent_type="finalize", deps=[2]),
 ]
-pairs = intent.expand_to_tasks(spec, sid, time.time())
+plan = TaskPlan(session_id=sid, intent=intent, steps=steps)
+pairs = plan.expand()
 for task, content in pairs:
     task_repo.insert(task)
     content_repo.insert(content)
-pipeline_id = pairs[0][0].pipeline_id
+pipeline_id = plan.pipeline_id
 order = ", ".join(f"{task.agent_type}#{i}" for i, (task, _) in enumerate(pairs, 1))
 print(f"[种子化] pipeline={pipeline_id} [{order}]")
+print(f"[invoke 样例]\n{pairs[0][1].invoke_message}\n")
 
 all_ok = True
 for agent_type, target, selected in STEPS:
