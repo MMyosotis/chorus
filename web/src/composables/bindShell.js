@@ -33,7 +33,8 @@ export function bindShell(templateHtml, slots = {}) {
     out = out.replace(LOOP_RE, (_, name, inner) => {
       const val = slots[name]
       if (Array.isArray(val)) return val.map((item) => bindItem(inner, item)).join('')
-      if (val) return bindItem(inner, val)
+      if (val === true) return inner          // 布尔真：只披露 inner，不注入 dot 上下文
+      if (val && typeof val === 'object') return bindItem(inner, val)
       return ''
     })
   } while (out !== prev)
