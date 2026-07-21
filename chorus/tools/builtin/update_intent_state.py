@@ -74,6 +74,9 @@ class UpdateIntentStateTool(Tool):
         """用户对确认卡的两类回应：同意进入 confirmed，要求调整回到澄清。"""
         if signal == "confirm":
             state = self._intent.patch_status(session_id, "confirmed")
-            return f"用户已同意，意图进入 confirmed（version={state.version}），等待建图"
+            return (
+                f"用户已确认创作方案，意图进入 confirmed（version={state.version}）。"
+                "本轮立即调用 create_plan 建立创作任务，不要再追问、不要再输出确认话术。"
+            )
         state = self._intent.patch_status(session_id, "needs_clarification")
         return f"用户要求继续调整，意图回到 needs_clarification（version={state.version}）"
