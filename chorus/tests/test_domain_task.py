@@ -35,6 +35,7 @@ from chorus.domain.task import (
     ScriptBlock,
     TaskArtifacts,
 )
+from chorus.domain.task.errors import AbandonError
 
 
 def _mk(status, deps=None, **kw):
@@ -242,6 +243,22 @@ def test_parse_output_finalize_postcard():
                "# 夏日晚风\n\n一段正文\n\n#标签：#夏天")
     artifacts = AGENT_PROFILES["finalize"].parse_output(content)
     assert artifacts.title == "夏日晚风"
+
+
+def test_parse_output_abandon_block_raises():
+    """任一角色产物为 # 失败 块时抛 AbandonError，携带失败说明。"""
+    body = "# 失败\n配图服务持续返回 Error，换写法仍无效"
+    for agent_type in ("idea", "script", "image", "finalize"):
+        with pytest.raises(AbandonError) as exc:
+            AGENT_PROFILES[agent_type].parse_output(body)
+        assert exc.value.reason == "配图服务持续返回 Error，换写法仍无效"
+
+
+def test_parse_output_normal_not_misread_as_abandon():
+    """三级标题含「失败」二字不误判为失败块（失败块须一级标题）。"""
+    content = "### 失败者的逆袭\n- 视角：反转\n- 理由：情绪钩子"
+    artifacts = AGENT_PROFILES["idea"].parse_output(content)
+    assert artifacts.candidates[0].title == "失败者的逆袭"
 
 
 def _task(tid, deps=None, created_at=0.0):

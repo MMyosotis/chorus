@@ -208,6 +208,20 @@ def test_subagent_failed_on_persistent_tool_calls():
     assert len(_model_responses(trace_svc)) == _MAX_STEPS
 
 
+def test_subagent_abandon_block_flips_failed():
+    """模型输出 # 失败 块 -> 翻 running->failed + 写 error 为失败说明，不落 artifacts。"""
+    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "image", "running")
+    content = "# 失败\n配图服务持续返回 Error，换写法仍无效"
+    client = FakeClient([FakeStream([({"content": content}, "stop")])])
+    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.FAILED
+    assert content_repo.load("t1").error == "配图服务持续返回 Error，换写法仍无效"
+    # 主动放弃不落降级产物
+    assert art_repo.load("t1") is None
+
+
 def _idea_content(marker=None):
     """构造合法 idea 产出文本，marker 嵌进理由便于断言未泄漏进消息。"""
     reason = marker or "r"

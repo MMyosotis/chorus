@@ -2,7 +2,7 @@
 按业务概念扁平组织，单一概念内聚，不依赖外部层。"""
 from __future__ import annotations
 
-from chorus.domain.task.errors import ValidationError
+from chorus.domain.task.errors import AbandonError, ValidationError
 from chorus.domain.task.graph import (
     TaskGraph,
     TaskNodeView,
@@ -49,6 +49,7 @@ from chorus.domain.task.state import (
 )
 
 __all__ = [
+    "AbandonError",
     "ValidationError",
     "AgentType",
     "IdeaArtifacts",

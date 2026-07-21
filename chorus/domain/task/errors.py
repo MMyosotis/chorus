@@ -9,3 +9,11 @@ class ValidationError(Exception):
         super().__init__(message)
         self.message = message
         self.correction = correction or message
+
+
+class AbandonError(Exception):
+    """模型主动声明本步无法完成，携带失败说明写入任务 error。"""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason

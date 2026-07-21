@@ -17,6 +17,7 @@ from chorus.domain.stream import StreamResult, silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
+    AbandonError,
     TaskStatus,
     ValidationError,
 )
@@ -154,6 +155,10 @@ class SubagentLoopStrategy:
         content = "".join(result.text_parts)
         try:
             artifacts = self.profile.parse_output(content)
+        except AbandonError as e:
+            # 模型主动声明放弃：翻失败并写说明，不落降级产物
+            self._guarded_fail(self.task, e.reason, self.owner_id)
+            return LoopAction(LoopSignal.FINISH, [])
         except ValidationError as e:
             # 纠错提示喂回模型继续自纠，撞上限才判失败
             _logger.debug("format self-correction", extra={"task_id": self.task.id})

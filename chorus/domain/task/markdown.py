@@ -7,7 +7,7 @@ from typing import Any, cast
 import mistune
 from mistune.renderers.markdown import MarkdownRenderer
 
-from chorus.domain.task.errors import ValidationError
+from chorus.domain.task.errors import AbandonError, ValidationError
 
 
 Token = dict[str, Any]
@@ -15,6 +15,14 @@ Token = dict[str, Any]
 _IMAGE_TITLE_RE = re.compile(r"图 \d+")
 _PREVIEW_REF_RE = re.compile(r"<!--\s*preview_ref\s*:\s*([^/\s]+/\S+?)\s*-->")
 _STYLESHEET_REF_RE = re.compile(r"<!--\s*stylesheet_ref\s*:\s*([^/\s]+/\S+?)\s*-->")
+# 失败块：模型主动声明本步放弃，正文为失败说明
+_ABANDON_RE = re.compile(r"^\s*#\s*失败\s*\n+(?P<reason>.+?)\s*$", re.DOTALL)
+
+
+def _detect_abandon(body: str) -> str | None:
+    """命中失败块则返回失败说明，否则 None。失败块优先于结构解析。"""
+    match = _ABANDON_RE.match(body)
+    return match.group("reason") if match else None
 
 
 def _parse_markdown(body: str) -> list[Token]:
@@ -173,6 +181,8 @@ def _parse_postcard_tags(token: Token) -> list[str]:
 
 def parse_script_md(body: str) -> dict[str, Any]:
     """解析文案官的标题、段落、列表与引用。"""
+    if (reason := _detect_abandon(body)) is not None:
+        raise AbandonError(reason)
     blocks = [_parse_section(token) for token in _parse_markdown(body)]
     if not blocks:
         raise ValidationError("文案正文为空", "请按 Markdown 协议输出完整文案")
@@ -181,6 +191,8 @@ def parse_script_md(body: str) -> dict[str, Any]:
 
 def parse_idea_md(body: str) -> dict[str, Any]:
     """解析选题官按三级标题分组的候选。"""
+    if (reason := _detect_abandon(body)) is not None:
+        raise AbandonError(reason)
     pairs = _pair_tokens(_parse_markdown(body), "每个候选使用 ### 标题，后跟视角和理由列表")
     candidates = [_parse_idea_candidate(index, *pair) for index, pair in enumerate(pairs)]
     return {"candidates": candidates, "selected": None}
@@ -188,12 +200,16 @@ def parse_idea_md(body: str) -> dict[str, Any]:
 
 def parse_image_md(body: str) -> dict[str, Any]:
     """解析配图官按三级标题分组的图片。"""
+    if (reason := _detect_abandon(body)) is not None:
+        raise AbandonError(reason)
     pairs = _pair_tokens(_parse_markdown(body), "每张图使用 ### 图 N，后跟 url：和 caption：两行")
     return {"images": [_parse_image_item(*pair) for pair in pairs]}
 
 
 def parse_postcard_md(body: str) -> dict[str, Any]:
     """解析汇总官的成品标题、正文、图片、标签与资源引用。"""
+    if (reason := _detect_abandon(body)) is not None:
+        raise AbandonError(reason)
     lines = body.splitlines()
     preview = _PREVIEW_REF_RE.fullmatch(lines[0].strip()) if len(lines) >= 1 else None
     stylesheet = _STYLESHEET_REF_RE.fullmatch(lines[1].strip()) if len(lines) >= 2 else None

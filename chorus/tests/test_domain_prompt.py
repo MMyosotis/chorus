@@ -59,15 +59,23 @@ def test_skill_section_present_with_load_skill():
 
 
 def test_image_prompt_caps_retry():
-    """配图 prompt 软约束：按张数生成、每张一次、服务故障不反复重试、回填 url、核对后收尾、错误不进 url。"""
+    """配图 prompt 软约束：按张数生成、每张一次、服务故障不反复重试、回填 url、核对后收尾、相同 url 不误判、真失败走失败块。"""
     p = subagent_base("image")
     assert "按意图要求的张数生成" in p
     assert "每张只调用一次" in p
     assert "全部生成后核对张数再收尾" in p
-    assert "图像服务故障" in p
-    assert "url： 行留空" in p
-    assert "不要把错误提示填进 url" in p
+    assert "字面含 Error 时才视为失败" in p
+    assert "不要因为多张图返回相同 url 就判定为故障" in p
+    assert "按产出协议写失败块" in p
     assert "### 图 1\nurl：图片url" in p
+
+
+def test_subagent_prompt_has_abandon_exit():
+    """产出协议给所有角色留失败出口：# 失败 + 一句说明。"""
+    for role in ("idea", "script", "image", "finalize"):
+        p = subagent_base(role)
+        assert "# 失败" in p
+        assert "失败块" in p
 
 
 def test_postcard_prompt_guides_image_url():
