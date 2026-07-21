@@ -33,6 +33,14 @@ class SkillLoader:
     def get(self, name: str) -> Optional[SkillContent]:
         return next((skill for skill, _ in self._scan_pairs() if skill.name == name), None)
 
+    def list_files(self, name: str) -> Optional[list[str]]:
+        """返回技能包内全部文件相对路径，无此技能返 None。"""
+        skill_dir = next((d for skill, d in self._scan_pairs() if skill.name == name), None)
+        if skill_dir is None:
+            return None
+        root = skill_dir.resolve()
+        return [str(p.resolve().relative_to(root)) for p in sorted(root.rglob("*")) if p.is_file()]
+
     def read_file(self, name: str, rel_path: str) -> Optional[str]:
         """读技能包内子文件，越界逃逸或后缀不在白名单时返 None。"""
         skill_dir = next((d for skill, d in self._scan_pairs() if skill.name == name), None)

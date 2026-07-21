@@ -14,6 +14,7 @@ from chorus.services.settings import SettingsService
 from chorus.tools.builtin import (
     BaiduSearchTool,
     CreatePlanTool,
+    ListSkillTool,
     LoadSkillTool,
     UpdateIntentStateTool,
 )
@@ -34,6 +35,7 @@ def build_tool_dispatch(
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     return ToolDispatch([
         LoadSkillTool(skill_loader),
+        ListSkillTool(skill_loader),
         GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
         UpdateIntentStateTool(intent_state),

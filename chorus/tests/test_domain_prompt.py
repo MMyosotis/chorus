@@ -25,6 +25,22 @@ def test_subagent_prompts():
         assert "禁用任何 emoji" in p
 
 
+def test_subagent_prompt_has_skill_fallback():
+    """无匹配 Skill 时回退 web-blog，给模型确定路径而非撞墙。"""
+    for at in ("idea", "script", "image", "finalize"):
+        p = subagent_base(at)
+        assert "没有与 platform 匹配的 Skill" in p
+        assert "按 web-blog 技能的规格回退" in p
+
+
+def test_subagent_prompt_guides_list_before_load():
+    """引用资源前先 list_skill 看包内文件，不要凭空推测路径。"""
+    for at in ("idea", "script", "image", "finalize"):
+        p = subagent_base(at)
+        assert "list_skill" in p
+        assert "只能从 list_skill 的清单中挑" in p
+
+
 def test_supervisor_prompt_has_profiles():
     p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT))
     assert "create_plan" in p

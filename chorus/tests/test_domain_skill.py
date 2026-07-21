@@ -106,6 +106,21 @@ def test_skill_loader_missing_dir_yields_empty():
     assert loader.list_summaries() == []  # 不抛
 
 
+def test_list_files_enumerates_package_files():
+    tmp = Path(tempfile.mkdtemp())
+    _write_skill(tmp, "alpha", "---\nname: a\ndescription: x\n---\nb")
+    (tmp / "alpha" / "preview").mkdir()
+    (tmp / "alpha" / "preview" / "desktop.html").write_text("h", encoding="utf-8")
+    (tmp / "alpha" / "platform.yaml").write_text("y", encoding="utf-8")
+    loader = SkillLoader(skills_dir=tmp)
+    files = loader.list_files("a")
+    assert files is not None
+    assert "SKILL.md" in files
+    assert "preview/desktop.html" in files
+    assert "platform.yaml" in files
+    assert loader.list_files("nope") is None
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
