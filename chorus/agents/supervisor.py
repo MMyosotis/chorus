@@ -124,7 +124,10 @@ class SupervisorLoopStrategy:
 
     def after_text(self, ctx, result):
         """纯文本回复：落库并发完成事件与收尾钩子。"""
-        content = "".join(result.text_parts) if result.text_parts else None
+        if result.finish_reason == "length" and not result.text_parts:
+            content = "这轮想得太久没回出来，再发一次试试，或者把要求说细一点。"
+        else:
+            content = "".join(result.text_parts) if result.text_parts else None
         self._message.append_assistant_message(
             self.session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
         )
