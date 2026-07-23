@@ -20,7 +20,7 @@ from chorus.tools import ToolCall, ToolContext, ToolDispatch
 _logger = get_logger("loop")
 
 _MODEL_CALL_TIMEOUT = 90
-_MAX_TOKENS = 2048
+_MAX_TOKENS = 8192
 
 
 class LoopSignal(Enum):
