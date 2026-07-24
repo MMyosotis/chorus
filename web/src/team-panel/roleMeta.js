@@ -1,10 +1,19 @@
 // 角色元数据与状态徽章映射，新增状态仅改此处。
 
 export const ROLE_LABELS = {
+  chief: '主编辑',
   idea: '选题官',
   script: '文案编辑',
   image: '视觉编辑',
   finalize: '汇总编辑',
+}
+
+export const ROLE_INITIALS = {
+  chief: '主',
+  idea: '选',
+  script: '文',
+  image: '视',
+  finalize: '汇',
 }
 
 export const ROLE_ORDER = ['idea', 'script', 'image', 'finalize']

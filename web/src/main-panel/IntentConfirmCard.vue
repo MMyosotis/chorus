@@ -7,62 +7,82 @@ const props = defineProps({
 })
 const emit = defineEmits(['confirm', 'revise'])
 const locking = ref(false)
-const decision = ref('')
 
-const orDash = (value, fallback = '待确认') => {
+const clean = (value, fallback = '待补充') => {
   const text = value == null ? '' : String(value).trim()
   return text || fallback
 }
-const valueText = (value) => Array.isArray(value) ? value.join('、') : String(value)
-const specs = computed(() => [
-  ['PLATFORM / 平台', orDash(props.state?.platform)],
-  ['FORMAT / 体裁', orDash(props.state?.format)],
-  ['STYLE / 风格', orDash(props.state?.style)],
-  ['IMAGES / 配图', props.state?.image_count != null ? `${props.state.image_count} 张` : '待确认'],
-])
-const notes = computed(() => {
-  const entries = Object.entries(props.state?.extra || {})
-    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
-  return entries.length ? entries : [['补充', '自由发挥']]
-})
-const title = computed(() => props.state?.topic || '请确认这次创作方向')
-const deck = computed(() => props.state?.topic || '签发后，编辑部将按此建立完整创作计划。')
 
-function submitDecision() {
-  if (locking.value || !decision.value) return
+const title = computed(() => clean(props.state?.topic, '请确认这次创作方向'))
+const meta = computed(() => [
+  clean(props.state?.platform),
+  clean(props.state?.format),
+  props.state?.image_count != null ? `${props.state.image_count} 张配图` : '配图待定',
+])
+const direction = computed(() => clean(props.state?.style, '风格自由发挥'))
+const notes = computed(() =>
+  Object.entries(props.state?.extra || {})
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
+    .slice(0, 4)
+    .map(([label, value]) => ({
+      label,
+      value: Array.isArray(value) ? value.join('、') : String(value),
+    }))
+)
+
+function decide(type) {
+  if (locking.value || props.archived) return
   locking.value = true
-  emit(decision.value === 'confirm' ? 'confirm' : 'revise')
+  emit(type)
 }
 </script>
 
 <template>
-  <section class="intent-confirm">
-    <header class="commission-mast">
-      <div class="confirm-kicker">选题签发 <small>STORY COMMISSION</small></div>
-      <div class="commission-no">VOL. 07 · NO. 001</div>
-      <div class="commission-status" :class="{ archived }"><i></i>{{ archived ? '已签发' : '待签发' }}</div>
+  <section class="intent-confirm" :class="{ archived }">
+    <header class="card-head">
+      <div class="head-copy">
+        <p>选题签发</p>
+      </div>
+      <span class="status">{{ archived ? '已签发' : '待确认' }}</span>
     </header>
 
-    <h2 class="confirm-title">{{ title }}</h2>
-    <p class="commission-deck">{{ deck }}</p>
-
-    <div class="commission-index">
-      <span v-for="([label, value]) in specs" :key="label"><small>{{ label }}</small><b :title="value">{{ value }}</b></span>
+    <div class="brief">
+      <span class="eyebrow">本次创作方向</span>
+      <h2>{{ title }}</h2>
+      <div class="meta" aria-label="创作规格">
+        <span v-for="item in meta" :key="item">{{ item }}</span>
+      </div>
     </div>
 
-    <div class="notes-head"><span>编辑批注 · NOTES</span><small>{{ notes.length }} 项 · {{ archived ? '已确认' : '待确认' }}</small></div>
-    <div class="notes-grid">
-      <span v-for="([label, value]) in notes" :key="label"><b>{{ label }}</b><em :title="valueText(value)">{{ valueText(value) }}</em></span>
+    <div class="direction">
+      <div>
+        <small>表达气质</small>
+        <p>{{ direction }}</p>
+      </div>
     </div>
+
+    <section v-if="notes.length" class="focus">
+      <header class="focus-head">
+        <span class="section-title">创作重点</span>
+        <span class="section-meta">已整理 {{ notes.length }} 项</span>
+      </header>
+      <dl>
+        <div v-for="note in notes" :key="note.label">
+          <dt>{{ note.label }}</dt>
+          <dd>{{ note.value }}</dd>
+        </div>
+      </dl>
+    </section>
 
     <footer class="actions">
-      <span class="signoff" :class="{ archived }">{{ archived ? '用户已确认 · 创作计划已建立' : '签发后建立创作计划' }}</span>
-      <template v-if="!archived">
-        <fieldset class="choices" aria-label="选题签发决定">
-          <label><input v-model="decision" type="radio" value="confirm" :disabled="locking"><span class="box" aria-hidden="true"></span><span>确认签发</span></label>
-          <label><input v-model="decision" type="radio" value="revise" :disabled="locking"><span class="box" aria-hidden="true"></span><span>退回补充</span></label>
-        </fieldset>
-        <button class="submit" :disabled="locking || !decision" @click="submitDecision">确认决定</button>
+      <p v-if="archived" class="archived-note">选题已进入创作流程</p>
+      <template v-else>
+        <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
+          继续调整
+        </button>
+        <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
+          确认并开始创作
+        </button>
       </template>
     </footer>
   </section>
@@ -72,59 +92,253 @@ function submitDecision() {
 .intent-confirm {
   position: relative;
   width: 100%;
-  padding: 0 16px 18px;
-  border-top: 1px solid rgba(110, 103, 93, .62);
-  border-right: 0;
-  border-bottom: 1px solid rgba(110, 103, 93, .62);
-  border-left: 0;
-  background: var(--ch-slip-soft);
-  box-shadow: none;
+  padding: var(--ch-space-4);
+  overflow: hidden;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface);
+  box-shadow: var(--ch-shadow-sm);
+  color: var(--ch-text);
+  font-family: var(--ch-font-sans);
 }
-.commission-mast { min-height: 44px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 14px; border-bottom: 3px double rgba(27, 25, 22, .82); color: var(--ch-body); }
-.confirm-kicker { display: flex; align-items: baseline; gap: 8px; color: var(--ch-warm); font: 600 13px/1.25 var(--ch-serif); letter-spacing: .05em; }
-.confirm-kicker small, .commission-no { color: var(--ch-body); font: 500 10px/1.2 var(--ch-sans); letter-spacing: .07em; }
-.commission-status { display: inline-flex; align-items: center; gap: 6px; color: var(--ch-warm); font: 600 11px/1 var(--ch-serif); letter-spacing: .03em; }
-.commission-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.commission-status.archived, .signoff.archived { color: var(--ch-green); }
-.confirm-title { max-width: calc(100% - 76px); margin: 18px 0 6px; color: var(--ch-text); font: 600 21px/1.48 var(--ch-serif); letter-spacing: .015em; }
-.commission-deck { max-width: calc(100% - 76px); margin: 0 0 17px; color: var(--ch-body); font: 500 13px/1.8 var(--ch-serif); letter-spacing: .015em; }
-.commission-index { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ch-border-2); border-bottom: 1px solid var(--ch-border-2); }
-.commission-index > span { min-width: 0; padding: 11px 10px; }
-.commission-index > span + span { border-left: 1px solid var(--ch-border-2); }
-.commission-index small, .commission-index b { display: block; }
-.commission-index small { margin-bottom: 6px; color: var(--ch-muted); font: 500 9px/1.25 var(--ch-sans); letter-spacing: .055em; }
-.commission-index b { overflow: hidden; color: var(--ch-text); font: 600 12px/1.4 var(--ch-serif); text-overflow: ellipsis; white-space: nowrap; }
-.notes-head { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 2px; border-bottom: 1px solid var(--ch-border-2); color: var(--ch-body); font: 600 11px/1 var(--ch-serif); letter-spacing: .06em; }
-.notes-head small { color: var(--ch-muted); font: 500 10px/1 var(--ch-serif); letter-spacing: .04em; }
-.notes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-bottom: 1px solid var(--ch-border-2); }
-.notes-grid > span { min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px 12px; }
-.notes-grid > span:nth-child(even) { border-left: 1px dotted rgba(110, 103, 93, .42); }
-.notes-grid > span:nth-child(n + 3) { border-top: 1px dotted rgba(110, 103, 93, .42); }
-.notes-grid b { color: var(--ch-warm); font: 600 12px/1.4 var(--ch-serif); letter-spacing: .04em; }
-.notes-grid em { min-width: 0; overflow: hidden; color: var(--ch-body); font: 500 13px/1.4 var(--ch-serif); font-style: normal; letter-spacing: .01em; text-overflow: ellipsis; white-space: nowrap; }
-.actions { display: flex; align-items: center; gap: 12px; margin-top: 15px; }
-.signoff { margin-right: auto; color: var(--ch-body); font: 500 11px/1.55 var(--ch-serif); }
-.choices, .choices label { display: flex; align-items: center; }
-.choices { gap: 14px; margin: 0; padding: 0; border: 0; }
-.choices label { position: relative; min-height: 40px; gap: 7px; color: var(--ch-text); font: 500 13px/1 var(--ch-serif); white-space: nowrap; cursor: pointer; }
-.choices input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
-.box { position: relative; width: 16px; height: 16px; flex: 0 0 16px; border: 1px solid rgba(27, 25, 22, .68); background: rgba(255, 253, 248, .32); }
-.choices input:checked + .box { border-color: var(--ch-warm); }
-.choices input:checked + .box::after { content: ""; position: absolute; inset: 4px; background: var(--ch-warm); }
-.choices label:has(input:checked) { color: var(--ch-warm); font-weight: 600; }
-.choices input:focus-visible + .box { outline: 2px solid var(--ch-primary); outline-offset: 3px; }
-.choices label:has(input:disabled) { cursor: default; }
-.submit { height: 40px; min-height: 40px; padding: 0 3px; border: 0; background: transparent; color: var(--ch-warm); font: 600 13px/1 var(--ch-serif); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 5px; cursor: pointer; }
-.submit:hover:not(:disabled) { color: var(--ch-text); }
-.submit:disabled { color: var(--ch-faint); text-decoration-color: transparent; cursor: default; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.head-copy {
+  min-width: 0;
+}
+
+.head-copy p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  gap: 8px;
+  margin-left: auto;
+  padding: 0 8px;
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-warning-soft);
+  color: var(--ch-warning-text);
+  font: 600 12px/1 var(--ch-font-sans);
+}
+
+.archived .status {
+  background: var(--ch-success-soft);
+  color: var(--ch-success-text);
+}
+
+.brief {
+  padding: 32px 0 24px;
+}
+
+.eyebrow {
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.brief h2 {
+  max-width: 680px;
+  margin: 8px 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta span {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-surface-2);
+  color: var(--ch-text-secondary);
+  font: 500 12px/1 var(--ch-font-sans);
+}
+
+.direction {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface-3);
+}
+
+.direction small {
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.direction p {
+  margin: 8px 0 0;
+  color: var(--ch-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.focus {
+  overflow: hidden;
+  margin-top: 24px;
+  border-top: 1px solid var(--ch-border);
+  border-bottom: 1px solid var(--ch-border);
+}
+
+.focus-head {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--ch-border);
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.section-meta {
+  margin-left: auto;
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.focus dl {
+  margin: 0;
+  padding: 0 16px;
+}
+
+.focus dl > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--ch-border);
+}
+
+.focus dl > div:last-child {
+  border-bottom: 0;
+}
+
+.focus dt {
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.focus dd {
+  margin: 0;
+  color: var(--ch-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.focus + .actions {
+  padding-top: 24px;
+  border-top: 0;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ch-border);
+}
+
+.actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: var(--ch-radius-btn);
+  font: 600 14px/1 var(--ch-font-sans);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.actions button:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+.revise {
+  border: 1px solid var(--ch-border-strong);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+}
+
+.revise:hover:not(:disabled) {
+  background: var(--ch-surface-2);
+}
+
+.confirm {
+  border: 0;
+  background: var(--ch-accent);
+  color: var(--ch-on-accent);
+}
+
+.confirm:hover:not(:disabled) {
+  background: var(--ch-accent-hover);
+}
+
+.archived-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 0 0;
+  color: var(--ch-success-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 @media (max-width: 700px) {
-  .commission-mast { grid-template-columns: 1fr auto; }
-  .commission-no { display: none; }
-  .commission-index { grid-template-columns: repeat(2, 1fr); }
-  .commission-index > span:nth-child(3) { border-left: 0; }
-  .commission-index > span:nth-child(n+3) { border-top: 1px solid var(--ch-border-2); }
-  .actions { align-items: flex-start; flex-wrap: wrap; }
-  .signoff { flex-basis: 100%; }
-  .choices { flex-basis: 100%; }
+  .intent-confirm {
+    padding: 16px;
+  }
+
+  .section-meta {
+    display: none;
+  }
+
+  .brief {
+    padding: 24px 0;
+  }
+
+  .focus dl > div {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .actions button {
+    flex: 1 1 auto;
+  }
 }
 </style>

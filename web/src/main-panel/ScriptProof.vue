@@ -108,25 +108,24 @@ function renderInline(text) {
 </template>
 
 <style scoped>
-.script-proof { padding: 0 4px; }
-.script-proof h3 { max-width: 680px; margin: 6px 0 22px; color: var(--ch-text); font: 700 28px/1.35 var(--ch-serif); letter-spacing: .01em; }
-.script-proof h4 { margin: 22px 0 7px; color: var(--ch-text); font: 600 15px/1.55 var(--ch-serif); }
+.script-proof { padding: 0; font-family: var(--ch-font-sans); }
+.script-proof h3 { max-width: 680px; margin: 0 0 24px; color: var(--ch-text); font: 600 24px/1.3 var(--ch-font-sans); }
+.script-proof h4 { margin: 24px 0 8px; color: var(--ch-text); font: 600 16px/1.5 var(--ch-font-sans); }
 .script-proof p,
-.script-proof li { color: var(--ch-body); font: 500 14px/1.95 var(--ch-serif); letter-spacing: .005em; }
-.script-proof p { max-width: 680px; margin: 7px 0; }
-.script-proof p:first-of-type::first-letter { float: left; margin: 6px 8px 0 0; color: var(--ch-warm); font: 700 42px/.86 var(--ch-serif); }
+.script-proof li { color: var(--ch-text-secondary); font: 400 14px/1.6 var(--ch-font-sans); }
+.script-proof p { max-width: 680px; margin: 8px 0; }
 .script-proof :deep(strong) { color: var(--ch-text); font-weight: 600; }
-.script-proof ul { max-width: 680px; margin: 10px 0 14px; padding-left: 22px; }
-.script-proof li { margin: 3px 0; padding-left: 2px; }
-.script-proof blockquote { max-width: 680px; margin: 20px 0; padding: 14px 18px; border: 0; border-top: 1px solid var(--ch-border-2); border-bottom: 1px solid var(--ch-border-2); color: var(--ch-text); font: 600 16px/1.75 var(--ch-serif); text-align: center; }
-.script-proof hr { max-width: 680px; margin: 22px 0 18px; border: 0; border-top: 1px dashed var(--ch-border-2); }
-.script-tags { max-width: 680px; display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 16px; color: var(--ch-warm); font: 500 12px/1.7 var(--ch-serif); }
+.script-proof ul { max-width: 680px; margin: 16px 0; padding-left: 24px; }
+.script-proof li { margin: 8px 0; padding-left: 0; }
+.script-proof blockquote { max-width: 680px; margin: 24px 0; padding: 16px; border: 0; border-left: 2px solid var(--ch-accent); border-radius: var(--ch-radius-btn); background: var(--ch-surface-3); color: var(--ch-text); font: 500 16px/1.5 var(--ch-font-sans); text-align: left; }
+.script-proof hr { max-width: 680px; margin: 24px 0; border: 0; border-top: 1px solid var(--ch-border); }
+.script-tags { max-width: 680px; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: var(--ch-text-secondary); font: 500 12px/1.5 var(--ch-font-sans); }
 .script-tags span { white-space: nowrap; }
 
-.script-proof.compact h3 { margin-bottom: 18px; font-size: 24px; line-height: 1.4; }
-.script-proof.compact h4 { margin: 18px 0 6px; line-height: 1.5; }
+.script-proof.compact h3 { margin-bottom: 16px; font-size: 20px; line-height: 1.3; }
+.script-proof.compact h4 { margin: 16px 0 8px; line-height: 1.5; }
 .script-proof.compact p,
-.script-proof.compact li { font-size: 13px; line-height: 1.85; }
-.script-proof.compact blockquote { margin: 16px 0; padding: 10px 14px; font-size: 14px; line-height: 1.7; }
-.script-proof.compact .script-tags { font-size: 11px; }
+.script-proof.compact li { font-size: 14px; line-height: 1.6; }
+.script-proof.compact blockquote { margin: 16px 0; padding: 16px; font-size: 14px; line-height: 1.5; }
+.script-proof.compact .script-tags { font-size: 12px; }
 </style>

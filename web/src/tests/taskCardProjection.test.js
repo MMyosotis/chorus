@@ -34,22 +34,21 @@ test('planTaskCards 运行中归运行卡', () => {
   expect(plan[0]).toMatchObject({ kind: 'running', id: 'running:t4' })
 })
 
-test('planTaskCards 已完成非定稿汇总成校样登记', () => {
+test('planTaskCards 已完成非定稿各自成卡', () => {
   const plan = planTaskCards({
     tasks: [
       { id: 'a', status: 'finished', agent_type: 'idea' },
       { id: 'b', status: 'finished', agent_type: 'script' },
     ],
   })
-  expect(plan).toHaveLength(1)
-  expect(plan[0].kind).toBe('proof-register')
-  expect(plan[0].id).toBe('proof-register:a:b')
-  expect(plan[0].tasks.map((t) => t.id)).toEqual(['a', 'b'])
+  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'confirmed'])
+  expect(plan.map((card) => card.id)).toEqual(['confirmed:a', 'confirmed:b'])
+  expect(plan[0].task.id).toBe('a')
 })
 
-test('planTaskCards 定稿成品不进校样登记', () => {
+test('planTaskCards 定稿成品不进确认卡', () => {
   const plan = planTaskCards({ tasks: [{ id: 'f', status: 'finished', agent_type: 'finalize' }] })
-  expect(plan.find((c) => c.kind === 'proof-register')).toBeUndefined()
+  expect(plan.find((card) => card.kind === 'confirmed')).toBeUndefined()
 })
 
 test('planTaskCards 混合任务按顺序投影', () => {
@@ -61,7 +60,7 @@ test('planTaskCards 混合任务按顺序投影', () => {
       { id: 'd', status: 'finished', agent_type: 'finalize' },
     ],
   })
-  expect(plan.map((c) => c.kind)).toEqual(['proof-register', 'running', 'hil', 'postcard'])
+  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'running', 'hil', 'postcard'])
 })
 
 test('planIntentCard 非就绪态返回空', () => {

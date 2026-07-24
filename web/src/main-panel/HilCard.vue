@@ -1,25 +1,19 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { cancelPipeline, confirmTask, retryTask } from '../api.js'
-import { stepOf } from '../team-panel/roleMeta.js'
 import ArtifactCard from './ArtifactCard.vue'
 import ScriptProof from './ScriptProof.vue'
-import StageHeader from './StageHeader.vue'
 
 const props = defineProps({ task: { type: Object, required: true }, sessionId: { type: String, required: true } })
 const emit = defineEmits(['confirmed', 'retried', 'cancelled', 'preview-task'])
 const artifacts = computed(() => props.task.artifacts || {})
 const candidates = computed(() => artifacts.value.candidates || [])
 const selectedIdx = ref(props.task.artifacts?.selected ?? null)
-const decision = ref('')
+const revising = ref(false)
 const feedback = ref('')
 const busy = ref(false)
 const error = ref('')
 const needSelect = computed(() => props.task.agent_type === 'idea')
-const selectedPitch = computed(() => {
-  const position = (artifacts.value.candidates || []).findIndex((item) => item.index === selectedIdx.value)
-  return position < 0 ? null : position + 1
-})
 const scriptChars = computed(() => {
   const explicit = props.task.progress?.composing_chars || props.task.artifacts?.char_count
   if (explicit) return explicit
@@ -27,120 +21,428 @@ const scriptChars = computed(() => {
 })
 
 const meta = computed(() => ({
-  idea: { cn: '选题会审 · 等你定案', en: 'EDITORIAL PITCH REVIEW', status: `${(artifacts.value.candidates || []).length || 3} 案 · 待定案`, folio: 'PITCH PROOF', approve: '准予采用', revise: '退回重提', target: selectedPitch.value == null ? 'PITCH · 待选择' : `PITCH ${String(selectedPitch.value).padStart(2, '0')}` },
-  script: { cn: '文案编辑 · 等你过目', en: 'COPY EDITING REVIEW', status: '待确认', folio: `COPY PROOF${scriptChars.value ? ` · ${scriptChars.value} 字` : ''}`, approve: '确认定稿', revise: '退回重写', target: 'VERSION 01' },
-  image: { cn: '视觉编辑 · 等你过目', en: 'VISUAL EDITING REVIEW', status: `${(artifacts.value.images || []).length || 3} 帧 · 待确认`, folio: 'IMAGE PROOF · 4:5', approve: '确认配图', revise: '退回重绘', target: 'FIG. 01—03' },
-  finalize: { cn: '汇总编辑 · 等你过目', en: 'FINAL ASSEMBLY REVIEW', status: '待确认', folio: 'FINAL PROOF', approve: '确认成品', revise: '退回调整', target: 'FINAL COPY' },
-}[props.task.agent_type] || { cn: '校样审阅', en: 'EDITORIAL REVIEW', folio: 'PROOF', approve: '确认', revise: '退回', target: '当前校样' }))
-const stepNo = computed(() => String(stepOf(props.task.agent_type)).padStart(2, '0'))
+  idea: {
+    title: '选择一个选题方向',
+    description: `${candidates.value.length || 0} 个候选，选择后即可继续`,
+    approve: '确认这个选题',
+    revise: '重新生成选题',
+  },
+  script: {
+    title: '确认文案内容',
+    description: scriptChars.value ? `当前文案约 ${scriptChars.value} 字` : '检查结构、语气和细节',
+    approve: '确认文案',
+    revise: '修改文案',
+  },
+  image: {
+    title: '确认配图方案',
+    description: `${(artifacts.value.images || []).length || 0} 张配图，检查画面与叙事是否一致`,
+    approve: '确认配图',
+    revise: '重新配图',
+  },
+  finalize: {
+    title: '确认最终成品',
+    description: '检查标题、正文和配图的整体效果',
+    approve: '确认成品',
+    revise: '继续调整',
+  },
+}[props.task.agent_type] || {
+  title: '确认当前内容',
+  description: '检查后决定是否继续',
+  approve: '确认',
+  revise: '调整',
+}))
 
-async function submitDecision() {
-  if (!decision.value) return
-  if (decision.value === 'approve') return onConfirm()
-  return onRetry()
-}
 async function onConfirm() {
-  if (needSelect.value && selectedIdx.value == null) { error.value = '请先选择一个候选'; return }
-  busy.value = true; error.value = ''
-  try { await confirmTask(props.task.id, needSelect.value ? selectedIdx.value : null); emit('confirmed', props.task.id) }
-  catch (e) { error.value = e.detail || e.message }
-  finally { busy.value = false }
+  if (needSelect.value && selectedIdx.value == null) {
+    error.value = '请先选择一个候选'
+    return
+  }
+  busy.value = true
+  error.value = ''
+  try {
+    await confirmTask(props.task.id, needSelect.value ? selectedIdx.value : null)
+    emit('confirmed', props.task.id)
+  } catch (e) {
+    error.value = e.detail || e.message
+  } finally {
+    busy.value = false
+  }
 }
+
 async function onRetry() {
-  busy.value = true; error.value = ''
-  try { await retryTask(props.task.id, feedback.value || ''); emit('retried', props.task.id) }
-  catch (e) { error.value = e.detail || e.message }
-  finally { busy.value = false }
+  busy.value = true
+  error.value = ''
+  try {
+    await retryTask(props.task.id, feedback.value || '')
+    emit('retried', props.task.id)
+  } catch (e) {
+    error.value = e.detail || e.message
+  } finally {
+    busy.value = false
+  }
 }
+
 async function onCancel() {
-  if (!confirm('放弃整条创作？已确认的校样会保留。')) return
-  busy.value = true; error.value = ''
-  try { await cancelPipeline(props.sessionId); emit('cancelled', props.sessionId) }
-  catch (e) { error.value = e.detail || e.message }
-  finally { busy.value = false }
+  if (!confirm('放弃整条创作？已确认的内容会保留。')) return
+  busy.value = true
+  error.value = ''
+  try {
+    await cancelPipeline(props.sessionId)
+    emit('cancelled', props.sessionId)
+  } catch (e) {
+    error.value = e.detail || e.message
+  } finally {
+    busy.value = false
+  }
 }
 </script>
 
 <template>
   <section class="hil-card" :class="`review-${task.agent_type}`">
-    <StageHeader :number="stepNo" :title="meta.cn" :english="meta.en" :status="meta.status || '待确认'" />
-
-    <div class="proof-sheet">
-      <header class="proof-furniture"><span>{{ meta.folio }}</span><span>VOL. 07 · CURRENT DRAFT</span><span>P. {{ stepNo }}</span></header>
-      <div class="proof-canvas">
-        <div v-if="task.agent_type === 'idea'" class="candidates" :class="`count-${Math.min(candidates.length, 5)}`" role="radiogroup" aria-label="选题候选">
-          <button v-for="(c, idx) in candidates" :key="c.index" type="button" class="cand" :class="{ selected: selectedIdx === c.index }" role="radio" :aria-checked="selectedIdx === c.index" @click="selectedIdx = c.index">
-            <span class="cand-no">PITCH {{ String(idx + 1).padStart(2, '0') }}</span>
-            <h4>{{ c.title }}</h4><small v-if="c.angle">{{ c.angle }}</small><p v-if="c.reason">{{ c.reason }}</p>
-            <span class="choice">拟采用 · EDITOR'S PICK</span>
-          </button>
-        </div>
-
-        <div v-else-if="task.agent_type === 'script'">
-          <div class="proof-kicker">COPY PROOF · VERSION 01</div>
-          <ScriptProof :blocks="artifacts.blocks || []" />
-        </div>
-
-        <div v-else-if="task.agent_type === 'image'" class="img-grid">
-          <figure v-for="(img, i) in artifacts.images || []" :key="i" class="img-cell">
-            <img :src="img.url" :alt="img.caption || ''" loading="lazy" />
-            <figcaption><b>FIG. {{ String(i + 1).padStart(2, '0') }}</b><span>{{ img.caption }}</span></figcaption>
-          </figure>
-        </div>
-
-        <ArtifactCard v-else-if="task.agent_type === 'finalize'" :task="task" review @preview="$emit('preview-task', task)" />
+    <header class="review-head">
+      <div>
+        <h2>{{ meta.title }}</h2>
+        <p>{{ meta.description }}</p>
       </div>
+      <span>待确认</span>
+    </header>
+
+    <div class="review-content">
+      <div v-if="task.agent_type === 'idea'" class="candidates" role="radiogroup" aria-label="选题候选">
+        <button
+          v-for="c in candidates"
+          :key="c.index"
+          type="button"
+          class="candidate"
+          :class="{ selected: selectedIdx === c.index }"
+          role="radio"
+          :aria-checked="selectedIdx === c.index"
+          @click="selectedIdx = c.index"
+        >
+          <span class="candidate-state">{{ selectedIdx === c.index ? '已选择' : '候选选题' }}</span>
+          <h3>{{ c.title }}</h3>
+          <p v-if="c.angle" class="angle">{{ c.angle }}</p>
+          <p v-if="c.reason" class="reason">{{ c.reason }}</p>
+        </button>
+      </div>
+
+      <ScriptProof v-else-if="task.agent_type === 'script'" :blocks="artifacts.blocks || []" />
+
+      <div v-else-if="task.agent_type === 'image'" class="images">
+        <figure v-for="img in artifacts.images || []" :key="img.url">
+          <img :src="img.url" :alt="img.caption || ''" loading="lazy" />
+          <figcaption>{{ img.caption }}</figcaption>
+        </figure>
+      </div>
+
+      <ArtifactCard
+        v-else-if="task.agent_type === 'finalize'"
+        :task="task"
+        review
+        @preview="$emit('preview-task', task)"
+      />
     </div>
 
-    <footer class="review-decision" :data-decision="decision || 'none'">
-      <div class="decision-main">
-        <div class="decision-head"><span>校样批签 · SIGN-OFF</span><i></i><small>{{ meta.target }} · {{ decision ? (decision === 'approve' ? '准予采用' : '退改') : '待签' }}</small></div>
-        <div class="actions">
-          <fieldset class="choices">
-            <label><input v-model="decision" type="radio" value="approve"><span class="box"></span><span>{{ meta.approve }}</span></label>
-            <label><input v-model="decision" type="radio" value="revise"><span class="box"></span><span>{{ meta.revise }}</span></label>
-          </fieldset>
-          <button class="submit" :disabled="busy || !decision" @click="submitDecision">确认批签</button>
-          <button class="cancel" :disabled="busy" @click="onCancel">放弃</button>
-        </div>
+    <div v-if="revising" class="feedback">
+      <label for="review-feedback">希望怎样调整</label>
+      <textarea
+        id="review-feedback"
+        v-model="feedback"
+        placeholder="写下需要修改的内容或方向"
+        rows="3"
+      ></textarea>
+    </div>
+
+    <footer class="actions">
+      <button class="cancel" type="button" :disabled="busy" @click="onCancel">放弃创作</button>
+      <div>
+        <button
+          v-if="!revising"
+          class="secondary"
+          type="button"
+          :disabled="busy"
+          @click="revising = true"
+        >
+          {{ meta.revise }}
+        </button>
+        <button
+          v-else
+          class="secondary"
+          type="button"
+          :disabled="busy"
+          @click="revising = false"
+        >
+          返回
+        </button>
+        <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
+          {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
+        </button>
       </div>
-      <div v-if="decision === 'revise'" class="notes">
-        <div><label for="review-feedback">退改批注</label><small>选择退回后填写</small></div>
-        <textarea id="review-feedback" v-model="feedback" placeholder="写下希望本阶段重新处理的方向" rows="2"></textarea>
-      </div>
-      <p v-if="error" class="error">{{ error }}</p>
     </footer>
+
+    <p v-if="error" class="error" role="alert">{{ error }}</p>
   </section>
 </template>
 
 <style scoped>
-.hil-card { margin: 0 0 24px; padding: 0 0 24px; border: 0; }
-.proof-sheet { border-top: 2px solid rgba(27, 25, 22, .9); border-bottom: 1px solid rgba(27, 25, 22, .62); background: rgba(255, 253, 248, .2); }
-.proof-furniture { height: 31px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; padding: 0 2px; border-bottom: 1px solid rgba(27, 25, 22, .48); color: var(--ch-muted); font: 500 var(--ch-chat-meta-size)/1 var(--ch-serif); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .12em; }
-.proof-furniture span:nth-child(2) { text-align: center; }.proof-furniture span:last-child { text-align: right; }
-.proof-canvas { padding: 22px 0 12px; }
-.review-idea .proof-canvas { padding: 0; }
-.review-image .proof-sheet { border-bottom: 0; }
-.candidates { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-.cand { grid-column: span 2; min-height: 230px; display: flex; flex-direction: column; padding: 20px 18px 18px; border: 0; border-right: 1px solid var(--ch-border-2); background: rgba(255, 253, 248, .18); color: var(--ch-text); text-align: left; cursor: pointer; transition: background .2s; }
-.candidates.count-1 .cand { grid-column: span 6; border-right: 0; }
-.candidates.count-2 .cand, .candidates.count-4 .cand { grid-column: span 3; }
-.candidates.count-2 .cand:nth-child(2n), .candidates.count-4 .cand:nth-child(2n) { border-right: 0; }
-.candidates.count-4 .cand:nth-child(n + 3) { border-top: 1px solid var(--ch-border-2); }
-.candidates.count-3 .cand:nth-child(3), .candidates.count-5 .cand:nth-child(3) { border-right: 0; }
-.candidates.count-5 .cand:nth-child(n + 4) { grid-column: span 3; border-top: 1px solid var(--ch-border-2); }
-.candidates.count-5 .cand:nth-child(5) { border-right: 0; }
-.cand:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--ch-primary); outline-offset: -3px; }
-.cand:last-child { border-right: 0; }.cand:hover { background: rgba(221, 213, 200, .2); }.cand.selected { background: var(--ch-selection-soft); box-shadow: inset 0 -2px var(--ch-warm); }
-.cand-no { color: var(--ch-muted); font: 600 var(--ch-chat-meta-size)/1.2 var(--ch-serif); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .14em; }.cand.selected .cand-no { color: var(--ch-warm); }
-.cand h4 { margin: 14px 0 7px; font: 600 var(--ch-chat-subtitle-size)/1.55 var(--ch-serif); }.cand small { color: var(--ch-body); font: 500 var(--ch-chat-label-size)/1.6 var(--ch-serif); }.cand p { margin: 11px 0 0; color: var(--ch-body); font: 500 var(--ch-chat-note-size)/1.8 var(--ch-serif); }
-.choice { visibility: hidden; margin-top: auto; padding-top: 10px; color: var(--ch-warm); font: 600 var(--ch-chat-meta-size)/1.3 var(--ch-serif); }.cand.selected .choice { visibility: visible; }
-.proof-kicker { margin: 0 4px; color: var(--ch-warm); font: 600 9px/1.3 var(--ch-sans); letter-spacing: .14em; }
-.img-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 2px; }.img-cell { margin: 0; }.img-cell img { width: 100%; aspect-ratio: 1/1; display: block; object-fit: cover; box-shadow: 0 0 0 1px rgba(27, 25, 22, .2); }.img-cell figcaption { display: flex; align-items: baseline; justify-content: center; gap: 7px; margin-top: 9px; padding: 8px 4px 0; border-top: 1px solid var(--ch-border-2); color: var(--ch-body); font: 500 10px/1.55 var(--ch-serif); text-align: center; }.img-cell figcaption b { color: var(--ch-warm); font-weight: 600; white-space: nowrap; }
-@media (min-width: 781px) { .img-grid { gap: 14px; }.img-cell figcaption { font-size: 11px; } }
-.review-decision { margin-top: 24px; }.decision-main { min-height: 44px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }.decision-head { min-width: 0; height: 44px; display: flex; align-items: center; gap: 9px; color: var(--ch-warm); font: 600 13px/1 var(--ch-serif); letter-spacing: .04em; }.decision-head i { min-width: 14px; flex: 1; border-top: 1px dotted rgba(110, 103, 93, .48); }.decision-head small { overflow: hidden; color: var(--ch-muted); font: 500 13px/1 var(--ch-serif); text-overflow: ellipsis; white-space: nowrap; }
-.actions, .choices, .choices label { display: flex; align-items: center; }.actions { gap: 3px; }.choices { gap: 13px; margin: 0 14px 0 0; padding: 0; border: 0; }.choices label { position: relative; height: 44px; gap: 7px; font: 500 13px/1 var(--ch-serif); white-space: nowrap; cursor: pointer; }.choices input { position: absolute; opacity: 0; }.box { position: relative; width: 16px; height: 16px; border: 1px solid rgba(27, 25, 22, .68); }.choices input:checked + .box { border-color: var(--ch-warm); }.choices input:checked + .box::after { content: ""; position: absolute; inset: 4px; background: var(--ch-warm); }.choices label:has(input:checked) { color: var(--ch-warm); font-weight: 600; }
-.choices input:focus-visible + .box { outline: 2px solid var(--ch-primary); outline-offset: 3px; }
-.submit, .cancel { height: 44px; min-height: 44px; padding: 0 5px; border: 0; background: transparent; font: 500 13px/1 var(--ch-serif); cursor: pointer; }.submit { color: var(--ch-warm); text-decoration: underline; text-underline-offset: 5px; }.submit:disabled { color: var(--ch-faint); text-decoration: none; cursor: default; }.cancel { color: var(--ch-muted); }.notes { margin-top: 10px; }.notes > div { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; color: var(--ch-body); }.notes label { font: 600 var(--t-eyebrow)/1.4 var(--ch-serif); }.notes small { color: inherit; font: 500 var(--t-eyebrow)/1.4 var(--ch-serif); }.notes textarea { width: 100%; min-height: 72px; padding: 12px 14px; border: 1px solid var(--ch-border-2); border-radius: 0; background: rgba(255, 253, 248, .65); color: var(--ch-text); font: 500 13px/1.65 var(--ch-serif); resize: vertical; }.error { margin: 8px 0 0; color: var(--ch-red); font: 500 11px/1.5 var(--ch-serif); }
-@media (max-width: 760px) { .candidates { grid-template-columns: 1fr; }.candidates .cand { grid-column: auto; min-height: 0; border-top: 0; border-right: 0; border-bottom: 1px solid var(--ch-border-2); }.candidates .cand:last-child { border-bottom: 0; }.decision-main { grid-template-columns: 1fr; }.actions { flex-wrap: wrap; }.choices { flex-basis: 100%; }.proof-furniture { grid-template-columns: 1fr auto; }.proof-furniture span:nth-child(2) { display: none; } }
+.hil-card {
+  padding: var(--ch-space-4);
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface);
+  box-shadow: var(--ch-shadow-sm);
+  color: var(--ch-text);
+  font-family: var(--ch-font-sans);
+}
+
+.review-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.review-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.review-head p {
+  margin: 8px 0 0;
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.review-head > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-warning-soft);
+  color: var(--ch-warning-text);
+  font: 600 12px/1 var(--ch-font-sans);
+  white-space: nowrap;
+}
+
+.review-content {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ch-border);
+}
+
+.candidates {
+  display: grid;
+  gap: 8px;
+}
+
+.candidate {
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+  font-family: var(--ch-font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--ch-duration-fast) var(--ch-ease), background var(--ch-duration-fast) var(--ch-ease);
+}
+
+.candidate:hover,
+.candidate.selected {
+  border-color: var(--ch-accent);
+  background: var(--ch-accent-soft);
+}
+
+.candidate:focus-visible {
+  outline: 2px solid var(--ch-accent);
+  outline-offset: 0;
+}
+
+.candidate-state {
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.candidate.selected .candidate-state {
+  color: var(--ch-accent-soft-text);
+}
+
+.candidate h3 {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.candidate p {
+  margin: 8px 0 0;
+}
+
+.angle {
+  color: var(--ch-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.reason {
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.images figure {
+  min-width: 0;
+  margin: 0;
+}
+
+.images img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--ch-radius-card);
+  object-fit: cover;
+}
+
+.images figcaption {
+  margin-top: 8px;
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.feedback {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ch-border);
+}
+
+.feedback label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.feedback textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px solid var(--ch-border-strong);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+  font: 400 14px/1.5 var(--ch-font-sans);
+  resize: vertical;
+  transition: border-color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.feedback textarea:focus {
+  outline: 0;
+  border-color: var(--ch-accent);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ch-border);
+}
+
+.actions > div {
+  display: flex;
+  gap: 8px;
+}
+
+.actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: var(--ch-radius-btn);
+  font: 600 14px/1 var(--ch-font-sans);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.actions button:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+.cancel {
+  padding-left: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ch-text-muted);
+}
+
+.cancel:hover:not(:disabled) {
+  color: var(--ch-danger);
+}
+
+.secondary {
+  border: 1px solid var(--ch-border-strong);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--ch-surface-2);
+}
+
+.primary {
+  border: 0;
+  background: var(--ch-accent);
+  color: var(--ch-on-accent);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--ch-accent-hover);
+}
+
+.error {
+  margin: 16px 0 0;
+  color: var(--ch-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+  .hil-card {
+    padding: 16px;
+  }
+
+  .images {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .actions > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cancel {
+    align-self: flex-start;
+  }
+}
 </style>

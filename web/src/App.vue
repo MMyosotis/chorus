@@ -69,14 +69,14 @@ const paperDate = computed(() => {
 })
 const currentTask = computed(() => (activeGraph.value?.tasks || []).find((task) => ['running', 'awaiting_confirm', 'failed'].includes(task.status)) || null)
 const stageKicker = computed(() => {
-  if (awaitingConfirm.value) return 'STORY COMMISSION'
+  if (awaitingConfirm.value) return '等待确认'
   const task = currentTask.value
   if (task) {
-    if (task.status === 'failed') return `${ROLE_FULL[task.agent_type] || task.agent_type} · RECOVERY`
-    return `${ROLE_FULL[task.agent_type] || task.agent_type} · ${task.status === 'awaiting_confirm' ? 'PROOF' : 'WORKING'}`
+    if (task.status === 'failed') return `${ROLE_FULL[task.agent_type] || task.agent_type} · 需要处理`
+    return `${ROLE_FULL[task.agent_type] || task.agent_type} · ${task.status === 'awaiting_confirm' ? '等待确认' : '执行中'}`
   }
   const completedFinal = (activeGraph.value?.tasks || []).find((task) => task.agent_type === 'finalize' && task.status === 'finished')
-  return completedFinal ? 'FINAL COPY' : 'CONVERSATION'
+  return completedFinal ? '已完成' : '自由对话'
 })
 const paperPage = computed(() => {
   if (currentTask.value) return String(stepOf(currentTask.value.agent_type)).padStart(2, '0')
@@ -192,7 +192,7 @@ async function forceReloadMessages(id) {
   }
 }
 
-const REMOVABLE_KINDS = new Set(['hil', 'postcard', 'recovery', 'proof-register'])
+const REMOVABLE_KINDS = new Set(['hil', 'postcard', 'recovery', 'confirmed'])
 const RUNNING_KIND = 'running'
 
 function injectTaskCards(id) {
@@ -213,7 +213,7 @@ function injectTaskCards(id) {
   }
   for (const card of plan) {
     if (card.kind === RUNNING_KIND) continue
-    if (card.kind === 'proof-register') {
+    if (card.kind === 'confirmed') {
       const idx = list.findIndex((m) => m.kind === RUNNING_KIND)
       list.splice(idx >= 0 ? idx : list.length, 0, card)
     } else {
@@ -556,13 +556,13 @@ onMounted(async () => {
     />
     <main class="main-panel">
       <nav class="mobile-bar" aria-label="移动端栏目导航">
-        <button type="button" @click="leftRailOpen = true">稿件</button>
-        <strong>{{ activeTitle || '未命名稿件' }}</strong>
-        <button type="button" @click="rightRailOpen = true">题旨与目录</button>
+        <button type="button" @click="leftRailOpen = true">会话</button>
+        <strong>{{ activeTitle || '未命名会话' }}</strong>
+        <button type="button" @click="rightRailOpen = true">团队</button>
       </nav>
       <div class="paper-stage">
         <Transition name="paper-swap" @before-leave="pinLeavingPaper">
-          <article :key="activeId || 'empty'" class="paper-shell manuscript-paper">
+          <article :key="activeId || 'empty'" class="paper-shell">
             <ChatWindow
               ref="chatWindowRef"
               :messages="messages"
@@ -602,11 +602,9 @@ onMounted(async () => {
   display: flex;
   min-height: 100dvh;
   width: 100%;
-  overflow: visible;
+  overflow: clip;
   align-items: flex-start;
   background: var(--ch-canvas);
-  padding: 0;
-  gap: 0;
 }
 
 .main-panel {
@@ -614,12 +612,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow: visible;
   min-height: 100dvh;
-  padding: 26px;
-  background: var(--ch-canvas);
-  border: none;
-  box-shadow: none;
+  padding: var(--ch-space-4);
 }
 
 .mobile-bar { display: none; }
@@ -629,7 +623,7 @@ onMounted(async () => {
 
 .paper-stage {
   position: relative;
-  width: min(100%, 880px);
+  width: min(100%, var(--ch-content-width));
   margin: 0 auto;
 }
 
@@ -637,7 +631,6 @@ onMounted(async () => {
   position: relative;
   z-index: 1;
   width: 100%;
-  margin: 0;
 }
 
 .paper-shell :deep(.chat-window) {
@@ -691,8 +684,8 @@ onMounted(async () => {
 
   .paper-stage :deep(.input-bar) {
     position: fixed;
-    left: 50%;
-    width: min(calc(100vw - 2 * var(--ch-rail) - 104px), 828px);
+    left: calc(var(--ch-rail) + (100vw - var(--ch-rail) - var(--ch-right-rail)) / 2);
+    width: min(calc(100vw - var(--ch-rail) - var(--ch-right-rail) - 96px), 768px);
   }
 }
 
@@ -705,15 +698,9 @@ onMounted(async () => {
 
   .paper-stage :deep(.input-bar) {
     position: fixed;
-    left: calc((100vw + 224px) / 2);
-    width: min(calc(100vw - 328px), 828px);
+    left: calc((100vw + var(--ch-rail)) / 2);
+    width: min(calc(100vw - var(--ch-rail) - 96px), 768px);
   }
-}
-
-@media (max-width: 780px) {
-  .main-panel { padding: 0; }
-  .paper-shell { box-shadow: none; }
-  .paper-shell::before { left: 14px; }
 }
 
 @media (max-width: 1180px) {
@@ -721,19 +708,8 @@ onMounted(async () => {
 }
 
 @media (max-width: 780px) {
-  :deep(.team-panel) {
-    display: flex;
-    position: fixed;
-    z-index: 60;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(300px, 90vw);
-    transform: translateX(104%);
-    transition: transform .24s ease-out;
-    box-shadow: -14px 0 38px rgba(27, 25, 22, .14);
-  }
-  :deep(.team-panel.is-open) { transform: translateX(0); }
+  .main-panel { padding: 0; }
+  .paper-shell { height: calc(100% - 52px); }
   .mobile-bar {
     flex: 0 0 52px;
     display: grid;
@@ -741,15 +717,59 @@ onMounted(async () => {
     align-items: center;
     gap: 8px;
     padding: 0 12px;
-    border-bottom: 1px solid var(--ch-border-2);
-    background: rgba(232, 226, 215, .97);
+    background: var(--ch-surface);
+    border-bottom: 1px solid var(--ch-border);
   }
-  .mobile-bar button { min-height: 38px; padding: 0 8px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: var(--ch-warm); font: 600 11px/1 var(--ch-serif); cursor: pointer; }
-  .mobile-bar button:hover { border-bottom-color: currentColor; }
-  .mobile-bar strong { min-width: 0; overflow: hidden; font: 600 13px/1.3 var(--ch-serif); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
-  .paper-shell { height: calc(100% - 52px); }
-  .rail-scrim { position: fixed; z-index: 55; inset: 0; display: block; min-height: 0; border: 0; background: rgba(27, 25, 22, .32); }
-  :deep(.sidebar) { position: fixed; z-index: 60; top: 0; left: 0; bottom: 0; width: min(300px, 88vw); transform: translateX(-104%); transition: transform .24s ease-out; box-shadow: 14px 0 38px rgba(27, 25, 22, .14); }
+  .mobile-bar button {
+    min-height: 36px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: var(--ch-accent);
+    font: 600 var(--ch-text-xs)/1 var(--ch-font-sans);
+    cursor: pointer;
+  }
+  .mobile-bar strong {
+    min-width: 0;
+    overflow: hidden;
+    font: 600 var(--ch-text-sm)/1.3 var(--ch-font-sans);
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rail-scrim {
+    position: fixed;
+    z-index: var(--ch-z-overlay);
+    inset: 0;
+    display: block;
+    min-height: 0;
+    border: 0;
+    background: rgba(15, 23, 42, .4);
+  }
+  :deep(.sidebar) {
+    position: fixed;
+    z-index: var(--ch-z-modal);
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 88vw);
+    transform: translateX(-104%);
+    transition: transform var(--ch-duration-normal) var(--ch-ease-out);
+    box-shadow: var(--ch-shadow-lg);
+  }
   :deep(.sidebar.is-open) { transform: translateX(0); }
+  :deep(.team-panel) {
+    display: flex;
+    position: fixed;
+    z-index: var(--ch-z-modal);
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(300px, 90vw);
+    transform: translateX(104%);
+    transition: transform var(--ch-duration-normal) var(--ch-ease-out);
+    box-shadow: var(--ch-shadow-lg);
+  }
+  :deep(.team-panel.is-open) { transform: translateX(0); }
 }
 </style>

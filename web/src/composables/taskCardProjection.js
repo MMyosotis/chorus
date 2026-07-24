@@ -4,26 +4,22 @@
 export function planTaskCards(graph) {
   const tasks = (graph && graph.tasks) || []
   const plan = []
-  const confirmedProofs = tasks.filter((t) => t.status === 'finished' && t.agent_type !== 'finalize')
-  if (confirmedProofs.length) {
-    plan.push({
-      kind: 'proof-register',
-      tasks: confirmedProofs,
-      id: `proof-register:${confirmedProofs.map((t) => t.id).join(':')}`,
-      role: 'assistant',
-    })
+  for (const task of tasks) {
+    if (task.status === 'finished' && task.agent_type !== 'finalize') {
+      plan.push({ kind: 'confirmed', task, id: 'confirmed:' + task.id, role: 'assistant' })
+    }
   }
-  const runningTask = tasks.find((t) => t.status === 'running')
+  const runningTask = tasks.find((task) => task.status === 'running')
   if (runningTask) {
     plan.push({ kind: 'running', task: runningTask, id: 'running:' + runningTask.id, role: 'assistant' })
   }
-  for (const t of tasks) {
-    if (t.status === 'awaiting_confirm') {
-      plan.push({ kind: 'hil', task: t, id: 'hil:' + t.id, role: 'assistant' })
-    } else if (t.status === 'failed') {
-      plan.push({ kind: 'recovery', task: t, id: 'recovery:' + t.id, role: 'assistant' })
-    } else if (t.agent_type === 'finalize' && t.status === 'finished') {
-      plan.push({ kind: 'postcard', task: t, id: 'postcard:' + t.id, role: 'assistant' })
+  for (const task of tasks) {
+    if (task.status === 'awaiting_confirm') {
+      plan.push({ kind: 'hil', task, id: 'hil:' + task.id, role: 'assistant' })
+    } else if (task.status === 'failed') {
+      plan.push({ kind: 'recovery', task, id: 'recovery:' + task.id, role: 'assistant' })
+    } else if (task.agent_type === 'finalize' && task.status === 'finished') {
+      plan.push({ kind: 'postcard', task, id: 'postcard:' + task.id, role: 'assistant' })
     }
   }
   return plan

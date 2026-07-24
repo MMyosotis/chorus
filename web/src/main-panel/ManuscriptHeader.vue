@@ -9,59 +9,111 @@ defineProps({
 </script>
 
 <template>
-  <header class="manuscript-header">
-    <div class="manuscript-dateline">
-      <span>LIVE MANUSCRIPT</span>
-      <span>{{ date }}</span>
-      <span>P. {{ page }}</span>
+  <header class="workspace-header">
+    <div class="workspace-identity">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></svg>
+      </span>
+      <div>
+        <span class="workspace-label">AI 创作工作台</span>
+        <h1>{{ title }}</h1>
+      </div>
     </div>
-    <div class="manuscript-headline">
-      <span class="manuscript-kicker">{{ kicker }}</span>
-      <h1>{{ title }}</h1>
-      <p>{{ deck }}</p>
-      <div class="manuscript-byline"><span>文 / 稿搭编辑部</span><span>CITY NOTES · VOL. 07</span></div>
+    <div class="workspace-state">
+      <span class="state-dot"></span>
+      <span>{{ kicker }}</span>
+      <span class="state-page">{{ page }}</span>
     </div>
   </header>
 </template>
 
 <style scoped>
-.manuscript-header {
-  position: relative;
-  display: block;
-  height: auto;
+.workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 80px;
   flex-shrink: 0;
-  margin: -20px calc(-1 * var(--ch-paper-pad)) 0;
-  padding: 34px var(--ch-paper-pad) 0;
+  margin: -24px calc(-1 * var(--ch-paper-pad)) 0;
+  padding: 16px 24px;
   border: 0;
   background: transparent;
   color: var(--ch-text);
 }
-.manuscript-dateline {
-  height: auto;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
+.workspace-identity {
+  min-width: 0;
+  display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 2px;
-  border-top: 6px double var(--ch-text);
-  border-bottom: 1px solid rgba(27, 25, 22, .72);
-  color: var(--ch-body);
-  font: var(--ch-folio-weight) var(--ch-folio-size)/1 var(--ch-serif);
-  font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: var(--ch-folio-tracking);
+  gap: 16px;
 }
-.manuscript-dateline > span { font: inherit; letter-spacing: inherit; }
-.manuscript-dateline span:nth-child(2) { text-align: center; }
-.manuscript-dateline span:last-child { text-align: right; }
-.manuscript-headline { position: relative; padding: 30px 0 28px; }
-.manuscript-kicker { display: block; color: var(--ch-warm); font: 600 var(--t-micro)/1.2 var(--ch-serif); letter-spacing: .14em; text-transform: uppercase; }
-.manuscript-headline h1 { max-width: 100%; margin: 8px 0 6px; color: var(--ch-text); font: 700 clamp(28px, 2.7vw, 40px)/1.32 var(--ch-serif); letter-spacing: .04em; overflow-wrap: anywhere; }
-.manuscript-headline p { max-width: 640px; margin: 0; color: var(--ch-body); font: 500 14px/1.8 var(--ch-serif); letter-spacing: .025em; }
-.manuscript-byline { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding-top: 9px; border-top: 1px solid rgba(27, 25, 22, .58); color: var(--ch-meta); font: 500 10px/1.4 var(--ch-serif); font-variant-numeric: lining-nums tabular-nums; letter-spacing: .08em; }
-.manuscript-byline span:last-child { text-align: right; }
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ch-accent-gradient);
+  box-shadow: 0 8px 20px rgba(99, 102, 241, .22);
+}
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--ch-on-accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.workspace-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ch-text-secondary);
+  font: 500 var(--ch-text-xs)/1.5 var(--ch-font-sans);
+  letter-spacing: 0.02em;
+}
+.workspace-identity h1 {
+  max-width: 560px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ch-text);
+  font: 600 var(--ch-text-lg)/1.3 var(--ch-font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-state {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 16px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-surface-2);
+  color: var(--ch-text-secondary);
+  font: 500 var(--ch-text-xs)/1 var(--ch-font-sans);
+}
+.state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ch-accent);
+  box-shadow: 0 0 0 4px var(--ch-accent-soft);
+}
+.state-page {
+  min-width: 24px;
+  padding-left: 8px;
+  border-left: 1px solid var(--ch-border);
+  color: var(--ch-text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 @media (max-width: 780px) {
-  .manuscript-header { padding-inline: 28px; }
-  .manuscript-dateline { grid-template-columns: 1fr auto; }
-  .manuscript-dateline span:nth-child(2) { display: none; }
+  .workspace-header { min-height: 64px; padding-inline: 16px; }
+  .workspace-state { display: none; }
+  .brand-mark { width: 32px; height: 32px; flex-basis: 32px; }
+  .brand-mark svg { width: 16px; height: 16px; }
 }
 </style>

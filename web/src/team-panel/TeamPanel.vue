@@ -1,52 +1,32 @@
 <script setup>
 import { computed } from 'vue'
 
-import TocCard from './TocCard.vue'
 import IntentStateCard from './IntentStateCard.vue'
+import PipelineTimeline from './PipelineTimeline.vue'
 
 const props = defineProps({
   graph: { type: Object, default: null },
   focusedTaskId: { type: String, default: null },
   intentState: { type: Object, default: null },
 })
-const emit = defineEmits(['focus'])
 
 const tasks = computed(() => props.graph?.tasks || [])
-const hasIntent = computed(() => !!props.intentState)
-
-function onFocus(id) {
-  emit('focus', id)
-}
 </script>
 
 <template>
-  <aside class="team-panel">
+  <aside class="team-panel" aria-label="意图与团队">
     <div class="team-body">
-      <template v-if="hasIntent">
-        <IntentStateCard
-          :state="intentState"
-        />
-      </template>
-      <div v-if="!tasks.length && !hasIntent" class="team-empty">暂无创作任务</div>
-      <template v-if="tasks.length">
-        <TocCard
+      <div class="team-surface">
+        <header class="board-header">
+          <h1>工作展板</h1>
+        </header>
+        <div class="section-divider" aria-hidden="true"></div>
+        <IntentStateCard :state="intentState" />
+        <div class="section-divider" aria-hidden="true"></div>
+        <PipelineTimeline
           :tasks="tasks"
-          :focused-task-id="focusedTaskId"
-          @focus="onFocus"
+          :intent-state="intentState"
         />
-      </template>
-    </div>
-    <div class="editorial-mark" aria-label="稿搭编辑部，第七期">
-      <div class="editorial-mark-inner">
-        <div class="editorial-mark-dept">
-          <strong>稿搭编辑部</strong>
-          <span>EDITORIAL DEPT.</span>
-        </div>
-        <div class="editorial-mark-issue">
-          <strong>VOL. 07</strong>
-          <span>ISSUE</span>
-        </div>
-        <div class="editorial-mark-seal" aria-hidden="true"><span>稿</span></div>
       </div>
     </div>
   </aside>
@@ -54,118 +34,53 @@ function onFocus(id) {
 
 <style scoped>
 .team-panel {
-  width: var(--ch-rail);
-  flex: 0 0 var(--ch-rail);
-  border-left: 1px solid rgba(116, 107, 94, 0.34);
-  background: var(--ch-team-surface);
-  display: flex;
-  flex-direction: column;
+  width: var(--ch-right-rail);
   height: 100%;
-  overflow: hidden;
+  display: flex;
+  flex: 0 0 var(--ch-right-rail);
+  flex-direction: column;
+  overflow: visible;
+  border-left: 0;
+  background: transparent;
 }
 
 .team-body {
-  flex: 1;
   width: 100%;
+  min-height: 0;
+  flex: 1;
+  overflow: visible;
+  padding: var(--ch-space-2) var(--ch-space-2) var(--ch-space-5);
+}
+
+.team-surface {
+  height: calc(100dvh - 48px);
+  min-height: calc(100dvh - 48px);
+  overflow-x: hidden;
   overflow-y: auto;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-panel);
+  background: var(--ch-surface);
+  box-shadow: var(--ch-shadow-md);
+  scrollbar-color: var(--ch-border-strong) transparent;
   scrollbar-width: thin;
 }
 
-.editorial-mark {
-  flex: 0 0 68px;
-  width: calc(100% - 48px);
-  height: 68px;
-  margin: 18px 24px 30px;
-  padding: 3px;
-  border: 2px solid var(--ch-warm);
-  color: var(--ch-warm);
+.board-header {
+  padding: var(--ch-space-4) var(--ch-space-4) var(--ch-space-3);
+  font-family: var(--ch-font-sans);
 }
 
-.editorial-mark-inner {
-  height: 58px;
-  display: grid;
-  grid-template-columns: minmax(88px, 1.7fr) minmax(44px, .82fr) minmax(38px, .72fr);
-  border: 1px solid rgba(141, 51, 37, .82);
+.board-header h1 {
+  margin: 0;
+  color: var(--ch-text);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
 }
 
-.editorial-mark-dept,
-.editorial-mark-issue,
-.editorial-mark-seal {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-}
-
-.editorial-mark-dept {
-  padding: 7px 4px;
-}
-
-.editorial-mark-dept strong {
-  white-space: nowrap;
-  font: 600 12px/1.3 var(--ch-serif);
-  letter-spacing: .08em;
-}
-
-.editorial-mark-dept span {
-  margin-top: 5px;
-  white-space: nowrap;
-  font: 500 9px/1.15 var(--ch-serif);
-  letter-spacing: .025em;
-}
-
-.editorial-mark-issue {
-  padding: 7px 4px;
-  border-left: 1px solid rgba(141, 51, 37, .72);
-}
-
-.editorial-mark-issue strong {
-  white-space: nowrap;
-  font: 500 9px/1.2 var(--ch-serif);
-  letter-spacing: .02em;
-}
-
-.editorial-mark-issue span {
-  margin-top: 5px;
-  font: 500 9px/1.15 var(--ch-serif);
-  letter-spacing: .04em;
-}
-
-.editorial-mark-seal span {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--ch-warm);
-  border-radius: 50%;
-  font: 600 19px/1 var(--ch-serif);
-}
-
-.team-body :deep(.brief) {
-  flex: 0 0 auto;
-  margin: 0 0 40px;
-  padding: 30px 24px 0;
-}
-
-.team-body :deep(.toc-slip) {
-  flex: 0 0 auto;
-  padding: 30px 24px 24px;
-}
-
-.team-body :deep(.brief + .toc-slip) {
-  padding-top: 0;
-}
-
-.team-empty {
-  color: var(--ch-meta);
-  font-size: var(--t-meta);
-  text-align: center;
-  padding: 40px 0 0;
+.section-divider {
+  height: 1px;
+  margin: 0 var(--ch-space-4);
+  background: var(--ch-border);
 }
 </style>

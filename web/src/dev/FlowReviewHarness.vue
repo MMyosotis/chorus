@@ -48,7 +48,7 @@ const intentState = computed(() => ({
     叙事: '从停留体验切入，以空间观察和城市情绪组织内容',
     禁用: '不使用硬广表达，不堆砌卖点',
   },
-  missing_slots: current.value.type === 'conversation' ? ['感受', '具体店铺', '配图'] : [],
+  progress_percent: current.value.type === 'conversation' ? 58 : 100,
 }))
 
 function art(label, from, to) {
@@ -154,7 +154,9 @@ const messages = computed(() => {
   if (current.value.type === 'intent') return [...discussion, commissionNote, { id: 'audit-intent', kind: 'intent-confirm', role: 'assistant', state: intentState.value }]
   const items = [...discussion, planNote]
   const confirmed = current.value.type === 'complete' ? taskTemplates.slice(0, 3) : current.value.type === 'recovery' ? taskTemplates.slice(0, 2) : taskTemplates.slice(0, Math.max(0, current.value.phase - 1))
-  if (confirmed.length) items.push({ id: 'audit-register', kind: 'proof-register', role: 'assistant', tasks: confirmed })
+  for (const task of confirmed) {
+    items.push({ id: `audit-confirmed-${task.id}`, kind: 'confirmed', role: 'assistant', task })
+  }
   if (current.value.type === 'run') items.push({ id: `audit-${current.value.id}`, kind: 'running', role: 'assistant', task: activeTask() })
   if (current.value.type === 'review') items.push({ id: `audit-${current.value.id}`, kind: 'hil', role: 'assistant', task: activeTask() })
   if (current.value.type === 'complete') items.push({ id: 'audit-complete', kind: 'postcard', role: 'assistant', task: finalTask })
@@ -197,26 +199,26 @@ const messages = computed(() => {
 <style scoped>
 :global(body:has(.audit-shell)) { overflow-y: auto; }
 .audit-shell { display: flex; width: 100%; min-height: 100dvh; overflow: visible; align-items: flex-start; background: var(--ch-canvas); }
-.audit-nav { position: sticky; top: 0; width: var(--ch-rail); height: 100dvh; flex: 0 0 var(--ch-rail); display: flex; flex-direction: column; padding: var(--ch-left-rail-padding); border-right: 1px solid rgba(110,103,93,.34); background: var(--ch-canvas); }
-.audit-mast { display: grid; gap: 6px; margin-bottom: 26px; }.audit-mast strong { font: 700 25px/1.25 var(--ch-serif); letter-spacing: .08em; }.audit-mast small { color: var(--ch-muted); font: 600 9px/1.2 var(--ch-sans); letter-spacing: .16em; }
-.audit-nav label { margin-bottom: 7px; color: var(--ch-warm); font: 600 11px/1.2 var(--ch-serif); letter-spacing: .08em; }
-.audit-nav select { width: 100%; height: 44px; padding: 0 10px; border: 1px solid var(--ch-text); border-radius: 0; background: var(--ch-paper); color: var(--ch-text); font: 500 12px/1 var(--ch-serif); }
-.audit-steps { flex: 1; min-height: 0; margin-top: 18px; overflow-y: auto; border-top: 1px solid var(--ch-border-2); }.audit-steps button { width: 100%; min-height: 42px; display: grid; grid-template-columns: 27px 1fr; align-items: center; padding: 0 2px; border: 0; border-bottom: 1px dashed rgba(110,103,93,.28); background: transparent; color: var(--ch-body); text-align: left; font: 500 12px/1.3 var(--ch-serif); cursor: pointer; transition: color .18s ease, background-color .18s ease; }.audit-steps button span { color: var(--ch-muted); font-variant-numeric: tabular-nums; }.audit-steps button.current { background: rgba(255,253,248,.44); color: var(--ch-warm); font-weight: 600; }.audit-steps button.current span { color: var(--ch-warm); }
-.audit-pager { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }.audit-pager button { min-width: 0; border: 1px solid var(--ch-border-2); background: transparent; color: var(--ch-body); font: 600 11px/1 var(--ch-serif); cursor: pointer; }.audit-pager button:disabled { opacity: .3; cursor: default; }
-.audit-main { flex: 1; min-width: 0; padding: 26px; overflow: visible; }
+.audit-nav { position: sticky; top: 0; width: var(--ch-rail); height: 100dvh; flex: 0 0 var(--ch-rail); display: flex; flex-direction: column; padding: var(--ch-space-4) var(--ch-space-3) var(--ch-space-3); border-right: 1px solid var(--ch-border); background: var(--ch-canvas); }
+.audit-mast { display: grid; gap: var(--ch-space-2); margin-bottom: var(--ch-space-4); }.audit-mast strong { font: 700 24px/1.25 var(--ch-font-sans); letter-spacing: .08em; }.audit-mast small { color: var(--ch-text-muted); font: 600 12px/1.2 var(--ch-font-sans); letter-spacing: .16em; }
+.audit-nav label { margin-bottom: var(--ch-space-2); color: var(--ch-accent); font: 600 12px/1.2 var(--ch-font-sans); letter-spacing: .08em; }
+.audit-nav select { width: 100%; height: 40px; padding: 0 var(--ch-space-2); border: 1px solid var(--ch-border-strong); border-radius: var(--ch-radius-btn); background: var(--ch-surface); color: var(--ch-text); font: 500 12px/1 var(--ch-font-sans); }
+.audit-steps { flex: 1; min-height: 0; margin-top: var(--ch-space-4); overflow-y: auto; border-top: 1px solid var(--ch-border-strong); }.audit-steps button { width: 100%; min-height: 40px; display: grid; grid-template-columns: 24px 1fr; align-items: center; padding: 0 var(--ch-space-1); border: 0; border-bottom: 1px dashed var(--ch-border); background: transparent; color: var(--ch-text-secondary); text-align: left; font: 500 12px/1.3 var(--ch-font-sans); cursor: pointer; transition: color .18s ease, background-color .18s ease; }.audit-steps button span { color: var(--ch-text-muted); font-variant-numeric: tabular-nums; }.audit-steps button.current { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: 600; }.audit-steps button.current span { color: var(--ch-accent-soft-text); }
+.audit-pager { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ch-space-2); margin-top: var(--ch-space-3); }.audit-pager button { min-width: 0; min-height: 32px; padding: 0 var(--ch-space-2); border: 1px solid var(--ch-border-strong); border-radius: var(--ch-radius-btn); background: transparent; color: var(--ch-text-secondary); font: 600 12px/1 var(--ch-font-sans); cursor: pointer; }.audit-pager button:disabled { opacity: .3; cursor: default; }
+.audit-main { flex: 1; min-width: 0; padding: var(--ch-space-4); overflow: visible; }
 .audit-paper :deep(.chat-window) { flex: 0 0 auto; overflow: visible; scrollbar-gutter: auto; }
 .audit-paper :deep(.input-bar) {
   position: fixed;
-  left: 50%;
-  width: min(calc(100vw - 2 * var(--ch-rail) - 104px), 828px);
+  left: calc(var(--ch-rail) + (100vw - var(--ch-rail) - var(--ch-right-rail)) / 2);
+  width: min(calc(100vw - var(--ch-rail) - var(--ch-right-rail) - 104px), 828px);
 }
 .audit-shell > :deep(.team-panel) { position: sticky; top: 0; height: 100dvh; }
 @media(min-width:781px) and (max-width:1180px){
-  .audit-nav{width:224px;flex-basis:224px}
+  .audit-nav{width:var(--ch-rail);flex-basis:var(--ch-rail)}
   .audit-shell > :deep(.team-panel){display:none}
   .audit-paper :deep(.input-bar){
-    left:calc((100vw + 224px) / 2);
-    width:min(calc(100vw - 328px),828px);
+    left:calc((100vw + var(--ch-rail)) / 2);
+    width:min(calc(100vw - var(--ch-rail) - 104px),828px);
   }
 }
 @media(max-width:780px){

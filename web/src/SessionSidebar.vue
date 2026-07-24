@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
   sessions: { type: Array, required: true },
@@ -11,43 +11,24 @@ const props = defineProps({
 
 const emit = defineEmits(['select', 'create', 'delete', 'rename'])
 
+const searchText = ref('')
 const editingId = ref(null)
 const editingText = ref('')
 const inputRef = ref(null)
 
-function formatRel(ts) {
-  if (!ts) return ''
-  const now = Date.now() / 1000
-  const diff = Math.max(0, now - ts)
-  if (diff < 60) return '刚刚'
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`
-  if (diff < 172800) return '昨天'
-  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`
-  if (diff < 1209600) return '上周'
-  const d = new Date(ts * 1000)
-  return `${d.getMonth() + 1}月${d.getDate()}日`
-}
+const filteredSessions = computed(() => {
+  const keyword = searchText.value.trim().toLocaleLowerCase()
+  if (!keyword) return props.sessions
+  return props.sessions.filter((session) => session.title.toLocaleLowerCase().includes(keyword))
+})
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-function formatIssueDate(ts) {
-  if (!ts) return { short: '—', full: '—' }
-  const d = new Date(ts * 1000)
-  return {
-    short: `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}`,
-    full: `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`,
-  }
-}
-
-function startRename(c, e) {
-  e.stopPropagation()
-  editingId.value = c.id
-  editingText.value = c.title
+function startRename(session, event) {
+  event.stopPropagation()
+  editingId.value = session.id
+  editingText.value = session.title
   nextTick(() => {
-    if (inputRef.value) {
-      inputRef.value.focus()
-      inputRef.value.select()
-    }
+    inputRef.value?.focus()
+    inputRef.value?.select()
   })
 }
 
@@ -57,9 +38,8 @@ function commitRename() {
   const title = editingText.value.trim()
   editingId.value = null
   if (!title) return
-  const cur = props.sessions.find((c) => c.id === id)
-  if (cur && cur.title === title) return
-  emit('rename', { id, title })
+  const current = props.sessions.find((session) => session.id === id)
+  if (current && current.title !== title) emit('rename', { id, title })
 }
 
 function cancelRename() {
@@ -67,402 +47,522 @@ function cancelRename() {
   editingText.value = ''
 }
 
-function onKey(e) {
-  if (e.key === 'Enter') {
-    e.preventDefault()
+function onRenameKeydown(event) {
+  if (event.key === 'Enter') {
+    event.preventDefault()
     commitRename()
-  } else if (e.key === 'Escape') {
-    e.preventDefault()
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
     cancelRename()
   }
 }
 
-function handleDelete(c, e) {
-  e.stopPropagation()
-  if (props.streamingMap[c.id]) return
-  if (!confirm(`确定删除「${c.title}」？`)) return
-  emit('delete', c.id)
+function handleDelete(session, event) {
+  event.stopPropagation()
+  if (props.streamingMap[session.id]) return
+  if (confirm(`确定删除「${session.title}」？`)) emit('delete', session.id)
 }
 
-function handleSelect(c) {
-  if (editingId.value === c.id) return
-  emit('select', c.id)
+function handleSelect(session) {
+  if (editingId.value !== session.id) emit('select', session.id)
 }
 
 watch(
   () => props.activeId,
   () => {
-    if (editingId.value && editingId.value !== props.activeId) {
-      cancelRename()
-    }
-  }
+    if (editingId.value && editingId.value !== props.activeId) cancelRename()
+  },
 )
 </script>
 
 <template>
-  <aside class="sidebar">
-    <div class="brand">
-      <div class="name">稿搭<span class="en">GAODA · EDITORIAL</span></div>
-    </div>
-    <button class="new-btn" @click="emit('create')">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-        <path d="M12 5v14M5 12h14" />
-      </svg>
-      新建稿件
+  <aside class="sidebar" aria-label="会话侧栏">
+    <header class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z" /><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></svg>
+      </span>
+      <span class="brand-name">稿搭</span>
+    </header>
+
+    <button class="new-chat" type="button" @click="emit('create')">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      <span>新建会话</span>
     </button>
-    <div class="section-title">稿件 · COPY</div>
+
+    <label class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+      <input v-model="searchText" type="search" placeholder="搜索会话" aria-label="搜索会话" />
+    </label>
+
     <div class="session-list">
-      <div
-        v-for="(c, idx) in sessions"
-        :key="c.id"
-        :class="['sess', { active: c.id === activeId }]"
-        @click="handleSelect(c)"
+      <article
+        v-for="session in filteredSessions"
+        :key="session.id"
+        :class="['session', { active: session.id === activeId }]"
+        tabindex="0"
+        @click="handleSelect(session)"
+        @keydown.enter="handleSelect(session)"
       >
-        <div class="sess-main">
-          <div class="issue-meta">
-            <span>VOL. {{ String(Math.max(1, sessions.length - idx)).padStart(2, '0') }}</span>
-            <span v-if="streamingMap[c.id] || (c.id === activeId && activeWorking)" class="live"><i></i>创作中</span>
-            <span v-else>{{ c.id === activeId ? (activeCompleted ? '已完成' : '当前稿') : '已完成' }}</span>
-          </div>
-          <div class="sess-row">
-            <input
-              v-if="editingId === c.id"
-              ref="inputRef"
-              v-model="editingText"
-              class="rename-input"
-              maxlength="60"
-              @keydown="onKey"
-              @blur="commitRename"
-              @click.stop
-            />
-            <span v-else class="t">{{ c.title }}</span>
-          </div>
-          <div class="meta">
-            <span class="date-short">{{ formatIssueDate(c.updated_at).short }}</span>
-            <span class="date-full">{{ formatIssueDate(c.updated_at).full }}</span>
-          </div>
+        <span
+          :class="['session-dot', { 'is-working': streamingMap[session.id] || (session.id === activeId && activeWorking) }]"
+          aria-hidden="true"
+        ></span>
+        <div class="session-content">
+          <input
+            v-if="editingId === session.id"
+            ref="inputRef"
+            v-model="editingText"
+            class="rename-input"
+            maxlength="60"
+            @blur="commitRename"
+            @click.stop
+            @keydown="onRenameKeydown"
+          />
+          <template v-else>
+            <strong>{{ session.title }}</strong>
+            <span
+              v-if="streamingMap[session.id] || (session.id === activeId && activeWorking)"
+              class="session-status"
+            >
+              创作中
+            </span>
+          </template>
         </div>
-        <div v-if="editingId !== c.id" class="session-actions">
-          <button class="icon-btn" title="重命名" @click="startRename(c, $event)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
+        <div v-if="editingId !== session.id" class="session-actions">
+          <button type="button" aria-label="重命名会话" title="重命名" @click="startRename(session, $event)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="m16.5 3.5 4 4L7 21l-4 1 1-4L16.5 3.5Z" /></svg>
           </button>
-          <button class="icon-btn" title="删除" :disabled="!!streamingMap[c.id]" @click="handleDelete(c, $event)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6 18 20a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-              <path d="M10 11v6M14 11v6" />
-              <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
-            </svg>
+          <button
+            type="button"
+            aria-label="删除会话"
+            title="删除"
+            :disabled="!!streamingMap[session.id]"
+            @click="handleDelete(session, $event)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6" /></svg>
           </button>
         </div>
-      </div>
-      <div v-if="sessions.length === 0" class="empty">暂无会话</div>
+      </article>
+      <p v-if="filteredSessions.length === 0" class="empty">
+        {{ searchText ? '没有匹配的会话' : '暂无会话' }}
+      </p>
     </div>
+
+    <footer class="account">
+      <span class="avatar" aria-hidden="true">稿</span>
+      <span class="account-copy">
+        <strong>创作团队</strong>
+        <small>个人工作空间</small>
+      </span>
+      <button type="button" aria-label="账户设置">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
+      </button>
+    </footer>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
   width: var(--ch-rail);
+  height: 100%;
   flex-shrink: 0;
-  padding: var(--ch-left-rail-padding);
-  background: var(--ch-canvas);
-  border-right: 1px solid rgba(110, 103, 93, 0.34);
   display: flex;
   flex-direction: column;
-  height: 100%;
   overflow: hidden;
+  padding: var(--ch-space-3);
+  border-right: 1px solid var(--ch-border);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+  font-family: var(--ch-font-sans);
 }
 
 .brand {
-  margin: 0;
-  padding: 0 0 32px;
-  border: 0;
-  flex-shrink: 0;
-}
-
-.name {
-  font-family: var(--ch-serif);
-  font-weight: 700;
-  font-size: 34px;
-  line-height: .95;
-  color: var(--ch-text);
-  letter-spacing: 0.12em;
-}
-.name .en {
-  display: block;
-  line-height: 1.2;
-  font-family: var(--ch-sans);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.28em;
-  color: var(--ch-meta);
-  margin-top: 12px;
-}
-
-.new-btn {
-  width: 100%;
-  min-height: 44px;
-  margin: 0 0 30px;
-  padding: 0 12px;
-  border: 2px solid var(--ch-warm);
-  background: transparent;
-  color: var(--ch-warm);
-  font-family: var(--ch-serif);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: 0.06em;
   display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 var(--ch-space-1);
+  margin-bottom: var(--ch-space-3);
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  cursor: pointer;
   flex-shrink: 0;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-.new-btn svg { width: 17px; height: 17px; stroke-width: 2.4; }
-
-.new-btn:hover {
-  border-color: var(--ch-warm);
-  color: var(--ch-warm);
-  background: rgba(141, 51, 37, .055);
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-accent-gradient);
+  color: var(--ch-on-accent);
 }
 
-.section-title {
-  height: var(--ch-rail-head-height);
+.brand-mark svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-name {
+  font-size: var(--ch-text-lg);
+  font-weight: var(--ch-font-bold);
+  line-height: var(--ch-leading-tight);
+  letter-spacing: -0.01em;
+}
+
+.new-chat {
+  width: 100%;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ch-space-2);
+  flex-shrink: 0;
+  margin-bottom: var(--ch-space-3);
+  padding: 0 var(--ch-space-3);
+  border: 0;
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-accent-gradient);
+  color: var(--ch-on-accent);
+  font-size: var(--ch-text-sm);
+  font-weight: var(--ch-font-semibold);
+  cursor: pointer;
+  transition: box-shadow var(--ch-duration-fast) var(--ch-ease);
+}
+
+.new-chat:hover {
+  box-shadow: var(--ch-shadow-md);
+}
+
+.new-chat svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.search {
+  height: 40px;
   display: flex;
   align-items: center;
-  margin: 0;
-  padding: 1px 2px 10px;
-  border-bottom: 1px solid var(--ch-rail-rule);
-  color: var(--ch-warm);
-  font: var(--ch-rail-head-weight) var(--ch-rail-head-size)/var(--ch-rail-head-line) var(--ch-serif);
-  letter-spacing: var(--ch-rail-head-tracking);
+  gap: var(--ch-space-2);
+  flex-shrink: 0;
+  margin-bottom: var(--ch-space-2);
+  padding: 0 var(--ch-space-2);
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-surface-2);
+  color: var(--ch-text-muted);
+  transition: border-color var(--ch-duration-fast) var(--ch-ease),
+    background var(--ch-duration-fast) var(--ch-ease),
+    box-shadow var(--ch-duration-fast) var(--ch-ease);
+}
+
+.search:focus-within {
+  border-color: var(--ch-accent);
+  background: var(--ch-surface);
+  box-shadow: var(--ch-shadow-focus);
+}
+
+.search svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ch-text);
+  font-size: var(--ch-text-sm);
+  line-height: var(--ch-leading-normal);
+}
+
+.search input::placeholder {
+  color: var(--ch-text-faint);
+}
+
+.search input::-webkit-search-cancel-button {
+  display: none;
 }
 
 .session-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 0 12px;
   scrollbar-width: none;
 }
-.session-list::-webkit-scrollbar { display: none; }
 
-.sess {
+.session-list::-webkit-scrollbar {
+  display: none;
+}
+
+.session {
   position: relative;
   width: 100%;
-  min-height: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  padding: 18px 14px 19px;
-  border-top: 0;
-  border-bottom: 1px solid rgba(116, 107, 94, .45);
-  border-left: 0;
-  cursor: pointer;
-  margin: 0;
-  transition: background 0.12s, border-color 0.12s;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  height: 40px;
+  padding: 0 var(--ch-space-2);
+  border-radius: var(--ch-radius-btn);
+  cursor: pointer;
+  outline: none;
+  transition: background var(--ch-duration-fast) var(--ch-ease);
 }
 
-.sess::before {
+.session:hover,
+.session:focus-visible {
+  background: var(--ch-surface-2);
+}
+
+.session.active {
+  background: var(--ch-accent-soft);
+}
+
+.session.active::before {
   content: "";
   position: absolute;
+  left: 0;
   top: 8px;
   bottom: 8px;
-  left: 0;
   width: 3px;
-  z-index: 1;
-  background: var(--ch-warm);
-  opacity: 0;
-  transition: opacity 180ms ease-out;
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-accent);
 }
 
-.sess::after {
-  content: "";
-  position: absolute;
-  inset: 8px 0;
-  z-index: 0;
-  background: rgba(255, 254, 250, .76);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 180ms ease-out;
+.session-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--ch-text-faint);
+  transition: background var(--ch-duration-fast) var(--ch-ease);
 }
 
-.sess:hover {
-  background: color-mix(in srgb, var(--ch-text) 4%, transparent);
+.session.active .session-dot {
+  background: var(--ch-accent);
 }
 
-.sess.active {
-  margin: 0;
-  padding: 18px 14px 19px;
-  background: transparent;
-}
-.sess.active::before,
-.sess.active::after {
-  opacity: 1;
+.session-dot.is-working {
+  background: var(--ch-accent);
+  box-shadow: 0 0 0 3px var(--ch-accent-soft);
+  animation: pulse 1.6s ease-in-out infinite;
 }
 
-.sess-main {
-  position: relative;
-  z-index: 2;
+.session-content {
+  min-width: 0;
   flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.issue-meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 14px;
-  color: var(--ch-meta);
-  font: 500 var(--ch-rail-meta-size)/14px var(--ch-serif);
-  font-variant-numeric: lining-nums tabular-nums;
-}
-.issue-meta > span {
-  display: inline-flex;
-  align-items: center;
-  height: 14px;
-  line-height: 14px;
-}
-.issue-meta .live { gap: 6px; color: var(--ch-warm); }
-.issue-meta .live i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: breathe 1.7s ease-in-out infinite; }
-
-.sess-row {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  height: calc(var(--ch-rail-head-size) * 1.45);
-  margin: 9px 0 9px;
+  gap: var(--ch-space-2);
 }
 
-.t {
-  display: block;
-  flex: 1;
-  min-width: 0;
+.session-content strong,
+.session-content span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--ch-serif);
-  font-size: var(--ch-rail-head-size);
-  font-weight: 600;
-  color: var(--ch-text);
-  line-height: 1.45;
-  letter-spacing: .025em;
 }
 
-.sess.active .t { color: var(--ch-text); }
-
-.rename-input {
-  flex: 1;
+.session-content strong {
   min-width: 0;
-  padding: 2px 6px;
-  border: 1px solid var(--ch-border-2);
-  border-radius: 0;
-  font-size: var(--t-meta);
-  outline: none;
-  font-family: inherit;
-  background: var(--ch-surface);
-  color: var(--ch-text);
+  flex: 1;
+  color: var(--ch-text-secondary);
+  font-size: var(--ch-text-sm);
+  font-weight: var(--ch-font-medium);
+  line-height: var(--ch-leading-tight);
 }
 
-.meta {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-family: var(--ch-serif);
-  font-size: var(--ch-rail-meta-size);
-  font-weight: 500;
-  line-height: 1.25;
-  color: var(--ch-meta);
-  font-variant-numeric: lining-nums tabular-nums;
-}
-.date-short {
-  color: var(--ch-text);
-  font: 500 11px/1.25 var(--ch-serif);
-  letter-spacing: .04em;
-}
-.date-full {
-  color: var(--ch-meta);
-  font: 500 11px/1.3 var(--ch-serif);
-  letter-spacing: .02em;
+.session.active .session-content strong {
+  color: var(--ch-accent-soft-text);
+  font-weight: var(--ch-font-semibold);
 }
 
-.dot-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ch-orange);
-  animation: pulse 1.4s ease-in-out infinite;
+.session-status {
   flex-shrink: 0;
-}
-
-@keyframes breathe {
-  0%, 100% { opacity: 0.35; }
-  50% { opacity: 1; }
+  color: var(--ch-accent);
+  font-size: var(--ch-text-xs);
+  font-weight: var(--ch-font-medium);
 }
 
 .session-actions {
-  position: absolute;
-  z-index: 3;
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
   display: none;
-  gap: 2px;
+  align-items: center;
+  flex-shrink: 0;
+  gap: var(--ch-space-1);
 }
 
-.sess:hover .session-actions {
+.session:hover .session-actions,
+.session:focus-within .session-actions {
   display: flex;
 }
 
-.sess:hover .sess-row {
-  padding-right: 60px;
-}
-
-.icon-btn {
-  width: 22px;
-  height: 22px;
-  min-height: 22px;
-  display: flex;
+.session-actions button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ch-muted);
-  cursor: pointer;
   padding: 0;
-  transition: background 0.15s, color 0.15s;
+  border: 0;
+  border-radius: var(--ch-radius-btn);
+  background: transparent;
+  color: var(--ch-text-faint);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease),
+    color var(--ch-duration-fast) var(--ch-ease);
 }
 
-@media (max-width: 1180px) {
-  .sidebar { width: 224px; padding-inline: 20px; }
-}
-
-.icon-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--ch-text) 6%, transparent);
+.session-actions button:hover:not(:disabled) {
+  background: var(--ch-surface-3);
   color: var(--ch-text);
 }
 
-.icon-btn:disabled {
-  opacity: 0.4;
+.session-actions button:disabled {
+  opacity: .4;
   cursor: not-allowed;
 }
 
+.session-actions svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rename-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--ch-space-2);
+  border: 1px solid var(--ch-accent);
+  border-radius: var(--ch-radius-btn);
+  outline: none;
+  background: var(--ch-surface);
+  color: var(--ch-text);
+  font-size: var(--ch-text-sm);
+  line-height: var(--ch-leading-tight);
+  box-shadow: var(--ch-shadow-focus);
+}
+
 .empty {
+  margin: 0;
+  padding: var(--ch-space-4) var(--ch-space-2);
+  color: var(--ch-text-faint);
+  font-size: var(--ch-text-xs);
   text-align: center;
-  color: var(--ch-faint);
-  padding: 24px 12px;
-  font-size: var(--t-meta);
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--ch-space-2);
+  flex-shrink: 0;
+  margin-top: var(--ch-space-3);
+  padding: var(--ch-space-2);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface-2);
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-accent-gradient);
+  color: var(--ch-on-accent);
+  font-size: var(--ch-text-sm);
+  font-weight: var(--ch-font-bold);
+}
+
+.account-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.account-copy strong,
+.account-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-copy strong {
+  color: var(--ch-text);
+  font-size: var(--ch-text-sm);
+  font-weight: var(--ch-font-semibold);
+  line-height: var(--ch-leading-tight);
+}
+
+.account-copy small {
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-xs);
+  line-height: var(--ch-leading-tight);
+}
+
+.account button {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--ch-radius-btn);
+  background: transparent;
+  color: var(--ch-text-muted);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease),
+    color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.account button:hover {
+  background: var(--ch-surface-3);
+  color: var(--ch-text);
+}
+
+.account button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: .4; }
+  50% { opacity: 1; }
+}
+
+@media (max-height: 800px) {
+  .sidebar { padding: var(--ch-space-2); }
+  .brand { margin-bottom: var(--ch-space-2); }
+  .new-chat { margin-bottom: var(--ch-space-2); }
+  .account { margin-top: var(--ch-space-2); }
 }
 </style>

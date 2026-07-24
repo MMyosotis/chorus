@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
-import { ROLE_FULL, stepOf } from '../team-panel/roleMeta.js'
-import StageHeader from './StageHeader.vue'
+import { ROLE_FULL } from '../team-panel/roleMeta.js'
 
 const props = defineProps({ task: { type: Object, required: true } })
 
@@ -14,7 +13,6 @@ function toCN(n) {
 
 const agentType = computed(() => props.task.agent_type)
 const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
-const stepNo = computed(() => String(stepOf(agentType.value)).padStart(2, '0'))
 const prog = computed(() => props.task.progress || {})
 const aside = computed(() => prog.value.aside || '正在创作')
 
@@ -76,25 +74,24 @@ const recordLeft = computed(() => {
 
 <template>
   <section class="running">
-    <StageHeader :number="stepNo" :title="roleLabel" english="PRODUCTION DESK" status="制作中" status-tone="primary" />
-    <div class="running-body">
-      <div class="running-caption">CURRENT<br>ASSIGNMENT</div>
-      <div class="running-copy">
-        <div class="aside">{{ aside }}</div>
-        <div class="running-meta">
-          <div v-if="activityPrefix" class="activity">
-            <span class="dot-wrap"><span class="halo"></span><span class="core"></span></span>
-            <span class="act-slot">
-              <Transition name="label-swap">
-                <span :key="activityKind" class="act-prefix">{{ activityPrefix }}</span>
-              </Transition>
-              <span v-if="activitySuffix" class="act-suffix">{{ activitySuffix }}</span>
-            </span>
-          </div>
-          <div class="record">
-            <template v-if="hasOutput">{{ recordLeft }}<span v-if="chars"> · <span class="num">{{ charsText }}</span>字</span></template>
-            <span v-else class="record-empty">尚无落笔</span>
-          </div>
+    <header class="running-head">
+      <span>{{ roleLabel }}</span>
+      <span class="running-status">进行中</span>
+    </header>
+    <div class="running-copy">
+      <h2>{{ aside }}</h2>
+      <div class="running-meta">
+        <div v-if="activityPrefix" class="activity">
+          <span class="act-slot">
+            <Transition name="label-swap">
+              <span :key="activityKind" class="act-prefix">{{ activityPrefix }}</span>
+            </Transition>
+            <span v-if="activitySuffix" class="act-suffix">{{ activitySuffix }}</span>
+          </span>
+        </div>
+        <div class="record">
+          <template v-if="hasOutput">{{ recordLeft }}<span v-if="chars"> · <span class="num">{{ charsText }}</span>字</span></template>
+          <span v-else class="record-empty">正在准备内容</span>
         </div>
       </div>
     </div>
@@ -102,69 +99,39 @@ const recordLeft = computed(() => {
 </template>
 
 <style scoped>
-.running { display: block; border: 0; background: rgba(255, 253, 248, .38); }
-.running-body { display: grid; grid-template-columns: 118px minmax(0, 1fr); border-top: 2px solid rgba(27, 25, 22, .9); border-bottom: 1px solid rgba(27, 25, 22, .62); }
-.running-caption { display: flex; align-items: center; justify-content: center; padding: 18px 12px; border-right: 1px dotted rgba(110, 103, 93, .48); color: var(--ch-warm); font: 600 var(--ch-chat-label-size)/1.45 var(--ch-serif); letter-spacing: .08em; text-align: center; }
-.running-copy { min-width: 0; padding: 18px 0 14px 24px; }
-.aside {
-  font-family: var(--ch-serif);
+.running { display: block; padding: var(--ch-space-4); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); box-shadow: var(--ch-shadow-sm); font-family: var(--ch-font-sans); }
+.running-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--ch-text-secondary); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.running-status { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: var(--ch-radius-pill); background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font: 600 12px/1 var(--ch-font-sans); white-space: nowrap; }
+.running-copy { min-width: 0; padding: 0; }
+.running-copy h2 {
   max-width: 560px;
-  font-size: var(--ch-chat-title-size);
-  line-height: 1.72;
+  margin: 24px 0 0;
+  font-size: 18px;
+  line-height: 1.3;
   color: var(--ch-text);
   font-weight: 600;
-  letter-spacing: .015em;
-  padding: 0;
+  letter-spacing: 0;
 }
 .running-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px dotted rgba(110, 103, 93, .46);
-  font: 500 11px/1.4 var(--ch-serif);
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ch-border);
+  font: 500 12px/1.5 var(--ch-font-sans);
 }
 .activity {
   min-width: 0;
-  color: var(--ch-body);
+  color: var(--ch-text-secondary);
   font: inherit;
   letter-spacing: inherit;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 9px;
+  gap: 8px;
   min-height: 1.8em;
-}
-.dot-wrap {
-  position: relative;
-  width: 5px;
-  height: 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.halo {
-  position: absolute;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ch-primary);
-  animation: breath 1.4s ease-in-out infinite;
-}
-.core {
-  position: absolute;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--ch-primary-2);
-  opacity: .9;
-}
-@keyframes breath {
-  0%, 100% { opacity: .28; }
-  50% { opacity: 1; }
 }
 .act-slot {
   position: relative;
@@ -191,26 +158,26 @@ const recordLeft = computed(() => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  font-family: var(--ch-serif);
-  font-size: 11px;
-  color: var(--ch-muted);
-  letter-spacing: .18em;
+  font-family: var(--ch-font-sans);
+  font-size: 12px;
+  color: var(--ch-text-muted);
+  letter-spacing: 0;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 .record::before { content: none; }
 .record .num {
-  color: var(--ch-warm);
+  color: var(--ch-accent);
   font-weight: 600;
 }
 .record-empty {
-  color: var(--ch-faint);
-  opacity: .5;
-  letter-spacing: .25em;
+  color: var(--ch-text-faint);
+  opacity: .72;
 }
 
 @media (max-width: 700px) {
-  .running-body { grid-template-columns: 1fr; }
-  .running-caption { border-right: 0; border-bottom: 1px dotted rgba(110, 103, 93, .48); }
+  .running { padding: 16px; }
+  .running-meta { align-items: flex-start; flex-direction: column; }
+  .record { justify-content: flex-start; text-align: left; }
 }
 </style>
