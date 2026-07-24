@@ -6,13 +6,16 @@ const props = defineProps({
   activeId: { type: String, default: null },
   traceStore: { type: Object, required: true },
   open: { type: Boolean, default: false },
+  tab: { type: String, default: 'trace' },
 })
-const emit = defineEmits(['update:open'])
-
-const tab = ref('trace')
+const emit = defineEmits(['update:open', 'update:tab'])
 
 function close() {
   emit('update:open', false)
+}
+
+function setTab(next) {
+  emit('update:tab', next)
 }
 
 const testModeEnabled = ref(false)
@@ -217,12 +220,15 @@ function renderMessageContent(m) {
 </script>
 
 <template>
+  <transition name="console-fade">
+    <div v-if="open" class="console-scrim" @click="close"></div>
+  </transition>
   <transition name="console-slide">
     <aside v-if="open" class="console-panel" role="dialog" aria-label="控制台">
       <header class="console-header">
         <div class="tabs">
-          <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">设置</button>
-          <button :class="{ active: tab === 'trace' }" @click="tab = 'trace'">
+          <button :class="{ active: tab === 'settings' }" @click="setTab('settings')">设置</button>
+          <button :class="{ active: tab === 'trace' }" @click="setTab('trace')">
             Trace <span v-if="traces.length" class="count">{{ traces.length }}</span>
           </button>
         </div>
@@ -378,21 +384,29 @@ function renderMessageContent(m) {
 .console-panel {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   bottom: 0;
   width: 480px;
   max-width: 90vw;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(24px) saturate(170%);
   -webkit-backdrop-filter: blur(24px) saturate(170%);
-  border-left: 1px solid var(--ch-border);
-  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.06);
-  z-index: 1000;
+  border-right: 1px solid var(--ch-border);
+  box-shadow: 12px 0 32px rgba(0, 0, 0, 0.06);
+  z-index: 1001;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   font-size: 14px;
   color: var(--ch-text);
+}
+
+.console-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(15, 23, 42, .32);
+  backdrop-filter: blur(2px);
 }
 
 @media (max-width: 600px) {
@@ -402,6 +416,16 @@ function renderMessageContent(m) {
   }
 }
 
+.console-fade-enter-active,
+.console-fade-leave-active {
+  transition: opacity 0.22s ease;
+}
+
+.console-fade-enter-from,
+.console-fade-leave-to {
+  opacity: 0;
+}
+
 .console-slide-enter-active,
 .console-slide-leave-active {
   transition: transform 0.22s ease;
@@ -409,7 +433,7 @@ function renderMessageContent(m) {
 
 .console-slide-enter-from,
 .console-slide-leave-to {
-  transform: translateX(100%);
+  transform: translateX(-100%);
 }
 
 .console-header {

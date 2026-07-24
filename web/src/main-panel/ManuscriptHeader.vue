@@ -55,7 +55,7 @@ defineProps({
   place-items: center;
   border-radius: 50%;
   background: var(--ch-accent-gradient);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, .22);
+  box-shadow: 0 8px 20px rgba(108, 99, 255, .22);
 }
 .brand-mark svg {
   width: 20px;

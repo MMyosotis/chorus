@@ -3,7 +3,9 @@ import { ref, reactive, computed, watch, nextTick, onMounted, defineAsyncCompone
 import ChatWindow from './main-panel/ChatWindow.vue'
 import InputBar from './main-panel/InputBar.vue'
 import ManuscriptHeader from './main-panel/ManuscriptHeader.vue'
+import ConsolePanel from './main-panel/ConsolePanel.vue'
 import SessionSidebar from './SessionSidebar.vue'
+import NavDock from './NavDock.vue'
 import {
   listSessions,
   createSession,
@@ -37,11 +39,22 @@ const activeId = ref(null)
 const inputBarRef = ref(null)
 const leftRailOpen = ref(false)
 const rightRailOpen = ref(false)
+const consoleOpen = ref(false)
+const consoleTab = ref('trace')
 
 const focusedTaskId = ref(null)
 
 function onTaskFocus(taskId) {
   focusedTaskId.value = taskId
+}
+
+function openConsole(tab) {
+  consoleTab.value = tab
+  consoleOpen.value = true
+}
+
+function onPreviewTask(task) {
+  chatWindowRef.value?.openPreview(task)
 }
 
 const messages = computed(() => messagesBySession[activeId.value] || [])
@@ -541,7 +554,12 @@ onMounted(async () => {
 <template>
   <FlowReviewHarness v-if="uiReviewMode" />
   <template v-else>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'sidebar-open': leftRailOpen }">
+    <NavDock
+      :sidebar-open="leftRailOpen"
+      @toggle-sidebar="leftRailOpen = !leftRailOpen"
+      @open-settings="openConsole('settings')"
+    />
     <SessionSidebar
       :class="{ 'is-open': leftRailOpen }"
       :sessions="sessions"
@@ -591,6 +609,14 @@ onMounted(async () => {
       :focused-task-id="focusedTaskId"
       :intent-state="activeIntentState"
       @focus="onTaskFocus"
+      @view-logs="openConsole('trace')"
+      @preview-task="onPreviewTask"
+    />
+    <ConsolePanel
+      v-model:open="consoleOpen"
+      v-model:tab="consoleTab"
+      :active-id="activeId"
+      :trace-store="traceStore"
     />
     <button v-if="leftRailOpen || rightRailOpen" class="rail-scrim" type="button" aria-label="关闭侧栏" @click="leftRailOpen = false; rightRailOpen = false"></button>
   </div>
@@ -599,12 +625,17 @@ onMounted(async () => {
 
 <style scoped>
 .app-shell {
+  --ch-left-inset: 56px;
   display: flex;
   min-height: 100dvh;
   width: 100%;
   overflow: clip;
   align-items: flex-start;
   background: var(--ch-canvas);
+}
+
+.app-shell.sidebar-open {
+  --ch-left-inset: 296px;
 }
 
 .main-panel {
@@ -675,6 +706,7 @@ onMounted(async () => {
 }
 
 @media (min-width: 1181px) {
+  .app-shell > :deep(.nav-dock),
   .app-shell > :deep(.sidebar),
   .app-shell > :deep(.team-panel) {
     position: sticky;
@@ -682,24 +714,39 @@ onMounted(async () => {
     height: 100dvh;
   }
 
+  .app-shell > :deep(.sidebar) {
+    width: calc(var(--ch-left-inset) - 56px);
+    transition: width var(--ch-duration-normal) var(--ch-ease-out);
+  }
+
   .paper-stage :deep(.input-bar) {
     position: fixed;
-    left: calc(var(--ch-rail) + (100vw - var(--ch-rail) - var(--ch-right-rail)) / 2);
-    width: min(calc(100vw - var(--ch-rail) - var(--ch-right-rail) - 96px), 768px);
+    left: calc(var(--ch-left-inset) + (100vw - var(--ch-left-inset) - var(--ch-right-rail)) / 2);
+    width: min(calc(100vw - var(--ch-left-inset) - var(--ch-right-rail) - 96px), 768px);
+    transition: left var(--ch-duration-normal) var(--ch-ease-out),
+      width var(--ch-duration-normal) var(--ch-ease-out);
   }
 }
 
 @media (min-width: 781px) and (max-width: 1180px) {
+  .app-shell > :deep(.nav-dock),
   .app-shell > :deep(.sidebar) {
     position: sticky;
     top: 0;
     height: 100dvh;
   }
 
+  .app-shell > :deep(.sidebar) {
+    width: calc(var(--ch-left-inset) - 56px);
+    transition: width var(--ch-duration-normal) var(--ch-ease-out);
+  }
+
   .paper-stage :deep(.input-bar) {
     position: fixed;
-    left: calc((100vw + var(--ch-rail)) / 2);
-    width: min(calc(100vw - var(--ch-rail) - 96px), 768px);
+    left: calc((100vw + var(--ch-left-inset)) / 2);
+    width: min(calc(100vw - var(--ch-left-inset) - 96px), 768px);
+    transition: left var(--ch-duration-normal) var(--ch-ease-out),
+      width var(--ch-duration-normal) var(--ch-ease-out);
   }
 }
 

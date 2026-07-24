@@ -54,7 +54,7 @@ function followBottom(behavior = 'auto') {
   scrollToBottom(behavior)
 }
 
-defineExpose({ scrollToBottom, followBottom })
+defineExpose({ scrollToBottom, followBottom, openPreview })
 
 const previewTask = ref(null)
 function openPreview(task) { previewTask.value = task }
@@ -259,7 +259,7 @@ watch(
   border-radius: var(--ch-radius-card);
   background: var(--ch-accent-gradient);
   color: var(--ch-on-accent);
-  box-shadow: 0 12px 28px rgba(99, 102, 241, .22);
+  box-shadow: 0 12px 28px rgba(108, 99, 255, .22);
 }
 .empty-mark svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .empty-hint h2 { margin: 0; color: var(--ch-text); font: 600 28px/1.3 var(--ch-font-sans); }

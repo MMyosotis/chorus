@@ -49,7 +49,7 @@ function displayValue(value) {
   <section class="intent-card" aria-labelledby="intent-card-title">
     <header class="intent-head">
       <div class="intent-heading">
-        <h2 id="intent-card-title">意图识别</h2>
+        <h2 id="intent-card-title">意图理解</h2>
       </div>
       <span class="intent-status" :class="statusMeta.tone">
         <i aria-hidden="true"></i>{{ statusMeta.label }}

@@ -300,11 +300,11 @@ function closePreview() {
   max-width: min(540px, 88%);
   margin-left: auto;
   padding: 16px 24px;
-  background: var(--ch-accent-gradient);
-  border: 1px solid transparent;
+  background: var(--ch-surface-3);
+  border: 1px solid var(--ch-border);
   border-radius: 16px 16px 4px 16px;
   box-shadow: var(--ch-shadow-sm);
-  color: var(--ch-on-accent);
+  color: var(--ch-text);
 }
 
 .bubble {
@@ -316,7 +316,7 @@ function closePreview() {
 
 .bubble.user {
   max-width: min(540px, 88%);
-  color: var(--ch-on-accent);
+  color: var(--ch-text);
   font-family: var(--ch-font-sans);
   font-size: var(--ch-text-sm);
   font-weight: var(--ch-font-medium);
@@ -498,7 +498,7 @@ function closePreview() {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--ch-accent) 0%, rgba(99, 102, 241, 0.32) 55%, transparent 100%);
+  background: radial-gradient(circle, var(--ch-accent) 0%, rgba(108, 99, 255, 0.32) 55%, transparent 100%);
   animation: breath 1.4s ease-in-out infinite;
 }
 .core {

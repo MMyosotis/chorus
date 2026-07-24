@@ -3,12 +3,14 @@ import { computed } from 'vue'
 
 import IntentStateCard from './IntentStateCard.vue'
 import PipelineTimeline from './PipelineTimeline.vue'
+import ArtifactsCard from './ArtifactsCard.vue'
 
 const props = defineProps({
   graph: { type: Object, default: null },
   focusedTaskId: { type: String, default: null },
   intentState: { type: Object, default: null },
 })
+defineEmits(['view-logs', 'preview-task'])
 
 const tasks = computed(() => props.graph?.tasks || [])
 </script>
@@ -17,16 +19,11 @@ const tasks = computed(() => props.graph?.tasks || [])
   <aside class="team-panel" aria-label="意图与团队">
     <div class="team-body">
       <div class="team-surface">
-        <header class="board-header">
-          <h1>工作展板</h1>
-        </header>
-        <div class="section-divider" aria-hidden="true"></div>
         <IntentStateCard :state="intentState" />
         <div class="section-divider" aria-hidden="true"></div>
-        <PipelineTimeline
-          :tasks="tasks"
-          :intent-state="intentState"
-        />
+        <PipelineTimeline :tasks="tasks" @view-logs="$emit('view-logs')" />
+        <div class="section-divider" aria-hidden="true"></div>
+        <ArtifactsCard :tasks="tasks" @preview-task="$emit('preview-task')" />
       </div>
     </div>
   </aside>
@@ -40,7 +37,6 @@ const tasks = computed(() => props.graph?.tasks || [])
   flex: 0 0 var(--ch-right-rail);
   flex-direction: column;
   overflow: visible;
-  border-left: 0;
   background: transparent;
 }
 
@@ -58,24 +54,11 @@ const tasks = computed(() => props.graph?.tasks || [])
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-panel);
+  border-radius: var(--ch-radius-xl);
   background: var(--ch-surface);
   box-shadow: var(--ch-shadow-md);
   scrollbar-color: var(--ch-border-strong) transparent;
   scrollbar-width: thin;
-}
-
-.board-header {
-  padding: var(--ch-space-4) var(--ch-space-4) var(--ch-space-3);
-  font-family: var(--ch-font-sans);
-}
-
-.board-header h1 {
-  margin: 0;
-  color: var(--ch-text);
-  font-size: 24px;
-  font-weight: 600;
-  line-height: 32px;
 }
 
 .section-divider {

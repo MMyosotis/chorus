@@ -1,6 +1,6 @@
 /* ===== Design tokens ===== */
 :root {
-  --ch-canvas: #f6f7f9;
+  --ch-canvas: #fafafb;
   --ch-surface: #ffffff;
   --ch-surface-2: #f8fafc;
   --ch-surface-3: #f1f5f9;
@@ -12,13 +12,13 @@
   --ch-text-faint: #9ca3af;
   --ch-text-inverse: #ffffff;
 
-  --ch-accent: #6366f1;
-  --ch-accent-hover: #5558e3;
-  --ch-accent-active: #4f46e5;
+  --ch-accent: #6c63ff;
+  --ch-accent-hover: #5a52e0;
+  --ch-accent-active: #4f47d6;
   --ch-accent-2: #7c3aed;
-  --ch-accent-soft: #eef2ff;
+  --ch-accent-soft: #eeedff;
   --ch-accent-soft-text: #4338ca;
-  --ch-accent-gradient: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  --ch-accent-gradient: linear-gradient(135deg, #6c63ff 0%, #7c3aed 100%);
   --ch-on-accent: #ffffff;
 
   --ch-success: #16a34a;
@@ -37,13 +37,14 @@
   --ch-radius-btn: 8px;
   --ch-radius-card: 16px;
   --ch-radius-panel: 20px;
+  --ch-radius-xl: 24px;
   --ch-radius-pill: 999px;
 
   --ch-shadow-xs: 0 1px 2px rgba(15, 23, 42, .04);
   --ch-shadow-sm: 0 1px 3px rgba(15, 23, 42, .06), 0 1px 2px rgba(15, 23, 42, .04);
   --ch-shadow-md: 0 4px 12px rgba(15, 23, 42, .06), 0 2px 4px rgba(15, 23, 42, .04);
   --ch-shadow-lg: 0 12px 32px rgba(15, 23, 42, .10), 0 4px 8px rgba(15, 23, 42, .06);
-  --ch-shadow-focus: 0 0 0 3px rgba(99, 102, 241, .18);
+  --ch-shadow-focus: 0 0 0 3px rgba(108, 99, 255, .18);
 
   --ch-space-1: 4px;
   --ch-space-2: 8px;

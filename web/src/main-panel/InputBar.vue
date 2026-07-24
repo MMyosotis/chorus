@@ -182,7 +182,7 @@ defineExpose({ focus })
 }
 .send-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-.send-btn:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(99, 102, 241, .32); }
+.send-btn:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(108, 99, 255, .32); }
 
 .send-btn:active:not(:disabled) { transform: scale(0.94); }
 

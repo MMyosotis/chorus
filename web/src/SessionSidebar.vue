@@ -77,13 +77,7 @@ watch(
 
 <template>
   <aside class="sidebar" aria-label="会话侧栏">
-    <header class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z" /><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" /></svg>
-      </span>
-      <span class="brand-name">稿搭</span>
-    </header>
-
+    <div class="sidebar-inner">
     <button class="new-chat" type="button" @click="emit('create')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       <span>新建会话</span>
@@ -147,72 +141,25 @@ watch(
         {{ searchText ? '没有匹配的会话' : '暂无会话' }}
       </p>
     </div>
-
-    <footer class="account">
-      <span class="avatar" aria-hidden="true">稿</span>
-      <span class="account-copy">
-        <strong>创作团队</strong>
-        <small>个人工作空间</small>
-      </span>
-      <button type="button" aria-label="账户设置">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></svg>
-      </button>
-    </footer>
+    </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: var(--ch-rail);
   height: 100%;
   flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
   overflow: hidden;
-  padding: var(--ch-space-3);
-  border-right: 1px solid var(--ch-border);
   background: var(--ch-surface);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
 
-.brand {
+.sidebar-inner {
+  height: 100%;
   display: flex;
-  align-items: center;
-  gap: var(--ch-space-2);
-  flex-shrink: 0;
-  height: 40px;
-  padding: 0 var(--ch-space-1);
-  margin-bottom: var(--ch-space-3);
-}
-
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-accent-gradient);
-  color: var(--ch-on-accent);
-}
-
-.brand-mark svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.brand-name {
-  font-size: var(--ch-text-lg);
-  font-weight: var(--ch-font-bold);
-  line-height: var(--ch-leading-tight);
-  letter-spacing: -0.01em;
+  flex-direction: column;
+  padding: var(--ch-space-3);
 }
 
 .new-chat {
@@ -471,98 +418,13 @@ watch(
   text-align: center;
 }
 
-.account {
-  display: flex;
-  align-items: center;
-  gap: var(--ch-space-2);
-  flex-shrink: 0;
-  margin-top: var(--ch-space-3);
-  padding: var(--ch-space-2);
-  border-radius: var(--ch-radius-card);
-  background: var(--ch-surface-2);
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-accent-gradient);
-  color: var(--ch-on-accent);
-  font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-bold);
-}
-
-.account-copy {
-  min-width: 0;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.account-copy strong,
-.account-copy small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.account-copy strong {
-  color: var(--ch-text);
-  font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-semibold);
-  line-height: var(--ch-leading-tight);
-}
-
-.account-copy small {
-  color: var(--ch-text-muted);
-  font-size: var(--ch-text-xs);
-  line-height: var(--ch-leading-tight);
-}
-
-.account button {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: var(--ch-radius-btn);
-  background: transparent;
-  color: var(--ch-text-muted);
-  cursor: pointer;
-  transition: background var(--ch-duration-fast) var(--ch-ease),
-    color var(--ch-duration-fast) var(--ch-ease);
-}
-
-.account button:hover {
-  background: var(--ch-surface-3);
-  color: var(--ch-text);
-}
-
-.account button svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 @keyframes pulse {
   0%, 100% { opacity: .4; }
   50% { opacity: 1; }
 }
 
 @media (max-height: 800px) {
-  .sidebar { padding: var(--ch-space-2); }
-  .brand { margin-bottom: var(--ch-space-2); }
+  .sidebar-inner { padding: var(--ch-space-2); }
   .new-chat { margin-bottom: var(--ch-space-2); }
-  .account { margin-top: var(--ch-space-2); }
 }
 </style>
