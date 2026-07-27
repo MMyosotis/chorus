@@ -101,7 +101,7 @@ scheduler 占槽 pending->running 后 submit 到线程池。`run(task_id)`：loa
 
 ### 意图状态链路（会话级工作记忆）
 
-主 agent 每轮调 `update_intent_state` 工具，把对用户意图的理解写进 `IntentState`（`intent_status` / `goal` / `known_slots` / `missing_slots` / `confirmation_summary`），独立于 message history 存 `intent_states` 表（每会话一行最新快照，CASCADE 随会话删）。
+主 agent 每轮调 `update_intent_state` 工具，把对用户意图的理解写进 `IntentState`（创作字段 / `intent_status` / `progress_percent`），独立于 message history 存 `intent_states` 表（每会话一行最新快照，CASCADE 随会话删）。
 
 - 状态机 `IntentStatus`：empty → capturing →（needs_clarification | ready_to_confirm）→ confirmed → dispatched。`next_action` 由 status 经 `derive_next_action` 单一映射派生，**不让模型填**——避免 status 与 next_action 不自洽。此即「去代码强制」：意图流程由模型经工具 + 状态机驱动，不在 Python 里硬编码分支。
 - `update_intent_state`（supervisor 白名单首位）是注册型 builtin 工具，只更新意图状态、不建任务；`IntentStateService` 负责读写 + 版本号 + 确认门禁。建图仍由 `create_plan` 在 confirmed（next_action=create_plan_after_confirm）后触发。
@@ -267,6 +267,20 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 - 无含义单字母一律改简短实名，覆盖：`for <单字母> in` 循环变量（含推导式）、**元组解包循环变量**（`for c, d in pairs`，非 dict 惯用法）、**函数参数**、**lambda 参数**、**单字母局部变量**（`q = ...` / `n = len(...)` / `p = AGENT_PROFILES[...]`）。按上下文定名：`p`→path/profile/part、`t`→task/tool/call/trace、`r`→row/ref、`s`→skill/session/summary、`m`→message/model、`k`（在 `XxxRow.model_fields` 中）→field、`d`→dep/dispatch、`n`→count、`q`→query、`c`→call/created、`g`→graph、`a`→aside、`v`→view、`e`→event。两字母缩写（如 `td`）同样费解，一并清理。
 - **保留的惯用单字母**：`i`（索引）、`k`/`v`（`for k, v in d.items()` dict 解包）、`_`（丢弃占位）、`except ... as e:`（异常对象）。
 - 改名时注意不要遮蔽同函数 `Depends()` 注入的参数名——此时挑更精准的名（如 `SessionSummary` 项→`summary`、`TraceEntry` 项→`entry`）而非套映射。
+
+### 前端 UI 规范
+
+**字体**：
+
+- 字体族：中文移动端优先苹方（`PingFang SC`）、桌面端微软雅黑（`Microsoft YaHei`），英文推荐 `Inter`；单个界面字体种类控制在 2 款以内。
+- 字号一律取偶数，避免真机边缘模糊。层级：大标题 `24/28/32px`、页面/正文标题 `18/20px`、常规正文 `14/16px`、辅助说明/小标签 `12px`。
+- 行高：正文为字号的 `1.5-1.6` 倍，标题 `1.2-1.3` 倍。
+
+**间距（8px 黄金法则）**：
+
+- 元素间距、内边距、外边距都必须是 8 的倍数（`8/16/24/32px`），杜绝 `15px`、`22px` 这类非 8 倍数值。
+
+> 改前端样式时先对照本节自检字号是否偶数、间距是否 8 的倍数，再提交。
 
 ### 提交信息规范
 
