@@ -92,6 +92,6 @@ watch(() => [props.previewRef, props.stylesheetRef, props.card], load)
 
 <style scoped>
 .platform-shell { width: 100%; }
-.platform-iframe { width: 100%; border: 0; display: block; background: #fff; }
-.platform-error { padding: 24px; color: #c00; font-size: 14px; text-align: center; border: 1px dashed #ccc; }
+.platform-iframe { width: 100%; border: 0; display: block; background: var(--ch-surface); }
+.platform-error { padding: 24px; color: var(--ch-danger); font-size: 14px; text-align: center; border: 1px dashed var(--ch-border-strong); }
 </style>

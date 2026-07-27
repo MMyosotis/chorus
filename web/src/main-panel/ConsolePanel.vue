@@ -388,11 +388,11 @@ function renderMessageContent(m) {
   bottom: 0;
   width: 480px;
   max-width: 90vw;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--ch-surface-glass-strong);
   backdrop-filter: blur(24px) saturate(170%);
   -webkit-backdrop-filter: blur(24px) saturate(170%);
   border-right: 1px solid var(--ch-border);
-  box-shadow: 12px 0 32px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--ch-shadow-panel);
   z-index: 1001;
   display: flex;
   flex-direction: column;
@@ -405,7 +405,7 @@ function renderMessageContent(m) {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(15, 23, 42, .32);
+  background: var(--ch-overlay-soft);
   backdrop-filter: blur(2px);
 }
 
@@ -466,7 +466,7 @@ function renderMessageContent(m) {
 }
 
 .tabs button.active {
-  background: color-mix(in srgb, var(--ch-accent) 8%, transparent);
+  background: var(--ch-accent-subtle);
   border-color: transparent;
   color: var(--ch-text);
   font-weight: 500;

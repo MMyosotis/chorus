@@ -173,7 +173,6 @@ watch(
             v-else
             :role="msg.role"
             :content="msg.content"
-            :created-at="msg.created_at"
             :thinking="msg.thinking"
             :tools="msg.tools"
             :intent-state="msg.intentState"
@@ -215,11 +214,13 @@ watch(
 <style scoped>
 .chat-window {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 24px var(--ch-paper-pad) 144px;
+  padding: 0 0 24px;
   background: transparent;
-  scrollbar-gutter: stable both-edges;
+  scrollbar-width: none;
 }
+.chat-window::-webkit-scrollbar { display: none; }
 
 .chat-inner {
   max-width: none;
@@ -251,21 +252,21 @@ watch(
   text-align: center;
 }
 .empty-mark {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   margin-bottom: 24px;
   display: grid;
   place-items: center;
-  border-radius: var(--ch-radius-card);
-  background: var(--ch-accent-gradient);
-  color: var(--ch-on-accent);
-  box-shadow: 0 12px 28px rgba(108, 99, 255, .22);
+  border-radius: 16px;
+  background: var(--ch-accent-subtle);
+  color: var(--ch-accent);
+  box-shadow: none;
 }
 .empty-mark svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.empty-hint h2 { margin: 0; color: var(--ch-text); font: 600 28px/1.3 var(--ch-font-sans); }
-.empty-hint > p { max-width: 480px; margin: 0 0 24px; color: var(--ch-text-muted); font: 400 14px/1.6 var(--ch-font-sans); }
+.empty-hint h2 { margin: 0; color: var(--ch-text); font: 600 24px/1.3 var(--ch-font-sans); }
+.empty-hint > p { max-width: 480px; margin: 0 0 24px; color: var(--ch-text-faint); font: 400 14px/1.6 var(--ch-font-sans); }
 .starter-grid { width: min(100%, 640px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.starter-grid button { min-height: 144px; display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); color: var(--ch-text); text-align: left; cursor: default; box-shadow: var(--ch-shadow-sm); }
+.starter-grid button { min-height: 144px; display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--ch-border); border-radius: 16px; background: var(--ch-surface); color: var(--ch-text); text-align: left; cursor: default; box-shadow: none; }
 .starter-grid .starter-icon { display: inline-flex; margin-bottom: 24px; color: var(--ch-accent); }
 .starter-grid .starter-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .starter-grid b { margin-bottom: 8px; font: 600 14px/1.4 var(--ch-font-sans); }
@@ -276,20 +277,20 @@ watch(
 .chat-inner :deep(.running),
 .chat-inner :deep(.confirmed-card),
 .chat-inner :deep(.artifact-wrap:not(.review)) {
-  margin: 32px 0 16px;
+  margin: 0 0 48px;
 }
 .chat-inner :deep(.intent-confirm) {
   margin: 16px 0 0;
 }
 
-.preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; background: rgba(15, 23, 42, .55); overflow-y: auto; }
+.preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; background: var(--ch-overlay); overflow-y: auto; }
 .preview-frame { position: relative; width: min(100%, 880px); background: var(--ch-surface); padding: 32px 24px 24px; border-radius: var(--ch-radius-card); box-shadow: var(--ch-shadow-lg); }
 .preview-close { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; background: transparent; color: var(--ch-text-muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .preview-close:hover { color: var(--ch-text); }
 .preview-modal-enter-active, .preview-modal-leave-active { transition: opacity .2s; }
 .preview-modal-enter-from, .preview-modal-leave-to { opacity: 0; }
 @media (max-width: 780px) {
-  .chat-window { padding-inline: 16px; }
+  .chat-window { padding: 24px 16px 24px; }
   .empty-hint { min-height: 480px; padding: 48px 0; }
   .starter-grid { grid-template-columns: 1fr; }
   .starter-grid button { min-height: 96px; padding: 16px; }

@@ -53,7 +53,7 @@ defineProps({ task: { type: Object, required: true } })
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
-.candidates { display: grid; gap: 8px; }
+.candidates { display: grid; gap: 16px; }
 .candidate { padding: 16px; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); }
 .candidate.selected { border-color: var(--ch-accent); background: var(--ch-accent-soft); }
 .candidate > span { color: var(--ch-text-muted); font-size: 12px; line-height: 1.5; }

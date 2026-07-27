@@ -25,8 +25,21 @@ function openFinalize(row) { emit('preview-task', row.task) }
 
     <ul v-else class="artifacts-list">
       <li v-for="row in rows" :key="row.kind" class="artifact-row">
-        <span class="artifact-check" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 7" /></svg>
+        <span class="artifact-icon" aria-hidden="true">
+          <svg v-if="row.kind === 'idea'" viewBox="0 0 24 24">
+            <path d="M9 18h6M10 22h4M8.4 14.6A7 7 0 1 1 15.6 14.6C14.6 15.4 14 16.1 14 17h-4c0-.9-.6-1.6-1.6-2.4Z" />
+          </svg>
+          <svg v-else-if="row.kind === 'script'" viewBox="0 0 24 24">
+            <path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6" />
+          </svg>
+          <svg v-else-if="row.kind === 'image'" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <circle cx="8.5" cy="9" r="1.5" />
+            <path d="m4 17 5-5 3 3 2-2 6 6" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24">
+            <path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6" />
+          </svg>
         </span>
         <div class="artifact-body">
           <span class="artifact-role">{{ ROLE_LABELS[row.kind] }}</span>
@@ -41,36 +54,15 @@ function openFinalize(row) { emit('preview-task', row.task) }
 
           <template v-else-if="row.kind === 'image'">
             <p class="artifact-text">{{ row.images.length }} 张配图</p>
-            <div v-if="row.images.length" class="thumb-strip">
-              <button
-                v-for="(img, idx) in row.images.slice(0, 3)"
-                :key="idx"
-                type="button"
-                class="thumb"
-                @click="openImage(img.url)"
-              >
-                <img :src="img.url" :alt="img.caption || ''" loading="lazy" />
-              </button>
-            </div>
           </template>
 
           <template v-else-if="row.kind === 'finalize'">
             <p class="artifact-text">{{ row.title || '已交付成品' }}</p>
-            <div class="finalize-row">
-              <button
-                v-if="row.cover && row.cover.url"
-                type="button"
-                class="final-cover"
-                @click="openImage(row.cover.url)"
-              >
-                <img :src="row.cover.url" :alt="row.cover.caption || row.title" loading="lazy" />
-              </button>
-              <button type="button" class="final-open" @click="openFinalize(row)">
-                查看完整成品
-              </button>
-            </div>
           </template>
         </div>
+        <span class="artifact-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg>
+        </span>
       </li>
     </ul>
 
@@ -87,7 +79,6 @@ function openFinalize(row) { emit('preview-task', row.task) }
 
 <style scoped>
 .artifacts-card {
-  padding: var(--ch-space-4);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -99,6 +90,7 @@ function openFinalize(row) { emit('preview-task', row.task) }
 
 .artifacts-head h2 {
   margin: 0;
+  color: var(--ch-ink);
   font-size: 18px;
   font-weight: 600;
   line-height: 24px;
@@ -121,16 +113,33 @@ function openFinalize(row) { emit('preview-task', row.task) }
 }
 
 .artifact-row {
+  position: relative;
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
-  gap: var(--ch-space-2);
+  grid-template-columns: 32px minmax(0, 1fr) 14px;
+  gap: var(--ch-space-3);
   align-items: start;
 }
 
-.artifact-check {
-  width: 20px;
-  height: 20px;
-  margin-top: 2px;
+.artifact-row::before {
+  position: absolute;
+  inset: -6px -8px;
+  z-index: 0;
+  border-radius: var(--ch-radius-list);
+  background: transparent;
+  content: "";
+  transition: background var(--ch-duration-fast) var(--ch-ease);
+}
+
+.artifact-row:hover::before {
+  background: var(--ch-surface-3);
+}
+
+.artifact-icon {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  margin-top: 8px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -140,9 +149,9 @@ function openFinalize(row) { emit('preview-task', row.task) }
   color: var(--ch-accent-soft-text);
 }
 
-.artifact-check svg {
-  width: 12px;
-  height: 12px;
+.artifact-icon svg {
+  width: 16px;
+  height: 16px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.5;
@@ -151,6 +160,8 @@ function openFinalize(row) { emit('preview-task', row.task) }
 }
 
 .artifact-body {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -167,7 +178,7 @@ function openFinalize(row) { emit('preview-task', row.task) }
 .artifact-text {
   margin: 0;
   overflow: hidden;
-  color: var(--ch-text-secondary);
+  color: var(--ch-text);
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
@@ -175,81 +186,35 @@ function openFinalize(row) { emit('preview-task', row.task) }
   white-space: nowrap;
 }
 
-.thumb-strip {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
+.artifact-arrow {
+  position: relative;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin-top: 11px;
+  color: var(--ch-text-faint);
+  opacity: .55;
+  transition:
+    color var(--ch-duration-fast) var(--ch-ease),
+    opacity var(--ch-duration-fast) var(--ch-ease),
+    transform var(--ch-duration-fast) var(--ch-ease);
 }
 
-.thumb {
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-surface-3);
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform .2s ease-out, border-color .2s ease-out;
-}
-
-.thumb:hover {
-  transform: scale(1.06);
-  border-color: var(--ch-accent);
-}
-
-.thumb img {
+.artifact-arrow svg {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.finalize-row {
-  display: flex;
-  align-items: center;
-  gap: var(--ch-space-2);
-  margin-top: 4px;
-}
-
-.final-cover {
-  width: 48px;
-  height: 36px;
-  padding: 0;
-  flex: 0 0 auto;
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-surface-3);
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform .2s ease-out, border-color .2s ease-out;
-}
-
-.final-cover:hover {
-  transform: scale(1.06);
-  border-color: var(--ch-accent);
-}
-
-.final-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.final-open {
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--ch-accent);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  cursor: pointer;
-  transition: color .2s ease-out;
-}
-
-.final-open:hover {
-  color: var(--ch-accent-hover);
+.artifact-row:hover .artifact-arrow {
+  color: var(--ch-ink);
+  opacity: 1;
+  transform: translateX(2px);
 }
 
 .image-overlay {
@@ -260,7 +225,7 @@ function openFinalize(row) { emit('preview-task', row.task) }
   align-items: center;
   justify-content: center;
   padding: var(--ch-space-6);
-  background: rgba(20, 20, 24, .72);
+  background: var(--ch-overlay-strong);
   backdrop-filter: blur(8px);
   cursor: zoom-out;
 }
@@ -281,8 +246,8 @@ function openFinalize(row) { emit('preview-task', row.task) }
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .12);
-  color: #fff;
+  background: var(--ch-overlay-control);
+  color: var(--ch-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -291,7 +256,7 @@ function openFinalize(row) { emit('preview-task', row.task) }
 }
 
 .overlay-close:hover {
-  background: rgba(255, 255, 255, .24);
+  background: var(--ch-overlay-control-hover);
 }
 
 .overlay-close svg {
@@ -304,6 +269,8 @@ function openFinalize(row) { emit('preview-task', row.task) }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thumb, .final-cover, .final-open, .overlay-close { transition: none; }
+  .artifact-row::before,
+  .artifact-arrow,
+  .overlay-close { transition: none; }
 }
 </style>

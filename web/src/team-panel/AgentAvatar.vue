@@ -7,6 +7,7 @@ const props = defineProps({
   agentType: { type: String, default: 'chief' },
   status: { type: String, default: 'finished' },
   standby: { type: Boolean, default: false },
+  inactive: { type: Boolean, default: false },
   size: { type: Number, default: 40 },
 })
 
@@ -18,7 +19,7 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
 <template>
   <span
     class="agent-avatar"
-    :class="[{ online, standby }]"
+    :class="[{ online, standby, inactive }]"
     :style="{ '--avatar-size': `${size}px` }"
     :title="label"
     :aria-label="label"
@@ -48,10 +49,10 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
 
 .agent-avatar i {
   position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 10px;
-  height: 10px;
+  right: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--ch-success);
   box-shadow: 0 0 0 2px var(--ch-accent-soft);
@@ -64,6 +65,12 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
 .agent-avatar.standby {
   opacity: .55;
   filter: saturate(.4);
+}
+
+.agent-avatar.inactive {
+  border-color: var(--ch-border);
+  background: var(--ch-surface-3);
+  color: var(--ch-text-faint);
 }
 
 @keyframes avatarPulse {

@@ -12,7 +12,7 @@ const STATUS_META = {
   needs_clarification: { label: '待补充', tone: 'attention' },
   ready_to_confirm: { label: '信息齐备', tone: 'ready' },
   confirmed: { label: '已确认', tone: 'ready' },
-  dispatched: { label: '执行中', tone: 'live' },
+  dispatched: { label: '执行中', tone: 'executing' },
 }
 
 const statusMeta = computed(() => STATUS_META[status.value] || STATUS_META.empty)
@@ -61,29 +61,29 @@ function displayValue(value) {
       <p v-if="status === 'empty'" class="intent-helper">你的创作方向将在这里自动整理</p>
     </div>
 
-    <dl v-if="entries.length" class="intent-fields">
-      <template v-for="([label, value]) in entries" :key="label">
-        <dt>{{ label }}</dt>
-        <dd :title="displayValue(value)">{{ displayValue(value) }}</dd>
-      </template>
-    </dl>
+    <div v-if="entries.length" class="tags">
+      <span
+        v-for="([label, value]) in entries"
+        :key="label"
+        class="tag"
+        :title="displayValue(value)"
+      >{{ displayValue(value) }}</span>
+    </div>
 
     <div class="intent-progress">
-      <div class="progress-copy">
-        <p>意图已完成 <strong>{{ progress }}%</strong></p>
+      <div class="progress-line">
+        <strong>意图进度</strong>
+        <span>{{ progress }}%</span>
       </div>
-      <div class="progress-row">
-        <div
-          class="progress-track"
-          role="progressbar"
-          aria-label="意图完整度"
-          aria-valuemin="0"
-          aria-valuemax="100"
-          :aria-valuenow="progress"
-        >
-          <i :style="{ width: `${progress}%` }"></i>
-        </div>
-        <span>{{ progress }}/100</span>
+      <div
+        class="progress-track"
+        role="progressbar"
+        aria-label="意图完整度"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-valuenow="progress"
+      >
+        <i :style="{ width: `${progress}%` }"></i>
       </div>
     </div>
   </section>
@@ -91,7 +91,6 @@ function displayValue(value) {
 
 <style scoped>
 .intent-card {
-  padding: var(--ch-space-4);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -115,6 +114,7 @@ function displayValue(value) {
 
 .intent-heading h2 {
   margin: 0;
+  color: var(--ch-ink);
   font-size: 18px;
   font-weight: 600;
   line-height: 24px;
@@ -142,23 +142,47 @@ function displayValue(value) {
   background: currentColor;
 }
 
+.intent-status.muted {
+  background: var(--ch-surface-3);
+  color: var(--ch-text-muted);
+}
+
 .intent-status.live {
-  background: var(--ch-accent-soft);
-  color: var(--ch-accent-soft-text);
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
 }
 
 .intent-status.live i {
+  background: var(--ch-on-ink);
   animation: intentPulse 1.8s ease-in-out infinite;
 }
 
+.intent-status.executing {
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
+}
+
+.intent-status.executing i {
+  background: var(--ch-on-ink);
+  animation: intentStatusPulse 1.8s ease-in-out infinite;
+}
+
 .intent-status.attention {
-  background: var(--ch-warning-soft);
-  color: var(--ch-warning-text);
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
+}
+
+.intent-status.attention i {
+  background: var(--ch-on-ink);
 }
 
 .intent-status.ready {
-  background: var(--ch-success-soft);
-  color: var(--ch-success-text);
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
+}
+
+.intent-status.ready i {
+  background: var(--ch-on-ink);
 }
 
 .intent-summary {
@@ -169,7 +193,7 @@ function displayValue(value) {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
-  color: var(--ch-text);
+  color: var(--ch-ink);
   font-size: 16px;
   font-weight: 600;
   line-height: 24px;
@@ -184,77 +208,54 @@ function displayValue(value) {
   line-height: 18px;
 }
 
-.intent-fields {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px var(--ch-space-2);
-  margin: var(--ch-space-3) 0 0;
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 13px;
 }
 
-.intent-fields dt,
-.intent-fields dd {
-  margin: 0;
-}
-
-.intent-fields dt {
-  color: var(--ch-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-  white-space: nowrap;
-}
-
-.intent-fields dd {
-  min-width: 0;
-  display: -webkit-box;
-  overflow: hidden;
+.tag {
+  padding: 2px var(--ch-space-2);
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-muted-gradient);
   color: var(--ch-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  font-size: var(--ch-text-xs);
+  font-weight: var(--ch-font-medium);
+  line-height: 1.5;
 }
 
 .intent-progress {
   margin-top: var(--ch-space-3);
-  padding: var(--ch-space-3);
-  border-radius: var(--ch-radius-card);
-  background: var(--ch-surface-3);
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--ch-muted-gradient);
 }
 
-.progress-copy {
+.progress-line {
   display: flex;
   align-items: center;
+  margin-bottom: 13px;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-xs);
 }
 
-.progress-copy p {
-  margin: 0;
-  color: var(--ch-text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 22px;
-}
-
-.progress-copy strong {
-  color: var(--ch-text);
+.progress-line strong {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
-.progress-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--ch-space-2);
-  margin-top: var(--ch-space-3);
+.progress-line span {
+  margin-left: auto;
+  color: var(--ch-ink);
+  font-weight: var(--ch-font-semibold);
+  font-variant-numeric: tabular-nums;
 }
 
 .progress-track {
-  height: 16px;
+  height: 9px;
   overflow: hidden;
-  border-radius: var(--ch-radius-btn);
+  border-radius: 9px;
   background: var(--ch-border);
 }
 
@@ -262,18 +263,9 @@ function displayValue(value) {
   display: block;
   width: 0;
   height: 100%;
-  border-radius: inherit;
-  background: var(--ch-accent-gradient);
+  border-radius: 9px;
+  background: var(--ch-accent);
   transition: width .32s ease-out;
-}
-
-.progress-row span {
-  color: var(--ch-text-muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 @keyframes intentPulse {
@@ -281,8 +273,18 @@ function displayValue(value) {
   50% { opacity: 1; }
 }
 
+@keyframes intentStatusPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ch-on-ink) 34%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .intent-status.live i { animation: none; }
+  .intent-status.live i,
+  .intent-status.executing i { animation: none; }
   .progress-track i { transition: none; }
 }
 </style>

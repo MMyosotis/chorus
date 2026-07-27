@@ -78,6 +78,7 @@ watch(
 <template>
   <aside class="sidebar" aria-label="会话侧栏">
     <div class="sidebar-inner">
+    <h2 class="sidebar-title">稿搭</h2>
     <button class="new-chat" type="button" @click="emit('create')">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
       <span>新建会话</span>
@@ -88,6 +89,8 @@ watch(
       <input v-model="searchText" type="search" placeholder="搜索会话" aria-label="搜索会话" />
     </label>
 
+    <div class="section-label">会话列表</div>
+
     <div class="session-list">
       <article
         v-for="session in filteredSessions"
@@ -97,10 +100,17 @@ watch(
         @click="handleSelect(session)"
         @keydown.enter="handleSelect(session)"
       >
-        <span
-          :class="['session-dot', { 'is-working': streamingMap[session.id] || (session.id === activeId && activeWorking) }]"
+        <svg
+          :class="['session-icon', { 'is-working': streamingMap[session.id] || (session.id === activeId && activeWorking) }]"
+          viewBox="0 0 24 24"
           aria-hidden="true"
-        ></span>
+        >
+          <path d="M5 18 3.5 21l4-1.5H16a5 5 0 0 0 5-5V9a5 5 0 0 0-5-5H8a5 5 0 0 0-5 5v5a4.9 4.9 0 0 0 2 4Z" />
+          <g v-if="session.id === activeId">
+            <circle cx="9" cy="12" r=".6" />
+            <circle cx="13" cy="12" r=".6" />
+          </g>
+        </svg>
         <div class="session-content">
           <input
             v-if="editingId === session.id"
@@ -150,7 +160,8 @@ watch(
   height: 100%;
   flex-shrink: 0;
   overflow: hidden;
-  background: var(--ch-surface);
+  background: var(--ch-surface-glass-soft);
+  border-right: 1px solid var(--ch-border);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -159,12 +170,19 @@ watch(
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: var(--ch-space-3);
+  padding: 32px 16px 16px;
+}
+
+.sidebar-title {
+  margin: 0 0 var(--ch-space-4);
+  font-size: var(--ch-text-xl);
+  font-weight: var(--ch-font-bold);
+  letter-spacing: .3px;
 }
 
 .new-chat {
   width: 100%;
-  height: 40px;
+  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,17 +190,21 @@ watch(
   flex-shrink: 0;
   margin-bottom: var(--ch-space-3);
   padding: 0 var(--ch-space-3);
-  border: 0;
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-accent-gradient);
-  color: var(--ch-on-accent);
-  font-size: var(--ch-text-sm);
+  border: 1px solid var(--ch-ink);
+  border-radius: var(--ch-radius-bar-btn);
+  background: var(--ch-ink);
+  box-shadow: var(--ch-shadow-sm);
+  color: var(--ch-on-ink);
+  font-size: var(--ch-text-md);
   font-weight: var(--ch-font-semibold);
   cursor: pointer;
-  transition: box-shadow var(--ch-duration-fast) var(--ch-ease);
+  transition: box-shadow var(--ch-duration-fast) var(--ch-ease),
+    border-color var(--ch-duration-fast) var(--ch-ease);
 }
 
 .new-chat:hover {
+  border-color: var(--ch-ink-hover);
+  background: var(--ch-ink-hover);
   box-shadow: var(--ch-shadow-md);
 }
 
@@ -190,31 +212,33 @@ watch(
   width: 16px;
   height: 16px;
   fill: none;
-  stroke: currentColor;
+  stroke: var(--ch-on-ink);
   stroke-width: 2.2;
   stroke-linecap: round;
 }
 
 .search {
-  height: 40px;
+  height: 48px;
   display: flex;
   align-items: center;
   gap: var(--ch-space-2);
   flex-shrink: 0;
-  margin-bottom: var(--ch-space-2);
-  padding: 0 var(--ch-space-2);
+  margin-bottom: var(--ch-space-4);
+  padding: 0 var(--ch-space-3);
   border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-surface-2);
-  color: var(--ch-text-muted);
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-surface);
+  color: var(--ch-text-faint);
   transition: border-color var(--ch-duration-fast) var(--ch-ease),
-    background var(--ch-duration-fast) var(--ch-ease),
     box-shadow var(--ch-duration-fast) var(--ch-ease);
+}
+
+.search:hover {
+  border-color: var(--ch-border-strong);
 }
 
 .search:focus-within {
   border-color: var(--ch-accent);
-  background: var(--ch-surface);
   box-shadow: var(--ch-shadow-focus);
 }
 
@@ -224,7 +248,7 @@ watch(
   flex-shrink: 0;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 2;
   stroke-linecap: round;
 }
 
@@ -248,8 +272,17 @@ watch(
   display: none;
 }
 
+.section-label {
+  margin: 0 0 12px;
+  color: var(--ch-text-faint);
+  font-size: var(--ch-text-xs);
+}
+
 .session-list {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ch-space-1);
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -259,15 +292,14 @@ watch(
 }
 
 .session {
-  position: relative;
   width: 100%;
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: var(--ch-space-2);
-  height: 40px;
-  padding: 0 var(--ch-space-2);
-  border-radius: var(--ch-radius-btn);
+  gap: 12px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: var(--ch-radius-list);
   cursor: pointer;
   outline: none;
   transition: background var(--ch-duration-fast) var(--ch-ease);
@@ -279,36 +311,28 @@ watch(
 }
 
 .session.active {
-  background: var(--ch-accent-soft);
+  background: var(--ch-accent-soft-gradient);
 }
 
-.session.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 8px;
-  bottom: 8px;
-  width: 3px;
-  border-radius: var(--ch-radius-pill);
-  background: var(--ch-accent);
+.session-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--ch-text-faint);
+  transition: color var(--ch-duration-fast) var(--ch-ease);
 }
 
-.session-dot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--ch-text-faint);
-  transition: background var(--ch-duration-fast) var(--ch-ease);
+.session.active .session-icon {
+  color: var(--ch-accent);
 }
 
-.session.active .session-dot {
-  background: var(--ch-accent);
-}
-
-.session-dot.is-working {
-  background: var(--ch-accent);
-  box-shadow: 0 0 0 3px var(--ch-accent-soft);
+.session-icon.is-working {
+  color: var(--ch-accent);
   animation: pulse 1.6s ease-in-out infinite;
 }
 
@@ -332,13 +356,12 @@ watch(
   flex: 1;
   color: var(--ch-text-secondary);
   font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-medium);
+  font-weight: var(--ch-font-semibold);
   line-height: var(--ch-leading-tight);
 }
 
 .session.active .session-content strong {
-  color: var(--ch-accent-soft-text);
-  font-weight: var(--ch-font-semibold);
+  color: var(--ch-accent);
 }
 
 .session-status {
@@ -391,7 +414,7 @@ watch(
   height: 14px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -401,7 +424,7 @@ watch(
   height: 32px;
   padding: 0 var(--ch-space-2);
   border: 1px solid var(--ch-accent);
-  border-radius: var(--ch-radius-btn);
+  border-radius: var(--ch-radius-list);
   outline: none;
   background: var(--ch-surface);
   color: var(--ch-text);
@@ -424,7 +447,8 @@ watch(
 }
 
 @media (max-height: 800px) {
-  .sidebar-inner { padding: var(--ch-space-2); }
+  .sidebar-title { margin-bottom: var(--ch-space-2); }
   .new-chat { margin-bottom: var(--ch-space-2); }
+  .search { margin-bottom: var(--ch-space-2); }
 }
 </style>

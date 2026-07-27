@@ -22,7 +22,7 @@ import { useTaskPolling } from './composables/useTaskPolling.js'
 import { mergeAssistantHistory } from './composables/messageHistory.js'
 import { planTaskCards, planIntentCard } from './composables/taskCardProjection.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
-import { ROLE_FULL, stepOf } from './team-panel/roleMeta.js'
+import { ROLE_FULL } from './team-panel/roleMeta.js'
 
 const uiReviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has('ui-review')
 const FlowReviewHarness = uiReviewMode ? defineAsyncComponent(() => import('./dev/FlowReviewHarness.vue')) : null
@@ -72,14 +72,6 @@ const activeSessionUpdatedAt = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.updated_at : null
 })
-const paperDate = computed(() => {
-  const date = new Date((activeSessionUpdatedAt.value || Date.now() / 1000) * 1000)
-  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-  return {
-    short: `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}`,
-    full: `${date.getFullYear()} · ${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}`,
-  }
-})
 const currentTask = computed(() => (activeGraph.value?.tasks || []).find((task) => ['running', 'awaiting_confirm', 'failed'].includes(task.status)) || null)
 const stageKicker = computed(() => {
   if (awaitingConfirm.value) return '等待确认'
@@ -91,12 +83,6 @@ const stageKicker = computed(() => {
   const completedFinal = (activeGraph.value?.tasks || []).find((task) => task.agent_type === 'finalize' && task.status === 'finished')
   return completedFinal ? '已完成' : '自由对话'
 })
-const paperPage = computed(() => {
-  if (currentTask.value) return String(stepOf(currentTask.value.agent_type)).padStart(2, '0')
-  const completedFinal = (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished')
-  return String(completedFinal ? stepOf('finalize') : 1).padStart(2, '0')
-})
-const headlineDeck = computed(() => activeIntentState.value?.topic || '一份正在编辑、校样与签认的创作稿件')
 
 function makeEmptyAssistant(id) {
   return {
@@ -595,7 +581,7 @@ onMounted(async () => {
               @intent-revise="onIntentRevise"
             >
               <template #scroll-header>
-                <ManuscriptHeader :date="paperDate.full" :page="paperPage" :kicker="stageKicker" :title="activeTitle || '未命名稿件'" :deck="headlineDeck" />
+                <ManuscriptHeader :kicker="stageKicker" :title="activeTitle || '未命名稿件'" />
               </template>
             </ChatWindow>
           </article>
@@ -609,7 +595,6 @@ onMounted(async () => {
       :focused-task-id="focusedTaskId"
       :intent-state="activeIntentState"
       @focus="onTaskFocus"
-      @view-logs="openConsole('trace')"
       @preview-task="onPreviewTask"
     />
     <ConsolePanel
@@ -625,49 +610,51 @@ onMounted(async () => {
 
 <style scoped>
 .app-shell {
-  --ch-left-inset: 56px;
+  --ch-left-inset: 80px;
   display: flex;
   min-height: 100dvh;
   width: 100%;
   overflow: clip;
   align-items: flex-start;
-  background: var(--ch-canvas);
+  background: var(--ch-canvas-gradient);
 }
 
 .app-shell.sidebar-open {
-  --ch-left-inset: 296px;
+  --ch-left-inset: 352px;
 }
 
 .main-panel {
+  --ws-main-pad: 48px;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 100dvh;
-  padding: var(--ch-space-4);
+  height: 100dvh;
+  overflow: hidden;
+  padding: 32px var(--ws-main-pad) 24px;
 }
 
 .mobile-bar { display: none; }
 .rail-scrim { display: none; }
 
-:global(body:has(.app-shell)) { overflow-y: auto; }
+:global(body:has(.app-shell)) { overflow: hidden; }
 
 .paper-stage {
   position: relative;
-  width: min(100%, var(--ch-content-width));
-  margin: 0 auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .paper-shell {
   position: relative;
   z-index: 1;
-  width: 100%;
-}
-
-.paper-shell :deep(.chat-window) {
-  flex: 0 0 auto;
-  overflow: visible;
-  scrollbar-gutter: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
 @media (min-width: 781px) {
@@ -683,6 +670,8 @@ onMounted(async () => {
   }
 
   .paper-swap-leave-active {
+    position: absolute;
+    inset: 0;
     z-index: 1;
     will-change: opacity;
     transition: opacity 180ms ease-in;
@@ -715,16 +704,8 @@ onMounted(async () => {
   }
 
   .app-shell > :deep(.sidebar) {
-    width: calc(var(--ch-left-inset) - 56px);
+    width: calc(var(--ch-left-inset) - 80px);
     transition: width var(--ch-duration-normal) var(--ch-ease-out);
-  }
-
-  .paper-stage :deep(.input-bar) {
-    position: fixed;
-    left: calc(var(--ch-left-inset) + (100vw - var(--ch-left-inset) - var(--ch-right-rail)) / 2);
-    width: min(calc(100vw - var(--ch-left-inset) - var(--ch-right-rail) - 96px), 768px);
-    transition: left var(--ch-duration-normal) var(--ch-ease-out),
-      width var(--ch-duration-normal) var(--ch-ease-out);
   }
 }
 
@@ -737,16 +718,8 @@ onMounted(async () => {
   }
 
   .app-shell > :deep(.sidebar) {
-    width: calc(var(--ch-left-inset) - 56px);
+    width: calc(var(--ch-left-inset) - 80px);
     transition: width var(--ch-duration-normal) var(--ch-ease-out);
-  }
-
-  .paper-stage :deep(.input-bar) {
-    position: fixed;
-    left: calc((100vw + var(--ch-left-inset)) / 2);
-    width: min(calc(100vw - var(--ch-left-inset) - 96px), 768px);
-    transition: left var(--ch-duration-normal) var(--ch-ease-out),
-      width var(--ch-duration-normal) var(--ch-ease-out);
   }
 }
 
@@ -756,7 +729,6 @@ onMounted(async () => {
 
 @media (max-width: 780px) {
   .main-panel { padding: 0; }
-  .paper-shell { height: calc(100% - 52px); }
   .mobile-bar {
     flex: 0 0 52px;
     display: grid;
@@ -791,7 +763,7 @@ onMounted(async () => {
     display: block;
     min-height: 0;
     border: 0;
-    background: rgba(15, 23, 42, .4);
+    background: var(--ch-overlay-soft);
   }
   :deep(.sidebar) {
     position: fixed;
@@ -802,7 +774,7 @@ onMounted(async () => {
     width: min(300px, 88vw);
     transform: translateX(-104%);
     transition: transform var(--ch-duration-normal) var(--ch-ease-out);
-    box-shadow: var(--ch-shadow-lg);
+    box-shadow: var(--ch-shadow-soft-hover);
   }
   :deep(.sidebar.is-open) { transform: translateX(0); }
   :deep(.team-panel) {

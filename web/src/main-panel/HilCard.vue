@@ -236,7 +236,7 @@ async function onCancel() {
 
 .candidates {
   display: grid;
-  gap: 8px;
+  gap: 16px;
 }
 
 .candidate {

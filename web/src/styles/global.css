@@ -4,22 +4,49 @@
   --ch-surface: #ffffff;
   --ch-surface-2: #f8fafc;
   --ch-surface-3: #f1f5f9;
+  --ch-canvas-gradient: linear-gradient(180deg, var(--ch-canvas), var(--ch-surface-2));
+  --ch-surface-glass-soft: color-mix(in srgb, var(--ch-surface) 76%, transparent);
+  --ch-surface-glass-strong: color-mix(in srgb, var(--ch-surface) 92%, transparent);
   --ch-border: #e8eaef;
   --ch-border-strong: #d6d9e0;
+  --ch-divider-subtle: color-mix(in srgb, var(--ch-text) 6%, transparent);
   --ch-text: #0f1729;
   --ch-text-secondary: #475569;
-  --ch-text-muted: #6b7280;
+  --ch-text-muted: #697086;
   --ch-text-faint: #9ca3af;
-  --ch-text-inverse: #ffffff;
+  --ch-ink: #191a1f;
+  --ch-ink-hover: #26272d;
+  --ch-on-ink: var(--ch-surface);
 
-  --ch-accent: #6c63ff;
-  --ch-accent-hover: #5a52e0;
-  --ch-accent-active: #4f47d6;
-  --ch-accent-2: #7c3aed;
-  --ch-accent-soft: #eeedff;
-  --ch-accent-soft-text: #4338ca;
-  --ch-accent-gradient: linear-gradient(135deg, #6c63ff 0%, #7c3aed 100%);
-  --ch-on-accent: #ffffff;
+  --ch-accent: #6f59e0;
+  --ch-accent-hover: #614bcf;
+  --ch-accent-active: #5340ba;
+  --ch-accent-2: #8067e5;
+  --ch-accent-soft: #efedfd;
+  --ch-accent-soft-text: #4d3fac;
+  --ch-accent-gradient: linear-gradient(135deg, var(--ch-accent) 0%, var(--ch-accent-2) 100%);
+  --ch-accent-soft-gradient: linear-gradient(
+    135deg,
+    var(--ch-accent-soft),
+    color-mix(in srgb, var(--ch-accent) 14%, var(--ch-surface))
+  );
+  --ch-accent-border: color-mix(in srgb, var(--ch-accent) 18%, var(--ch-surface));
+  --ch-accent-subtle: color-mix(in srgb, var(--ch-accent) 8%, transparent);
+  --ch-user-bubble: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ch-accent) 10%, var(--ch-surface)),
+    color-mix(in srgb, var(--ch-accent) 17%, var(--ch-surface))
+  );
+  --ch-on-accent: var(--ch-surface);
+  --ch-muted-gradient: linear-gradient(135deg, var(--ch-surface-2), var(--ch-surface-3));
+
+  --ch-overlay-soft: color-mix(in srgb, var(--ch-text) 32%, transparent);
+  --ch-overlay: color-mix(in srgb, var(--ch-text) 55%, transparent);
+  --ch-overlay-strong: color-mix(in srgb, var(--ch-text) 78%, transparent);
+  --ch-overlay-control: color-mix(in srgb, var(--ch-on-accent) 12%, transparent);
+  --ch-overlay-control-hover: color-mix(in srgb, var(--ch-on-accent) 24%, transparent);
+  --ch-scrollbar-thumb: color-mix(in srgb, var(--ch-text-muted) 30%, transparent);
+  --ch-scrollbar-thumb-hover: color-mix(in srgb, var(--ch-text-muted) 50%, transparent);
 
   --ch-success: #16a34a;
   --ch-success-soft: #dcfce7;
@@ -39,12 +66,30 @@
   --ch-radius-panel: 20px;
   --ch-radius-xl: 24px;
   --ch-radius-pill: 999px;
+  --ch-radius-icon-btn: 50%;
+  --ch-radius-bar-btn: 13px;
+  --ch-radius-list: 12px;
 
-  --ch-shadow-xs: 0 1px 2px rgba(15, 23, 42, .04);
-  --ch-shadow-sm: 0 1px 3px rgba(15, 23, 42, .06), 0 1px 2px rgba(15, 23, 42, .04);
-  --ch-shadow-md: 0 4px 12px rgba(15, 23, 42, .06), 0 2px 4px rgba(15, 23, 42, .04);
-  --ch-shadow-lg: 0 12px 32px rgba(15, 23, 42, .10), 0 4px 8px rgba(15, 23, 42, .06);
-  --ch-shadow-focus: 0 0 0 3px rgba(108, 99, 255, .18);
+  --ch-shadow-xs: 0 1px 2px color-mix(in srgb, var(--ch-text) 4%, transparent);
+  --ch-shadow-sm: 0 1px 3px color-mix(in srgb, var(--ch-text) 6%, transparent),
+    0 1px 2px color-mix(in srgb, var(--ch-text) 4%, transparent);
+  --ch-shadow-md: 0 4px 12px color-mix(in srgb, var(--ch-text) 6%, transparent),
+    0 2px 4px color-mix(in srgb, var(--ch-text) 4%, transparent);
+  --ch-shadow-lg: 0 12px 32px color-mix(in srgb, var(--ch-text) 10%, transparent),
+    0 4px 8px color-mix(in srgb, var(--ch-text) 6%, transparent);
+  --ch-shadow-focus: 0 0 0 3px color-mix(in srgb, var(--ch-accent) 18%, transparent);
+  --ch-shadow-soft: 0 8px 30px color-mix(in srgb, var(--ch-text) 6%, transparent);
+  --ch-shadow-soft-hover: 0 10px 28px color-mix(in srgb, var(--ch-text) 8%, transparent);
+  --ch-shadow-panel: 12px 0 32px color-mix(in srgb, var(--ch-text) 6%, transparent);
+  --ch-shadow-team: 0 8px 30px rgba(29, 35, 64, .035);
+  --ch-shadow-preview: 0 20px 60px color-mix(in srgb, var(--ch-text) 45%, transparent);
+  --ch-shadow-bubble: 0 6px 17px rgba(110, 90, 206, .06);
+  --ch-skeleton-gradient: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ch-text) 3%, transparent) 0%,
+    color-mix(in srgb, var(--ch-text) 8%, transparent) 50%,
+    color-mix(in srgb, var(--ch-text) 3%, transparent) 100%
+  );
 
   --ch-space-1: 4px;
   --ch-space-2: 8px;
@@ -58,7 +103,7 @@
   --ch-font-mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
   --ch-text-xs: 12px;
   --ch-text-sm: 14px;
-  --ch-text-base: 16px;
+  --ch-text-md: 16px;
   --ch-text-lg: 18px;
   --ch-text-xl: 20px;
   --ch-text-2xl: 24px;
@@ -73,10 +118,8 @@
   --ch-leading-normal: 1.6;
 
   --ch-rail: 240px;
-  --ch-right-rail: clamp(304px, 22vw, 320px);
-  --ch-content-width: 768px;
+  --ch-right-rail: clamp(334px, 22vw, 340px);
   --ch-turn-gap: 32px;
-  --ch-paper-pad: clamp(16px, 4vw, 40px);
 
   --ch-z-dropdown: 100;
   --ch-z-sticky: 200;
@@ -164,12 +207,12 @@ select:focus-visible {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, .3);
+  background: var(--ch-scrollbar-thumb);
   border-radius: var(--ch-radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, .5);
+  background: var(--ch-scrollbar-thumb-hover);
 }
 
 /* ===== Component primitives ===== */
@@ -254,11 +297,11 @@ select:focus-visible {
 
 .ch-btn-danger {
   background: var(--ch-danger);
-  color: #fff;
+  color: var(--ch-on-accent);
 }
 
 .ch-btn-danger:hover:not(:disabled) {
-  background: #b91c1c;
+  background: var(--ch-danger-text);
 }
 
 .ch-btn-sm {
@@ -337,7 +380,7 @@ select:focus-visible {
   padding: var(--ch-space-2) var(--ch-space-3);
   border-radius: var(--ch-radius-btn);
   background: var(--ch-text);
-  color: var(--ch-text-inverse);
+  color: var(--ch-on-accent);
   box-shadow: var(--ch-shadow-md);
   font-size: var(--ch-text-xs);
   line-height: 1.5;

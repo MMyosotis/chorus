@@ -10,7 +10,7 @@ const props = defineProps({
   focusedTaskId: { type: String, default: null },
   intentState: { type: Object, default: null },
 })
-defineEmits(['view-logs', 'preview-task'])
+defineEmits(['preview-task'])
 
 const tasks = computed(() => props.graph?.tasks || [])
 </script>
@@ -19,9 +19,11 @@ const tasks = computed(() => props.graph?.tasks || [])
   <aside class="team-panel" aria-label="意图与团队">
     <div class="team-body">
       <div class="team-surface">
+        <div class="right-title">工作展板</div>
+        <div class="section-divider" aria-hidden="true"></div>
         <IntentStateCard :state="intentState" />
         <div class="section-divider" aria-hidden="true"></div>
-        <PipelineTimeline :tasks="tasks" @view-logs="$emit('view-logs')" />
+        <PipelineTimeline :tasks="tasks" />
         <div class="section-divider" aria-hidden="true"></div>
         <ArtifactsCard :tasks="tasks" @preview-task="$emit('preview-task')" />
       </div>
@@ -44,26 +46,37 @@ const tasks = computed(() => props.graph?.tasks || [])
   width: 100%;
   min-height: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow: visible;
-  padding: var(--ch-space-2) var(--ch-space-2) var(--ch-space-5);
+  padding: 30px var(--ch-space-4) 30px 0;
 }
 
 .team-surface {
-  height: calc(100dvh - 48px);
-  min-height: calc(100dvh - 48px);
+  flex: 1;
+  min-height: 0;
+  padding: 26px var(--ch-space-4) var(--ch-space-4) var(--ch-space-4);
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-xl);
   background: var(--ch-surface);
-  box-shadow: var(--ch-shadow-md);
+  box-shadow: var(--ch-shadow-team);
   scrollbar-color: var(--ch-border-strong) transparent;
   scrollbar-width: thin;
 }
 
+.right-title {
+  color: var(--ch-ink);
+  font-family: var(--ch-font-sans);
+  font-size: var(--ch-text-xl);
+  font-weight: var(--ch-font-semibold);
+  line-height: 1.4;
+}
+
 .section-divider {
   height: 1px;
-  margin: 0 var(--ch-space-4);
+  margin: var(--ch-space-4) 0;
   background: var(--ch-border);
 }
 </style>

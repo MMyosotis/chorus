@@ -185,7 +185,7 @@ const messages = computed(() => {
       <article class="audit-paper manuscript-paper">
         <ChatWindow :messages="messages" :session-id="'ui-flow-review'" :session-updated-at="1784088240" :intent-state="intentState">
           <template #scroll-header>
-            <ManuscriptHeader date="2026 · JUL 15" :page="String(Math.min(4, Math.max(1, current.phase))).padStart(2, '0')" :kicker="stageKicker" title="城市小众咖啡馆探店" deck="一间咖啡馆，一段重新发现的城市日常" />
+            <ManuscriptHeader :kicker="stageKicker" title="城市小众咖啡馆探店" />
           </template>
         </ChatWindow>
         <InputBar :streaming="false" :has-active-task="current.type === 'run'" :awaiting-confirm="current.type === 'intent'" />
