@@ -20,7 +20,7 @@ def test_intent_state_defaults():
     assert state.style == ""
     assert state.image_count == 3
     assert state.extra == {}
-    assert state.missing_slots == []
+    assert state.progress_percent == 0
     assert state.version == 0
 
 
@@ -29,9 +29,15 @@ def test_update_rejects_unknown_fields():
     with pytest.raises(Exception):
         IntentStateUpdate(
             intent_status="empty", topic="", style="", image_count=3,
-            extra={}, missing_slots=[],
+            extra={}, progress_percent=0,
             goal="已废弃",  # 已并入 topic
         )
+
+
+@pytest.mark.parametrize("value", [-1, 101])
+def test_progress_percent_rejects_out_of_range(value):
+    with pytest.raises(Exception):
+        IntentStateUpdate(intent_status="capturing", progress_percent=value)
 
 
 def test_update_requires_intent_status():

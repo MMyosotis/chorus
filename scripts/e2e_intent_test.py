@@ -3,7 +3,8 @@
 
 新契约要点（对齐 6213c62 重构）：
 - IntentState 字段 = topic/platform/format/style/image_count/extra/intent_status/
-  missing_slots/session_id/version/updated_at；已删 next_action/confirmation_summary/
+  progress_percent/session_id/version/updated_at；已删 missing_slots/
+  next_action/confirmation_summary/
   skill_ref/public_dict。
 - update_intent_state 在 ready_to_confirm 返 Terminal 终止本轮，模型无法同轮建图；
   其它状态返 Reply 续跑。
@@ -41,9 +42,9 @@ DB = _tmp / "chorus.db"
 # 新契约字段集：10 存储 + session_id，无 next_action/confirmation_summary/skill_ref
 EXPECTED_STATE_FIELDS = {
     "topic", "platform", "format", "style", "image_count", "extra",
-    "intent_status", "missing_slots", "session_id", "version", "updated_at",
+    "intent_status", "progress_percent", "session_id", "version", "updated_at",
 }
-FORBIDDEN_FIELDS = {"next_action", "confirmation_summary", "skill_ref"}
+FORBIDDEN_FIELDS = {"missing_slots", "next_action", "confirmation_summary", "skill_ref"}
 
 
 def _run_stream(sid, query):
@@ -93,7 +94,7 @@ def _check_table_schema(sid):
     conn.close()
     expected_cols = {
         "session_id", "intent_status", "topic", "platform", "format", "style",
-        "image_count", "extra", "missing_slots", "version", "updated_at",
+        "image_count", "extra", "progress_percent", "version", "updated_at",
     }
     cols_ok = set(cols) == expected_cols
     no_forbidden = not (set(cols) & FORBIDDEN_FIELDS)
@@ -123,7 +124,7 @@ def run_one(label, query):
         last = intent_events[-1]
         print(f"[末次意图] status={last.get('intent_status')} "
               f"topic={last.get('topic', '')[:36]!r} "
-              f"missing={last.get('missing_slots')} "
+              f"progress={last.get('progress_percent')}% "
               f"version={last.get('version')}")
         all_ok &= _check_state_contract(last, "SSE intent_state 事件")
     else:

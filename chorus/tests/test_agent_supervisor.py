@@ -267,7 +267,7 @@ def test_update_intent_state_does_not_finish():
         "style": "",
         "image_count": 3,
         "extra": {},
-        "missing_slots": [],
+        "progress_percent": 0,
     }
     # 第一轮：文本 + update_intent_state(Reply) → after_tools 无 Suspend → CONTINUE
     tool_stream = FakeStream([
@@ -312,7 +312,7 @@ def test_update_intent_state_ready_to_confirm_finishes():
         "style": "轻松",
         "image_count": 3,
         "extra": {},
-        "missing_slots": [],
+        "progress_percent": 100,
     }
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(

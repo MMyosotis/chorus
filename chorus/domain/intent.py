@@ -49,7 +49,12 @@ class IntentSnapshot(Intent):
     """主 Agent 对当前创作意图的完整理解。"""
 
     intent_status: IntentStatus = Field("empty", description="意图成熟度")
-    missing_slots: list[str] = Field(default_factory=list, description="仍缺失、会影响执行派发的槽位，用中文短词（主题/风格/配图等）")
+    progress_percent: int = Field(
+        0,
+        ge=0,
+        le=100,
+        description="意图信息完整度百分比，取 0 到 100 的整数；不是任务执行进度",
+    )
 
 
 class IntentStateUpdate(IntentSnapshot):

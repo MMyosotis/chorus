@@ -15,7 +15,7 @@ _INTENT_STATUS_ENUM = IntentStateUpdate.tool_schema_properties("intent_status")[
 class UpdateIntentStateTool(Tool):
     name = "update_intent_state"
     description = (
-        "每轮用户对话后调用，用结构化字段保存你当前对用户意图的理解、缺失信息和下一步。"
+        "每轮用户对话后调用，用结构化字段保存你当前对用户意图的理解和信息完整度。"
         "本工具只更新意图状态，不创建任务。"
     )
     parameters = {
@@ -35,12 +35,12 @@ class UpdateIntentStateTool(Tool):
             },
             **IntentStateUpdate.tool_schema_properties(
                 "topic", "platform", "format", "style",
-                "image_count", "extra", "missing_slots",
+                "image_count", "extra", "progress_percent",
             ),
         },
         "required": [
             "intent_status", "topic", "platform", "format", "style",
-            "image_count", "extra", "missing_slots",
+            "image_count", "extra", "progress_percent",
         ],
     }
     running_label = "意图识别中"
