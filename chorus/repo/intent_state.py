@@ -1,133 +1,55 @@
 """意图状态表：每个会话保留一份最新结构化快照。"""
-
 from __future__ import annotations
 
-import json
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete
+from sqlalchemy.dialects.sqlite import insert
 
-from chorus.domain.intent import IntentState, IntentStatus
-from chorus.repo.connection import ConnectionFactory
+from chorus.domain.intent import IntentState
+from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
+from chorus.repo.models import IntentStateRecord
 
-_DDL = """
-CREATE TABLE IF NOT EXISTS intent_states (
-    session_id            TEXT PRIMARY KEY,
-    intent_status         TEXT NOT NULL,
-    topic                 TEXT NOT NULL,
-    platform              TEXT NOT NULL,
-    format                TEXT NOT NULL,
-    style                 TEXT NOT NULL,
-    image_count           INTEGER NOT NULL,
-    extra                 TEXT NOT NULL,
-    progress_percent      INTEGER NOT NULL CHECK(progress_percent BETWEEN 0 AND 100),
-    version               INTEGER NOT NULL,
-    updated_at            REAL NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-"""
-
-
-class IntentStateRow(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    session_id: str
-    intent_status: IntentStatus
-    topic: str
-    platform: str
-    format: str
-    style: str
-    image_count: int
-    extra: str
-    progress_percent: int
-    version: int
-    updated_at: float
-
-    def to_domain(self) -> IntentState:
-        return IntentState(
-            **shared_fields(self, IntentState, exclude={"extra"}),
-            extra=json.loads(self.extra),
-        )
-
-    @classmethod
-    def from_domain(cls, state: IntentState) -> "IntentStateRow":
-        return cls(
-            **shared_fields(state, cls, exclude={"extra"}),
-            extra=json.dumps(state.extra, ensure_ascii=False),
-        )
-
-
-_COLS = ", ".join(IntentStateRow.model_fields)
-_PH = ", ".join(f":{field}" for field in IntentStateRow.model_fields)
-_UPDATES = ", ".join(
-    f"{field}=excluded.{field}" for field in IntentStateRow.model_fields if field != "session_id"
+_SET_COLS = (
+    "intent_status", "topic", "platform", "format", "style", "image_count",
+    "extra", "progress_percent", "version", "updated_at",
 )
 
 
-class IntentStateRepository:
-    def __init__(self, conn: ConnectionFactory):
-        self._conn = conn
-        self._ensure_schema()
+def _to_domain(r: IntentStateRecord) -> IntentState:
+    return IntentState(
+        **shared_fields(r, IntentState, exclude={"extra"}),
+        extra=dict(r.extra or {}),
+    )
 
-    def _ensure_schema(self) -> None:
-        """建新表，并把旧 missing_slots 契约一次性迁移为进度百分比。"""
-        conn = self._conn.get()
-        columns = {
-            row["name"]
-            for row in conn.execute("PRAGMA table_info(intent_states)").fetchall()
-        }
-        if not columns:
-            conn.execute(_DDL)
-            return
-        if "progress_percent" in columns and "missing_slots" not in columns:
-            return
-        if "missing_slots" not in columns:
-            raise RuntimeError(f"unsupported intent_states schema: {sorted(columns)}")
 
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            conn.execute("ALTER TABLE intent_states RENAME TO intent_states_legacy")
-            conn.execute(_DDL)
-            conn.execute(
-                """
-                INSERT INTO intent_states(
-                    session_id, intent_status, topic, platform, format, style,
-                    image_count, extra, progress_percent, version, updated_at
-                )
-                SELECT
-                    session_id, intent_status, topic, platform, format, style,
-                    image_count, extra,
-                    CASE intent_status
-                        WHEN 'empty' THEN 0
-                        WHEN 'capturing' THEN 35
-                        WHEN 'needs_clarification' THEN 65
-                        ELSE 100
-                    END,
-                    version, updated_at
-                FROM intent_states_legacy
-                """
-            )
-            conn.execute("DROP TABLE intent_states_legacy")
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
+def _from_domain(s: IntentState) -> IntentStateRecord:
+    return IntentStateRecord(
+        **shared_fields(s, IntentStateRecord, exclude={"extra"}),
+        extra=dict(s.extra),
+    )
 
-    def get(self, session_id: str) -> Optional[IntentState]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM intent_states WHERE session_id=?",
-            (session_id,),
-        ).fetchone()
-        return IntentStateRow(**dict(row)).to_domain() if row else None
 
-    def upsert(self, state: IntentState) -> None:
-        row = IntentStateRow.from_domain(state)
-        self._conn.get().execute(
-            f"INSERT INTO intent_states({_COLS}) VALUES ({_PH}) "
-            f"ON CONFLICT(session_id) DO UPDATE SET {_UPDATES}",
-            row.model_dump(),
+class IntentStateRepository(BaseRepository):
+    @read
+    def get(self, db, session_id: str) -> Optional[IntentState]:
+        r = db.get(IntentStateRecord, session_id)
+        return _to_domain(r) if r else None
+
+    @write
+    def upsert(self, db, state: IntentState) -> None:
+        r = _from_domain(state)
+        set_ = {name: getattr(r, name) for name in _SET_COLS}
+        db.execute(
+            insert(IntentStateRecord)
+            .values(session_id=r.session_id, **set_)
+            .on_conflict_do_update(index_elements=["session_id"], set_=set_)
         )
 
-    def delete(self, session_id: str) -> None:
-        self._conn.get().execute("DELETE FROM intent_states WHERE session_id=?", (session_id,))
+    @write
+    def delete(self, db, session_id: str) -> None:
+        db.execute(
+            delete(IntentStateRecord)
+            .where(IntentStateRecord.session_id == session_id)
+        )

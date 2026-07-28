@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import chorus.app as app_module
 from chorus.domain.intent import Intent
 from chorus.domain.task import StepSpec, TaskPlan
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
@@ -37,10 +37,10 @@ def main() -> None:
     scheduler = _app.state.scheduler
     run_startup(scheduler)
 
-    conn = ConnectionFactory(_tmp / "chorus.db")
-    task_repo = TaskRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    artifacts_repo = TaskArtifactsRepository(conn)
+    engine = build_engine(_tmp / "chorus.db")
+    task_repo = TaskRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    artifacts_repo = TaskArtifactsRepository(engine)
 
     session = session_service.create("E2E-idea-candidates")
     sid = session.id

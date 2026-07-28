@@ -15,11 +15,11 @@ from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import fresh_conn
+from chorus.tests._helpers import fresh_engine
 
 
 def _svc():
-    return SessionService(SessionRepository(fresh_conn()))
+    return SessionService(SessionRepository(fresh_engine()))
 
 
 def test_create_exists_get():
@@ -72,9 +72,9 @@ def test_is_title_set_and_set_title():
 
 
 def test_delete_cascades_messages():
-    conn = fresh_conn()
-    svc = SessionService(SessionRepository(conn))
-    msg_svc = MessageService(MessageRepository(conn), TraceService(TraceRepository(conn)))
+    engine = fresh_engine()
+    svc = SessionService(SessionRepository(engine))
+    msg_svc = MessageService(MessageRepository(engine), TraceService(TraceRepository(engine)))
     s = svc.create("hi")
     msg_svc.append_user_message(s.id, "hello")
     assert len(msg_svc.list_messages(s.id)) == 1
@@ -85,8 +85,8 @@ def test_delete_cascades_messages():
 
 
 def test_list_sorts_by_updated_at():
-    conn = fresh_conn()
-    repo = SessionRepository(conn)
+    engine = fresh_engine()
+    repo = SessionRepository(engine)
     repo.insert(Session(id="a", title="A", title_generated=False, created_at=1.0, updated_at=2.0))
     repo.insert(Session(id="b", title="B", title_generated=False, created_at=1.0, updated_at=5.0))
     svc = SessionService(repo)

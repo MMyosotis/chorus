@@ -15,7 +15,7 @@ from chorus.domain.skill import SkillLoader
 from chorus.domain.task import Task, TaskContent, TaskStatus
 from chorus.domain.trace import ModelResponse, TracePhase
 from chorus.hooks import HookRegistry, TraceEmitter
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
@@ -80,16 +80,16 @@ class FakeTool(Tool):
 
 def _setup():
     tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    msg_repo = MessageRepository(conn)
-    trace_repo = TraceRepository(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    content_repo = TaskContentRepository(conn)
+    engine = build_engine(Path(tmp) / "t.db")
+    SessionRepository(engine).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
+    msg_repo = MessageRepository(engine)
+    trace_repo = TraceRepository(engine)
+    task_repo = TaskRepository(engine)
+    art_repo = TaskArtifactsRepository(engine)
+    content_repo = TaskContentRepository(engine)
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
-    return conn, msg_svc, trace_svc, task_repo, art_repo, content_repo
+    return engine, msg_svc, trace_svc, task_repo, art_repo, content_repo
 
 
 def _mk_task(task_repo, content_repo, agent_type="idea", status="running", deps=None):
@@ -110,7 +110,7 @@ def _stub_settings():
     return _S()
 
 
-def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client, aside=None):
+def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client, aside=None):
     from chorus.repo.task_progress import TaskProgressRepository
     hooks = HookRegistry()
     tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
@@ -125,7 +125,7 @@ def _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo,
     if aside is None:
         aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
     return SubAgentService(
-        msg_svc, task_repo, art_repo, TaskProgressRepository(conn),
+        msg_svc, task_repo, art_repo, TaskProgressRepository(engine),
         content_repo, tool_dispatcher,
         _provider, loop, aside, SkillLoader(skills_dir=Path("/nonexistent-skills")),
     )
@@ -142,12 +142,12 @@ def _model_responses(trace_svc, task_id="t1"):
 
 def test_subagent_idea_awaiting_confirm():
     """idea 子 Agent：无工具轮直接产出 → 翻转 running→awaiting_confirm + 写 artifacts。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     # 一轮文本回复（产出协议）
     content = "### t\n- 视角：a\n- 理由：r"
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     art = art_repo.load("t1")
@@ -158,13 +158,13 @@ def test_subagent_idea_awaiting_confirm():
 
 def test_subagent_finalize_awaiting_confirm():
     """finalize 子 Agent：产出 PostCard → 翻转 running→awaiting_confirm（成品也需人工确认）。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
     content = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
                "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
                "# 夏日晚风\n\n一段\n\n#标签：#夏天")
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     assert art_repo.load("t1").artifacts.title == "夏日晚风"
@@ -172,7 +172,7 @@ def test_subagent_finalize_awaiting_confirm():
 
 def test_subagent_react_with_tool():
     """子 Agent 先调工具再产出：两轮 ReAct，trace 留两条 model_response。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     content = "### t\n- 视角：a\n- 理由：r"
     # 第 1 轮工具调用，第 2 轮产出
@@ -181,7 +181,7 @@ def test_subagent_react_with_tool():
             index=0, id="c1", function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}, "tool_calls")]),
         FakeStream([({"content": content}, "stop")]),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     mrs = _model_responses(trace_svc)
@@ -196,11 +196,11 @@ def test_subagent_failed_on_persistent_tool_calls():
     每轮调未知工具 Reply 喂回继续 loop,撞步数上限才判死。
     """
     from chorus.agents.subagent import _MAX_STEPS
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     streams = [_tool_call_stream(f"c{i}") for i in range(_MAX_STEPS + 1)]
     client = FakeClient(streams)
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED
     assert content_repo.load("t1").error
@@ -210,11 +210,11 @@ def test_subagent_failed_on_persistent_tool_calls():
 
 def test_subagent_abandon_block_flips_failed():
     """模型输出 # 失败 块 -> 翻 running->failed + 写 error 为失败说明，不落 artifacts。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "image", "running")
     content = "# 失败\n配图服务持续返回 Error，换写法仍无效"
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED
     assert content_repo.load("t1").error == "配图服务持续返回 Error，换写法仍无效"
@@ -244,7 +244,7 @@ def _drift_to(task_repo, tid, to_status="pending"):
 def test_subagent_cooperative_cancel_between_iterations():
     """I-1：第 1 轮(工具调用)中途任务被僵死回收翻回待执行，第 2 轮迭代顶部复查到非运行即退出。
     即退出——不 _finalize、不 append done 气泡、不落 artifacts。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     tool_call_delta = {"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(name="baidu_search", arguments="{}"))]}
@@ -253,7 +253,7 @@ def test_subagent_cooperative_cancel_between_iterations():
         (_drift_to(task_repo, "t1"), FakeStream([(tool_call_delta, "tool_calls")])),
         (None, FakeStream([({"content": _idea_content("DONE_MARKER_I1")}, "stop")])),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     # 任务已漂移回待执行（_finalize 未成功 CAS 到 awaiting_confirm）
     assert task_repo.get("t1").status == TaskStatus.PENDING
@@ -269,13 +269,13 @@ def test_subagent_cooperative_cancel_between_iterations():
 def test_subagent_finalize_drift_no_orphan():
     """I-2：最终产出轮的 _call_model 中途任务被僵死回收，_finalize 的 owning CAS
     (running→awaiting_confirm) 漂移失败：不 upsert 产物、不 append done 气泡。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "idea", "running")
     # 单轮：副作用漂移任务 + 合法产出流；_finalize 的 CAS 必失败
     client = SideEffectClient([
         (_drift_to(task_repo, "t1"), FakeStream([({"content": _idea_content("DONE_MARKER_I2")}, "stop")])),
     ])
-    sub = _build_subagent(conn, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.PENDING
     # 不落产物（CAS 漂移→跳过 upsert）

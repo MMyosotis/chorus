@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from chorus.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
 from chorus.repo.task import TaskRepository
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
 def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None, **kw):
@@ -17,9 +17,9 @@ def _mk(task_id, status="pending", pipeline_id="p1", session_id="s1", deps=None,
 
 
 def _repo():
-    conn = fresh_conn()
-    seed_session(conn)  # 须先建 sessions 父行（外键约束）
-    return TaskRepository(conn), conn
+    engine = fresh_engine()
+    seed_session(engine)  # 须先建 sessions 父行（外键约束）
+    return TaskRepository(engine), engine
 
 
 def test_insert_and_get():
@@ -75,9 +75,9 @@ def test_find_running_before():
 
 
 def test_find_count_by_session_statuses():
-    repo, conn = _repo()
+    repo, engine = _repo()
     # 别的会话的 task 不应被查到（跨会话隔离）
-    seed_session(conn, sid="s2", title="t2")
+    seed_session(engine, sid="s2", title="t2")
     repo.insert(_mk("a", status="pending"))
     repo.insert(_mk("b", status="running"))
     repo.insert(_mk("c", status="finished"))

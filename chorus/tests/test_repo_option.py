@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from chorus.domain.option import OptionItem, OptionPrompt
 from chorus.repo.option import OptionPromptRepository
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
 def _prompt(pid="p1", sid="s1", question="选哪个", status="open", created_at=1.0):
@@ -22,9 +22,9 @@ def _prompt(pid="p1", sid="s1", question="选哪个", status="open", created_at=
 
 
 def test_insert_and_get_round_trip():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    repo = OptionPromptRepository(conn)
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    repo = OptionPromptRepository(engine)
     repo.insert(_prompt())
     got = repo.get("p1")
     assert got is not None
@@ -38,9 +38,9 @@ def test_insert_and_get_round_trip():
 
 
 def test_find_open_by_session_returns_latest():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    repo = OptionPromptRepository(conn)
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    repo = OptionPromptRepository(engine)
     repo.insert(_prompt(pid="p1", question="旧", status="answered", created_at=1.0))
     repo.insert(_prompt(pid="p2", question="新", status="open", created_at=2.0))
     got = repo.find_open_by_session("s1")
@@ -49,17 +49,17 @@ def test_find_open_by_session_returns_latest():
 
 
 def test_find_open_returns_none_when_all_answered():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    repo = OptionPromptRepository(conn)
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    repo = OptionPromptRepository(engine)
     repo.insert(_prompt(pid="p1", status="answered"))
     assert repo.find_open_by_session("s1") is None
 
 
 def test_update_answered_flips_status():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    repo = OptionPromptRepository(conn)
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    repo = OptionPromptRepository(engine)
     repo.insert(_prompt(pid="p1", status="open"))
     repo.update_answered("p1")
     assert repo.get("p1").status == "answered"

@@ -1,6 +1,6 @@
-"""测试共享工具：临时 DB 连接 + sessions 父行种子。
+"""测试共享工具：临时 Engine 与 sessions 父行种子。
 
-各 repo / service 测试本要重复建临时连接与插会话父行，统一收敛到这里，
+各 repo / service 测试本要重复建临时 Engine 与插会话父行，统一收敛到这里，
 配合各测试文件裸跑 main() 的既有风格。
 """
 from __future__ import annotations
@@ -8,32 +8,27 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from sqlalchemy import Engine
+
 from chorus.domain.session import Session
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.session import SessionRepository
 
 
-def fresh_conn(db_name: str = "t.db") -> ConnectionFactory:
-    """返回指向临时目录的 ConnectionFactory（自动建库；线程局部连接）。"""
-    return ConnectionFactory(Path(tempfile.mkdtemp()) / db_name)
+def fresh_engine(db_name: str = "t.db") -> Engine:
+    """返回指向临时目录的 Engine（自动建库与全部表）。"""
+    return build_engine(Path(tempfile.mkdtemp()) / db_name)
 
 
-def seed_session(conn: ConnectionFactory, sid: str = "s1", title: str = "t") -> Session:
-    """建 sessions 表并插一条父行（tasks / messages 等外键引用 sessions.id）。
-
-    返回插入的 Session，供断言或引用。
-    """
+def seed_session(engine: Engine, sid: str = "s1", title: str = "t") -> Session:
+    """插一条父行（tasks / messages 等外键引用 sessions.id）。"""
     session = Session(id=sid, title=title, title_generated=False, created_at=0.0, updated_at=0.0)
-    SessionRepository(conn).insert(session)
+    SessionRepository(engine).insert(session)
     return session
 
 
 def stub_chat_model_provider(client, model_id: str = "fake"):
-    """构造注入 ChatModelEntry 的假 ChatModelProvider（不经真实 OpenAI / settings）。
-
-    supervisor/subagent 测试用：get_entry() 恒返回包好 fake client 的 entry，
-    跳过 ChatModelProvider 的 config 解析与 settings 查询。
-    """
+    """构造注入 ChatModelEntry 的假 ChatModelProvider（不经真实 OpenAI / settings）。"""
     from chorus.agents.chat_model import ChatModelEntry
     entry = ChatModelEntry(client=client, model_id=model_id)
 
@@ -45,4 +40,3 @@ def stub_chat_model_provider(client, model_id: str = "fake"):
             return entry
 
     return _Stub()
-

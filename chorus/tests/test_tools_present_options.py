@@ -6,18 +6,18 @@ from chorus.repo.option import OptionPromptRepository
 from chorus.repo.session import SessionRepository
 from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 from chorus.tools.builtin.present_options import PresentOptionsTool
 from chorus.tools.framework import Reply, Suspend, ToolContext
 
 
 def _build():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    option = OptionPromptService(OptionPromptRepository(conn), SessionService(SessionRepository(conn)))
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    option = OptionPromptService(OptionPromptRepository(engine), SessionService(SessionRepository(engine)))
     tool = PresentOptionsTool(option)
     ctx = ToolContext(session_id="s1")
-    return conn, option, tool, ctx
+    return engine, option, tool, ctx
 
 
 def _args(question="选哪个方向", options=None, allow_custom=True):

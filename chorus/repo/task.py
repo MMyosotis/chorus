@@ -1,179 +1,156 @@
-"""任务表的唯一 SQL 入口，哑查询不开事务。
+"""任务表的唯一 SQL 入口。
 
 只存调度、身份与状态机；任务内容见专门的内容表。状态集合由编排层传入，不硬编码。
 """
 from __future__ import annotations
 
-import json
 import time
 from typing import Iterable, Optional
 
-from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, select, update
 
 from chorus.domain.log import get_logger
 from chorus.domain.task import Task
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
+from chorus.repo.models import TaskRecord
 
 _logger = get_logger("repo.task")
 
-_DDL = """
-CREATE TABLE IF NOT EXISTS tasks (
-    id             TEXT PRIMARY KEY,
-    session_id     TEXT NOT NULL,
-    pipeline_id    TEXT NOT NULL,
-    agent_type     TEXT NOT NULL,
-    status         TEXT NOT NULL,
-    dependencies   TEXT NOT NULL DEFAULT '[]',
-    created_at     REAL NOT NULL,
-    updated_at     REAL NOT NULL,
-    owner_id       REAL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
-"""
 
-class TaskRow(BaseModel):
-    """任务表持久化形状，与列一一对应。依赖为 JSON 列。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    id: str
-    session_id: str
-    pipeline_id: str
-    agent_type: str
-    status: str
-    dependencies: str
-    created_at: float
-    updated_at: float
-    owner_id: Optional[float] = None
-
-    def to_domain(self) -> Task:
-        try:
-            deps = json.loads(self.dependencies) if self.dependencies else []
-        except json.JSONDecodeError:
-            deps = []
-        return Task(
-            **shared_fields(self, Task, exclude={"dependencies"}),
-            dependencies=deps,
-        )
-
-    @classmethod
-    def from_domain(cls, task: Task) -> "TaskRow":
-        return cls(
-            **shared_fields(task, cls, exclude={"dependencies"}),
-            dependencies=json.dumps(task.dependencies, ensure_ascii=False),
-        )
+def _to_domain(r: TaskRecord) -> Task:
+    return Task(
+        **shared_fields(r, Task, exclude={"dependencies"}),
+        dependencies=list(r.dependencies or []),
+    )
 
 
-_COLS = ", ".join(TaskRow.model_fields)
-_PH = ", ".join(f":{field}" for field in TaskRow.model_fields)
+def _load_deps(db, task: Task) -> list[Task]:
+    """按任务依赖标识加载依赖任务，跳过空标识与缺失行。"""
+    deps: list[Task] = []
+    for dep_id in task.dependencies:
+        if not dep_id:
+            continue
+        dep = db.get(TaskRecord, dep_id)
+        if dep is not None:
+            deps.append(_to_domain(dep))
+    return deps
 
 
-class TaskRepository:
-    def __init__(self, conn: ConnectionFactory):
-        self._conn = conn
-        self._conn.ensure_schema(_DDL)
+def _from_domain(t: Task) -> TaskRecord:
+    return TaskRecord(
+        **shared_fields(t, TaskRecord, exclude={"dependencies"}),
+        dependencies=list(t.dependencies),
+    )
 
-    def insert(self, task: Task) -> None:
-        row = TaskRow.from_domain(task)
-        self._conn.get().execute(
-            f"INSERT INTO tasks({_COLS}) VALUES ({_PH})", row.model_dump()
-        )
 
-    def get(self, task_id: str) -> Optional[Task]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM tasks WHERE id=?",
-            (task_id,),
-        ).fetchone()
-        return TaskRow(**dict(row)).to_domain() if row else None
+class TaskRepository(BaseRepository):
+    @write
+    def insert(self, db, task: Task) -> None:
+        db.add(_from_domain(task))
 
-    def transition(self, task_id: str, to_status: str) -> bool:
+    @read
+    def get(self, db, task_id: str) -> Optional[Task]:
+        r = db.get(TaskRecord, task_id)
+        return _to_domain(r) if r else None
+
+    @write
+    def transition(self, db, task_id: str, to_status: str) -> bool:
         """状态翻转：直接设目标状态，更新时间自动刷新。返回是否命中行。"""
-        cur = self._conn.get().execute(
-            "UPDATE tasks SET status=?, updated_at=? WHERE id=?",
-            (to_status, time.time(), task_id),
+        result = db.execute(
+            update(TaskRecord).where(TaskRecord.id == task_id)
+            .values(status=to_status, updated_at=time.time())
         )
-        hit = cur.rowcount > 0
+        hit = result.rowcount > 0
         _logger.info("transition", extra={"task_id": task_id, "to": to_status, "hit": hit})
         return hit
 
-    def claim(self, task_id: str, now: float) -> bool:
+    @write
+    def claim(self, db, task_id: str, now: float) -> bool:
         """scheduler 派发占槽：设为运行中并写归属与更新时间。"""
-        cur = self._conn.get().execute(
-            "UPDATE tasks SET status='running', owner_id=?, updated_at=? WHERE id=?",
-            (now, now, task_id),
+        result = db.execute(
+            update(TaskRecord).where(TaskRecord.id == task_id)
+            .values(status="running", owner_id=now, updated_at=now)
         )
-        hit = cur.rowcount > 0
+        hit = result.rowcount > 0
         _logger.info("claim", extra={"task_id": task_id, "hit": hit})
         return hit
 
-    def touch_updated_at(self, task_id: str) -> None:
+    @write
+    def touch_updated_at(self, db, task_id: str) -> None:
         """心跳：直接更新时间，不走翻转不校验状态，防僵死误杀。"""
-        self._conn.get().execute(
-            "UPDATE tasks SET updated_at=? WHERE id=?", (time.time(), task_id)
+        db.execute(
+            update(TaskRecord).where(TaskRecord.id == task_id).values(updated_at=time.time())
         )
 
-    def cancel_pipeline(self, pipeline_id: str, statuses: Iterable[str]) -> int:
+    @write
+    def cancel_pipeline(self, db, pipeline_id: str, statuses: Iterable[str]) -> int:
         """批量取消非终态任务，返回受影响行数。状态集合由编排层传入。"""
         statuses = list(statuses)
-        placeholders = ",".join("?" * len(statuses))
         now = time.time()
-        cur = self._conn.get().execute(
-            f"UPDATE tasks SET status='cancelled', updated_at=? "
-            f"WHERE pipeline_id=? AND status IN ({placeholders})",
-            (now, pipeline_id, *statuses),
+        result = db.execute(
+            update(TaskRecord)
+            .where(
+                TaskRecord.pipeline_id == pipeline_id,
+                TaskRecord.status.in_(statuses),
+            )
+            .values(status="cancelled", updated_at=now)
         )
-        return cur.rowcount
+        return result.rowcount
 
-    def find_pending_with_deps(self) -> list[tuple[Task, list[Task]]]:
+    @read
+    def find_pending_with_deps(self, db) -> list[tuple[Task, list[Task]]]:
         """返回所有待执行任务及其依赖，调度判定交领域。"""
-        pending_rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM tasks WHERE status='pending'"
-        ).fetchall()
+        pending = db.scalars(select(TaskRecord).where(TaskRecord.status == "pending")).all()
         result: list[tuple[Task, list[Task]]] = []
-        for row in pending_rows:
-            task = TaskRow(**dict(row)).to_domain()
-            deps = [self.get(dep) for dep in task.dependencies if dep]
-            result.append((task, [dep for dep in deps if dep is not None]))
+        for r in pending:
+            task = _to_domain(r)
+            result.append((task, _load_deps(db, task)))
         return result
 
-    def find_running_before(self, cutoff_ts: float) -> list[Task]:
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM tasks "
-            "WHERE status='running' AND updated_at < ?",
-            (cutoff_ts,),
-        ).fetchall()
-        return [TaskRow(**dict(row)).to_domain() for row in rows]
+    @read
+    def find_running_before(self, db, cutoff_ts: float) -> list[Task]:
+        rs = db.scalars(
+            select(TaskRecord).where(
+                TaskRecord.status == "running", TaskRecord.updated_at < cutoff_ts
+            )
+        ).all()
+        return [_to_domain(r) for r in rs]
 
+    @read
     def find_by_session_statuses(
-        self, session_id: str, statuses: Iterable[str]
+        self, db, session_id: str, statuses: Iterable[str]
     ) -> list[Task]:
         statuses = list(statuses)
-        placeholders = ",".join("?" * len(statuses))
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM tasks "
-            f"WHERE session_id=? AND status IN ({placeholders}) ORDER BY created_at, id",
-            (session_id, *statuses),
-        ).fetchall()
-        return [TaskRow(**dict(row)).to_domain() for row in rows]
+        rs = db.scalars(
+            select(TaskRecord)
+            .where(
+                TaskRecord.session_id == session_id,
+                TaskRecord.status.in_(statuses),
+            )
+            .order_by(TaskRecord.created_at, TaskRecord.id)
+        ).all()
+        return [_to_domain(r) for r in rs]
 
-    def find_by_pipeline(self, pipeline_id: str) -> list[Task]:
+    @read
+    def find_by_pipeline(self, db, pipeline_id: str) -> list[Task]:
         """返回流水线全部任务按创建升序，展示用拓扑序由编排层排。"""
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM tasks WHERE pipeline_id=? ORDER BY created_at, id",
-            (pipeline_id,),
-        ).fetchall()
-        return [TaskRow(**dict(row)).to_domain() for row in rows]
+        rs = db.scalars(
+            select(TaskRecord).where(TaskRecord.pipeline_id == pipeline_id)
+            .order_by(TaskRecord.created_at, TaskRecord.id)
+        ).all()
+        return [_to_domain(r) for r in rs]
 
+    @read
     def count_by_session_statuses(
-        self, session_id: str, statuses: Iterable[str]
+        self, db, session_id: str, statuses: Iterable[str]
     ) -> int:
         statuses = list(statuses)
-        placeholders = ",".join("?" * len(statuses))
-        row = self._conn.get().execute(
-            f"SELECT COUNT(*) FROM tasks WHERE session_id=? AND status IN ({placeholders})",
-            (session_id, *statuses),
-        ).fetchone()
-        return int(row[0]) if row else 0
+        n = db.scalar(
+            select(func.count(TaskRecord.id))
+            .where(
+                TaskRecord.session_id == session_id,
+                TaskRecord.status.in_(statuses),
+            )
+        )
+        return int(n or 0)

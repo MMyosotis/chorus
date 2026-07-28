@@ -11,6 +11,7 @@ dependencies = [
     "uvicorn[standard]>=0.29.0",
     "pydantic>=2.13.4",
     "uuid6>=2025.0.1",
+    "sqlalchemy>=2.0.51",
 ]
 
 [dependency-groups]

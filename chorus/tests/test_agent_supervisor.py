@@ -11,7 +11,7 @@ from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
@@ -63,25 +63,25 @@ def _stub_settings():
 
 def _setup():
     tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    SessionRepository(conn)  # 建表
-    msg_repo = MessageRepository(conn)
-    trace_repo = TraceRepository(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    progress_repo = TaskProgressRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    session_svc = SessionService(SessionRepository(conn))
+    engine = build_engine(Path(tmp) / "t.db")
+    SessionRepository(engine)  # 建表
+    msg_repo = MessageRepository(engine)
+    trace_repo = TraceRepository(engine)
+    task_repo = TaskRepository(engine)
+    art_repo = TaskArtifactsRepository(engine)
+    progress_repo = TaskProgressRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    session_svc = SessionService(SessionRepository(engine))
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
     task_svc = TaskService(task_repo, art_repo, progress_repo, content_repo, session_svc)
-    return conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo
+    return engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo
 
 
-def _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, fake_client):
+def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, fake_client):
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     hooks = HookRegistry()
-    intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
+    intent_state = IntentStateService(IntentStateRepository(engine), session_svc)
     tool_dispatcher = ToolDispatch([
         CreatePlanTool(task_repo, content_repo, intent_state),
         LoadSkillTool(skill_loader),
@@ -117,9 +117,9 @@ def _plan_args(topic="夏日晚风", steps=None):
 
 def test_only_reply():
     """无 tool_call → only_reply：事件 [message_start, token+, done]，落 user+assistant。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     client = FakeClient([FakeStream([({"content": "你好呀"}, "stop")])])
-    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "hi"))
     types_seq = [e.type for e in events]
@@ -132,13 +132,13 @@ def test_only_reply():
 
 def test_new_plan():
     """create_plan tool_call → dispatch Suspend → 建图落库 + done；assistant(tool_calls)+tool 成对落库。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup, intent_state = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, intent_state = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     intent_state.patch_status(s.id, "confirmed")
     events = list(sup.stream(s.id, "帮我写一篇夏日博文"))
@@ -165,7 +165,7 @@ def test_reply_outcome_pairs_and_continues():
     用真实 LoadSkillTool 加载不存在的技能名 → Reply("Error: skill '...' not found...")，
     下一轮模型回文本 done。
     """
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     # 第一轮：load_skill("ghost") → Reply(未命中技能错误串)
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
@@ -173,7 +173,7 @@ def test_reply_outcome_pairs_and_continues():
     # 第二轮：纯文本回复（loop 继续）
     text_stream = FakeStream([({"content": "已为你查到"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 技能"))
     types_seq = [e.type for e in events]
@@ -196,7 +196,7 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
 
     锚定多 tool_call 配对结构，避免多 Reply 复用 message_id 撞表。下一轮模型回文本 done。
     """
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     # 第一轮：2 个 load_skill tool_call（index 0/1），均 Reply(未命中技能错误串)
     tool_stream = FakeStream([({
         "tool_calls": [
@@ -215,7 +215,7 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
     # 第二轮：纯文本回复（loop 继续）
     text_stream = FakeStream([({"content": "两个技能都没找到"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "帮我加载 ghost 和 phantom 技能"))
     types_seq = [e.type for e in events]
@@ -234,13 +234,13 @@ def test_multi_reply_tool_calls_in_one_turn_persists_one_assistant():
 
 def test_new_plan_blocked_by_active_task():
     """会话有 active task → stream 入口 yield BusyEvent，user 消息不入库。"""
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     args = _plan_args()
     tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
         index=0, id="c1", function=types.SimpleNamespace(
             name="create_plan", arguments=json.dumps(args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     task_repo.insert(Task(id="active1", session_id=s.id, pipeline_id="p1", agent_type="idea",
                           status="running", dependencies=[],
@@ -260,7 +260,7 @@ def test_update_intent_state_does_not_finish():
     empty/capturing/needs_clarification 只记状态，关流权交还模型，须等下一轮模型纯文本走
     after_text 才 done。锚定非挂起状态工具不替模型决定流程的契约；ready_to_confirm 挂起另测。
     """
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     intent_args = {
         "intent_status": "empty",
         "topic": "",
@@ -279,7 +279,7 @@ def test_update_intent_state_does_not_finish():
     # 第二轮：模型纯文本（不再调工具）→ after_text → done
     text_stream = FakeStream([({"content": "很高兴帮你"}, "stop")])
     client = FakeClient([tool_stream, text_stream])
-    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "你好"))
     types_seq = [e.type for e in events]
@@ -305,7 +305,7 @@ def test_update_intent_state_ready_to_confirm_finishes():
     after_tools 命中 Suspend -> SUSPEND -> 同轮关流 done，不再有后续纯文本轮。
     模型本轮无正文，content 如实为 None，与 create_plan 同构。
     """
-    conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     intent_args = {
         "intent_status": "ready_to_confirm",
         "topic": "精品咖啡豆种草",
@@ -318,7 +318,7 @@ def test_update_intent_state_ready_to_confirm_finishes():
         index=0, id="c1", function=types.SimpleNamespace(
             name="update_intent_state", arguments=json.dumps(intent_args)))]}, "tool_calls")])
     client = FakeClient([tool_stream])
-    sup, _ = _build_supervisor(conn, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "精品咖啡豆，轻松种草风格，3张图"))
     types_seq = [e.type for e in events]

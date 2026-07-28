@@ -7,13 +7,15 @@ from __future__ import annotations
 import types
 from pathlib import Path
 
+from sqlalchemy import text
+
 from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService, SubagentLoopStrategy, _MAX_STEPS
 from chorus.domain.session import Session
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import AGENT_PROFILES, Task, TaskContent, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
@@ -68,17 +70,17 @@ class _SideClient(FakeClient):
 
 
 def _setup():
-    conn = ConnectionFactory(Path("/tmp") / f"t_{__import__('time').time_ns()}.db")
-    SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    msg_repo = MessageRepository(conn)
-    trace_repo = TraceRepository(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    progress_repo = TaskProgressRepository(conn)
-    content_repo = TaskContentRepository(conn)
+    engine = build_engine(Path("/tmp") / f"t_{__import__('time').time_ns()}.db")
+    SessionRepository(engine).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
+    msg_repo = MessageRepository(engine)
+    trace_repo = TraceRepository(engine)
+    task_repo = TaskRepository(engine)
+    art_repo = TaskArtifactsRepository(engine)
+    progress_repo = TaskProgressRepository(engine)
+    content_repo = TaskContentRepository(engine)
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
-    return conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo
+    return engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo
 
 
 def _stub_settings():
@@ -88,7 +90,7 @@ def _stub_settings():
     return _S()
 
 
-def _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=None):
+def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=None):
     hooks = HookRegistry()
     disp = ToolDispatch([], _stub_settings())
     trace = TraceEmitter(trace_svc, disp)
@@ -139,10 +141,10 @@ def _takeover(task_repo):
 
 def test_progress_label_written_on_start():
     """入口租约通过即写创作量词；idea 一轮产出后量词仍在。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     client = FakeClient([FakeStream([({"content": _idea_md()}, "stop")])])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     progress = progress_repo.load("t1")
     assert progress is not None
@@ -159,11 +161,11 @@ def _tool_call_stream(call_id="c1"):
 
 def test_progress_fail_signal_on_exhausted():
     """连续工具调用撞步数上限 -> 写失败信号 + 翻 failed。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     streams = [_tool_call_stream(f"c{i}") for i in range(_MAX_STEPS + 1)]
     client = FakeClient(streams)
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED
     assert progress_repo.load("t1").last_signal == "这步失败了"
@@ -174,10 +176,10 @@ def test_progress_fail_signal_on_exception():
     def _boom():
         raise RuntimeError("model boom")
 
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     client = _SideClient([(_boom, None)])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.FAILED
     assert progress_repo.load("t1").last_signal == "这步失败了"
@@ -185,12 +187,12 @@ def test_progress_fail_signal_on_exception():
 
 def test_lease_drift_at_max_steps_skips_fail():
     """撞步数上限前归属漂移 -> 租约拦下失败写入：不翻 failed、不写失败信号。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     pairs = [(lambda: _takeover(task_repo), _tool_call_stream("c0"))]
     pairs += [(None, _tool_call_stream(f"c{i+1}")) for i in range(_MAX_STEPS)]
     client = _SideClient(pairs)
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.RUNNING
     assert progress_repo.load("t1").last_signal != "这步失败了"
@@ -198,12 +200,12 @@ def test_lease_drift_at_max_steps_skips_fail():
 
 def test_lease_takeover_prevents_stale_finalize():
     """汇总轮归属漂移 -> 租约拦下：不翻待复核、不落产物。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     client = _SideClient([
         (lambda: _takeover(task_repo), FakeStream([({"content": _idea_md()}, "stop")])),
     ])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.RUNNING
     assert art_repo.load("t1") is None
@@ -215,10 +217,10 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
         _takeover(task_repo)
         raise RuntimeError("model boom")
 
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     client = _SideClient([(_takeover_and_boom, None)])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.RUNNING
     assert progress_repo.load("t1").last_signal != "这步失败了"
@@ -226,11 +228,12 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
 
 def test_finalize_drift_writes_no_terminal():
     """汇总轮被取消 -> 租约校验状态非 running 即早退：不落产物。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     task_repo.transition("t1", "cancelled")
     # cancelled->pending 不合法，直接重置为 running 以便进入循环
-    conn.get().execute("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'")
+    with engine.begin() as db:
+        db.execute(text("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'"))
 
     def _cancel():
         task_repo.transition("t1", TaskStatus.CANCELLED)
@@ -238,7 +241,7 @@ def test_finalize_drift_writes_no_terminal():
     client = _SideClient([
         (_cancel, FakeStream([({"content": _idea_md()}, "stop")])),
     ])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.CANCELLED
     assert art_repo.load("t1") is None
@@ -246,11 +249,11 @@ def test_finalize_drift_writes_no_terminal():
 
 def test_progress_chars_units_written_during_stream():
     """产出轮逐字累计 chars + 数 ### 行得 units,节流后落进度。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
     body = ("### 候选一\n- 视角：a\n- 理由：r\n\n### 候选二\n- 视角：b\n- 理由：s")
     client = FakeClient([FakeStream([({"content": body}, "stop")])])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     progress = progress_repo.load("t1")
     assert progress.composing_chars == len(body)
@@ -259,7 +262,7 @@ def test_progress_chars_units_written_during_stream():
 
 def test_image_after_dispatch_counts_units():
     """配图工具声明 units_produced,after_dispatch 累计,正文写字不覆盖。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     strategy = SubagentLoopStrategy(
         task=task_repo.get("t1"), owner_id=100.0,
@@ -280,7 +283,7 @@ def test_image_after_dispatch_counts_units():
 
 def test_tool_without_units_not_counted():
     """不带 units_produced 的工具(如搜索)不误增配图张数。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     strategy = SubagentLoopStrategy(
         task=task_repo.get("t1"), owner_id=100.0,
@@ -298,10 +301,10 @@ def test_tool_without_units_not_counted():
 
 def test_image_unfinished_still_finalizes_for_hil():
     """配图产物不全(无 url)不再代码判死,照常收尾交 HIL,成败交模型。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     client = FakeClient([FakeStream([({"content": _image_md()}, "stop")])])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
     assert art_repo.load("t1") is not None
@@ -309,12 +312,12 @@ def test_image_unfinished_still_finalizes_for_hil():
 
 def test_progress_aside_written_on_entry():
     """入口调旁白生成器,写进度 aside 字段。"""
-    conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
+    engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
     body = _idea_md()
     aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "打算用光线串起一杯咖啡的时间")
     client = FakeClient([FakeStream([({"content": body}, "stop")])])
-    sub = _build(conn, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=aside)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=aside)
     sub.run("t1")
     assert progress_repo.load("t1").aside == "打算用光线串起一杯咖啡的时间"
 

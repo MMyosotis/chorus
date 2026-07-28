@@ -1,14 +1,12 @@
 """消息表的唯一 SQL 入口，按消息粒度逐行存储。
 
-助手消息的展示元数据存轨迹表，靠消息标识关联聚合。映射归框架，形状转换集中在行模型。
+助手消息的展示元数据存轨迹表，靠消息标识关联聚合。形状转换集中在转换函数。
 """
-
 from __future__ import annotations
 
-import json
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select, update
 
 from chorus.domain.message import (
     AssistantMessage,
@@ -17,134 +15,103 @@ from chorus.domain.message import (
     ToolMessage,
     UserMessage,
 )
-from chorus.repo.connection import ConnectionFactory
-from chorus.repo.mapping import shared_fields
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS messages (
-    id              TEXT PRIMARY KEY,
-    session_id      TEXT NOT NULL,
-    role            TEXT NOT NULL,
-    content         TEXT,
-    tool_calls_json TEXT,
-    tool_call_id    TEXT,
-    tool_name       TEXT,
-    created_at      REAL NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id, id);
-"""
+from chorus.repo.base import BaseRepository, read, write
+from chorus.repo.models import MessageRecord
 
 
-class MessageRow(BaseModel):
-    """消息表持久化形状，与列一一对应。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    id: str
-    session_id: str
-    role: str
-    content: Optional[str] = None
-    tool_calls_json: Optional[str] = None
-    tool_call_id: Optional[str] = None
-    tool_name: Optional[str] = None
-    created_at: float
-
-    def to_domain(self) -> Message:
-        if self.role == "user":
-            return UserMessage(
-                **shared_fields(self, UserMessage, exclude={"content"}),
-                content=self.content or "",
-            )
-        if self.role == "assistant":
-            return AssistantMessage(
-                **shared_fields(self, AssistantMessage, exclude={"tool_calls"}),
-                tool_calls=self._parse_tool_calls(self.tool_calls_json),
-            )
-        if self.role == "tool":
-            return ToolMessage(
-                **shared_fields(self, ToolMessage, exclude={"tool_call_id", "name", "content"}),
-                tool_call_id=self.tool_call_id or "",
-                name=self.tool_name or "",
-                content=self.content or "",
-            )
-        raise ValueError(f"unknown role: {self.role}")
-
-    @classmethod
-    def from_domain(cls, msg: Message) -> "MessageRow":
-        if isinstance(msg, UserMessage):
-            return cls(**shared_fields(msg, cls))
-        if isinstance(msg, AssistantMessage):
-            return cls(
-                **shared_fields(msg, cls),
-                tool_calls_json=cls._dump_tool_calls(msg.tool_calls),
-            )
-        if isinstance(msg, ToolMessage):
-            return cls(
-                **shared_fields(msg, cls),
-                tool_name=msg.name,
-            )
-        raise TypeError(f"unsupported message type: {type(msg)}")
-
-    @staticmethod
-    def _parse_tool_calls(raw: Optional[str]) -> list[ToolCallSpec]:
-        """解析工具调用 JSON，脏数据退化为空。"""
-        if not raw:
-            return []
-        try:
-            return [ToolCallSpec(**tc) for tc in json.loads(raw)]
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-    @staticmethod
-    def _dump_tool_calls(tool_calls: Optional[list[ToolCallSpec]]) -> Optional[str]:
-        if not tool_calls:
-            return None
-        return json.dumps([call.model_dump() for call in tool_calls], ensure_ascii=False)
+def _parse_tool_calls(raw) -> list[ToolCallSpec]:
+    """解析工具调用列表，脏数据退化为空。"""
+    if not raw:
+        return []
+    try:
+        return [ToolCallSpec(**tc) for tc in raw]
+    except (TypeError, ValueError):
+        return []
 
 
-_COLS = ", ".join(MessageRow.model_fields)
-_PH = ", ".join(f":{field}" for field in MessageRow.model_fields)
+def _dump_tool_calls(tool_calls: Optional[list[ToolCallSpec]]):
+    if not tool_calls:
+        return None
+    return [call.model_dump() for call in tool_calls]
 
 
-class MessageRepository:
-    def __init__(self, conn: ConnectionFactory):
-        self._conn = conn
-        self._conn.ensure_schema(_DDL)
-
-    def append(self, message: Message) -> None:
-        """单条消息入库。"""
-        row = MessageRow.from_domain(message)
-        self._conn.get().execute(
-            f"INSERT INTO messages({_COLS}) VALUES ({_PH})", row.model_dump()
+def _to_domain(r: MessageRecord) -> Message:
+    if r.role == "user":
+        return UserMessage(
+            id=r.id, session_id=r.session_id, created_at=r.created_at,
+            content=r.content or "",
         )
+    if r.role == "assistant":
+        return AssistantMessage(
+            id=r.id, session_id=r.session_id, created_at=r.created_at,
+            content=r.content, tool_calls=_parse_tool_calls(r.tool_calls_json),
+        )
+    if r.role == "tool":
+        return ToolMessage(
+            id=r.id, session_id=r.session_id, created_at=r.created_at,
+            tool_call_id=r.tool_call_id or "", name=r.tool_name or "",
+            content=r.content or "",
+        )
+    raise ValueError(f"unknown role: {r.role}")
 
-    def list_by_session(self, session_id: str) -> list[Message]:
+
+def _from_domain(msg: Message) -> MessageRecord:
+    if isinstance(msg, UserMessage):
+        return MessageRecord(
+            id=msg.id, session_id=msg.session_id, role="user",
+            content=msg.content, created_at=msg.created_at,
+        )
+    if isinstance(msg, AssistantMessage):
+        return MessageRecord(
+            id=msg.id, session_id=msg.session_id, role="assistant",
+            content=msg.content, tool_calls_json=_dump_tool_calls(msg.tool_calls),
+            created_at=msg.created_at,
+        )
+    if isinstance(msg, ToolMessage):
+        return MessageRecord(
+            id=msg.id, session_id=msg.session_id, role="tool",
+            tool_call_id=msg.tool_call_id, tool_name=msg.name,
+            content=msg.content, created_at=msg.created_at,
+        )
+    raise TypeError(f"unsupported message type: {type(msg)}")
+
+
+class MessageRepository(BaseRepository):
+    @write
+    def append(self, db, message: Message) -> None:
+        """单条消息入库。"""
+        db.add(_from_domain(message))
+
+    @read
+    def list_by_session(self, db, session_id: str) -> list[Message]:
         """按标识升序返回该会话全部消息，即写入顺序。"""
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM messages WHERE session_id=? ORDER BY id",
-            (session_id,),
-        ).fetchall()
-        return [MessageRow(**dict(row)).to_domain() for row in rows]
+        rs = db.scalars(
+            select(MessageRecord).where(MessageRecord.session_id == session_id)
+            .order_by(MessageRecord.id)
+        ).all()
+        return [_to_domain(r) for r in rs]
 
-    def get(self, message_id: str) -> Optional[Message]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM messages WHERE id=?",
-            (message_id,),
-        ).fetchone()
-        return MessageRow(**dict(row)).to_domain() if row else None
+    @read
+    def get(self, db, message_id: str) -> Optional[Message]:
+        r = db.get(MessageRecord, message_id)
+        return _to_domain(r) if r else None
 
-    def find_last_tool_by_name(self, session_id: str, name: str) -> Optional[ToolMessage]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM messages "
-            "WHERE session_id=? AND role='tool' AND tool_name=? "
-            "ORDER BY id DESC LIMIT 1",
-            (session_id, name),
-        ).fetchone()
-        return MessageRow(**dict(row)).to_domain() if row else None
+    @read
+    def find_last_tool_by_name(self, db, session_id: str, name: str) -> Optional[ToolMessage]:
+        r = db.scalars(
+            select(MessageRecord)
+            .where(
+                MessageRecord.session_id == session_id,
+                MessageRecord.role == "tool",
+                MessageRecord.tool_name == name,
+            )
+            .order_by(MessageRecord.id.desc())
+            .limit(1)
+        ).first()
+        return _to_domain(r) if r else None
 
-    def update_content(self, message_id: str, content: str) -> None:
-        self._conn.get().execute(
-            "UPDATE messages SET content=? WHERE id=?",
-            (content, message_id),
+    @write
+    def update_content(self, db, message_id: str, content: str) -> None:
+        db.execute(
+            update(MessageRecord).where(MessageRecord.id == message_id).values(content=content)
         )

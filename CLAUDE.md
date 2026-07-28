@@ -23,6 +23,9 @@ uv sync                                              # 安装依赖
 
 # 一键跑全部自动化测试（逐模块裸跑；也可 `.venv/bin/python -m pytest chorus/tests/`）
 .venv/bin/python -m chorus.tests
+
+# 重建产品库（drop_all + create_all，清空 data/chorus.db；结构变动后用，不保留旧数据）
+.venv/bin/python scripts/reset_db.py
 ```
 
 ### 前端
@@ -57,7 +60,7 @@ cd web && npm run build                # 构建生产版本
 | `domain/` | 领域层，**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作 + 围绕该概念的基础设施型 service：`session`/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`，支持 `progress`/`plan` 等 subtype)/`trace`(多来源：supervisor/subagent/scheduler，靠 `message_id` 与 `task_id` 关联)/`skill`/`events`(SSE sealed 联合)/`intent`(会话级意图状态机：IntentState + IntentStatus empty→capturing→…→dispatched + derive_next_action status→next_action 派生不模型填 + IntentStatePatch)/`title`/`stream`(`consume_stream` supervisor 用 / `silent_consume` subagent 用 / `drain_stream` 复用 + `StreamResult`)/`prompt`(`supervisor` SYSTEM_PROMPT + `PromptContext`/`build_system_prompt`；`subagent` 各角色 prompt)/`task`(`models` Task/TaskContent 带只读行为(can_schedule/render_invoke) + StepSpec/CreationIntent(expand_to_tasks) + PostCard 成品契约 + `state` LEGAL_TRANSITIONS/topological_order + `pipeline` validate_steps + `profiles` AGENT_PROFILES + AgentProfile.parse_output/build_artifacts + `progress` 运行期进度快照值对象(TaskProgress/dump_progress) + `errors`，单一概念内聚为包) |
 | `tools/` | 工具子系统（领域模型 + 框架，但因规模大而独立成顶层包）：`models` 纯模型 ToolSchema/ToolCall/ToolResult + `framework` select_schemas_by_names 与 Tool/ToolContext/ToolDispatch（登记+查 schema+派发） + `builtin/`(6 工具：load_skill / output_plan / generate_image / baidu_search / create_plan / update_intent_state) + `clients/`(ark_image / baidu_search 外部依赖封装)。**所有工具（含 create_plan）经 `ToolDispatch` 统一登记/派发**，schema 按 `config.TOOL_WHITELISTS` 白名单暴露给各 agent。依赖 `domain/skill` 与 `services`（如生图模型选择查 SettingsService），单向，不反向被依赖 |
 | `agents/` | **三 loop 编排层**（取数据→调 domain/LLM/工具→存数据 + agent loop 流程控制）：`supervisor`(SupervisorService SSE 流式，建图/only_reply 路由，原 ChatService 迁入改造)、`subagent`(SubAgentService 后台线程 ReAct，写库不连 SSE)、`scheduler`(TaskScheduler 守护线程轮询派发 + zombie 回收，裸线程派发（无并发上限）)、`loop`(AgentLoop 共享 kernel + `LoopStrategy` 协议 + `dispatch_tool_calls`，supervisor/subagent 共用)、`runtime`(AgentContext/TurnState/LoopOutcome 运行时脚手架，三 loop 共享)。`__init__.py` 用 PEP 562 `__getattr__` 懒加载打破循环 import |
-| `repo/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验、不开事务、不硬编码业务状态集合）：`connection`(线程局部 sqlite)、`session`/`message`/`trace`/`settings`/`task`/`task_artifacts`/`task_progress`/`intent_state` |
+| `repo/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验、事务边界=方法边界每方法一事务不跨表、不硬编码业务状态集合）：`engine`(Engine 装配 + 建连 PRAGMA)、`models`(SQLAlchemy 2 declarative Record 定义)、`base`(BaseRepository 收 Engine 注入与短 Session 事务样板 + `@read`/`@write` 装饰器自动开 Session 注入 db 决定是否提交)、`mapping`(Record↔domain 同名字段投影)、`session`/`message`/`trace`/`settings`/`task`/`task_artifacts`/`task_progress`/`task_content`/`intent_state`/`option` |
 | `services/` | 应用 / HIL 编排层（取数据→调 domain→存数据）：`session`(会话元数据 CRUD + 标题归一)、`message`(消息/trace 编排 + `build_provider_messages` 唯一构建点)、`trace`(TraceService 编排 TraceRepository)、`settings`、`task`(HIL confirm/retry/cancel_pipeline + get_graph)、`intent_state`(意图状态读写 + 版本号 + 确认门禁)。**无 agent loop**——loop 已下沉到 `agents/`；纯领域逻辑在 `domain/`，单概念 infra service（skill/title）在 `domain/`，工具在 `tools/` |
 | `hooks/` | CC 式扁平注册表：`registry`(HookRegistry `event -> list[callable]` + `trigger` fail-open 分发，5 个事件点 BeforeModelRequest/AfterModelResponse/PreToolUse/PostToolUse/Stop) + 2 个 handler（`trace` TraceEmitter 观测 / `title` TitlePostProcessor 收尾，绑 `source=supervisor`）。**无 Hook ABC / HookBundle / HookManager 胶水**。load-bearing 收尾（轮首气泡 message_start、异常占位消息）不进 hook，归各自 `LoopStrategy` |
 | `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`(CRUD + messages/traces 视图)、`chat`(SSE 流式)、`task`(任务图查询 + HIL 写 + ReAct 过程)、`agents`(/api/agents/profiles 角色档案视图)、`settings`(/api/debug/test-mode + /api/settings 模型选项) |
@@ -109,8 +112,8 @@ scheduler 占槽 pending->running 后 submit 到线程池。`run(task_id)`：loa
 
 ### 存储层
 
-- `ConnectionFactory`：线程局部 sqlite 连接，WAL + NORMAL 同步 + 外键约束开启 + busy_timeout。
-- 各 repo 是各自表的唯一 SQL 入口，返回 Pydantic 模型，**不开事务、不硬编码业务状态集合**（状态集合由 service 从 domain 传入，如 `cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES)`）：`SessionRepository` / `MessageRepository` / `TraceRepository` / `SettingsRepository` / `TaskRepository`(`transition`/`claim` + `cancel_pipeline` + `find_by_session_statuses` + `count_by_session_statuses`) / `TaskArtifactsRepository` / `TaskProgressRepository`。
+- `build_engine`：SQLAlchemy Engine，建连时开 PRAGMA（WAL + NORMAL 同步 + 外键约束 + busy_timeout），并按 Record 定义幂等建全部表（替代旧的线程局部连接工厂）。
+- 各 repo 是各自表的唯一 SQL 入口，返回 Pydantic 领域模型（Record↔domain 双向映射在 repo 内收口：同名字段经 `shared_fields` 投影，各 repo 继承 `BaseRepository` 复用 Engine 注入与事务样板，方法标 `@read`/`@write` 装饰器自动开短 Session 注入 db 并按读/写决定是否提交--防漏 commit），**事务边界=方法边界（短 Session + 每方法显式 commit，不跨表）、不硬编码业务状态集合**（状态集合由 service 从 domain 传入，如 `cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES)`）：`SessionRepository` / `MessageRepository` / `TraceRepository` / `SettingsRepository` / `TaskRepository`(`transition`/`claim` + `cancel_pipeline` + `find_by_session_statuses` + `count_by_session_statuses`) / `TaskArtifactsRepository` / `TaskProgressRepository` / `TaskContentRepository` / `IntentStateRepository` / `OptionPromptRepository`。
 - `messages` 表按消息粒度（user/assistant/tool）逐条 `append` 入库，支持 `progress`/`plan` 等 subtype；`traces` 表靠 `message_id` 与 `task_id` 双键关联，多来源（supervisor/subagent/scheduler）。
 - `tasks` 表是三 loop 通信媒介：状态翻转是协调核心；`task_artifacts` 存产物/selected，`task_progress` 存运行期进度快照（一任务一行 upsert，字数/结构单元/临时信号/意图旁白）。ReAct 原始过程由 `traces` 表（model_request/model_response/tool_call/tool_result）覆盖，无独立 steps 表。
 - `SessionService` 编排 session repo；删除会话经 `SessionService.delete`（带 CASCADE 级联清消息/轨迹）。
@@ -264,7 +267,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 
 **单字母命名**：
 
-- 无含义单字母一律改简短实名，覆盖：`for <单字母> in` 循环变量（含推导式）、**元组解包循环变量**（`for c, d in pairs`，非 dict 惯用法）、**函数参数**、**lambda 参数**、**单字母局部变量**（`q = ...` / `n = len(...)` / `p = AGENT_PROFILES[...]`）。按上下文定名：`p`→path/profile/part、`t`→task/tool/call/trace、`r`→row/ref、`s`→skill/session/summary、`m`→message/model、`k`（在 `XxxRow.model_fields` 中）→field、`d`→dep/dispatch、`n`→count、`q`→query、`c`→call/created、`g`→graph、`a`→aside、`v`→view、`e`→event。两字母缩写（如 `td`）同样费解，一并清理。
+- 无含义单字母一律改简短实名，覆盖：`for <单字母> in` 循环变量（含推导式）、**元组解包循环变量**（`for c, d in pairs`，非 dict 惯用法）、**函数参数**、**lambda 参数**、**单字母局部变量**（`q = ...` / `n = len(...)` / `p = AGENT_PROFILES[...]`）。按上下文定名：`p`→path/profile/part、`t`→task/tool/call/trace、`r`→row/ref、`s`→skill/session/summary、`m`→message/model、`k`（在 `XxxRecord.__table__.columns` 中）→field、`d`→dep/dispatch、`n`→count、`q`→query、`c`→call/created、`g`→graph、`a`→aside、`v`→view、`e`→event。两字母缩写（如 `td`）同样费解，一并清理。
 - **保留的惯用单字母**：`i`（索引）、`k`/`v`（`for k, v in d.items()` dict 解包）、`_`（丢弃占位）、`except ... as e:`（异常对象）。
 - 改名时注意不要遮蔽同函数 `Depends()` 注入的参数名——此时挑更精准的名（如 `SessionSummary` 项→`summary`、`TraceEntry` 项→`entry`）而非套映射。
 

@@ -1,104 +1,79 @@
-"""会话表的唯一 SQL 入口。映射归框架，布尔与整型的转换集中在行模型。"""
-
+"""会话表的唯一 SQL 入口。布尔与整型的转换集中在转换函数。"""
 from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, func, select, update
 
 from chorus.domain.session import Session
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS sessions (
-    id              TEXT PRIMARY KEY,
-    title           TEXT NOT NULL,
-    title_generated INTEGER NOT NULL DEFAULT 0,
-    created_at      REAL NOT NULL,
-    updated_at      REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_session_updated ON sessions(updated_at DESC);
-"""
+from chorus.repo.models import SessionRecord
 
 
-class SessionRow(BaseModel):
-    """会话表持久化形状，与列一一对应。"""
+def _to_domain(r: SessionRecord) -> Session:
+    return Session(
+        **shared_fields(r, Session, exclude={"title_generated"}),
+        title_generated=bool(r.title_generated),
+    )
 
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    id: str
-    title: str
-    title_generated: int
-    created_at: float
-    updated_at: float
+def _from_domain(s: Session) -> SessionRecord:
+    return SessionRecord(
+        **shared_fields(s, SessionRecord, exclude={"title_generated"}),
+        title_generated=1 if s.title_generated else 0,
+    )
 
-    def to_domain(self) -> Session:
-        return Session(
-            **shared_fields(self, Session, exclude={"title_generated"}),
-            title_generated=bool(self.title_generated),
+
+class SessionRepository(BaseRepository):
+    @write
+    def insert(self, db, session: Session) -> None:
+        db.add(_from_domain(session))
+
+    @read
+    def get(self, db, session_id: str) -> Optional[Session]:
+        r = db.get(SessionRecord, session_id)
+        return _to_domain(r) if r else None
+
+    @read
+    def list_all(self, db) -> list[Session]:
+        rs = db.scalars(
+            select(SessionRecord).order_by(SessionRecord.updated_at.desc())
+        ).all()
+        return [_to_domain(r) for r in rs]
+
+    @write
+    def touch(self, db, session_id: str, updated_at: float) -> None:
+        db.execute(
+            update(SessionRecord).where(SessionRecord.id == session_id)
+            .values(updated_at=updated_at)
         )
 
-    @classmethod
-    def from_domain(cls, session: Session) -> "SessionRow":
-        return cls(
-            **shared_fields(session, cls, exclude={"title_generated"}),
-            title_generated=1 if session.title_generated else 0,
-        )
-
-
-_COLS = ", ".join(SessionRow.model_fields)
-_PH = ", ".join(f":{field}" for field in SessionRow.model_fields)
-
-
-class SessionRepository:
-    def __init__(self, conn: ConnectionFactory):
-        self._conn = conn
-        self._conn.ensure_schema(_DDL)
-
-    def insert(self, session: Session) -> None:
-        row = SessionRow.from_domain(session)
-        self._conn.get().execute(
-            f"INSERT INTO sessions({_COLS}) VALUES ({_PH})", row.model_dump()
-        )
-
-    def get(self, session_id: str) -> Optional[Session]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM sessions WHERE id=?",
-            (session_id,),
-        ).fetchone()
-        return SessionRow(**dict(row)).to_domain() if row else None
-
-    def list_all(self) -> list[Session]:
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM sessions ORDER BY updated_at DESC"
-        ).fetchall()
-        return [SessionRow(**dict(row)).to_domain() for row in rows]
-
-    def touch(self, session_id: str, updated_at: float) -> None:
-        """刷新会话更新时间。"""
-        self._conn.get().execute(
-            "UPDATE sessions SET updated_at=? WHERE id=?", (updated_at, session_id)
-        )
-
+    @write
     def set_title(
-        self, session_id: str, *, title: str, title_generated: bool, updated_at: float
+        self, db, session_id: str, *, title: str, title_generated: bool, updated_at: float
     ) -> None:
-        self._conn.get().execute(
-            "UPDATE sessions SET title=?, title_generated=?, updated_at=? WHERE id=?",
-            (title, 1 if title_generated else 0, updated_at, session_id),
+        db.execute(
+            update(SessionRecord).where(SessionRecord.id == session_id).values(
+                title=title,
+                title_generated=1 if title_generated else 0,
+                updated_at=updated_at,
+            )
         )
 
-    def delete(self, session_id: str) -> None:
-        """级联删除关联消息与轨迹。"""
-        self._conn.get().execute("DELETE FROM sessions WHERE id=?", (session_id,))
+    @write
+    def delete(self, db, session_id: str) -> None:
+        """级联删除关联消息与轨迹靠外键 ON DELETE CASCADE。"""
+        db.execute(delete(SessionRecord).where(SessionRecord.id == session_id))
 
-    def count(self) -> int:
-        row = self._conn.get().execute("SELECT COUNT(*) FROM sessions").fetchone()
-        return int(row[0]) if row else 0
+    @read
+    def count(self, db) -> int:
+        return int(db.scalar(select(func.count(SessionRecord.id))) or 0)
 
-    def list_expired(self, ttl_cut: float) -> list[str]:
-        rows = self._conn.get().execute(
-            "SELECT id FROM sessions WHERE updated_at < ?", (ttl_cut,)
-        ).fetchall()
-        return [row["id"] for row in rows]
+    @read
+    def list_expired(self, db, ttl_cut: float) -> list[str]:
+        return list(
+            db.scalars(
+                select(SessionRecord.id).where(SessionRecord.updated_at < ttl_cut)
+            ).all()
+        )

@@ -4,28 +4,28 @@ from __future__ import annotations
 from chorus.domain.task import Task, TaskContent
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
-def _seed_task(conn, task_id="t1", status="pending") -> Task:
+def _seed_task(engine, task_id="t1", status="pending") -> Task:
     """建 tasks 父行 + 对应 content 行，返回 Task。"""
     task = Task(
         id=task_id, session_id="s1", pipeline_id="p1", agent_type="idea",
         status=status, dependencies=[], created_at=0.0, updated_at=0.0,
     )
-    TaskRepository(conn).insert(task)
+    TaskRepository(engine).insert(task)
     return task
 
 
 def _repo():
-    conn = fresh_conn()
-    seed_session(conn)
-    return TaskContentRepository(conn), conn
+    engine = fresh_engine()
+    seed_session(engine)
+    return TaskContentRepository(engine), engine
 
 
 def test_insert_and_load():
-    repo, conn = _repo()
-    _seed_task(conn, "t1")
+    repo, engine = _repo()
+    _seed_task(engine, "t1")
     repo.insert(TaskContent(task_id="t1", invoke_message="骨架：主题=测试", progress_total=3))
     got = repo.load("t1")
     assert got is not None
@@ -35,9 +35,9 @@ def test_insert_and_load():
 
 
 def test_load_many():
-    repo, conn = _repo()
-    _seed_task(conn, "t1")
-    _seed_task(conn, "t2")
+    repo, engine = _repo()
+    _seed_task(engine, "t1")
+    _seed_task(engine, "t2")
     repo.insert(TaskContent(task_id="t1", invoke_message="a"))
     repo.insert(TaskContent(task_id="t2", invoke_message="b"))
     m = repo.load_many(["t1", "t2", "t3"])
@@ -48,20 +48,20 @@ def test_load_many():
 
 def test_set_error_upsert():
     """对已存在行更新错误信息，对不存在行 upsert 占位空串。"""
-    repo, conn = _repo()
-    _seed_task(conn, "t1", status="running")
+    repo, engine = _repo()
+    _seed_task(engine, "t1", status="running")
     repo.insert(TaskContent(task_id="t1", invoke_message="骨架"))
     repo.set_error("t1", "boom")
     assert repo.load("t1").error == "boom"
     # 不存在行：upsert 不抛（占位空串）
-    _seed_task(conn, "t2", status="running")
+    _seed_task(engine, "t2", status="running")
     repo.set_error("t2", "late")
     assert repo.load("t2").error == "late"
 
 
 def test_set_feedback_upsert():
-    repo, conn = _repo()
-    _seed_task(conn, "t1", status="awaiting_confirm")
+    repo, engine = _repo()
+    _seed_task(engine, "t1", status="awaiting_confirm")
     repo.insert(TaskContent(task_id="t1", invoke_message="骨架"))
     repo.set_feedback("t1", "标题不够吸引")
     got = repo.load("t1")

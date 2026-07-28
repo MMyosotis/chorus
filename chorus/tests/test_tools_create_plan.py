@@ -11,7 +11,7 @@ from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.session import SessionRepository
 from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 from chorus.tools.builtin.create_plan import CreatePlanTool
 from chorus.tools.framework import Reply, Suspend, ToolContext
 
@@ -29,19 +29,19 @@ def _args(topic="夏日晚风", steps=None, intent_extras=None):
 
 
 def _build():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    repo = TaskRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    intent = IntentStateService(IntentStateRepository(conn), SessionService(SessionRepository(conn)))
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    repo = TaskRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    intent = IntentStateService(IntentStateRepository(engine), SessionService(SessionRepository(engine)))
     intent.patch_status("s1", "confirmed")
     tool = CreatePlanTool(repo, content_repo, intent)
     ctx = ToolContext(session_id="s1")
-    return conn, repo, content_repo, tool, ctx
+    return engine, repo, content_repo, tool, ctx
 
 
 def test_success_returns_terminal_and_persists_tasks():
-    conn, repo, content_repo, tool, ctx = _build()
+    engine, repo, content_repo, tool, ctx = _build()
     outcome = tool.run(_args(), ctx).outcome
     assert isinstance(outcome, Suspend)
     assert isinstance(outcome.content, str) and outcome.content  # 如实建图摘要
@@ -60,11 +60,11 @@ def test_success_returns_terminal_and_persists_tasks():
 
 
 def test_unconfirmed_intent_blocks_plan_creation():
-    conn = fresh_conn()
-    seed_session(conn, sid="s1")
-    repo = TaskRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    intent = IntentStateService(IntentStateRepository(conn), SessionService(SessionRepository(conn)))
+    engine = fresh_engine()
+    seed_session(engine, sid="s1")
+    repo = TaskRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    intent = IntentStateService(IntentStateRepository(engine), SessionService(SessionRepository(engine)))
     tool = CreatePlanTool(repo, content_repo, intent)
     outcome = tool.run(_args(), ToolContext(session_id="s1")).outcome
     assert isinstance(outcome, Reply)

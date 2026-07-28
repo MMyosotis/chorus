@@ -1,95 +1,58 @@
 """选项征询表：每条提问单一行，存提问定义与作答状态。"""
-
 from __future__ import annotations
 
-import json
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select, update
 
 from chorus.domain.option import OptionPrompt, OptionPromptDef
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
-
-_DDL_TABLE = """
-CREATE TABLE IF NOT EXISTS option_prompts (
-    prompt_id   TEXT PRIMARY KEY,
-    session_id  TEXT NOT NULL,
-    prompt      TEXT NOT NULL,
-    status      TEXT NOT NULL,
-    created_at  REAL NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-)
-"""
-
-_DDL_INDEX = "CREATE INDEX IF NOT EXISTS idx_option_prompts_session ON option_prompts(session_id)"
+from chorus.repo.models import OptionPromptRecord
 
 
-class OptionPromptRow(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    prompt_id: str
-    session_id: str
-    prompt: str
-    status: str
-    created_at: float
-
-    def to_domain(self) -> OptionPrompt:
-        definition = json.loads(self.prompt)
-        return OptionPrompt(
-            **shared_fields(self, OptionPrompt, exclude={"prompt"}),
-            **definition,
-        )
-
-    @classmethod
-    def from_domain(cls, prompt: OptionPrompt) -> "OptionPromptRow":
-        definition = prompt.model_dump(
-            include=set(OptionPromptDef.model_fields), mode="json",
-        )
-        return cls(
-            **shared_fields(prompt, cls, exclude={"prompt"}),
-            prompt=json.dumps(definition, ensure_ascii=False),
-        )
+def _to_domain(r: OptionPromptRecord) -> OptionPrompt:
+    return OptionPrompt(
+        **shared_fields(r, OptionPrompt),
+        **r.prompt,
+    )
 
 
-_COLS = ", ".join(OptionPromptRow.model_fields)
-_PH = ", ".join(f":{field}" for field in OptionPromptRow.model_fields)
+def _from_domain(p: OptionPrompt) -> OptionPromptRecord:
+    definition = p.model_dump(include=set(OptionPromptDef.model_fields), mode="json")
+    return OptionPromptRecord(
+        **shared_fields(p, OptionPromptRecord),
+        prompt=definition,
+    )
 
 
-class OptionPromptRepository:
-    def __init__(self, conn: ConnectionFactory):
-        self._conn = conn
-        self._ensure_schema()
+class OptionPromptRepository(BaseRepository):
+    @write
+    def insert(self, db, prompt: OptionPrompt) -> None:
+        db.add(_from_domain(prompt))
 
-    def _ensure_schema(self) -> None:
-        conn = self._conn.get()
-        conn.execute(_DDL_TABLE)
-        conn.execute(_DDL_INDEX)
+    @read
+    def get(self, db, prompt_id: str) -> Optional[OptionPrompt]:
+        r = db.get(OptionPromptRecord, prompt_id)
+        return _to_domain(r) if r else None
 
-    def insert(self, prompt: OptionPrompt) -> None:
-        row = OptionPromptRow.from_domain(prompt)
-        self._conn.get().execute(
-            f"INSERT INTO option_prompts({_COLS}) VALUES ({_PH})",
-            row.model_dump(),
-        )
+    @read
+    def find_open_by_session(self, db, session_id: str) -> Optional[OptionPrompt]:
+        r = db.scalars(
+            select(OptionPromptRecord)
+            .where(
+                OptionPromptRecord.session_id == session_id,
+                OptionPromptRecord.status == "open",
+            )
+            .order_by(OptionPromptRecord.created_at.desc())
+            .limit(1)
+        ).first()
+        return _to_domain(r) if r else None
 
-    def get(self, prompt_id: str) -> Optional[OptionPrompt]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM option_prompts WHERE prompt_id=?",
-            (prompt_id,),
-        ).fetchone()
-        return OptionPromptRow(**dict(row)).to_domain() if row else None
-
-    def find_open_by_session(self, session_id: str) -> Optional[OptionPrompt]:
-        row = self._conn.get().execute(
-            f"SELECT {_COLS} FROM option_prompts "
-            "WHERE session_id=? AND status='open' ORDER BY created_at DESC LIMIT 1",
-            (session_id,),
-        ).fetchone()
-        return OptionPromptRow(**dict(row)).to_domain() if row else None
-
-    def update_answered(self, prompt_id: str) -> None:
-        self._conn.get().execute(
-            "UPDATE option_prompts SET status='answered' WHERE prompt_id=?",
-            (prompt_id,),
+    @write
+    def update_answered(self, db, prompt_id: str) -> None:
+        db.execute(
+            update(OptionPromptRecord)
+            .where(OptionPromptRecord.prompt_id == prompt_id)
+            .values(status="answered")
         )

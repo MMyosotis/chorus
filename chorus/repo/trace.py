@@ -3,13 +3,11 @@
 轨迹与消息物理解耦，仅靠消息标识关联。载荷结构由领域模型强类型约束，
 读回时按阶段经注册表还原成对应载荷模型，聚合逻辑重建思考与工具摘要。
 """
-
 from __future__ import annotations
 
-import json
-from typing import Optional
+from typing import cast
 
-from pydantic import BaseModel, ConfigDict
+from sqlalchemy import delete, select
 
 from chorus.domain.trace import (
     MessageTrace,
@@ -22,25 +20,8 @@ from chorus.domain.trace import (
     TraceToolResult,
     aggregate_trace,
 )
-from chorus.repo.connection import ConnectionFactory
-from chorus.repo.mapping import shared_fields
-
-_DDL = """
-CREATE TABLE IF NOT EXISTS traces (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    message_id      TEXT,
-    task_id         TEXT,
-    source          TEXT NOT NULL DEFAULT 'supervisor',
-    phase           TEXT NOT NULL,
-    created_at      REAL NOT NULL,
-    payload_json    TEXT NOT NULL,
-    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_traces_session_created_at ON traces(session_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_traces_message ON traces(message_id);
-CREATE INDEX IF NOT EXISTS idx_traces_task ON traces(task_id, created_at);
-"""
+from chorus.repo.base import BaseRepository, read, write
+from chorus.repo.models import TraceRecord
 
 _PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
     TracePhase.MODEL_REQUEST: ModelRequest,
@@ -50,98 +31,81 @@ _PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
 }
 
 
-class TraceRow(BaseModel):
-    """轨迹表持久化形状，与列一一对应。"""
-
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-
-    id: Optional[int] = None
-    session_id: str
-    message_id: Optional[str] = None
-    task_id: Optional[str] = None
-    source: str = "supervisor"
-    phase: str
-    created_at: float
-    payload_json: str
-
-    def to_domain(self) -> TraceEntry:
-        phase = TracePhase(self.phase)
-        payload: TracePayload = _PAYLOAD_BY_PHASE[phase](**json.loads(self.payload_json))
-        return TraceEntry(
-            **shared_fields(self, TraceEntry, exclude={"phase", "payload", "source"}),
-            source=self.source or "supervisor",
-            phase=phase,
-            payload=payload,
-        )
-
-    @classmethod
-    def from_domain(cls, entry: TraceEntry) -> "TraceRow":
-        return cls(
-            **shared_fields(entry, cls, exclude={"phase", "payload_json"}),
-            phase=entry.phase.value,
-            payload_json=json.dumps(entry.payload.model_dump(), ensure_ascii=False),
-        )
+def _to_domain(r: TraceRecord) -> TraceEntry:
+    phase = TracePhase(r.phase)
+    payload = _PAYLOAD_BY_PHASE[phase](**r.payload_json)
+    return TraceEntry(
+        id=r.id, session_id=r.session_id, message_id=r.message_id, task_id=r.task_id,
+        source=r.source or "supervisor", phase=phase, created_at=r.created_at, payload=payload,
+    )
 
 
-_COLS = ", ".join(TraceRow.model_fields)
-_PH = ", ".join(f":{field}" for field in TraceRow.model_fields)
+def _from_domain(e: TraceEntry) -> TraceRecord:
+    return TraceRecord(
+        id=e.id, session_id=e.session_id, message_id=e.message_id, task_id=e.task_id,
+        source=e.source, phase=e.phase.value, created_at=e.created_at,
+        payload_json=e.payload.model_dump(),
+    )
 
 
-class TraceRepository:
-    def __init__(self, conn: ConnectionFactory):
-        self._conn = conn
-        self._conn.ensure_schema(_DDL)
+class TraceRepository(BaseRepository):
+    @write
+    def add(self, db, entry: TraceEntry) -> int:
+        r = _from_domain(entry)
+        db.add(r)
+        db.flush()
+        return r.id or 0
 
-    def add(self, entry: TraceEntry) -> int:
-        row = TraceRow.from_domain(entry)
-        cur = self._conn.get().execute(
-            f"INSERT INTO traces({_COLS}) VALUES ({_PH})", row.model_dump()
-        )
-        return int(cur.lastrowid) if cur.lastrowid is not None else 0
+    @read
+    def list_by_session(self, db, session_id: str) -> list[TraceEntry]:
+        rs = db.scalars(
+            select(TraceRecord).where(TraceRecord.session_id == session_id)
+            .order_by(TraceRecord.created_at, TraceRecord.id)
+        ).all()
+        return [_to_domain(r) for r in rs]
 
-    def list_by_session(self, session_id: str) -> list[TraceEntry]:
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM traces WHERE session_id=? ORDER BY created_at ASC, id ASC",
-            (session_id,),
-        ).fetchall()
-        return [TraceRow(**dict(row)).to_domain() for row in rows]
+    @read
+    def list_by_message(self, db, message_id: str) -> list[TraceEntry]:
+        rs = db.scalars(
+            select(TraceRecord).where(TraceRecord.message_id == message_id)
+            .order_by(TraceRecord.created_at, TraceRecord.id)
+        ).all()
+        return [_to_domain(r) for r in rs]
 
-    def list_by_message(self, message_id: str) -> list[TraceEntry]:
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM traces WHERE message_id=? ORDER BY created_at ASC, id ASC",
-            (message_id,),
-        ).fetchall()
-        return [TraceRow(**dict(row)).to_domain() for row in rows]
-
-    def list_by_task(self, task_id: str) -> list[TraceEntry]:
+    @read
+    def list_by_task(self, db, task_id: str) -> list[TraceEntry]:
         """按任务取其全部轨迹，调试单任务用。"""
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM traces WHERE task_id=? ORDER BY created_at ASC, id ASC",
-            (task_id,),
-        ).fetchall()
-        return [TraceRow(**dict(row)).to_domain() for row in rows]
+        rs = db.scalars(
+            select(TraceRecord).where(TraceRecord.task_id == task_id)
+            .order_by(TraceRecord.created_at, TraceRecord.id)
+        ).all()
+        return [_to_domain(r) for r in rs]
 
     def aggregate_message_trace(self, message_id: str) -> MessageTrace:
         """从该消息的若干轨迹行重建思考与工具摘要。"""
         return aggregate_trace(message_id, self.list_by_message(message_id))
 
-    def batch_aggregate(self, message_ids) -> dict[str, MessageTrace]:
+    @read
+    def batch_aggregate(self, db, message_ids) -> dict[str, MessageTrace]:
         """一次查询批量聚合多条消息的轨迹，避免逐条查询。无轨迹的消息不在结果中。"""
         ids = list(message_ids)
-        placeholders = ",".join("?" * len(ids))
-        rows = self._conn.get().execute(
-            f"SELECT {_COLS} FROM traces "
-            f"WHERE message_id IN ({placeholders}) ORDER BY created_at, id", ids,
-        ).fetchall()
-
+        if not ids:
+            return {}
+        rs = db.scalars(
+            select(TraceRecord).where(TraceRecord.message_id.in_(ids))
+            .order_by(TraceRecord.created_at, TraceRecord.id)
+        ).all()
         grouped: dict[str, list[TraceEntry]] = {}
-        for row in rows:
-            entry = TraceRow(**dict(row)).to_domain()
-            grouped.setdefault(entry.message_id, []).append(entry)
+        for r in rs:
+            entry = _to_domain(r)
+            mid = cast(str, entry.message_id)
+            grouped.setdefault(mid, []).append(entry)
         return {mid: aggregate_trace(mid, entries) for mid, entries in grouped.items()}
 
-    def delete_by_session(self, session_id: str) -> None:
-        self._conn.get().execute("DELETE FROM traces WHERE session_id=?", (session_id,))
+    @write
+    def delete_by_session(self, db, session_id: str) -> None:
+        db.execute(delete(TraceRecord).where(TraceRecord.session_id == session_id))
 
-    def delete_by_message(self, message_id: str) -> None:
-        self._conn.get().execute("DELETE FROM traces WHERE message_id=?", (message_id,))
+    @write
+    def delete_by_message(self, db, message_id: str) -> None:
+        db.execute(delete(TraceRecord).where(TraceRecord.message_id == message_id))

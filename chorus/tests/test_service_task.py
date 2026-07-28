@@ -12,7 +12,7 @@ from chorus.domain.task import (
     TaskContent,
     TaskStatus,
 )
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
@@ -20,19 +20,19 @@ from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
 def _setup():
     tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    task_repo = TaskRepository(conn)
-    progress_repo = TaskProgressRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    session_svc = SessionService(SessionRepository(conn))
+    engine = build_engine(Path(tmp) / "t.db")
+    SessionRepository(engine).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
+    task_repo = TaskRepository(engine)
+    progress_repo = TaskProgressRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    session_svc = SessionService(SessionRepository(engine))
     svc = TaskService(
-        task_repo, TaskArtifactsRepository(conn), progress_repo, content_repo, session_svc,
+        task_repo, TaskArtifactsRepository(engine), progress_repo, content_repo, session_svc,
     )
     return svc, task_repo, content_repo
 
@@ -48,7 +48,7 @@ def _mk(task_repo, content_repo, tid, agent_type="idea", status="awaiting_confir
 def test_confirm_idea_with_selected():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
-    TaskArtifactsRepository(_conn_of(task_repo)).upsert(
+    TaskArtifactsRepository(_engine_of(task_repo)).upsert(
         "t1", "idea",
         IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="t", angle="a", reason="r")]),
     )
@@ -141,27 +141,27 @@ def test_get_graph_recent_finished():
     assert {t.id for t in graph.nodes} == {"new"}  # 最近 finished pipeline
 
 
-def _conn_of(task_repo):
-    return task_repo._conn  # noqa: SLF001 — 测试辅助
+def _engine_of(task_repo):
+    return task_repo._engine  # noqa: SLF001 — 测试辅助
 
 
 def test_get_graph_includes_progress_and_timestamps():
     """任务图每节点含时间戳与运行期进度；error 取自内容表。"""
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
-    conn = fresh_conn()
-    seed_session(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, TaskProgressRepository(conn), content_repo, _SS(_SR(conn)))
+    engine = fresh_engine()
+    seed_session(engine)
+    task_repo = TaskRepository(engine)
+    art_repo = TaskArtifactsRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    svc = TaskService(task_repo, art_repo, TaskProgressRepository(engine), content_repo, _SS(_SR(engine)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", dependencies=[],
         created_at=0.0, updated_at=10.0,
     ))
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", progress_total=3))
-    progress_repo = TaskProgressRepository(conn)
+    progress_repo = TaskProgressRepository(engine)
     progress_repo.set_composing("t1", 120, 2)
     progress_repo.set_composing_label("t1", "张")
     graph = svc.get_graph("s1")
@@ -181,12 +181,12 @@ def test_get_graph_error_from_content():
     """任务图的 error 取自内容表，不在调度行。"""
     from chorus.services.session import SessionService as _SS
     from chorus.repo.session import SessionRepository as _SR
-    conn = fresh_conn()
-    seed_session(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    content_repo = TaskContentRepository(conn)
-    svc = TaskService(task_repo, art_repo, TaskProgressRepository(conn), content_repo, _SS(_SR(conn)))
+    engine = fresh_engine()
+    seed_session(engine)
+    task_repo = TaskRepository(engine)
+    art_repo = TaskArtifactsRepository(engine)
+    content_repo = TaskContentRepository(engine)
+    svc = TaskService(task_repo, art_repo, TaskProgressRepository(engine), content_repo, _SS(_SR(engine)))
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[], created_at=0.0, updated_at=1.0,

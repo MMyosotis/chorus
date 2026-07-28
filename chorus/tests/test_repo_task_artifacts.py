@@ -18,23 +18,23 @@ from chorus.domain.task import (
 )
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
 def _setup():
-    conn = fresh_conn()
-    seed_session(conn)  # 须先建 sessions 父行（外键约束）
-    TaskRepository(conn).insert(Task(
+    engine = fresh_engine()
+    seed_session(engine)  # 须先建 sessions 父行（外键约束）
+    TaskRepository(engine).insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[],
         created_at=0.0, updated_at=0.0,
     ))
-    return conn
+    return engine
 
 
 def test_artifacts_upsert_load():
-    conn = _setup()
-    repo = TaskArtifactsRepository(conn)
+    engine = _setup()
+    repo = TaskArtifactsRepository(engine)
     assert repo.load("t1") is None
     repo.upsert(
         "t1", "idea",
@@ -54,13 +54,13 @@ def test_artifacts_upsert_load():
 
 
 def test_artifacts_load_many():
-    conn = _setup()
-    TaskRepository(conn).insert(Task(
+    engine = _setup()
+    TaskRepository(engine).insert(Task(
         id="t2", session_id="s1", pipeline_id="p1", agent_type="script",
         status="pending", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
-    repo = TaskArtifactsRepository(conn)
+    repo = TaskArtifactsRepository(engine)
     repo.upsert(
         "t1", "idea",
         IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="t", angle="a", reason="r")]),
@@ -76,8 +76,8 @@ def test_artifacts_load_many():
 
 
 def test_roundtrip_idea():
-    conn = _setup()
-    repo = TaskArtifactsRepository(conn)
+    engine = _setup()
+    repo = TaskArtifactsRepository(engine)
     idea = IdeaArtifacts(
         candidates=[IdeaCandidate(index=0, title="标题", angle="角度", reason="理由")],
         selected=0,
@@ -88,13 +88,13 @@ def test_roundtrip_idea():
 
 
 def test_roundtrip_script():
-    conn = _setup()
-    TaskRepository(conn).insert(Task(
+    engine = _setup()
+    TaskRepository(engine).insert(Task(
         id="ts", session_id="s1", pipeline_id="p1", agent_type="script",
         status="finished", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
-    repo = TaskArtifactsRepository(conn)
+    repo = TaskArtifactsRepository(engine)
     script = ScriptArtifacts(blocks=[
         ScriptBlock(kind="heading", text="标题"),
         ScriptBlock(kind="paragraph", text="正文"),
@@ -105,13 +105,13 @@ def test_roundtrip_script():
 
 
 def test_roundtrip_image():
-    conn = _setup()
-    TaskRepository(conn).insert(Task(
+    engine = _setup()
+    TaskRepository(engine).insert(Task(
         id="ti", session_id="s1", pipeline_id="p1", agent_type="image",
         status="finished", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
-    repo = TaskArtifactsRepository(conn)
+    repo = TaskArtifactsRepository(engine)
     img = ImageArtifacts(images=[
         ImageItem(url="http://x/1.jpg", caption="图一"),
         ImageItem(url="http://x/2.jpg"),
@@ -122,13 +122,13 @@ def test_roundtrip_image():
 
 
 def test_roundtrip_postcard():
-    conn = _setup()
-    TaskRepository(conn).insert(Task(
+    engine = _setup()
+    TaskRepository(engine).insert(Task(
         id="tf", session_id="s1", pipeline_id="p1", agent_type="finalize",
         status="finished", dependencies=["t1"],
         created_at=0.0, updated_at=0.0,
     ))
-    repo = TaskArtifactsRepository(conn)
+    repo = TaskArtifactsRepository(engine)
     card = PostCard(
         title="夏日晚风",
         sections=[

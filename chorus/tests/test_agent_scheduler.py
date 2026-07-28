@@ -8,7 +8,7 @@ from pathlib import Path
 from chorus.agents.scheduler import TaskScheduler
 from chorus.domain.session import Session
 from chorus.domain.task import Task, TaskStatus
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
@@ -17,9 +17,9 @@ from chorus.repo.task_progress import TaskProgressRepository
 
 def _setup():
     tmp = tempfile.mkdtemp()
-    conn = ConnectionFactory(Path(tmp) / "t.db")
-    SessionRepository(conn).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
-    return conn, TaskRepository(conn), TaskContentRepository(conn), TaskProgressRepository(conn)
+    engine = build_engine(Path(tmp) / "t.db")
+    SessionRepository(engine).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
+    return engine, TaskRepository(engine), TaskContentRepository(engine), TaskProgressRepository(engine)
 
 
 def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
@@ -32,7 +32,7 @@ def _mk(task_repo, tid, status="pending", deps=None, updated_at=0.0):
 
 def test_dispatch_pending_with_finished_deps():
     """pending + deps 全 finished → 占槽 running + 调 subagent_run。"""
-    conn, task_repo, content_repo, progress_repo = _setup()
+    engine, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "dep", status="finished")
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
@@ -47,7 +47,7 @@ def test_dispatch_pending_with_finished_deps():
 
 def test_blocked_by_unfinished_dep():
     """pending + dep 是 running（进行中、未完成）→ t1 不调度。"""
-    conn, task_repo, content_repo, progress_repo = _setup()
+    engine, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "dep", status="running", updated_at=time.time())
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
@@ -60,7 +60,7 @@ def test_blocked_by_unfinished_dep():
 
 def test_zombie_reclaim():
     """running + 心跳超时 → 翻为失败。"""
-    conn, task_repo, content_repo, progress_repo = _setup()
+    engine, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "t1", status="running", updated_at=0.0)  # 很久以前的心跳
     sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
                           content_repo, progress_repo, interval=0.01, zombie_timeout=1)

@@ -28,7 +28,7 @@ from chorus.domain.log import setup_logging
 from chorus.domain.title import TitleGenerationService
 from chorus.domain.task.aside import AsideGenerator
 from chorus.hooks import HookRegistry, TitlePostProcessor, TraceEmitter
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.option import OptionPromptRepository
@@ -60,21 +60,21 @@ from chorus.tools import build_tool_dispatch
 def create_app() -> FastAPI:
     skill_loader = SkillLoader()
 
-    conn = ConnectionFactory(DATA_DIR / "chorus.db")
-    settings_service = SettingsService(SettingsRepository(conn))
-    session_repo = SessionRepository(conn)
-    msg_repo = MessageRepository(conn)
-    intent_repo = IntentStateRepository(conn)
-    trace_repo = TraceRepository(conn)
-    task_repo = TaskRepository(conn)
-    task_artifacts_repo = TaskArtifactsRepository(conn)
-    task_progress_repo = TaskProgressRepository(conn)
-    task_content_repo = TaskContentRepository(conn)
+    engine = build_engine(DATA_DIR / "chorus.db")
+    settings_service = SettingsService(SettingsRepository(engine))
+    session_repo = SessionRepository(engine)
+    msg_repo = MessageRepository(engine)
+    intent_repo = IntentStateRepository(engine)
+    trace_repo = TraceRepository(engine)
+    task_repo = TaskRepository(engine)
+    task_artifacts_repo = TaskArtifactsRepository(engine)
+    task_progress_repo = TaskProgressRepository(engine)
+    task_content_repo = TaskContentRepository(engine)
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
     message_service = MessageService(msg_repo, trace_service)
     intent_state_service = IntentStateService(intent_repo, session_service)
-    option_repo = OptionPromptRepository(conn)
+    option_repo = OptionPromptRepository(engine)
     option_service = OptionPromptService(option_repo, session_service)
 
     chat_models = ChatModelProvider(settings_service)

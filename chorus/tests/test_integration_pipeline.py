@@ -17,7 +17,7 @@ from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
-from chorus.repo.connection import ConnectionFactory
+from chorus.repo.engine import build_engine
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
@@ -93,13 +93,13 @@ def _stub_settings():
 
 def _build_assembly():
     """装配全链路组件到临时 DB。返回 (supervisor, subagent, task_service, scheduler, task_repo, session_svc)。"""
-    conn = ConnectionFactory(Path(tempfile.mkdtemp()) / "t.db")
-    session_repo = SessionRepository(conn)
-    msg_repo = MessageRepository(conn)
-    trace_repo = TraceRepository(conn)
-    task_repo = TaskRepository(conn)
-    art_repo = TaskArtifactsRepository(conn)
-    content_repo = TaskContentRepository(conn)
+    engine = build_engine(Path(tempfile.mkdtemp()) / "t.db")
+    session_repo = SessionRepository(engine)
+    msg_repo = MessageRepository(engine)
+    trace_repo = TraceRepository(engine)
+    task_repo = TaskRepository(engine)
+    art_repo = TaskArtifactsRepository(engine)
+    content_repo = TaskContentRepository(engine)
 
     session_svc = SessionService(session_repo)
     trace_svc = TraceService(trace_repo)
@@ -108,7 +108,7 @@ def _build_assembly():
     # 扁平 hook 注册表：4 个 trace 观测点
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    intent_state = IntentStateService(IntentStateRepository(conn), session_svc)
+    intent_state = IntentStateService(IntentStateRepository(engine), session_svc)
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, intent_state)], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)
@@ -119,7 +119,7 @@ def _build_assembly():
     agent_loop = AgentLoop(hooks, tool_dispatcher)
 
     task_service = TaskService(
-        task_repo, art_repo, TaskProgressRepository(conn), content_repo, session_svc,
+        task_repo, art_repo, TaskProgressRepository(engine), content_repo, session_svc,
     )
 
     # supervisor：一次建图工具调用流
@@ -142,7 +142,7 @@ def _build_assembly():
     ])
     subagent = SubAgentService(
         msg_svc, task_repo, art_repo,
-        TaskProgressRepository(conn), content_repo,
+        TaskProgressRepository(engine), content_repo,
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
         types.SimpleNamespace(generate=lambda agent_type, invoke: ""),
@@ -151,15 +151,15 @@ def _build_assembly():
 
     scheduler = TaskScheduler(
         task_repo, subagent.run, session_svc,
-        content_repo, TaskProgressRepository(conn),
+        content_repo, TaskProgressRepository(engine),
         interval=0.01, zombie_timeout=999,
     )
-    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, conn, intent_state
+    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, engine, intent_state
 
 
 def test_end_to_end_pipeline():
     """4 链路全跑通：supervisor 建图 → idea awaiting_confirm → confirm finished → scheduler 派发 finalize。"""
-    sup, sub, task_service, scheduler, task_repo, session_svc, conn, intent_state = _build_assembly()
+    sup, sub, task_service, scheduler, task_repo, session_svc, engine, intent_state = _build_assembly()
     session = session_svc.create("集成测试")
     sid = session.id
     intent_state.patch_status(sid, "confirmed")

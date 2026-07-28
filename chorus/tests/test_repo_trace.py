@@ -11,13 +11,13 @@ from chorus.domain.trace import (
     TraceToolResult,
 )
 from chorus.repo.trace import TraceRepository
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
 def _setup():
-    conn = fresh_conn()
-    seed_session(conn)
-    return conn
+    engine = fresh_engine()
+    seed_session(engine)
+    return engine
 
 
 def _request() -> ModelRequest:
@@ -25,8 +25,8 @@ def _request() -> ModelRequest:
 
 
 def test_add_with_source_and_task_id():
-    conn = _setup()
-    repo = TraceRepository(conn)
+    engine = _setup()
+    repo = TraceRepository(engine)
     # supervisor trace（默认来源）
     repo.add(TraceEntry(session_id="s1", message_id="m1", phase=TracePhase.MODEL_REQUEST,
                         created_at=1.0, payload=_request()))
@@ -47,8 +47,8 @@ def test_add_with_source_and_task_id():
 
 def test_batch_aggregate_groups_by_message():
     """IN 批量查多条 message 的 trace 并聚合；无 trace 的 id 不在结果中。"""
-    conn = _setup()
-    repo = TraceRepository(conn)
+    engine = _setup()
+    repo = TraceRepository(engine)
     # 第一条消息：思考 + 工具调用 + 结果
     repo.add(TraceEntry(session_id="s1", message_id="m1",
                         phase=TracePhase.MODEL_RESPONSE, created_at=1.0,
@@ -77,8 +77,8 @@ def test_batch_aggregate_groups_by_message():
 
 def test_payload_round_trip_all_phases():
     """四种 phase 的 payload 入库后读回，类型与字段全保留。"""
-    conn = _setup()
-    repo = TraceRepository(conn)
+    engine = _setup()
+    repo = TraceRepository(engine)
     cases = [
         (TracePhase.MODEL_REQUEST, _request()),
         (TracePhase.MODEL_RESPONSE, ModelResponse(

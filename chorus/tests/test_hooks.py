@@ -18,15 +18,15 @@ from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import fresh_conn, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session
 
 
 def _setup():
-    conn = fresh_conn()
-    seed_session(conn)                                # "s1" 供异常收尾/trace（FK 父行）
-    trace_svc = TraceService(TraceRepository(conn))
-    msg_svc = MessageService(MessageRepository(conn), trace_svc)
-    session_svc = SessionService(SessionRepository(conn))
+    engine = fresh_engine()
+    seed_session(engine)                                # "s1" 供异常收尾/trace（FK 父行）
+    trace_svc = TraceService(TraceRepository(engine))
+    msg_svc = MessageService(MessageRepository(engine), trace_svc)
+    session_svc = SessionService(SessionRepository(engine))
     return msg_svc, trace_svc, session_svc
 
 
