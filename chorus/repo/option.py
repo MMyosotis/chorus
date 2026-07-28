@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.option import OptionPrompt, OptionPromptDef
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _DDL_TABLE = """
 CREATE TABLE IF NOT EXISTS option_prompts (
@@ -36,26 +37,18 @@ class OptionPromptRow(BaseModel):
     def to_domain(self) -> OptionPrompt:
         definition = json.loads(self.prompt)
         return OptionPrompt(
-            prompt_id=self.prompt_id,
-            session_id=self.session_id,
-            status=self.status,
-            created_at=self.created_at,
+            **shared_fields(self, OptionPrompt, exclude={"prompt"}),
             **definition,
         )
 
     @classmethod
     def from_domain(cls, prompt: OptionPrompt) -> "OptionPromptRow":
-        definition = OptionPromptDef(
-            question=prompt.question,
-            options=prompt.options,
-            allow_custom=prompt.allow_custom,
+        definition = prompt.model_dump(
+            include=set(OptionPromptDef.model_fields), mode="json",
         )
         return cls(
-            prompt_id=prompt.prompt_id,
-            session_id=prompt.session_id,
-            prompt=json.dumps(definition.model_dump(mode="json"), ensure_ascii=False),
-            status=prompt.status,
-            created_at=prompt.created_at,
+            **shared_fields(prompt, cls, exclude={"prompt"}),
+            prompt=json.dumps(definition, ensure_ascii=False),
         )
 
 

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.session import Session
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -34,21 +35,15 @@ class SessionRow(BaseModel):
 
     def to_domain(self) -> Session:
         return Session(
-            id=self.id,
-            title=self.title,
+            **shared_fields(self, Session, exclude={"title_generated"}),
             title_generated=bool(self.title_generated),
-            created_at=self.created_at,
-            updated_at=self.updated_at,
         )
 
     @classmethod
     def from_domain(cls, session: Session) -> "SessionRow":
         return cls(
-            id=session.id,
-            title=session.title,
+            **shared_fields(session, cls, exclude={"title_generated"}),
             title_generated=1 if session.title_generated else 0,
-            created_at=session.created_at,
-            updated_at=session.updated_at,
         )
 
 

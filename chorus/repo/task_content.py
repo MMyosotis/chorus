@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.task import TaskContent
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS task_content (
@@ -35,21 +36,11 @@ class TaskContentRow(BaseModel):
     feedback: Optional[str] = None
 
     def to_domain(self) -> TaskContent:
-        return TaskContent(
-            task_id=self.task_id, invoke_message=self.invoke_message,
-            progress_total=self.progress_total, error=self.error,
-            feedback=self.feedback,
-        )
+        return TaskContent(**shared_fields(self, TaskContent))
 
     @classmethod
     def from_domain(cls, content: TaskContent) -> "TaskContentRow":
-        return cls(
-            task_id=content.task_id,
-            invoke_message=content.invoke_message,
-            progress_total=content.progress_total,
-            error=content.error,
-            feedback=content.feedback,
-        )
+        return cls(**shared_fields(content, cls))
 
 
 _COLS = ", ".join(TaskContentRow.model_fields)

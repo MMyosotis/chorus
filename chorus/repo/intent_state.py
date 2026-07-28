@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from chorus.domain.intent import IntentState, IntentStatus
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS intent_states (
@@ -45,33 +46,15 @@ class IntentStateRow(BaseModel):
 
     def to_domain(self) -> IntentState:
         return IntentState(
-            session_id=self.session_id,
-            intent_status=self.intent_status,
-            topic=self.topic,
-            platform=self.platform,
-            format=self.format,
-            style=self.style,
-            image_count=self.image_count,
+            **shared_fields(self, IntentState, exclude={"extra"}),
             extra=json.loads(self.extra),
-            progress_percent=self.progress_percent,
-            version=self.version,
-            updated_at=self.updated_at,
         )
 
     @classmethod
     def from_domain(cls, state: IntentState) -> "IntentStateRow":
         return cls(
-            session_id=state.session_id,
-            intent_status=state.intent_status,
-            topic=state.topic,
-            platform=state.platform,
-            format=state.format,
-            style=state.style,
-            image_count=state.image_count,
+            **shared_fields(state, cls, exclude={"extra"}),
             extra=json.dumps(state.extra, ensure_ascii=False),
-            progress_percent=state.progress_percent,
-            version=state.version,
-            updated_at=state.updated_at,
         )
 
 

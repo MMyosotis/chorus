@@ -18,6 +18,7 @@ from chorus.domain.message import (
     UserMessage,
 )
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -51,35 +52,38 @@ class MessageRow(BaseModel):
 
     def to_domain(self) -> Message:
         if self.role == "user":
-            return UserMessage(id=self.id, session_id=self.session_id,
-                               created_at=self.created_at, content=self.content or "")
+            return UserMessage(
+                **shared_fields(self, UserMessage, exclude={"content"}),
+                content=self.content or "",
+            )
         if self.role == "assistant":
-            return AssistantMessage(id=self.id, session_id=self.session_id,
-                                    created_at=self.created_at, content=self.content,
-                                    tool_calls=self._parse_tool_calls(self.tool_calls_json))
+            return AssistantMessage(
+                **shared_fields(self, AssistantMessage, exclude={"tool_calls"}),
+                tool_calls=self._parse_tool_calls(self.tool_calls_json),
+            )
         if self.role == "tool":
-            return ToolMessage(id=self.id, session_id=self.session_id,
-                               created_at=self.created_at,
-                               tool_call_id=self.tool_call_id or "",
-                               name=self.tool_name or "",
-                               content=self.content or "")
+            return ToolMessage(
+                **shared_fields(self, ToolMessage, exclude={"tool_call_id", "name", "content"}),
+                tool_call_id=self.tool_call_id or "",
+                name=self.tool_name or "",
+                content=self.content or "",
+            )
         raise ValueError(f"unknown role: {self.role}")
 
     @classmethod
     def from_domain(cls, msg: Message) -> "MessageRow":
         if isinstance(msg, UserMessage):
-            return cls(id=msg.id, session_id=msg.session_id,
-                       role="user", content=msg.content, created_at=msg.created_at)
+            return cls(**shared_fields(msg, cls))
         if isinstance(msg, AssistantMessage):
-            return cls(id=msg.id, session_id=msg.session_id,
-                       role="assistant", content=msg.content,
-                       tool_calls_json=cls._dump_tool_calls(msg.tool_calls),
-                       created_at=msg.created_at)
+            return cls(
+                **shared_fields(msg, cls),
+                tool_calls_json=cls._dump_tool_calls(msg.tool_calls),
+            )
         if isinstance(msg, ToolMessage):
-            return cls(id=msg.id, session_id=msg.session_id,
-                       role="tool", content=msg.content,
-                       tool_call_id=msg.tool_call_id, tool_name=msg.name,
-                       created_at=msg.created_at)
+            return cls(
+                **shared_fields(msg, cls),
+                tool_name=msg.name,
+            )
         raise TypeError(f"unsupported message type: {type(msg)}")
 
     @staticmethod

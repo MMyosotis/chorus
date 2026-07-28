@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from chorus.domain.log import get_logger
 from chorus.domain.task import Task
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _logger = get_logger("repo.task")
 
@@ -54,21 +55,15 @@ class TaskRow(BaseModel):
         except json.JSONDecodeError:
             deps = []
         return Task(
-            id=self.id, session_id=self.session_id, pipeline_id=self.pipeline_id,
-            agent_type=self.agent_type, status=self.status,
+            **shared_fields(self, Task, exclude={"dependencies"}),
             dependencies=deps,
-            created_at=self.created_at, updated_at=self.updated_at,
-            owner_id=self.owner_id,
         )
 
     @classmethod
     def from_domain(cls, task: Task) -> "TaskRow":
         return cls(
-            id=task.id, session_id=task.session_id, pipeline_id=task.pipeline_id,
-            agent_type=task.agent_type, status=task.status,
+            **shared_fields(task, cls, exclude={"dependencies"}),
             dependencies=json.dumps(task.dependencies, ensure_ascii=False),
-            created_at=task.created_at, updated_at=task.updated_at,
-            owner_id=task.owner_id,
         )
 
 

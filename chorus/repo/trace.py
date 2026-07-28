@@ -23,6 +23,7 @@ from chorus.domain.trace import (
     aggregate_trace,
 )
 from chorus.repo.connection import ConnectionFactory
+from chorus.repo.mapping import shared_fields
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS traces (
@@ -67,26 +68,17 @@ class TraceRow(BaseModel):
         phase = TracePhase(self.phase)
         payload: TracePayload = _PAYLOAD_BY_PHASE[phase](**json.loads(self.payload_json))
         return TraceEntry(
-            id=self.id,
-            session_id=self.session_id,
-            message_id=self.message_id,
-            task_id=self.task_id,
+            **shared_fields(self, TraceEntry, exclude={"phase", "payload", "source"}),
             source=self.source or "supervisor",
             phase=phase,
-            created_at=self.created_at,
             payload=payload,
         )
 
     @classmethod
     def from_domain(cls, entry: TraceEntry) -> "TraceRow":
         return cls(
-            id=entry.id,
-            session_id=entry.session_id,
-            message_id=entry.message_id,
-            task_id=entry.task_id,
-            source=entry.source,
+            **shared_fields(entry, cls, exclude={"phase", "payload_json"}),
             phase=entry.phase.value,
-            created_at=entry.created_at,
             payload_json=json.dumps(entry.payload.model_dump(), ensure_ascii=False),
         )
 
