@@ -33,7 +33,7 @@ test('mergeAssistantHistory 空入空出', () => {
   expect(mergeAssistantHistory([])).toEqual([])
 })
 
-test('mergeAssistantHistory 段内无正文工具轮不累积到后续有正文助手', () => {
+test('mergeAssistantHistory 段内无正文工具轮作为后续正文的宿主保留', () => {
   const raw = [
     { role: 'assistant', content: '', tools: [{ name: 'search', display: '搜索' }] },
     { role: 'assistant', content: '结果', tools: [] },
@@ -41,24 +41,29 @@ test('mergeAssistantHistory 段内无正文工具轮不累积到后续有正文�
   const out = mergeAssistantHistory(raw)
   expect(out).toHaveLength(1)
   expect(out[0].content).toBe('结果')
-  expect(out[0].tools.items).toHaveLength(0)
+  expect(out[0].tools.items).toHaveLength(1)
+  expect(out[0].tools.items[0].name).toBe('search')
+  expect(out[0].suspended).toBe(false)
 })
 
-test('mergeAssistantHistory 中间用户消息打断合并', () => {
+test('mergeAssistantHistory 用户消息打断后保留前段挂起宿主', () => {
   const raw = [
     { role: 'assistant', content: '', tools: [{ name: 'search' }] },
     { role: 'user', content: '插话' },
     { role: 'assistant', content: '回复', tools: [] },
   ]
   const out = mergeAssistantHistory(raw)
-  expect(out).toHaveLength(2)
-  expect(out[0].role).toBe('user')
-  expect(out[0].content).toBe('插话')
-  expect(out[1].role).toBe('assistant')
-  expect(out[1].content).toBe('回复')
+  expect(out).toHaveLength(3)
+  expect(out[0].role).toBe('assistant')
+  expect(out[0].suspended).toBe(true)
+  expect(out[0].tools.items[0].name).toBe('search')
+  expect(out[1].role).toBe('user')
+  expect(out[1].content).toBe('插话')
+  expect(out[2].role).toBe('assistant')
+  expect(out[2].content).toBe('回复')
 })
 
-test('mergeAssistantHistory 同气泡后续轮正文追加', () => {
+test('mergeAssistantHistory 同气泡后续轮正文与工具均追加', () => {
   const raw = [
     { role: 'assistant', content: '首段', tools: [{ name: 'a' }] },
     { role: 'assistant', content: '次段', tools: [{ name: 'b' }] },
@@ -66,10 +71,10 @@ test('mergeAssistantHistory 同气泡后续轮正文追加', () => {
   const out = mergeAssistantHistory(raw)
   expect(out).toHaveLength(1)
   expect(out[0].content).toBe('首段\n\n次段')
-  expect(out[0].tools.items).toHaveLength(0)
+  expect(out[0].tools.items.map((item) => item.name)).toEqual(['a', 'b'])
 })
 
-test('mergeAssistantHistory 尾部无正文工具轮丢弃不独立成泡', () => {
+test('mergeAssistantHistory 尾部无正文工具轮合并到当前助手气泡', () => {
   const raw = [
     { role: 'user', content: '问' },
     { role: 'assistant', content: '答', tools: [{ name: 'a' }] },
@@ -79,33 +84,40 @@ test('mergeAssistantHistory 尾部无正文工具轮丢弃不独立成泡', () =
   expect(out).toHaveLength(2)
   expect(out[1].role).toBe('assistant')
   expect(out[1].content).toBe('答')
-  expect(out[1].tools.items).toHaveLength(0)
+  expect(out[1].tools.items.map((item) => item.name)).toEqual(['a', 'tail'])
 })
 
-test('mergeAssistantHistory 无正文工具轮前无助手则丢弃不画空泡', () => {
+test('mergeAssistantHistory 无正文工具轮前无助手时保留挂起宿主', () => {
   const raw = [
     { role: 'user', content: '问' },
     { role: 'assistant', content: '', tools: [{ name: 'only_tool' }] },
   ]
   const out = mergeAssistantHistory(raw)
-  expect(out).toHaveLength(1)
+  expect(out).toHaveLength(2)
   expect(out[0].role).toBe('user')
+  expect(out[1].role).toBe('assistant')
+  expect(out[1].content).toBe('')
+  expect(out[1].suspended).toBe(true)
+  expect(out[1].tools.items[0].name).toBe('only_tool')
 })
 
-test('mergeAssistantHistory 跨用户段的无正文工具轮不并入前段助手', () => {
+test('mergeAssistantHistory 跨用户段的无正文工具轮保留在新段', () => {
   const raw = [
     { role: 'assistant', content: '答', tools: [{ name: 'a' }] },
     { role: 'user', content: '再问' },
     { role: 'assistant', content: '', tools: [{ name: 'b' }] },
   ]
   const out = mergeAssistantHistory(raw)
-  expect(out).toHaveLength(2)
+  expect(out).toHaveLength(3)
   expect(out[0].content).toBe('答')
-  expect(out[0].tools.items).toHaveLength(0)
+  expect(out[0].tools.items.map((item) => item.name)).toEqual(['a'])
   expect(out[1].role).toBe('user')
+  expect(out[2].content).toBe('')
+  expect(out[2].suspended).toBe(true)
+  expect(out[2].tools.items.map((item) => item.name)).toEqual(['b'])
 })
 
-test('mergeAssistantHistory 段内无正文工具轮跨用户消息均丢弃', () => {
+test('mergeAssistantHistory 段内工具轮合并，跨用户消息保持分段', () => {
   const raw = [
     { role: 'assistant', content: '首答', tools: [{ name: 'a' }] },
     { role: 'assistant', content: '', tools: [{ name: 'b' }] },
@@ -116,8 +128,8 @@ test('mergeAssistantHistory 段内无正文工具轮跨用户消息均丢弃', (
   const out = mergeAssistantHistory(raw)
   expect(out).toHaveLength(3)
   expect(out[0].content).toBe('首答')
-  expect(out[0].tools.items).toHaveLength(0)
+  expect(out[0].tools.items.map((item) => item.name)).toEqual(['a', 'b'])
   expect(out[1].role).toBe('user')
   expect(out[2].content).toBe('再答')
-  expect(out[2].tools.items).toHaveLength(0)
+  expect(out[2].tools.items.map((item) => item.name)).toEqual(['c', 'd'])
 })
