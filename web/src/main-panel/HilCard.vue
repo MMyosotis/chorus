@@ -1,11 +1,15 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { cancelPipeline, confirmTask, retryTask } from '../api.js'
+import { confirmTask, retryTask } from '../api.js'
 import ArtifactCard from './ArtifactCard.vue'
 import ScriptProof from './ScriptProof.vue'
 
-const props = defineProps({ task: { type: Object, required: true }, sessionId: { type: String, required: true } })
-const emit = defineEmits(['confirmed', 'retried', 'cancelled', 'preview-task'])
+const props = defineProps({
+  task: { type: Object, required: true },
+  sessionId: { type: String, default: '' },
+  confirmed: { type: Boolean, default: false },
+})
+const emit = defineEmits(['confirmed', 'retried', 'preview-task'])
 const artifacts = computed(() => props.task.artifacts || {})
 const candidates = computed(() => artifacts.value.candidates || [])
 const selectedIdx = ref(props.task.artifacts?.selected ?? null)
@@ -23,7 +27,9 @@ const scriptChars = computed(() => {
 const meta = computed(() => ({
   idea: {
     title: '选择一个选题方向',
-    description: `${candidates.value.length || 0} 个候选，选择后即可继续`,
+    description: props.confirmed
+      ? `${candidates.value.length || 0} 个候选，已完成选择`
+      : `${candidates.value.length || 0} 个候选，选择后即可继续`,
     approve: '确认这个选题',
     revise: '重新生成选题',
   },
@@ -82,19 +88,6 @@ async function onRetry() {
   }
 }
 
-async function onCancel() {
-  if (!confirm('放弃整条创作？已确认的内容会保留。')) return
-  busy.value = true
-  error.value = ''
-  try {
-    await cancelPipeline(props.sessionId)
-    emit('cancelled', props.sessionId)
-  } catch (e) {
-    error.value = e.detail || e.message
-  } finally {
-    busy.value = false
-  }
-}
 </script>
 
 <template>
@@ -104,7 +97,7 @@ async function onCancel() {
         <h2>{{ meta.title }}</h2>
         <p>{{ meta.description }}</p>
       </div>
-      <span>待确认</span>
+      <span :class="{ confirmed }">{{ confirmed ? '已确认' : '待确认' }}</span>
     </header>
 
     <div class="review-content">
@@ -117,12 +110,24 @@ async function onCancel() {
           :class="{ selected: selectedIdx === c.index }"
           role="radio"
           :aria-checked="selectedIdx === c.index"
+          :aria-label="[c.title, c.angle || c.reason, selectedIdx === c.index ? '已选择' : ''].filter(Boolean).join('，')"
+          :disabled="confirmed"
           @click="selectedIdx = c.index"
         >
-          <span class="candidate-state">{{ selectedIdx === c.index ? '已选择' : '候选选题' }}</span>
-          <h3>{{ c.title }}</h3>
-          <p v-if="c.angle" class="angle">{{ c.angle }}</p>
-          <p v-if="c.reason" class="reason">{{ c.reason }}</p>
+          <span class="candidate-copy">
+            <h3>{{ c.title }}</h3>
+            <span v-if="c.angle || c.reason" class="candidate-summary">{{ c.angle || c.reason }}</span>
+          </span>
+          <span
+            class="candidate-selection"
+            :class="{ visible: selectedIdx === c.index }"
+            aria-hidden="true"
+          >
+            <span class="candidate-state">已选择</span>
+            <span class="candidate-check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
+            </span>
+          </span>
         </button>
       </div>
 
@@ -153,8 +158,7 @@ async function onCancel() {
       ></textarea>
     </div>
 
-    <footer class="actions">
-      <button class="cancel" type="button" :disabled="busy" @click="onCancel">放弃创作</button>
+    <footer v-if="!confirmed" class="actions">
       <div>
         <button
           v-if="!revising"
@@ -176,6 +180,7 @@ async function onCancel() {
         </button>
         <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
           {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
+          <svg v-if="!busy" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
         </button>
       </div>
     </footer>
@@ -190,7 +195,7 @@ async function onCancel() {
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
-  box-shadow: var(--ch-shadow-sm);
+  box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -204,28 +209,40 @@ async function onCancel() {
 
 .review-head h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--ch-text-xl);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: var(--ch-leading-snug);
 }
 
 .review-head p {
   margin: 8px 0 0;
   color: var(--ch-text-muted);
-  font-size: 12px;
+  font-size: var(--ch-text-sm);
   line-height: 1.5;
 }
 
 .review-head > span {
   display: inline-flex;
-  align-items: center;
   min-height: 32px;
-  padding: 0 8px;
+  flex: 0 0 auto;
+  align-self: center;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 0 var(--ch-space-3);
+  border: 0;
   border-radius: var(--ch-radius-pill);
   background: var(--ch-warning-soft);
   color: var(--ch-warning-text);
-  font: 600 12px/1 var(--ch-font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
+}
+
+.review-head > span.confirmed {
+  background: var(--ch-success-soft);
+  color: var(--ch-success-text);
 }
 
 .review-content {
@@ -236,14 +253,21 @@ async function onCancel() {
 
 .candidates {
   display: grid;
-  gap: 16px;
+  gap: var(--ch-space-3);
 }
 
 .candidate {
+  position: relative;
   width: 100%;
-  padding: 16px;
+  min-height: 80px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: var(--ch-space-3);
+  padding: 16px 20px;
+  overflow: hidden;
   border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-card);
+  border-radius: var(--ch-radius-list);
   background: var(--ch-surface);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
@@ -252,9 +276,18 @@ async function onCancel() {
   transition: border-color var(--ch-duration-fast) var(--ch-ease), background var(--ch-duration-fast) var(--ch-ease);
 }
 
-.candidate:hover,
+.candidate:not(:disabled):hover {
+  border-color: var(--ch-border-strong);
+  background: var(--ch-surface-2);
+}
+
+.candidate:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .candidate.selected {
-  border-color: var(--ch-accent);
+  border-color: var(--ch-border);
   background: var(--ch-accent-soft);
 }
 
@@ -264,43 +297,74 @@ async function onCancel() {
 }
 
 .candidate-state {
-  color: var(--ch-text-muted);
+  color: var(--ch-accent-soft-text);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.5;
+  white-space: nowrap;
 }
 
-.candidate.selected .candidate-state {
-  color: var(--ch-accent-soft-text);
+.candidate-copy {
+  min-width: 0;
+  display: block;
+}
+
+.candidate-selection {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  visibility: hidden;
+}
+
+.candidate-selection.visible {
+  visibility: visible;
+}
+
+.candidate-check {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ch-accent);
+  color: var(--ch-on-accent);
+}
+
+.candidate-check svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
 }
 
 .candidate h3 {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
   line-height: 1.5;
 }
 
-.candidate p {
-  margin: 8px 0 0;
-}
-
-.angle {
+.candidate-summary {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  overflow: hidden;
   color: var(--ch-text-secondary);
   font-size: 14px;
   line-height: 1.5;
-}
-
-.reason {
-  color: var(--ch-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .images {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--ch-space-3);
 }
 
 .images figure {
@@ -312,7 +376,7 @@ async function onCancel() {
   display: block;
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: var(--ch-radius-card);
+  border-radius: var(--ch-radius-list);
   object-fit: cover;
 }
 
@@ -358,11 +422,9 @@ async function onCancel() {
 .actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--ch-border);
+  margin-top: var(--ch-space-6);
 }
 
 .actions > div {
@@ -371,7 +433,11 @@ async function onCancel() {
 }
 
 .actions button {
+  display: inline-flex;
   min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 0 16px;
   border-radius: var(--ch-radius-btn);
   font: 600 14px/1 var(--ch-font-sans);
@@ -382,17 +448,6 @@ async function onCancel() {
 .actions button:disabled {
   cursor: default;
   opacity: .5;
-}
-
-.cancel {
-  padding-left: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ch-text-muted);
-}
-
-.cancel:hover:not(:disabled) {
-  color: var(--ch-danger);
 }
 
 .secondary {
@@ -407,12 +462,22 @@ async function onCancel() {
 
 .primary {
   border: 0;
-  background: var(--ch-accent);
-  color: var(--ch-on-accent);
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--ch-accent-hover);
+  background: var(--ch-ink-hover);
+}
+
+.primary svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .error {
@@ -433,7 +498,6 @@ async function onCancel() {
 
   .actions {
     align-items: stretch;
-    flex-direction: column-reverse;
   }
 
   .actions > div {
@@ -441,8 +505,5 @@ async function onCancel() {
     grid-template-columns: 1fr 1fr;
   }
 
-  .cancel {
-    align-self: flex-start;
-  }
 }
 </style>

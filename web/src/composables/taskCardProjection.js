@@ -26,7 +26,10 @@ export function planTaskCards(graph) {
 }
 
 export function planIntentCard(state) {
-  if (state && state.intent_status === 'ready_to_confirm') {
+  if (
+    state &&
+    ['ready_to_confirm', 'confirmed', 'dispatched'].includes(state.intent_status)
+  ) {
     return { kind: 'intent-confirm', state, id: 'intent-confirm', role: 'assistant' }
   }
   return null

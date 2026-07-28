@@ -49,16 +49,16 @@ const isFinished = computed(() => props.task.status === 'finished')
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
-  box-shadow: var(--ch-shadow-sm);
+  box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
 .artifact-wrap.review {
-  padding: 0;
+  padding: var(--ch-space-3);
   border: 0;
-  border-radius: 0;
+  border-radius: var(--ch-radius-list);
   box-shadow: none;
-  background: transparent;
+  background: var(--ch-muted-gradient);
 }
 .finish {
   display: flex;
@@ -83,7 +83,7 @@ const isFinished = computed(() => props.task.status === 'finished')
   font: 600 12px/1 var(--ch-font-sans);
   white-space: nowrap;
 }
-.artifact-card { display: flex; gap: 16px; }
+.artifact-card { display: flex; align-items: stretch; gap: 20px; }
 .ac-cover { width: 160px; aspect-ratio: 4 / 3; object-fit: cover; flex-shrink: 0; border-radius: var(--ch-radius-card); }
 .ac-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .ac-platform { color: var(--ch-text-muted); font-size: 12px; font-weight: 500; line-height: 1.5; }
@@ -102,7 +102,7 @@ const isFinished = computed(() => props.task.status === 'finished')
   cursor: pointer;
   transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease);
 }
-.ac-expand:hover { background: var(--ch-surface-2); }
+.ac-expand:hover { border-color: var(--ch-text-faint); background: var(--ch-surface); }
 @media (max-width: 620px) {
   .artifact-wrap { padding: 16px; }
   .artifact-card { flex-direction: column; }

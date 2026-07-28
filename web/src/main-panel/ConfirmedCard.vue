@@ -1,72 +1,52 @@
 <script setup>
+import { computed } from 'vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
-import ScriptProof from './ScriptProof.vue'
+import { ROLE_FULL } from '../team-panel/roleMeta.js'
+import HilCard from './HilCard.vue'
 
-defineProps({ task: { type: Object, required: true } })
+const props = defineProps({ task: { type: Object, required: true } })
+
+const agentType = computed(() => props.task.agent_type)
+const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
 </script>
 
 <template>
   <section class="confirmed-card">
-    <header class="confirmed-head">
-      <AgentAvatar :agent-type="task.agent_type" status="finished" :size="40" />
+    <header class="turn-head">
+      <AgentAvatar :agent-type="agentType" status="finished" :size="34" />
+      <span class="role">{{ roleLabel }} AI</span>
     </header>
-    <div class="confirmed-body">
-      <div v-if="task.agent_type === 'idea'" class="candidates">
-        <article
-          v-for="candidate in task.artifacts?.candidates || []"
-          :key="candidate.index"
-          class="candidate"
-          :class="{ selected: task.artifacts?.selected === candidate.index }"
-        >
-          <span>{{ task.artifacts?.selected === candidate.index ? '已采用' : '候选' }}</span>
-          <h3>{{ candidate.title }}</h3>
-          <p v-if="candidate.angle">{{ candidate.angle }}</p>
-          <small v-if="candidate.reason">{{ candidate.reason }}</small>
-        </article>
-      </div>
-
-      <ScriptProof
-        v-else-if="task.agent_type === 'script'"
-        :blocks="task.artifacts?.blocks || []"
-        compact
-      />
-
-      <div v-else-if="task.agent_type === 'image'" class="images">
-        <figure v-for="image in task.artifacts?.images || []" :key="image.url">
-          <img :src="image.url" :alt="image.caption || ''">
-          <figcaption>{{ image.caption }}</figcaption>
-        </figure>
-      </div>
-    </div>
+    <HilCard :task="task" confirmed />
   </section>
 </template>
 
 <style scoped>
-.confirmed-card { width: 100%; }
-.confirmed-head { display: flex; align-items: center; margin-bottom: 8px; min-height: 40px; }
-.confirmed-body {
-  padding: var(--ch-space-4);
-  background: var(--ch-surface);
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-card);
-  box-shadow: var(--ch-shadow-sm);
-  color: var(--ch-text);
-  font-family: var(--ch-font-sans);
+.confirmed-card {
+  width: 100%;
 }
-.candidates { display: grid; gap: 16px; }
-.candidate { padding: 16px; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); }
-.candidate.selected { border-color: var(--ch-accent); background: var(--ch-accent-soft); }
-.candidate > span { color: var(--ch-text-muted); font-size: 12px; line-height: 1.5; }
-.candidate.selected > span { color: var(--ch-accent-soft-text); }
-.candidate h3 { margin: 8px 0 0; font-size: 16px; font-weight: 600; line-height: 1.5; }
-.candidate p,
-.candidate small { display: block; margin: 8px 0 0; color: var(--ch-text-secondary); font-size: 12px; line-height: 1.5; }
-.candidate small { color: var(--ch-text-muted); }
-.images { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.images figure { min-width: 0; margin: 0; }
-.images img { display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: var(--ch-radius-card); object-fit: cover; }
-.images figcaption { margin-top: 8px; color: var(--ch-text-muted); font-size: 12px; line-height: 1.5; }
-@media (max-width: 700px) {
-  .images { grid-template-columns: 1fr; }
+
+.turn-head {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.turn-head :deep(.agent-avatar) {
+  border-color: var(--ch-ink);
+  background: var(--ch-ink);
+  box-shadow: var(--ch-shadow-bubble);
+  color: var(--ch-on-ink);
+}
+
+.turn-head .role {
+  color: var(--ch-text);
+  font: 500 14px/1 var(--ch-font-sans);
+  letter-spacing: 0;
+}
+
+.confirmed-card :deep(.hil-card) {
+  margin: 0;
 }
 </style>

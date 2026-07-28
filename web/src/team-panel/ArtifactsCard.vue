@@ -117,7 +117,8 @@ function openFinalize(row) { emit('preview-task', row.task) }
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 14px;
   gap: var(--ch-space-3);
-  align-items: start;
+  align-items: center;
+  padding-right: var(--ch-space-2);
 }
 
 .artifact-row::before {
@@ -131,7 +132,7 @@ function openFinalize(row) { emit('preview-task', row.task) }
 }
 
 .artifact-row:hover::before {
-  background: var(--ch-surface-3);
+  background: var(--ch-muted-gradient);
 }
 
 .artifact-icon {
@@ -139,14 +140,13 @@ function openFinalize(row) { emit('preview-task', row.task) }
   z-index: 1;
   width: 32px;
   height: 32px;
-  margin-top: 8px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: var(--ch-accent-soft);
-  color: var(--ch-accent-soft-text);
+  background: var(--ch-muted-gradient);
+  color: var(--ch-text-faint);
 }
 
 .artifact-icon svg {
@@ -191,9 +191,8 @@ function openFinalize(row) { emit('preview-task', row.task) }
   z-index: 1;
   width: 14px;
   height: 14px;
-  margin-top: 11px;
-  color: var(--ch-text-faint);
-  opacity: .55;
+  color: var(--ch-text-secondary);
+  opacity: 0;
   transition:
     color var(--ch-duration-fast) var(--ch-ease),
     opacity var(--ch-duration-fast) var(--ch-ease),
@@ -212,7 +211,6 @@ function openFinalize(row) { emit('preview-task', row.task) }
 }
 
 .artifact-row:hover .artifact-arrow {
-  color: var(--ch-ink);
   opacity: 1;
   transform: translateX(2px);
 }

@@ -102,7 +102,7 @@ defineExpose({ focus })
   position: relative;
   width: calc(100% - 32px);
   margin: 0 auto;
-  padding: 12px 14px;
+  padding: 24px 24px 16px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -125,7 +125,7 @@ defineExpose({ focus })
   outline: none;
   background: transparent;
   min-height: 44px;
-  padding: 6px 6px 2px;
+  padding: 0;
   font-family: var(--ch-font-sans);
   font-size: 15px;
   line-height: 1.6;
@@ -155,13 +155,13 @@ defineExpose({ focus })
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 2px 2px;
+  padding: 0;
 }
 
 .tool-group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--ch-space-3);
 }
 .tool-group.right {
   gap: 6px;
@@ -172,7 +172,7 @@ defineExpose({ focus })
   align-items: center;
   gap: 6px;
   height: 32px;
-  padding: 0 10px;
+  padding: 0;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -232,8 +232,8 @@ defineExpose({ focus })
 
 .send-btn {
   flex-shrink: 0;
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -246,8 +246,8 @@ defineExpose({ focus })
     transform var(--ch-duration-fast) var(--ch-ease);
 }
 .send-btn svg {
-  width: 19px;
-  height: 19px;
+  width: 17px;
+  height: 17px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -263,9 +263,8 @@ defineExpose({ focus })
 }
 
 @media (max-width: 780px) {
-  .input-bar { padding: 10px 12px; }
+  .input-bar { padding: 24px 24px 16px; }
   .input-field { font-size: var(--ch-text-sm); }
   .tool-btn span { display: none; }
-  .tool-btn { padding: 0 8px; }
 }
 </style>

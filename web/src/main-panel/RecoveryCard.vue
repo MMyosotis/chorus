@@ -47,25 +47,30 @@ async function onCancel() {
       <span>需要处理</span>
     </header>
 
-    <div v-if="task.error" class="recovery-message" role="status">
-      <small>问题说明</small>
-      <p>{{ task.error }}</p>
-    </div>
+    <div class="recovery-content">
+      <div v-if="task.error" class="recovery-message" role="status">
+        <small>问题说明</small>
+        <p>{{ task.error }}</p>
+      </div>
 
-    <div class="feedback">
-      <label :for="feedbackId">补充要求</label>
-      <small>选填，重新执行时会一并提交</small>
-      <textarea
-        :id="feedbackId"
-        v-model="feedback"
-        placeholder="写下重新执行时需要注意的内容"
-        rows="3"
-      />
+      <div class="feedback">
+        <label :for="feedbackId">补充要求</label>
+        <small>选填，重新执行时会一并提交</small>
+        <textarea
+          :id="feedbackId"
+          v-model="feedback"
+          placeholder="写下重新执行时需要注意的内容"
+          rows="3"
+        />
+      </div>
     </div>
 
     <footer class="actions">
       <button class="cancel" :disabled="busy" @click="onCancel">放弃创作</button>
-      <button class="primary" :disabled="busy" @click="onRetry">{{ busy ? '正在处理' : '重新执行当前阶段' }}</button>
+      <button class="primary" :disabled="busy" @click="onRetry">
+        {{ busy ? '正在处理' : '重新执行当前阶段' }}
+        <svg v-if="!busy" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
     </footer>
     <div v-if="error" class="error" role="alert">{{ error }}</div>
   </section>
@@ -77,7 +82,7 @@ async function onCancel() {
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
-  box-shadow: var(--ch-shadow-sm);
+  box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -89,32 +94,39 @@ async function onCancel() {
 }
 .recovery-head h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--ch-text-xl);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: var(--ch-leading-snug);
 }
 .recovery-head p {
   margin: 8px 0 0;
   color: var(--ch-text-muted);
-  font-size: 12px;
+  font-size: var(--ch-text-sm);
   line-height: 1.5;
 }
 .recovery-head > span {
   display: inline-flex;
+  flex: 0 0 auto;
+  align-self: center;
   align-items: center;
   min-height: 32px;
-  padding: 0 8px;
+  margin-left: auto;
+  padding: 0 var(--ch-space-3);
   border-radius: var(--ch-radius-pill);
   background: var(--ch-danger-soft);
   color: var(--ch-danger-text);
   font: 600 12px/1 var(--ch-font-sans);
   white-space: nowrap;
 }
+.recovery-content {
+  margin-top: var(--ch-space-4);
+  padding-top: var(--ch-space-4);
+  border-top: 1px solid var(--ch-border);
+}
 .recovery-message {
-  margin-top: 24px;
-  padding: 16px;
-  border-radius: var(--ch-radius-card);
-  background: var(--ch-danger-soft);
+  padding: var(--ch-space-3);
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-muted-gradient);
 }
 .recovery-message small {
   color: var(--ch-text-muted);
@@ -128,8 +140,8 @@ async function onCancel() {
   line-height: 1.5;
 }
 .feedback {
-  margin-top: 24px;
-  padding-top: 24px;
+  margin-top: var(--ch-space-4);
+  padding-top: var(--ch-space-4);
   border-top: 1px solid var(--ch-border);
 }
 .feedback label {
@@ -165,34 +177,44 @@ async function onCancel() {
 .actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--ch-border);
+  margin-top: var(--ch-space-4);
 }
 .actions button {
+  display: inline-flex;
   min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 0 16px;
+  border: 1px solid transparent;
   border-radius: var(--ch-radius-btn);
   font: 600 14px/1 var(--ch-font-sans);
   cursor: pointer;
-  transition: background var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
 }
 .actions button:disabled { cursor: default; opacity: .5; }
 .cancel {
-  padding-left: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ch-text-muted);
+  border-color: var(--ch-border-strong);
+  background: var(--ch-surface);
+  color: var(--ch-text);
 }
-.cancel:hover:not(:disabled) { color: var(--ch-danger); }
+.cancel:hover:not(:disabled) { background: var(--ch-surface-2); }
 .primary {
-  border: 0;
-  background: var(--ch-accent);
-  color: var(--ch-on-accent);
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
 }
-.primary:hover:not(:disabled) { background: var(--ch-accent-hover); }
+.primary:hover:not(:disabled) { background: var(--ch-ink-hover); }
+.primary svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
 .error { margin: 16px 0 0; color: var(--ch-danger); font-size: 12px; line-height: 1.5; }
 @media (max-width: 620px) {
   .recovery-card { padding: 16px; }

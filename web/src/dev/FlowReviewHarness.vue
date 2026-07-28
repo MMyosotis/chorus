@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import ChatWindow from '../main-panel/ChatWindow.vue'
 import InputBar from '../main-panel/InputBar.vue'
 import ManuscriptHeader from '../main-panel/ManuscriptHeader.vue'
@@ -7,6 +7,7 @@ import TeamPanel from '../team-panel/TeamPanel.vue'
 
 const stages = [
   { id: 'conversation', label: '00 前期对话', type: 'conversation', phase: 0 },
+  { id: 'thinking', label: '00A 主编 · 思考中', type: 'thinking', phase: 0 },
   { id: 'intent', label: '01 题旨签发', type: 'intent', phase: 0 },
   { id: 'idea-run', label: '02 选题 · 执行', type: 'run', phase: 1 },
   { id: 'idea-review', label: '03 选题 · 校样', type: 'review', phase: 1 },
@@ -33,10 +34,26 @@ onMounted(() => {
   if (index >= 0) currentIndex.value = index
 })
 
-watch(current, (stage) => history.replaceState(null, '', `${location.pathname}${location.search}#${stage.id}`))
+const stageCardSelector = {
+  thinking: '.status-card.thinking',
+  intent: '.intent-confirm',
+  run: '.running-panel',
+  review: '.hil-card',
+  complete: '.artifact-wrap:not(.review)',
+  recovery: '.recovery-card',
+}
+
+watch(current, async (stage) => {
+  history.replaceState(null, '', `${location.pathname}${location.search}#${stage.id}`)
+  await nextTick()
+  requestAnimationFrame(() => {
+    const selector = stageCardSelector[stage.type]
+    if (selector) document.querySelector(selector)?.scrollIntoView({ block: 'center' })
+  })
+})
 
 const intentState = computed(() => ({
-  intent_status: current.value.type === 'conversation' ? 'capturing' : current.value.type === 'intent' ? 'ready_to_confirm' : current.value.type === 'complete' ? 'confirmed' : 'dispatched',
+  intent_status: ['conversation', 'thinking'].includes(current.value.type) ? 'capturing' : current.value.type === 'intent' ? 'ready_to_confirm' : current.value.type === 'complete' ? 'confirmed' : 'dispatched',
   topic: '从一个人的停留体验切入城市空间，以观察和情绪组织内容，避开广告式卖点罗列。',
   platform: '小红书',
   format: '图文探店',
@@ -48,7 +65,7 @@ const intentState = computed(() => ({
     叙事: '从停留体验切入，以空间观察和城市情绪组织内容',
     禁用: '不使用硬广表达，不堆砌卖点',
   },
-  progress_percent: current.value.type === 'conversation' ? 58 : 100,
+  progress_percent: ['conversation', 'thinking'].includes(current.value.type) ? 58 : 100,
 }))
 
 function art(label, from, to) {
@@ -103,7 +120,7 @@ const finalTask = {
 const taskTemplates = [ideaTask, scriptTask, imageTask, finalTask]
 const roleNames = ['选题官', '文案编辑', '视觉编辑', '汇总编辑']
 const stageKicker = computed(() => {
-  if (current.value.type === 'conversation') return 'CONVERSATION'
+  if (['conversation', 'thinking'].includes(current.value.type)) return 'CONVERSATION'
   if (current.value.type === 'intent') return 'STORY COMMISSION'
   if (current.value.type === 'complete') return 'FINAL COPY'
   if (current.value.type === 'recovery') return '视觉编辑 · RECOVERY'
@@ -151,8 +168,25 @@ function activeTask() {
 
 const messages = computed(() => {
   if (current.value.type === 'conversation') return discussion
+  if (current.value.type === 'thinking') {
+    return [
+      ...discussion,
+      {
+        id: 'audit-assistant-thinking',
+        role: 'assistant',
+        content: '',
+        created_at: 1784088420,
+        thinking: { state: 'running' },
+        tools: { state: 'idle', items: [] },
+      },
+    ]
+  }
   if (current.value.type === 'intent') return [...discussion, commissionNote, { id: 'audit-intent', kind: 'intent-confirm', role: 'assistant', state: intentState.value }]
-  const items = [...discussion, planNote]
+  const items = [
+    ...discussion,
+    planNote,
+    { id: 'audit-intent', kind: 'intent-confirm', role: 'assistant', state: intentState.value },
+  ]
   const confirmed = current.value.type === 'complete' ? taskTemplates.slice(0, 3) : current.value.type === 'recovery' ? taskTemplates.slice(0, 2) : taskTemplates.slice(0, Math.max(0, current.value.phase - 1))
   for (const task of confirmed) {
     items.push({ id: `audit-confirmed-${task.id}`, kind: 'confirmed', role: 'assistant', task })
@@ -183,12 +217,12 @@ const messages = computed(() => {
 
     <main class="audit-main">
       <article class="audit-paper manuscript-paper">
-        <ChatWindow :messages="messages" :session-id="'ui-flow-review'" :session-updated-at="1784088240" :intent-state="intentState">
+        <ChatWindow :messages="messages" :streaming="current.type === 'thinking'" :session-id="'ui-flow-review'" :session-updated-at="1784088240" :intent-state="intentState">
           <template #scroll-header>
             <ManuscriptHeader :kicker="stageKicker" title="城市小众咖啡馆探店" />
           </template>
         </ChatWindow>
-        <InputBar :streaming="false" :has-active-task="current.type === 'run'" :awaiting-confirm="current.type === 'intent'" />
+        <InputBar :streaming="current.type === 'thinking'" :has-active-task="current.type === 'run'" :awaiting-confirm="current.type === 'intent'" />
       </article>
     </main>
 
@@ -209,16 +243,17 @@ const messages = computed(() => {
 .audit-paper :deep(.chat-window) { flex: 0 0 auto; overflow: visible; scrollbar-gutter: auto; }
 .audit-paper :deep(.input-bar) {
   position: fixed;
-  left: calc(var(--ch-rail) + (100vw - var(--ch-rail) - var(--ch-right-rail)) / 2);
-  width: min(calc(100vw - var(--ch-rail) - var(--ch-right-rail) - 104px), 828px);
+  left: calc(var(--ch-rail) + (100% - var(--ch-rail) - var(--ch-right-rail)) / 2);
+  transform: translateX(-50%);
+  width: calc(100% - var(--ch-rail) - var(--ch-right-rail) - 48px);
 }
 .audit-shell > :deep(.team-panel) { position: sticky; top: 0; height: 100dvh; }
 @media(min-width:781px) and (max-width:1180px){
   .audit-nav{width:var(--ch-rail);flex-basis:var(--ch-rail)}
   .audit-shell > :deep(.team-panel){display:none}
   .audit-paper :deep(.input-bar){
-    left:calc((100vw + var(--ch-rail)) / 2);
-    width:min(calc(100vw - var(--ch-rail) - 104px),828px);
+    left:calc((100% + var(--ch-rail)) / 2);
+    width:calc(100% - var(--ch-rail) - 48px);
   }
 }
 @media(max-width:780px){

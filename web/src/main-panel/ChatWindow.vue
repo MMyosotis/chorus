@@ -7,6 +7,8 @@ import PlatformPreviewShell from './PlatformPreviewShell.vue'
 import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
 import ConfirmedCard from './ConfirmedCard.vue'
+import AgentAvatar from '../team-panel/AgentAvatar.vue'
+import { ROLE_FULL } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -61,6 +63,10 @@ function openPreview(task) { previewTask.value = task }
 
 function messageKey(msg, idx) {
   return msg.id || `${msg.kind || msg.role}:${msg.task?.id || idx}`
+}
+
+function taskRoleLabel(task) {
+  return ROLE_FULL[task?.agent_type] || task?.agent_type || ''
 }
 
 const MONTH_EN = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
@@ -150,25 +156,34 @@ watch(
     <div class="chat-inner">
       <TransitionGroup name="flow-stage" tag="div" class="flow-list">
         <div v-for="(msg, idx) in displayMessages" :key="messageKey(msg, idx)" class="flow-entry">
-          <HilCard
-            v-if="msg.kind === 'hil'"
-            :task="msg.task"
-            :session-id="sessionId"
-            @confirmed="$emit('hil-confirmed', $event)"
-            @retried="$emit('hil-retried', $event)"
-            @cancelled="$emit('hil-cancelled', $event)"
-            @preview-task="openPreview"
-          />
+          <div v-if="msg.kind === 'hil'" class="hil-panel">
+            <header class="task-turn-head">
+              <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="34" />
+              <span>{{ taskRoleLabel(msg.task) }} AI</span>
+            </header>
+            <HilCard
+              :task="msg.task"
+              :session-id="sessionId"
+              @confirmed="$emit('hil-confirmed', $event)"
+              @retried="$emit('hil-retried', $event)"
+              @preview-task="openPreview"
+            />
+          </div>
           <ArtifactCard v-else-if="msg.kind === 'postcard'" :task="msg.task" @preview="openPreview(msg.task)" />
           <ConfirmedCard v-else-if="msg.kind === 'confirmed'" :task="msg.task" />
           <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
-          <RecoveryCard
-            v-else-if="msg.kind === 'recovery'"
-            :task="msg.task"
-            :session-id="sessionId"
-            @retried="$emit('hil-retried', $event)"
-            @cancelled="$emit('hil-cancelled', $event)"
-          />
+          <div v-else-if="msg.kind === 'recovery'" class="recovery-panel">
+            <header class="task-turn-head">
+              <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="34" />
+              <span>{{ taskRoleLabel(msg.task) }} AI</span>
+            </header>
+            <RecoveryCard
+              :task="msg.task"
+              :session-id="sessionId"
+              @retried="$emit('hil-retried', $event)"
+              @cancelled="$emit('hil-cancelled', $event)"
+            />
+          </div>
           <MessageBubble
             v-else
             :role="msg.role"
@@ -277,10 +292,39 @@ watch(
 .chat-inner :deep(.running),
 .chat-inner :deep(.confirmed-card),
 .chat-inner :deep(.artifact-wrap:not(.review)) {
-  margin: 0 0 48px;
+  margin: 0 0 var(--ch-space-8);
 }
 .chat-inner :deep(.intent-confirm) {
   margin: 16px 0 0;
+}
+
+.hil-panel {
+  width: 100%;
+}
+
+.recovery-panel {
+  width: 100%;
+}
+
+.task-turn-head {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.task-turn-head :deep(.agent-avatar) {
+  border-color: var(--ch-ink);
+  background: var(--ch-ink);
+  box-shadow: var(--ch-shadow-bubble);
+  color: var(--ch-on-ink);
+}
+
+.task-turn-head > span {
+  color: var(--ch-text);
+  font: 500 14px/1 var(--ch-font-sans);
+  letter-spacing: 0;
 }
 
 .preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; background: var(--ch-overlay); overflow-y: auto; }

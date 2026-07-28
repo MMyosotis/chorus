@@ -69,7 +69,7 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
 
 .agent-avatar.inactive {
   border-color: var(--ch-border);
-  background: var(--ch-surface-3);
+  background: var(--ch-muted-gradient);
   color: var(--ch-text-faint);
 }
 

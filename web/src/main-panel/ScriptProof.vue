@@ -117,7 +117,7 @@ function renderInline(text) {
 .script-proof :deep(strong) { color: var(--ch-text); font-weight: 600; }
 .script-proof ul { max-width: 680px; margin: 16px 0; padding-left: 24px; }
 .script-proof li { margin: 8px 0; padding-left: 0; }
-.script-proof blockquote { max-width: 680px; margin: 24px 0; padding: 16px; border: 0; border-left: 2px solid var(--ch-accent); border-radius: var(--ch-radius-btn); background: var(--ch-surface-3); color: var(--ch-text); font: 500 16px/1.5 var(--ch-font-sans); text-align: left; }
+.script-proof blockquote { max-width: 680px; margin: 24px 0; padding: 16px 20px; border: 0; border-radius: var(--ch-radius-list); background: var(--ch-muted-gradient); color: var(--ch-text); font: 500 16px/1.5 var(--ch-font-sans); text-align: left; }
 .script-proof hr { max-width: 680px; margin: 24px 0; border: 0; border-top: 1px solid var(--ch-border); }
 .script-tags { max-width: 680px; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; color: var(--ch-text-secondary); font: 500 12px/1.5 var(--ch-font-sans); }
 .script-tags span { white-space: nowrap; }

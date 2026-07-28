@@ -3,7 +3,6 @@
   --ch-canvas: #fafafb;
   --ch-surface: #ffffff;
   --ch-surface-2: #f8fafc;
-  --ch-surface-3: #f1f5f9;
   --ch-canvas-gradient: linear-gradient(180deg, var(--ch-canvas), var(--ch-surface-2));
   --ch-surface-glass-soft: color-mix(in srgb, var(--ch-surface) 76%, transparent);
   --ch-surface-glass-strong: color-mix(in srgb, var(--ch-surface) 92%, transparent);
@@ -38,7 +37,7 @@
     color-mix(in srgb, var(--ch-accent) 17%, var(--ch-surface))
   );
   --ch-on-accent: var(--ch-surface);
-  --ch-muted-gradient: linear-gradient(135deg, var(--ch-surface-2), var(--ch-surface-3));
+  --ch-muted-gradient: linear-gradient(135deg, var(--ch-surface-2), #f1f5f9);
 
   --ch-overlay-soft: color-mix(in srgb, var(--ch-text) 32%, transparent);
   --ch-overlay: color-mix(in srgb, var(--ch-text) 55%, transparent);
@@ -98,6 +97,7 @@
   --ch-space-5: 32px;
   --ch-space-6: 48px;
   --ch-space-7: 64px;
+  --ch-space-8: 80px;
 
   --ch-font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
   --ch-font-mono: "SF Mono", "JetBrains Mono", Consolas, monospace;
@@ -321,7 +321,7 @@ select:focus-visible {
   line-height: 1.5;
 }
 
-.ch-badge-neutral { background: var(--ch-surface-3); color: var(--ch-text-secondary); }
+.ch-badge-neutral { background: var(--ch-muted-gradient); color: var(--ch-text-secondary); }
 .ch-badge-accent { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
 .ch-badge-success { background: var(--ch-success-soft); color: var(--ch-success-text); }
 .ch-badge-warning { background: var(--ch-warning-soft); color: var(--ch-warning-text); }

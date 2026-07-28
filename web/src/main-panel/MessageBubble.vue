@@ -157,7 +157,7 @@ function closePreview() {
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
     <div v-if="role === 'assistant'" class="turn-head">
-      <AgentAvatar agent-type="chief" :status="active ? 'running' : 'finished'" :size="34" />
+      <AgentAvatar agent-type="chief" status="finished" :size="34" />
       <span class="role">主编辑 AI</span>
     </div>
     <div :class="['bubble', role, { bare: bareMode }]">
@@ -206,13 +206,14 @@ function closePreview() {
       v-if="role === 'assistant' && intentState"
       class="standalone-intent"
       :state="intentState"
+      :archived="['confirmed', 'dispatched'].includes(intentState.intent_status)"
       @confirm="emit('intent-confirm')"
       @revise="emit('intent-revise')"
     />
 
     <div v-if="content && activityState === 'tools'" class="tool-running-line" aria-hidden="true">
       <span class="spark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z"/></svg>
       </span>
       <span class="label-stage">
         <Transition name="label-swap">
@@ -227,7 +228,7 @@ function closePreview() {
       :class="activityState"
     >
       <span class="spark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/></svg>
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z"/></svg>
       </span>
       <span class="label-stage">
         <Transition name="label-swap">
@@ -249,7 +250,7 @@ function closePreview() {
 .bubble-row {
   position: relative;
   padding: 0;
-  margin: 0 0 var(--ch-space-7);
+  margin: 0 0 var(--ch-space-8);
 }
 
 .bubble-row + .bubble-row {
@@ -257,7 +258,7 @@ function closePreview() {
 }
 
 .bubble-row.user {
-  margin-bottom: var(--ch-space-5);
+  margin-bottom: var(--ch-space-6);
 }
 
 .turn-head {
@@ -269,9 +270,9 @@ function closePreview() {
 }
 
 .turn-head :deep(.agent-avatar) {
-  background: var(--ch-accent);
-  border-color: var(--ch-accent);
-  color: var(--ch-on-accent);
+  background: var(--ch-ink);
+  border-color: var(--ch-ink);
+  color: var(--ch-on-ink);
   box-shadow: var(--ch-shadow-bubble);
 }
 
@@ -324,7 +325,7 @@ function closePreview() {
   background: var(--ch-surface);
   border: 1px solid var(--ch-border);
   border-radius: 18px;
-  box-shadow: var(--ch-shadow-xs);
+  box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
   font-size: 15px;
@@ -480,15 +481,18 @@ function closePreview() {
 }
 
 .status-card {
-  margin: 12px 0 0;
+  width: fit-content;
+  min-width: 112px;
+  min-height: 32px;
+  margin: var(--ch-space-2) 0 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--ch-space-2);
   user-select: none;
   color: var(--ch-text-faint);
   font-family: var(--ch-font-sans);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .bubble-row.bare .status-card {
@@ -496,6 +500,7 @@ function closePreview() {
 }
 
 .status-text {
+  color: var(--ch-accent);
   font-weight: 400;
 }
 
@@ -507,7 +512,13 @@ function closePreview() {
   height: 14px;
   flex-shrink: 0;
   color: var(--ch-accent);
-  animation: spark-breath 1.6s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform, opacity;
+  animation: spark-breath .8s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+.status-card .spark {
+  width: 20px;
+  height: 20px;
 }
 .spark svg {
   width: 100%;
@@ -515,14 +526,21 @@ function closePreview() {
   fill: currentColor;
 }
 @keyframes spark-breath {
-  0%, 100% { opacity: 0.35; }
-  50%      { opacity: 1; }
+  from {
+    opacity: .36;
+    transform: scale(.76);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.12);
+  }
 }
 
 .label-stage {
   display: inline-grid;
   grid-template-areas: "stack";
-  height: calc(1.5 * 1em);
+  height: 20px;
+  align-items: center;
   overflow: hidden;
   vertical-align: bottom;
 }

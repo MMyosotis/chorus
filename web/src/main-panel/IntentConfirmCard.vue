@@ -14,12 +14,15 @@ const clean = (value, fallback = '待补充') => {
 }
 
 const title = computed(() => clean(props.state?.topic, '请确认这次创作方向'))
-const meta = computed(() => [
-  clean(props.state?.platform),
-  clean(props.state?.format),
-  props.state?.image_count != null ? `${props.state.image_count} 张配图` : '配图待定',
-])
 const direction = computed(() => clean(props.state?.style, '风格自由发挥'))
+const meta = computed(() => [
+  { label: '发布平台', value: clean(props.state?.platform) },
+  { label: '内容体裁', value: clean(props.state?.format) },
+  {
+    label: '配图规划',
+    value: props.state?.image_count != null ? `${props.state.image_count} 张` : '待确定',
+  },
+])
 const notes = computed(() =>
   Object.entries(props.state?.extra || {})
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
@@ -41,30 +44,33 @@ function decide(type) {
   <section class="intent-confirm" :class="{ archived }">
     <header class="card-head">
       <div class="head-copy">
-        <p>选题签发</p>
+        <h2>确认创作意图</h2>
+        <p>确认本次创作的方向与要求</p>
       </div>
-      <span class="status">{{ archived ? '已签发' : '待确认' }}</span>
+      <span class="status">{{ archived ? '已确认' : '待确认' }}</span>
     </header>
 
     <div class="brief">
-      <span class="eyebrow">本次创作方向</span>
+      <div class="section-heading">
+        <span class="section-title">主题方向</span>
+      </div>
       <h2>{{ title }}</h2>
       <div class="meta" aria-label="创作规格">
-        <span v-for="item in meta" :key="item">{{ item }}</span>
+        <div v-for="item in meta" :key="item.label" class="meta-item">
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </div>
       </div>
-    </div>
-
-    <div class="direction">
-      <div>
-        <small>表达气质</small>
-        <p>{{ direction }}</p>
+      <div class="direction">
+        <span>表达风格</span>
+        <strong>{{ direction }}</strong>
       </div>
     </div>
 
     <section v-if="notes.length" class="focus">
-      <header class="focus-head">
-        <span class="section-title">创作重点</span>
-        <span class="section-meta">已整理 {{ notes.length }} 项</span>
+      <header class="section-heading focus-head">
+        <span class="section-title">补充要求</span>
+        <span class="section-meta">{{ notes.length }} 项</span>
       </header>
       <dl>
         <div v-for="note in notes" :key="note.label">
@@ -74,16 +80,14 @@ function decide(type) {
       </dl>
     </section>
 
-    <footer class="actions">
-      <p v-if="archived" class="archived-note">选题已进入创作流程</p>
-      <template v-else>
-        <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
-          继续调整
-        </button>
-        <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
-          确认并开始创作
-        </button>
-      </template>
+    <footer v-if="!archived" class="actions">
+      <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
+        继续调整
+      </button>
+      <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
+        确认并开始创作
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
     </footer>
   </section>
 </template>
@@ -97,7 +101,7 @@ function decide(type) {
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
-  box-shadow: var(--ch-shadow-sm);
+  box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -112,24 +116,36 @@ function decide(type) {
   min-width: 0;
 }
 
-.head-copy p {
+.head-copy h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--ch-text-xl);
   font-weight: 600;
+  line-height: var(--ch-leading-snug);
+}
+
+.head-copy p {
+  margin: 8px 0 0;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-sm);
   line-height: 1.5;
 }
 
 .status {
   display: inline-flex;
-  align-items: center;
   min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
   gap: 8px;
   margin-left: auto;
-  padding: 0 8px;
+  padding: 0 var(--ch-space-3);
+  border: 0;
   border-radius: var(--ch-radius-pill);
   background: var(--ch-warning-soft);
   color: var(--ch-warning-text);
-  font: 600 12px/1 var(--ch-font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .archived .status {
@@ -138,84 +154,111 @@ function decide(type) {
 }
 
 .brief {
-  padding: 32px 0 24px;
+  margin-top: 24px;
+  padding: 24px 0;
+  border-top: 1px solid var(--ch-border);
 }
 
-.eyebrow {
-  color: var(--ch-text-muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.5;
+.section-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.section-heading::before {
+  width: 3px;
+  height: 16px;
+  flex: 0 0 3px;
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-accent);
+  content: "";
 }
 
 .brief h2 {
-  max-width: 680px;
-  margin: 8px 0 16px;
-  font-size: 20px;
+  max-width: 760px;
+  margin: 12px 0 20px;
+  font-size: var(--ch-text-xl);
   font-weight: 600;
-  line-height: 1.3;
-  letter-spacing: 0;
+  line-height: 1.4;
+  letter-spacing: -.01em;
 }
 
 .meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--ch-space-3);
 }
 
-.meta span {
-  display: inline-flex;
-  min-height: 32px;
-  align-items: center;
-  padding: 0 8px;
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-surface-2);
-  color: var(--ch-text-secondary);
-  font: 500 12px/1 var(--ch-font-sans);
+.meta-item {
+  display: flex;
+  min-width: 0;
+  min-height: 80px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px var(--ch-space-3);
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-muted-gradient);
+}
+
+.meta-item span,
+.meta-item strong {
+  display: block;
+}
+
+.meta-item span {
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-xs);
+  line-height: 1.5;
+}
+
+.meta-item strong {
+  margin-top: 4px;
+  color: var(--ch-text);
+  font-size: var(--ch-text-md);
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .direction {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-card);
-  background: var(--ch-surface-3);
+  min-height: 80px;
+  flex-direction: column;
+  justify-content: center;
+  margin-top: var(--ch-space-3);
+  padding: 12px var(--ch-space-3);
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-muted-gradient);
 }
 
-.direction small {
+.direction span {
   color: var(--ch-text-muted);
-  font-size: 12px;
+  font-size: var(--ch-text-xs);
   line-height: 1.5;
 }
 
-.direction p {
-  margin: 8px 0 0;
+.direction strong {
+  margin-top: 4px;
   color: var(--ch-text);
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--ch-text-md);
+  font-weight: 600;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .focus {
   overflow: hidden;
-  margin-top: 24px;
-  border-top: 1px solid var(--ch-border);
   border-bottom: 1px solid var(--ch-border);
 }
 
 .focus-head {
-  display: flex;
   min-height: 56px;
-  align-items: center;
-  gap: 8px;
   border-bottom: 1px solid var(--ch-border);
 }
 
 .section-title {
-  font-size: 14px;
+  color: var(--ch-text);
+  font-size: var(--ch-text-sm);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -258,21 +301,19 @@ function decide(type) {
   line-height: 1.5;
 }
 
-.focus + .actions {
-  padding-top: 24px;
-  border-top: 0;
-}
-
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 24px;
-  border-top: 1px solid var(--ch-border);
+  background: var(--ch-surface);
 }
 
 .actions button {
+  display: inline-flex;
   min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   padding: 0 16px;
   border-radius: var(--ch-radius-btn);
   font: 600 14px/1 var(--ch-font-sans);
@@ -297,22 +338,22 @@ function decide(type) {
 
 .confirm {
   border: 0;
-  background: var(--ch-accent);
-  color: var(--ch-on-accent);
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
 }
 
 .confirm:hover:not(:disabled) {
-  background: var(--ch-accent-hover);
+  background: var(--ch-ink-hover);
 }
 
-.archived-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 auto 0 0;
-  color: var(--ch-success-text);
-  font-size: 12px;
-  line-height: 1.5;
+.confirm svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 @media (max-width: 700px) {
@@ -328,6 +369,14 @@ function decide(type) {
     padding: 24px 0;
   }
 
+  .brief h2 {
+    font-size: var(--ch-text-lg);
+  }
+
+  .meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .focus dl > div {
     grid-template-columns: 64px minmax(0, 1fr);
     gap: 8px;
@@ -339,6 +388,12 @@ function decide(type) {
 
   .actions button {
     flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 460px) {
+  .meta {
+    grid-template-columns: 1fr;
   }
 }
 </style>

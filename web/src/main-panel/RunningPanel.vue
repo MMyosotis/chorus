@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref, watch, onUnmounted } from 'vue'
+import AgentAvatar from '../team-panel/AgentAvatar.vue'
 import { ROLE_FULL } from '../team-panel/roleMeta.js'
 
 const props = defineProps({ task: { type: Object, required: true } })
@@ -73,45 +74,155 @@ const recordLeft = computed(() => {
 </script>
 
 <template>
-  <section class="running">
-    <header class="running-head">
-      <span>{{ roleLabel }}</span>
-      <span class="running-status">进行中</span>
+  <div class="running-panel">
+    <header class="turn-head">
+      <AgentAvatar :agent-type="agentType" status="finished" :size="34" />
+      <span class="role">{{ roleLabel }} AI</span>
     </header>
-    <div class="running-copy">
-      <h2>{{ aside }}</h2>
-      <div class="running-meta">
-        <div v-if="activityPrefix" class="activity">
-          <span class="act-slot">
-            <Transition name="label-swap">
-              <span :key="activityKind" class="act-prefix">{{ activityPrefix }}</span>
-            </Transition>
-            <span v-if="activitySuffix" class="act-suffix">{{ activitySuffix }}</span>
-          </span>
-        </div>
-        <div class="record">
-          <template v-if="hasOutput">{{ recordLeft }}<span v-if="chars"> · <span class="num">{{ charsText }}</span>字</span></template>
-          <span v-else class="record-empty">正在准备内容</span>
+    <section class="running">
+      <header class="running-head">
+        <span class="running-sparkle" aria-hidden="true">
+          <svg viewBox="0 0 18 18">
+            <defs>
+              <linearGradient id="runningSparkleGrad" x1="2.5" y1="1.5" x2="16.3" y2="16.5" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="var(--ch-accent)" />
+                <stop offset="1" stop-color="var(--ch-accent-soft-text)" />
+              </linearGradient>
+            </defs>
+            <path
+              class="sparkle-main"
+              d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z"
+              fill="url(#runningSparkleGrad)"
+            />
+            <path
+              class="sparkle-small"
+              d="M14.5 11.5C14.5 12.75 15.4 14 16.3 14C15.4 14 14.5 15.25 14.5 16.5C14.5 15.25 13.6 14 12.7 14C13.6 14 14.5 12.75 14.5 11.5Z"
+              fill="url(#runningSparkleGrad)"
+            />
+          </svg>
+        </span>
+        <h2>{{ aside }}</h2>
+        <span class="running-status">进行中</span>
+      </header>
+      <div class="running-copy">
+        <div class="running-meta">
+          <div v-if="activityPrefix" class="activity">
+            <span class="act-slot">
+              <Transition name="label-swap">
+                <span :key="activityKind" class="act-prefix">{{ activityPrefix }}</span>
+              </Transition>
+              <span v-if="activitySuffix" class="act-suffix">{{ activitySuffix }}</span>
+            </span>
+          </div>
+          <div class="record">
+            <template v-if="hasOutput">{{ recordLeft }}<span v-if="chars"> · <span class="num">{{ charsText }}</span>字</span></template>
+            <span v-else class="record-empty">正在准备内容</span>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 </template>
 
 <style scoped>
-.running { display: block; padding: var(--ch-space-4); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); box-shadow: var(--ch-shadow-sm); font-family: var(--ch-font-sans); }
-.running-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--ch-text-secondary); font-size: 12px; font-weight: 600; line-height: 1.5; }
-.running-status { display: inline-flex; align-items: center; min-height: 32px; padding: 0 8px; border-radius: var(--ch-radius-pill); background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font: 600 12px/1 var(--ch-font-sans); white-space: nowrap; }
-.running-copy { min-width: 0; padding: 0; }
-.running-copy h2 {
-  max-width: 560px;
-  margin: 24px 0 0;
-  font-size: 18px;
-  line-height: 1.3;
-  color: var(--ch-text);
+.running-panel { width: 100%; }
+.turn-head { display: flex; align-items: center; gap: 12px; min-height: 34px; margin-bottom: 10px; }
+.turn-head :deep(.agent-avatar) {
+  border-color: var(--ch-ink);
+  background: var(--ch-ink);
+  box-shadow: var(--ch-shadow-bubble);
+  color: var(--ch-on-ink);
+}
+.turn-head .role { color: var(--ch-text); font: 500 14px/1 var(--ch-font-sans); letter-spacing: 0; }
+.running { display: block; padding: var(--ch-space-4); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); box-shadow: var(--ch-shadow-soft); font-family: var(--ch-font-sans); }
+.running-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: var(--ch-space-2) 0;
+  color: var(--ch-text-secondary);
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.5;
+}
+.running-head h2 {
+  min-width: 0;
+  max-width: 560px;
+  margin: 0;
+  color: var(--ch-text);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
   letter-spacing: 0;
 }
+.running-sparkle {
+  position: relative;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ch-accent);
+}
+.running-sparkle::before {
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ch-accent) 20%, transparent);
+  content: "";
+  filter: blur(6px);
+  opacity: .35;
+  animation: sparkle-glow 1.8s ease-in-out infinite;
+}
+.running-sparkle svg {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  overflow: visible;
+}
+.sparkle-main {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sparkle-main 1.6s cubic-bezier(.4, .2, .6, .8) infinite;
+  will-change: transform, opacity;
+}
+.sparkle-small {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sparkle-small 1.6s cubic-bezier(.4, .2, .6, .8) .2s infinite;
+  will-change: transform, opacity;
+}
+@keyframes sparkle-main {
+  0%, 100% { transform: scale(.76, .86); opacity: .58; }
+  50% { transform: scale(1.18, 1.06); opacity: 1; }
+}
+@keyframes sparkle-small {
+  0%, 100% { transform: scale(.3); opacity: .12; }
+  50% { transform: scale(1.18); opacity: 1; }
+}
+@keyframes sparkle-glow {
+  0%, 100% { transform: scale(.72); opacity: .18; }
+  45% { transform: scale(1.18); opacity: .42; }
+}
+.running-status {
+  display: inline-flex;
+  min-height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding: 0 var(--ch-space-3);
+  border: 0;
+  border-radius: var(--ch-radius-pill);
+  background: var(--ch-accent-soft);
+  color: var(--ch-accent-soft-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.running-copy { min-width: 0; padding: 0; }
 .running-meta {
   display: flex;
   align-items: center;
@@ -177,7 +288,24 @@ const recordLeft = computed(() => {
 
 @media (max-width: 700px) {
   .running { padding: 16px; }
+  .running-head { align-items: flex-start; }
+  .running-head h2 { flex: 1; }
+  .running-sparkle { width: 24px; height: 24px; flex-basis: 24px; }
+  .running-sparkle svg { width: 22px; height: 22px; }
   .running-meta { align-items: flex-start; flex-direction: column; }
   .record { justify-content: flex-start; text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparkle-main,
+  .sparkle-small,
+  .running-sparkle::before {
+    animation: none;
+  }
+  .sparkle-main,
+  .sparkle-small {
+    opacity: 1;
+    transform: none;
+  }
 }
 </style>

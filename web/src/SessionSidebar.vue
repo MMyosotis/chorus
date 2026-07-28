@@ -400,7 +400,7 @@ watch(
 }
 
 .session-actions button:hover:not(:disabled) {
-  background: var(--ch-surface-3);
+  background: var(--ch-muted-gradient);
   color: var(--ch-text);
 }
 

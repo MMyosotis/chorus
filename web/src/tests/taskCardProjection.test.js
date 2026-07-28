@@ -66,11 +66,17 @@ test('planTaskCards 混合任务按顺序投影', () => {
 test('planIntentCard 非就绪态返回空', () => {
   expect(planIntentCard(null)).toBeNull()
   expect(planIntentCard({ intent_status: 'capturing' })).toBeNull()
-  expect(planIntentCard({ intent_status: 'confirmed' })).toBeNull()
 })
 
 test('planIntentCard 就绪态返回确认卡', () => {
   const state = { intent_status: 'ready_to_confirm', goal: 'x' }
+  const card = planIntentCard(state)
+  expect(card).toMatchObject({ kind: 'intent-confirm', id: 'intent-confirm', role: 'assistant' })
+  expect(card.state).toBe(state)
+})
+
+test.each(['confirmed', 'dispatched'])('planIntentCard %s 状态保留只读确认卡', (intentStatus) => {
+  const state = { intent_status: intentStatus, goal: 'x' }
   const card = planIntentCard(state)
   expect(card).toMatchObject({ kind: 'intent-confirm', id: 'intent-confirm', role: 'assistant' })
   expect(card.state).toBe(state)
