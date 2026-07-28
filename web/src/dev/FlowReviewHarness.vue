@@ -19,6 +19,7 @@ const stages = [
   { id: 'finalize-review', label: '09 整合 · 校样', type: 'review', phase: 4 },
   { id: 'complete', label: '10 完成交付', type: 'complete', phase: 5 },
   { id: 'recovery', label: '异常 · 配图恢复', type: 'recovery', phase: 3 },
+  { id: 'option', label: '工具 · 选项征询', type: 'option', phase: 0 },
 ]
 
 const currentIndex = ref(0)
@@ -124,6 +125,7 @@ const stageKicker = computed(() => {
   if (current.value.type === 'intent') return 'STORY COMMISSION'
   if (current.value.type === 'complete') return 'FINAL COPY'
   if (current.value.type === 'recovery') return '视觉编辑 · RECOVERY'
+  if (current.value.type === 'option') return 'OPTION PROMPT · DEV'
   return `${roleNames[current.value.phase - 1]} · ${current.value.type === 'review' ? 'PROOF' : 'WORKING'}`
 })
 const runningCopy = [
@@ -166,6 +168,58 @@ function activeTask() {
   return base
 }
 
+const optionScenarios = [
+  {
+    headline: '场景 A · 3 选项 + 允许自定义',
+    intro: '默认形态：三个候选方向，用户也可补充自己的想法。',
+    prompt: {
+      question: '这一篇想从哪个角度切入城市咖啡馆？',
+      allow_custom: true,
+      options: [
+        { signal: '0', label: '一个人的松弛感', description: '从独处体验切入，突出安静停留与城市情绪。' },
+        { signal: '1', label: '一条街三种咖啡香', description: '以散步路线组织轻攻略，信息密度更高。' },
+        { signal: '2', label: '手冲与豆单', description: '聚焦冲煮细节与风味，偏专业向读者。' },
+      ],
+    },
+  },
+  {
+    headline: '场景 B · 4 选项 + 不可自定义',
+    intro: '四选一封闭征询：用户只能从给定方向里挑。',
+    prompt: {
+      question: '配图整体走哪种视觉调性？',
+      allow_custom: false,
+      options: [
+        { signal: '0', label: '胶片质感', description: '低饱和、颗粒感，偏怀旧。' },
+        { signal: '1', label: '清新明亮', description: '高调、自然光，偏日常。' },
+        { signal: '2', label: '暗调情绪', description: '低调、窗边侧光，偏氛围。' },
+        { signal: '3', label: '极简留白', description: '大量负空间，偏杂志感。' },
+      ],
+    },
+  },
+  {
+    headline: '场景 C · 长文案换行',
+    intro: '问题与描述都偏长，检查换行与溢出。',
+    prompt: {
+      question: '如果读者只能记住一句话，你希望这篇内容留给他的是哪种感受？是安静、是被理解、还是想立刻出发？',
+      allow_custom: true,
+      options: [
+        { signal: '0', label: '安静地被城市接住', description: '强调一个人在陌生空间里找到节奏的踏实感，适合情绪向选题。' },
+        { signal: '1', label: '被一种风味说服', description: '强调专业度与风味记忆，适合偏攻略与种草的读者。' },
+        { signal: '2', label: '想立刻出门走走', description: '强调行动召唤与场景代入，适合引流与传播向内容。' },
+      ],
+    },
+  },
+]
+
+function optionMessages() {
+  const items = []
+  for (const scenario of optionScenarios) {
+    items.push({ id: `audit-option-intro-${scenario.prompt.options.length}`, role: 'assistant', content: `**${scenario.headline}**\n\n${scenario.intro}`, thinking: { state: 'idle' }, tools: { state: 'idle', items: [] } })
+    items.push({ id: `audit-option-card-${scenario.prompt.options.length}`, kind: 'option', role: 'assistant', prompt: scenario.prompt })
+  }
+  return items
+}
+
 const messages = computed(() => {
   if (current.value.type === 'conversation') return discussion
   if (current.value.type === 'thinking') {
@@ -182,6 +236,7 @@ const messages = computed(() => {
     ]
   }
   if (current.value.type === 'intent') return [...discussion, commissionNote, { id: 'audit-intent', kind: 'intent-confirm', role: 'assistant', state: intentState.value }]
+  if (current.value.type === 'option') return optionMessages()
   const items = [
     ...discussion,
     planNote,
