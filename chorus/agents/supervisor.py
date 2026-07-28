@@ -108,6 +108,7 @@ class SupervisorLoopStrategy:
         self._session.touch(self.session_id)
         events = list(self._pending_intent_events)
         self._pending_intent_events = []
+        events.extend(event for _, dispatch in pairs for event in dispatch.events)
 
         if suspend is not None:
             return self._handle_suspend(ctx, events)

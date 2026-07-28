@@ -62,7 +62,7 @@ BAIDU_SEARCH_BASE_URL = os.environ.get(
 )
 
 TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
-    "supervisor": ("update_intent_state", "create_plan"),
+    "supervisor": ("update_intent_state", "create_plan", "present_options"),
     "idea": ("baidu_search", "list_skill", "load_skill"),
     "script": ("baidu_search", "list_skill", "load_skill"),
     "image": ("generate_image", "list_skill", "load_skill"),

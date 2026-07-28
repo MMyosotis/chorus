@@ -34,3 +34,8 @@ export function planIntentCard(state) {
   }
   return null
 }
+
+export function planOptionCard(prompt) {
+  if (!prompt) return null
+  return { kind: 'option', prompt, id: 'option:open', role: 'assistant' }
+}

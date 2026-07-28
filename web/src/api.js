@@ -80,6 +80,26 @@ export function reopenIntent(id, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/intent:reopen`, { method: 'POST' }, onEvent)
 }
 
+export function chooseOption(id, body, onEvent) {
+  return streamSessionEventSource(`${BASE}/${id}/option:choose`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, onEvent)
+}
+
+export async function fetchOpenOption(id) {
+  const res = await fetch(`${BASE}/${id}/option`)
+  if (res.status === 404) {
+    const err = new Error('session not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`open option failed: ${res.status}`)
+  const data = await res.json()
+  return data.prompt || null
+}
+
 export function streamChat(id, message, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/chat`, {
     method: 'POST',

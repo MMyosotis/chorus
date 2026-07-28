@@ -18,7 +18,7 @@ const props = defineProps({
   intentState: { type: Object, default: null },
 })
 
-defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise'])
+defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise', 'option-choose'])
 
 const container = ref(null)
 const stickToBottom = ref(false)
@@ -96,6 +96,13 @@ const displayMessages = computed(() => {
       const previous = result[result.length - 1]
       if (previous && previous.role === 'assistant' && !previous.kind) {
         result[result.length - 1] = { ...previous, intentState: message.state }
+        continue
+      }
+    }
+    if (message.kind === 'option') {
+      const previous = result[result.length - 1]
+      if (previous && previous.role === 'assistant' && !previous.kind) {
+        result[result.length - 1] = { ...previous, optionPrompt: message.prompt }
         continue
       }
     }
@@ -191,10 +198,12 @@ watch(
             :thinking="msg.thinking"
             :tools="msg.tools"
             :intent-state="msg.intentState"
+            :option-prompt="msg.optionPrompt"
             :suspended="msg.suspended"
             :active="streaming && idx === displayMessages.length - 1 && msg.role === 'assistant'"
             @intent-confirm="$emit('intent-confirm')"
             @intent-revise="$emit('intent-revise')"
+            @option-choose="$emit('option-choose', $event)"
           />
         </div>
       </TransitionGroup>

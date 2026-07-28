@@ -34,10 +34,14 @@ def test_update_rejects_unknown_fields():
         )
 
 
-@pytest.mark.parametrize("value", [-1, 101])
-def test_progress_percent_rejects_out_of_range(value):
+def test_progress_percent_rejects_negative():
     with pytest.raises(Exception):
-        IntentStateUpdate(intent_status="capturing", image_count=0, progress_percent=value)
+        IntentStateUpdate(intent_status="capturing", image_count=0, progress_percent=-1)
+
+
+def test_progress_percent_rejects_over_100():
+    with pytest.raises(Exception):
+        IntentStateUpdate(intent_status="capturing", image_count=0, progress_percent=101)
 
 
 def test_update_requires_intent_status():

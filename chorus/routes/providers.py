@@ -6,6 +6,7 @@ from fastapi import Request
 
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
+from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.trace import TraceService
@@ -25,6 +26,10 @@ def provide_trace_service(request: Request) -> TraceService:
 
 def provide_intent_state_service(request: Request) -> IntentStateService:
     return request.app.state.intent_state_service
+
+
+def provide_option_service(request: Request) -> OptionPromptService:
+    return request.app.state.option_service
 
 
 def provide_settings_service(request: Request) -> SettingsService:

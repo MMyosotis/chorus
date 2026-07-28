@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import ValidationError
 
 from chorus.domain.intent import IntentStateUpdate
@@ -70,7 +72,7 @@ class UpdateIntentStateTool(Tool):
             f"status={state.intent_status}, version={state.version}"
         ))
 
-    def resolve_external(self, session_id: str, signal: str) -> str:
+    def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
         """用户对确认卡的两类回应：同意进入 confirmed，要求调整回到澄清。"""
         if signal == "confirm":
             state = self._intent.patch_status(session_id, "confirmed")

@@ -10,10 +10,12 @@ from pydantic import BaseModel
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.events import IntentStateEvent
 from chorus.domain.message import MessageView
+from chorus.domain.option import OptionPrompt
 from chorus.domain.trace import TraceEntry
 from chorus.routes.providers import (
     provide_intent_state_service,
     provide_message_service,
+    provide_option_service,
     provide_session_service,
     provide_supervisor_service,
     provide_tool_dispatch,
@@ -22,6 +24,7 @@ from chorus.routes.providers import (
 from chorus.routes.sse import sse, sse_stream
 from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
+from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
 from chorus.tools import ToolDispatch
@@ -155,6 +158,62 @@ def resume_session(
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
     return sse_stream(_resume_with_tool(session_id, "create_plan", "finish", intent, supervisor, tools))
+
+
+class OptionChooseRequest(BaseModel):
+    signal: str
+    custom_text: Optional[str] = None
+
+
+def _resume_option(
+    session_id: str,
+    req: OptionChooseRequest,
+    supervisor: SupervisorService,
+    tools: ToolDispatch,
+) -> Iterator[str]:
+    payload = {"custom_text": req.custom_text} if req.custom_text else None
+    result_text = tools.get_tool("present_options").resolve_external(
+        session_id, req.signal, payload,
+    )
+    for event in supervisor.resume(session_id, "present_options", result_text):
+        yield sse(event)
+
+
+@router.post("/{session_id}/option:choose")
+def choose_option(
+    session_id: str,
+    req: OptionChooseRequest,
+    session: SessionService = Depends(provide_session_service),
+    option: OptionPromptService = Depends(provide_option_service),
+    supervisor: SupervisorService = Depends(provide_supervisor_service),
+    tools: ToolDispatch = Depends(provide_tool_dispatch),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    open_prompt = option.get_open(session_id)
+    if open_prompt is None:
+        raise HTTPException(status_code=409, detail="option prompt not open")
+    return sse_stream(_resume_option(session_id, req, supervisor, tools))
+
+
+@router.get("/{session_id}/option")
+def get_open_option(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    option: OptionPromptService = Depends(provide_option_service),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    prompt = option.get_open(session_id)
+    return {"prompt": _option_prompt_to_dict(prompt) if prompt else None}
+
+
+def _option_prompt_to_dict(prompt: OptionPrompt) -> dict:
+    return {
+        "question": prompt.question,
+        "options": [item.model_dump() for item in prompt.options],
+        "allow_custom": prompt.allow_custom,
+    }
 
 
 def _view_to_dict(view: MessageView) -> dict:

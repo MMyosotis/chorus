@@ -1,7 +1,7 @@
 // 任务卡投影规则单测。
 
 import { test, expect } from 'vitest'
-import { planTaskCards, planIntentCard } from '../composables/taskCardProjection.js'
+import { planTaskCards, planIntentCard, planOptionCard } from '../composables/taskCardProjection.js'
 
 test('planTaskCards 无图返回空', () => {
   expect(planTaskCards(null)).toEqual([])
@@ -80,4 +80,16 @@ test.each(['confirmed', 'dispatched'])('planIntentCard %s 状态保留只读确�
   const card = planIntentCard(state)
   expect(card).toMatchObject({ kind: 'intent-confirm', id: 'intent-confirm', role: 'assistant' })
   expect(card.state).toBe(state)
+})
+
+test('planOptionCard 无提问返回空', () => {
+  expect(planOptionCard(null)).toBeNull()
+  expect(planOptionCard(undefined)).toBeNull()
+})
+
+test('planOptionCard 有提问返回选项卡', () => {
+  const prompt = { question: '选哪个方向', options: [], allow_custom: true }
+  const card = planOptionCard(prompt)
+  expect(card).toMatchObject({ kind: 'option', id: 'option:open', role: 'assistant' })
+  expect(card.prompt).toBe(prompt)
 })

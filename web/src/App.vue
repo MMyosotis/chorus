@@ -16,11 +16,13 @@ import {
   getIntentState,
   confirmIntent,
   reopenIntent,
+  chooseOption,
+  fetchOpenOption,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
 import { mergeAssistantHistory } from './composables/messageHistory.js'
-import { planTaskCards, planIntentCard } from './composables/taskCardProjection.js'
+import { planTaskCards, planIntentCard, planOptionCard } from './composables/taskCardProjection.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import { ROLE_FULL } from './team-panel/roleMeta.js'
 
@@ -35,6 +37,7 @@ const sessions = ref([])
 const messagesBySession = reactive({})
 const streamingBySession = reactive({})
 const intentStateBySession = reactive({})
+const optionPromptBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
 const leftRailOpen = ref(false)
@@ -63,7 +66,9 @@ const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
 const activeCompleted = computed(() => (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished'))
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
+const activeOptionPrompt = computed(() => optionPromptBySession[activeId.value] || null)
 const awaitingConfirm = computed(() => activeIntentState.value?.intent_status === 'ready_to_confirm')
+const awaitingOption = computed(() => !!activeOptionPrompt.value)
 const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.title : ''
@@ -74,6 +79,7 @@ const activeSessionUpdatedAt = computed(() => {
 })
 const currentTask = computed(() => (activeGraph.value?.tasks || []).find((task) => ['running', 'awaiting_confirm', 'failed'].includes(task.status)) || null)
 const stageKicker = computed(() => {
+  if (awaitingOption.value) return '等待选择'
   if (awaitingConfirm.value) return '等待确认'
   const task = currentTask.value
   if (task) {
@@ -137,6 +143,14 @@ async function loadIntentState(id) {
   }
 }
 
+async function loadOpenOption(id) {
+  try {
+    optionPromptBySession[id] = await fetchOpenOption(id)
+  } catch {
+    optionPromptBySession[id] = null
+  }
+}
+
 let sessionSelectionToken = 0
 
 function pinLeavingPaper(el) {
@@ -164,7 +178,7 @@ async function selectSession(id) {
   if (!id || id === activeId.value) return
   const selectionToken = ++sessionSelectionToken
   leftRailOpen.value = false
-  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id)])
+  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id), loadOpenOption(id)])
   if (selectionToken !== sessionSelectionToken) return
   if (!messagesReady) {
     if (sessions.value.length > 0) await selectSession(sessions.value[0].id)
@@ -177,6 +191,7 @@ async function selectSession(id) {
   if (selectionToken !== sessionSelectionToken) return
   injectTaskCards(id)
   injectIntentCard(id)
+  injectOptionCard(id)
   await commitSessionSwitch(id, selectionToken)
 }
 
@@ -186,6 +201,7 @@ async function forceReloadMessages(id) {
     messagesBySession[id] = mergeAssistantHistory(raw)
     injectTaskCards(id)
     injectIntentCard(id)
+    injectOptionCard(id)
   } catch {
     // 轮询期间忽略
   }
@@ -231,8 +247,22 @@ function injectIntentCard(id) {
   if (card) list.push(card)
 }
 
+function injectOptionCard(id) {
+  const list = messagesBySession[id]
+  if (!list) return
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i].kind === 'option') list.splice(i, 1)
+  }
+  const card = planOptionCard(optionPromptBySession[id])
+  if (card) list.push(card)
+}
+
 watch(activeIntentState, () => {
   if (activeId.value) injectIntentCard(activeId.value)
+})
+
+watch(activeOptionPrompt, () => {
+  if (activeId.value) injectOptionCard(activeId.value)
 })
 
 taskPolling.configure({
@@ -261,6 +291,7 @@ async function onCreate() {
     sessions.value.unshift(meta)
     messagesBySession[meta.id] = []
     intentStateBySession[meta.id] = null
+    optionPromptBySession[meta.id] = null
     activeId.value = meta.id
     loadIntentState(meta.id)
   } catch (e) {
@@ -280,6 +311,7 @@ async function onDelete(id) {
   delete messagesBySession[id]
   delete streamingBySession[id]
   delete intentStateBySession[id]
+  delete optionPromptBySession[id]
   if (wasActive) {
     if (sessions.value.length > 0) {
       activeId.value = sessions.value[0].id
@@ -384,6 +416,14 @@ function createStreamHandler(sessionId) {
     }
     if (payload.type === 'intent_state') {
       intentStateBySession[sessionId] = payload.state
+      return
+    }
+    if (payload.type === 'option_prompt') {
+      optionPromptBySession[sessionId] = {
+        question: payload.question,
+        options: payload.options,
+        allow_custom: payload.allow_custom,
+      }
       return
     }
 
@@ -520,6 +560,13 @@ async function onIntentRevise() {
   await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
 }
 
+async function onOptionChoose(payload) {
+  const sessionId = activeId.value
+  if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
+  optionPromptBySession[sessionId] = null
+  await runAssistantStream(sessionId, (onEvent) => chooseOption(sessionId, payload, onEvent))
+}
+
 onMounted(async () => {
   if (uiReviewMode) return
   try {
@@ -551,7 +598,7 @@ onMounted(async () => {
       :sessions="sessions"
       :active-id="activeId"
       :streaming-map="streamingBySession"
-      :active-working="hasActiveTask || awaitingConfirm || streaming"
+      :active-working="hasActiveTask || awaitingConfirm || awaitingOption || streaming"
       :active-completed="activeCompleted"
       @select="selectSession"
       @create="onCreate"
@@ -579,6 +626,7 @@ onMounted(async () => {
               @hil-cancelled="onHilCancelled"
               @intent-confirm="onIntentConfirm"
               @intent-revise="onIntentRevise"
+              @option-choose="onOptionChoose"
             >
               <template #scroll-header>
                 <ManuscriptHeader :kicker="stageKicker" :title="activeTitle || '未命名稿件'" />
@@ -586,7 +634,7 @@ onMounted(async () => {
             </ChatWindow>
           </article>
         </Transition>
-        <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" :archived="activeCompleted" @send="onSend" />
+        <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" :awaiting-option="awaitingOption" :archived="activeCompleted" @send="onSend" />
       </div>
     </main>
     <TeamPanel

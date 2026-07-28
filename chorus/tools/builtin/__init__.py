@@ -5,6 +5,7 @@ from chorus.tools.builtin.create_plan import CreatePlanTool
 from chorus.tools.builtin.generate_image import GenerateImageTool
 from chorus.tools.builtin.list_skill import ListSkillTool
 from chorus.tools.builtin.load_skill import LoadSkillTool
+from chorus.tools.builtin.present_options import PresentOptionsTool
 from chorus.tools.builtin.update_intent_state import UpdateIntentStateTool
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "BaiduSearchTool",
     "CreatePlanTool",
     "UpdateIntentStateTool",
+    "PresentOptionsTool",
 ]

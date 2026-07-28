@@ -4,7 +4,7 @@ from __future__ import annotations
 from chorus.agents.supervisor import SupervisorLoopStrategy
 from chorus.config import TOOL_WHITELISTS
 from chorus.tools import ToolDispatch
-from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, UpdateIntentStateTool
+from chorus.tools.builtin import BaiduSearchTool, CreatePlanTool, LoadSkillTool, PresentOptionsTool, UpdateIntentStateTool
 from chorus.tools.builtin.generate_image import GenerateImageTool
 
 
@@ -31,6 +31,7 @@ def _registry() -> ToolDispatch:
         LoadSkillTool(None),
         UpdateIntentStateTool(None),
         CreatePlanTool(None, None, None),
+        PresentOptionsTool(None),
         BaiduSearchTool(None),
         GenerateImageTool(_stub_settings(), _stub_provider()),
     ], _stub_settings())

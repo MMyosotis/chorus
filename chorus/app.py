@@ -31,6 +31,7 @@ from chorus.hooks import HookRegistry, TitlePostProcessor, TraceEmitter
 from chorus.repo.connection import ConnectionFactory
 from chorus.repo.message import MessageRepository
 from chorus.repo.intent_state import IntentStateRepository
+from chorus.repo.option import OptionPromptRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.settings import SettingsRepository
 from chorus.repo.task import TaskRepository
@@ -47,6 +48,7 @@ from chorus.routes.skills import router as skills_router
 from chorus.routes.task import router as task_router
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
+from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
@@ -72,6 +74,8 @@ def create_app() -> FastAPI:
     trace_service = TraceService(trace_repo)
     message_service = MessageService(msg_repo, trace_service)
     intent_state_service = IntentStateService(intent_repo, session_service)
+    option_repo = OptionPromptRepository(conn)
+    option_service = OptionPromptService(option_repo, session_service)
 
     chat_models = ChatModelProvider(settings_service)
     # 标题生成固定用默认模型，不随用户当前设置变动
@@ -80,7 +84,7 @@ def create_app() -> FastAPI:
     aside_generator = AsideGenerator(title_entry.client, title_entry.model_id)
 
     tool_dispatcher = build_tool_dispatch(
-        settings_service, task_repo, task_content_repo, skill_loader, intent_state_service,
+        settings_service, task_repo, task_content_repo, skill_loader, intent_state_service, option_service,
     )
 
     hooks = HookRegistry()
@@ -118,12 +122,13 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Chorus",
         version="0.3.0",
-        lifespan=_build_lifespan(settings_service, scheduler),
+        lifespan=_build_lifespan(scheduler),
     )
     app.state.session_service = session_service
     app.state.message_service = message_service
     app.state.trace_service = trace_service
     app.state.intent_state_service = intent_state_service
+    app.state.option_service = option_service
     app.state.supervisor_service = supervisor_service
     app.state.task_service = task_service
     app.state.scheduler = scheduler
@@ -146,7 +151,7 @@ def create_app() -> FastAPI:
     return app
 
 
-def _build_lifespan(settings_service, scheduler):
+def _build_lifespan(scheduler):
     @asynccontextmanager
     async def _lifespan(_app: FastAPI):
         setup_logging(

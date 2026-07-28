@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from pydantic import ValidationError as PydanticValidationError
 
 from chorus.domain.intent import Intent
@@ -122,7 +124,7 @@ class CreatePlanTool(Tool):
             f"{len(pairs)} 个任务 [{roles}]，等待计划完成"
         )
 
-    def resolve_external(self, session_id: str, signal: str) -> str:
+    def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
         """pipeline 全部跑完后的收尾：复位意图状态，告知模型计划已落地。"""
         state = self._intent_state.patch_status(session_id, "empty")
         return f"计划已完成，所有创作步骤均已落地（version={state.version}）"

@@ -5,6 +5,7 @@ const props = defineProps({
   streaming: { type: Boolean, default: false },
   hasActiveTask: { type: Boolean, default: false },
   awaitingConfirm: { type: Boolean, default: false },
+  awaitingOption: { type: Boolean, default: false },
   archived: { type: Boolean, default: false },
 })
 
@@ -13,9 +14,10 @@ const emit = defineEmits(['send'])
 const inputText = ref('')
 const textarea = ref(null)
 
-const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm || props.archived)
+const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm || props.awaitingOption || props.archived)
 const placeholder = computed(() => {
   if (props.archived) return '本篇已定稿存档，请新建会话开始下一篇'
+  if (props.awaitingOption) return '请先在上方选择一个选项'
   if (props.awaitingConfirm) return '请先确认或调整上方意图卡片'
   if (props.hasActiveTask) return '执行中，暂时不能输入；确认节点或完成后恢复'
   if (props.streaming) return '助手正在回复，请稍候…'
@@ -53,7 +55,7 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="input-bar" :class="{ locked: hasActiveTask || awaitingConfirm, archived }">
+  <div class="input-bar" :class="{ locked: hasActiveTask || awaitingConfirm || awaitingOption, archived }">
     <textarea
       ref="textarea"
       v-model="inputText"

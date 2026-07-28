@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import IntentConfirmCard from './IntentConfirmCard.vue'
+import OptionCard from './OptionCard.vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
 
 const props = defineProps({
@@ -18,10 +19,11 @@ const props = defineProps({
     default: () => ({ state: 'idle', items: [] }),
   },
   intentState: { type: Object, default: null },
+  optionPrompt: { type: Object, default: null },
   suspended: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['intent-confirm', 'intent-revise'])
+const emit = defineEmits(['intent-confirm', 'intent-revise', 'option-choose'])
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -211,6 +213,13 @@ function closePreview() {
       @revise="emit('intent-revise')"
     />
 
+    <OptionCard
+      v-if="role === 'assistant' && optionPrompt"
+      class="standalone-option"
+      :prompt="optionPrompt"
+      @choose="emit('option-choose', $event)"
+    />
+
     <div v-if="content && activityState === 'tools'" class="tool-running-line" aria-hidden="true">
       <span class="spark" aria-hidden="true">
         <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z"/></svg>
@@ -336,6 +345,10 @@ function closePreview() {
 }
 
 .standalone-intent {
+  margin-top: 16px;
+}
+
+.standalone-option {
   margin-top: 16px;
 }
 

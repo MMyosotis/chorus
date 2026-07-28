@@ -92,6 +92,13 @@ class IntentStateEvent(_EventBase):
     state: dict
 
 
+class OptionPromptEvent(_EventBase):
+    type: Literal["option_prompt"] = "option_prompt"
+    question: str
+    options: list[dict]
+    allow_custom: bool
+
+
 SseEvent = Annotated[
     Union[
         MessageStartEvent,
@@ -107,6 +114,7 @@ SseEvent = Annotated[
         BusyEvent,
         ArchivedEvent,
         IntentStateEvent,
+        OptionPromptEvent,
         ErrorEvent,
     ],
     Field(discriminator="type"),

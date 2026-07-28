@@ -68,3 +68,15 @@ def test_progress_percent_round_trips():
     ))
 
     assert repo.get("s1").progress_percent == 42
+
+
+def main():
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            fn()
+            print(f"[{name}] 通过")
+    print("\n全部用例通过")
+
+
+if __name__ == "__main__":
+    main()
