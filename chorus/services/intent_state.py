@@ -16,7 +16,8 @@ class IntentStateService:
 
     def get(self, session_id: str) -> IntentState:
         state = self._repo.get(session_id)
-        return state if state is not None else IntentState(session_id=session_id)
+        # 配图数量无默认值,新会话初始空状态用 0 占位表示尚未向用户确认。
+        return state if state is not None else IntentState(session_id=session_id, image_count=0)
 
     def update_from_tool(self, session_id: str, update: IntentStateUpdate) -> IntentState:
         current = self.get(session_id)

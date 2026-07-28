@@ -153,29 +153,29 @@ def test_validate_steps_ok():
         StepSpec(agent_type="image", deps=[1]),
         StepSpec(agent_type="finalize", deps=[0, 1, 2]),
     ]
-    TaskPlan(session_id="s", intent=Intent(topic="t"), steps=steps)  # 构造即校验，不抛
+    TaskPlan(session_id="s", intent=Intent(topic="t", image_count=3), steps=steps)  # 构造即校验，不抛
 
 
 def test_validate_steps_rejects():
     # 漏 finalize
     with pytest.raises(ValidationError):
-        TaskPlan(session_id="s", intent=Intent(topic="t"),
+        TaskPlan(session_id="s", intent=Intent(topic="t", image_count=3),
                  steps=[StepSpec("idea", [])])
     # 杜撰角色
     with pytest.raises(ValidationError):
-        TaskPlan(session_id="s", intent=Intent(topic="t"),
+        TaskPlan(session_id="s", intent=Intent(topic="t", image_count=3),
                  steps=[StepSpec("novideo", []), StepSpec("finalize", [0])])
     # 前向依赖
     with pytest.raises(ValidationError):
-        TaskPlan(session_id="s", intent=Intent(topic="t"),
+        TaskPlan(session_id="s", intent=Intent(topic="t", image_count=3),
                  steps=[StepSpec("idea", [1]), StepSpec("finalize", [0])])
     # 自指
     with pytest.raises(ValidationError):
-        TaskPlan(session_id="s", intent=Intent(topic="t"),
+        TaskPlan(session_id="s", intent=Intent(topic="t", image_count=3),
                  steps=[StepSpec("idea", [0]), StepSpec("finalize", [0])])
     # 非首步无依赖
     with pytest.raises(ValidationError):
-        TaskPlan(session_id="s", intent=Intent(topic="t"), steps=[
+        TaskPlan(session_id="s", intent=Intent(topic="t", image_count=3), steps=[
             StepSpec("idea", []),
             StepSpec("script", []),
             StepSpec("finalize", [1]),

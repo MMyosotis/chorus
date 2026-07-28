@@ -27,7 +27,7 @@ class Intent(BaseModel):
     platform: str = Field("", description="目标平台展示名，如 网页博客")
     format: str = Field("", description="体裁，如 图文笔记/长文/短帖")
     style: str = Field("", description="风格倾向，如轻松/专业/种草")
-    image_count: int = Field(3, description="配图数量，默认 3")
+    image_count: int = Field(description="配图数量")
     extra: dict[str, Any] = Field(default_factory=dict, description="其它要求/约束/受众等零散槽位（key 用中文短词，value 自然语言）")
 
     @classmethod

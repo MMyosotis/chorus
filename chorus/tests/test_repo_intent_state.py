@@ -63,6 +63,7 @@ def test_progress_percent_round_trips():
         session_id="s1",
         intent_status="capturing",
         topic="咖啡馆探店",
+        image_count=0,
         progress_percent=42,
     ))
 

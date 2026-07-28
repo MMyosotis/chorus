@@ -14,11 +14,11 @@ from chorus.domain.intent import (
 
 
 def test_intent_state_defaults():
-    state = IntentState(session_id="s1")
+    state = IntentState(session_id="s1", image_count=0)
     assert state.intent_status == "empty"
     assert state.topic == ""
     assert state.style == ""
-    assert state.image_count == 3
+    assert state.image_count == 0
     assert state.extra == {}
     assert state.progress_percent == 0
     assert state.version == 0
@@ -37,13 +37,13 @@ def test_update_rejects_unknown_fields():
 @pytest.mark.parametrize("value", [-1, 101])
 def test_progress_percent_rejects_out_of_range(value):
     with pytest.raises(Exception):
-        IntentStateUpdate(intent_status="capturing", progress_percent=value)
+        IntentStateUpdate(intent_status="capturing", image_count=0, progress_percent=value)
 
 
 def test_update_requires_intent_status():
     """intent_status 无默认，必填。"""
     with pytest.raises(Exception):
-        IntentStateUpdate(topic="x")
+        IntentStateUpdate(topic="x", image_count=0)
 
 
 def test_tool_schema_properties_derives_clean():

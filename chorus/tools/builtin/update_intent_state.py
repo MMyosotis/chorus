@@ -29,7 +29,7 @@ class UpdateIntentStateTool(Tool):
                     "empty=刚打招呼无创作意图；"
                     "capturing=用户已提创作需求，正在识别槽位（创作必须从此态开始，不要停 empty）；"
                     "needs_clarification=信息不足需追问；"
-                    "ready_to_confirm=信息齐全，等用户拍板；"
+                    "ready_to_confirm=五个必填字段齐全且 extra 至少两条补充，等用户拍板；"
                     "confirmed/dispatched 由系统翻转，模型不要主动填"
                 ),
             },
