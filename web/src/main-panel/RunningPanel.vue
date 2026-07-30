@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
 import { ROLE_FULL } from '../team-panel/roleMeta.js'
 
@@ -19,28 +19,7 @@ const aside = computed(() => prog.value.aside || '正在创作')
 
 const activityKind = computed(() => prog.value.activity_kind || '')
 const activityDetail = computed(() => prog.value.activity_detail || '')
-const startedAt = computed(() => prog.value.activity_started_at || 0)
 const activityPrefix = computed(() => prog.value.activity_line || '')
-
-// 思考态秒数:本地每秒滴答,用后端起始时间算经过秒
-const now = ref(Date.now())
-let timer = null
-watch(
-  activityKind,
-  (kind) => {
-    if (timer) { clearInterval(timer); timer = null }
-    if (kind === 'thinking' && startedAt.value) {
-      timer = setInterval(() => { now.value = Date.now() }, 1000)
-    }
-  },
-  { immediate: true },
-)
-onUnmounted(() => { if (timer) clearInterval(timer) })
-
-const elapsedSec = computed(() => {
-  if (activityKind.value !== 'thinking' || !startedAt.value) return null
-  return Math.max(0, Math.floor(now.value / 1000 - startedAt.value))
-})
 
 function truncate(text, n) {
   const s = String(text || '').trim().replace(/\n/g, ' ')
@@ -48,9 +27,6 @@ function truncate(text, n) {
 }
 
 const activitySuffix = computed(() => {
-  if (activityKind.value === 'thinking') {
-    return elapsedSec.value != null ? ` · ${elapsedSec.value}″` : ''
-  }
   if (activityKind.value === 'drawing' || activityKind.value === 'searching') {
     const detail = truncate(activityDetail.value, 20)
     return detail ? ` · ${detail}` : ''

@@ -49,13 +49,8 @@ class TaskProgressRepository(BaseRepository):
         self._upsert(db, task_id, last_signal=signal)
 
     @write
-    def set_activity(
-        self, db, task_id: str, kind: str, detail: str = "", started_at: float = 0.0
-    ) -> None:
-        self._upsert(
-            db, task_id, activity_kind=kind,
-            activity_detail=detail, activity_started_at=started_at,
-        )
+    def set_activity(self, db, task_id: str, kind: str, detail: str = "") -> None:
+        self._upsert(db, task_id, activity_kind=kind, activity_detail=detail)
 
     @read
     def load(self, db, task_id: str) -> Optional[TaskProgress]:

@@ -172,7 +172,7 @@ function activeTask() {
   if (!base) return null
   if (current.value.type === 'run') {
     const [aside, activity, chars, units, label] = runningCopy[phase - 1]
-    return { ...base, status: 'running', progress: { aside, activity_kind: phase === 3 ? 'drawing' : 'thinking', activity_line: activity, activity_started_at: Date.now() / 1000 - 8, composing_chars: chars, composing_units: units, composing_label: label } }
+    return { ...base, status: 'running', progress: { aside, activity_kind: phase === 3 ? 'drawing' : 'thinking', activity_line: activity, composing_chars: chars, composing_units: units, composing_label: label } }
   }
   if (current.value.type === 'review') return { ...base, status: 'awaiting_confirm' }
   return base

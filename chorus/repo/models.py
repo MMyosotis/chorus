@@ -125,7 +125,6 @@ class TaskProgressRecord(Base):
     aside: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     activity_kind: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     activity_detail: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
-    activity_started_at: Mapped[float] = mapped_column(Float, nullable=False, server_default="0")
 
 
 class SettingsRecord(Base):

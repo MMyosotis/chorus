@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
-from time import perf_counter, time as wall_clock
+from time import perf_counter
 from typing import Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
@@ -77,7 +77,7 @@ class ProgressSink:
         self._chars += len(content)
         self._units.feed(content)
         if was_empty:
-            self._repo.set_activity(self._task_id, "composing", "", wall_clock())
+            self._repo.set_activity(self._task_id, "composing")
         now = perf_counter()
         if self._chars - self._last_flush_chars < 16 and now - self._last_flush_at < 0.5:
             return
@@ -115,7 +115,7 @@ class SubagentLoopStrategy:
         if latest is None or latest.status != TaskStatus.RUNNING:
             _logger.info("cooperative cancel, early exit", extra={"task_id": self.task.id})
             return False
-        self._progress_repo.set_activity(self.task.id, "thinking", "", wall_clock())
+        self._progress_repo.set_activity(self.task.id, "thinking")
         return True
 
     def message_start(self, ctx):
@@ -138,7 +138,7 @@ class SubagentLoopStrategy:
     def before_dispatch(self, call):
         kind, detail = self._tool_dispatch.activity(call.name, call.arguments)
         if kind:
-            self._progress_repo.set_activity(self.task.id, kind, detail, wall_clock())
+            self._progress_repo.set_activity(self.task.id, kind, detail)
 
     def after_dispatch(self, call, dispatch):
         self._produced_units += dispatch.units_produced

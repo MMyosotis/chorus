@@ -70,23 +70,21 @@ def test_set_aside():
 def test_set_activity():
     repo, engine = _repo()
     tid = _seed_task(engine)
-    repo.set_activity(tid, "drawing", "温暖午后窗边的书桌", 1_700_000_000.0)
+    repo.set_activity(tid, "drawing", "温暖午后窗边的书桌")
     repo.set_composing(tid, 30, 1)
     prog = repo.load(tid)
     assert prog.activity_kind == "drawing"
     assert prog.activity_detail == "温暖午后窗边的书桌"
-    assert prog.activity_started_at == 1_700_000_000.0
     assert prog.composing_chars == 30
 
 
 def test_set_activity_overwrites():
     repo, engine = _repo()
     tid = _seed_task(engine)
-    repo.set_activity(tid, "thinking", "", 1.0)
-    repo.set_activity(tid, "composing", "", 2.0)
+    repo.set_activity(tid, "thinking")
+    repo.set_activity(tid, "composing")
     prog = repo.load(tid)
     assert prog.activity_kind == "composing"
-    assert prog.activity_started_at == 2.0
 
 
 def test_load_missing_returns_none():

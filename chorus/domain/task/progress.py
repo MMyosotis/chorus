@@ -20,7 +20,6 @@ class TaskProgress:
     aside: str = ""
     activity_kind: str = ""
     activity_detail: str = ""
-    activity_started_at: float = 0.0
 
 
 class UnitCounter:
