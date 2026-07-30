@@ -2,7 +2,9 @@
 纯数据形状，按角色多态，与表一一对应。"""
 from __future__ import annotations
 
-from typing import Literal, Optional, Union
+import dataclasses
+from functools import singledispatch
+from typing import Any, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -31,11 +33,16 @@ class IdeaArtifacts:
     candidates: list[IdeaCandidate]
     selected: Optional[int] = None
 
+    def selected_candidate(self) -> Optional[IdeaCandidate]:
+        """生效选中项：selected 有效则取它，否则回退首个候选。"""
+        if self.selected is not None and 0 <= self.selected < len(self.candidates):
+            return self.candidates[self.selected]
+        return self.candidates[0] if self.candidates else None
+
     @property
     def display_title(self) -> Optional[str]:
-        if self.selected is not None and 0 <= self.selected < len(self.candidates):
-            return self.candidates[self.selected].title
-        return self.candidates[0].title if self.candidates else None
+        cand = self.selected_candidate()
+        return cand.title if cand else None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -114,3 +121,16 @@ class PostCard:
     @property
     def display_title(self) -> Optional[str]:
         return self.title
+
+
+@singledispatch
+def downstream_view(artifacts: Any) -> dict:
+    """产物转下游注入视图，默认全量。"""
+    return dataclasses.asdict(artifacts)
+
+
+@downstream_view.register
+def _idea_view(artifacts: IdeaArtifacts) -> dict:
+    """选题裁剪到生效选中候选。"""
+    cand = artifacts.selected_candidate()
+    return {"candidates": [dataclasses.asdict(cand)]} if cand else {}

@@ -20,6 +20,7 @@ from chorus.domain.task import (
     AbandonError,
     TaskStatus,
     ValidationError,
+    downstream_view,
 )
 from chorus.domain.task.aside import AsideGenerator
 from chorus.domain.task.progress import UnitCounter
@@ -272,7 +273,7 @@ class SubAgentService:
         deps_outputs: dict = {}
         for dep_id in task.dependencies:
             dep_art = self._artifacts_repo.load(dep_id)
-            deps_outputs[dep_id] = dataclasses.asdict(dep_art.artifacts)
+            deps_outputs[dep_id] = downstream_view(dep_art.artifacts)
 
         return content.render_invoke(
             deps_outputs,

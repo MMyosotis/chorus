@@ -28,6 +28,7 @@ from chorus.domain.task.artifacts import (
     ScriptArtifacts,
     ScriptBlock,
     TaskArtifacts,
+    downstream_view,
 )
 from chorus.domain.task.progress import (
     TaskProgress,
@@ -84,4 +85,5 @@ __all__ = [
     "build_task_graph",
     "dump_progress",
     "dump_task_graph",
+    "downstream_view",
 ]
