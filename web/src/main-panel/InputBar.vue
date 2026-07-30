@@ -23,8 +23,9 @@ const hasHil = computed(() => !!(props.intentConfirmation || props.optionPrompt)
 const displayedOptionPrompt = ref(null)
 const displayedIntentConfirmation = ref(null)
 let hilReleaseTimer = null
+const isClosingHil = ref(false)
 const hasHilStage = computed(() =>
-  hasHil.value || !!displayedOptionPrompt.value || !!displayedIntentConfirmation.value,
+  hasHil.value || isClosingHil.value,
 )
 
 watch(
@@ -35,21 +36,29 @@ watch(
       hilReleaseTimer = null
     }
     if (optionPrompt) {
+      isClosingHil.value = false
       displayedOptionPrompt.value = optionPrompt
       displayedIntentConfirmation.value = null
       return
     }
     if (intentConfirmation) {
+      isClosingHil.value = false
       displayedIntentConfirmation.value = intentConfirmation
       displayedOptionPrompt.value = null
       return
     }
-    // 收起动画结束后再卸载卡片，避免确认后内容瞬间消失。
+    if (!displayedOptionPrompt.value && !displayedIntentConfirmation.value) {
+      isClosingHil.value = false
+      return
+    }
+    // 收起阶段只执行确认卡的退出动画，避免与输入区的进入动画重叠。
+    isClosingHil.value = true
     hilReleaseTimer = setTimeout(() => {
       displayedOptionPrompt.value = null
       displayedIntentConfirmation.value = null
+      isClosingHil.value = false
       hilReleaseTimer = null
-    }, 360)
+    }, 260)
   },
   { immediate: true },
 )
@@ -93,9 +102,9 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage }">
-    <div class="input-stage-shell" :class="{ 'has-hil': hasHil }">
-    <div class="input-stage" :class="{ 'has-hil': hasHil }">
+  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil }">
+    <div class="input-stage-shell" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
+    <div class="input-stage" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
       <div class="stage-slot input-slot" :aria-hidden="hasHil">
         <div class="input-bar" :class="{ 'is-disabled': disabled, archived }">
           <div class="input-editor">
@@ -193,7 +202,12 @@ defineExpose({ focus })
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
   box-shadow: var(--ch-shadow-soft);
-  transition: border-color 180ms ease;
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.input-zone.is-closing-hil {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .input-bar {
@@ -248,6 +262,10 @@ defineExpose({ focus })
   grid-template-rows: 0fr 1fr;
 }
 
+.input-stage.is-closing-hil {
+  grid-template-rows: 0fr 0fr;
+}
+
 .stage-slot {
   min-height: 0;
   overflow: hidden;
@@ -262,6 +280,11 @@ defineExpose({ focus })
   border-radius: var(--ch-radius-card);
   opacity: 1;
   transform: translateY(0);
+}
+
+.input-stage.is-closing-hil .hil-slot {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 
 .input-hil-card {

@@ -17,18 +17,18 @@ const clean = (value, fallback = '待补充') => {
 
 const title = computed(() => clean(props.state?.topic, '请确认这次创作方向'))
 const meta = computed(() => [
-  { label: '发布平台', value: clean(props.state?.platform) },
-  { label: '内容体裁', value: clean(props.state?.format) },
-  { label: '表达风格', value: clean(props.state?.style, '风格自由发挥') },
+  { label: '发布平台', value: clean(props.state?.platform), icon: 'platform' },
+  { label: '内容体裁', value: clean(props.state?.format), icon: 'format' },
+  { label: '表达风格', value: clean(props.state?.style, '风格自由发挥'), icon: 'style' },
   {
     label: '配图规划',
     value: props.state?.image_count != null ? `${props.state.image_count} 张` : '待确定',
+    icon: 'image',
   },
 ])
 const notes = computed(() =>
   Object.entries(props.state?.extra || {})
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
-    .slice(0, 4)
     .map(([label, value]) => ({
       label,
       value: Array.isArray(value) ? value.join('、') : String(value),
@@ -64,11 +64,19 @@ defineExpose({
         <span class="section-title">主题方向</span>
       </div>
       <h2>{{ title }}</h2>
-      <div class="meta" aria-label="创作规格">
-        <div v-for="item in meta" :key="item.label" class="meta-item">
-          <span>{{ item.label }}</span>
+    </div>
+    <div class="meta" aria-label="创作规格">
+      <div v-for="item in meta" :key="item.label" class="meta-item">
+        <span class="meta-icon" aria-hidden="true">
+          <svg v-if="item.icon === 'platform'" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4z" /><path d="M8 20h8M12 16v4" /></svg>
+          <svg v-else-if="item.icon === 'format'" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></svg>
+          <svg v-else-if="item.icon === 'style'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5S4 16 4 9.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5c0 6.5-8 11-8 11Z" /></svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8" cy="9" r="1.5" /><path d="m21 16-5-5L5 20" /></svg>
+        </span>
+        <span class="meta-copy">
+          <span class="meta-label">{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
-        </div>
+        </span>
       </div>
     </div>
 
@@ -77,8 +85,9 @@ defineExpose({
         <span class="section-title">补充要求</span>
         <span class="section-meta">{{ notes.length }} 项</span>
       </header>
-      <dl>
-        <div v-for="note in notes" :key="note.label">
+      <dl class="focus-list">
+        <div v-for="(note, index) in notes" :key="note.label" class="focus-item">
+          <span class="focus-marker" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
           <dt>{{ note.label }}</dt>
           <dd>{{ note.value }}</dd>
         </div>
@@ -115,7 +124,7 @@ defineExpose({
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .head-copy {
@@ -144,8 +153,10 @@ defineExpose({
 
 .brief {
   margin: 0;
-  padding: 0;
-  border: 0;
+  padding: var(--ch-space-4);
+  border: 1px solid var(--ch-accent-border);
+  border-radius: var(--ch-radius-list);
+  background: color-mix(in srgb, var(--ch-accent) 5%, var(--ch-surface));
 }
 
 .section-heading {
@@ -154,19 +165,10 @@ defineExpose({
   gap: var(--ch-space-2);
 }
 
-.section-heading::before {
-  width: 4px;
-  height: 16px;
-  flex: 0 0 4px;
-  border-radius: var(--ch-radius-pill);
-  background: var(--ch-accent);
-  content: "";
-}
-
 .brief h2 {
   max-width: 760px;
-  margin: var(--ch-space-3) 0 var(--ch-space-4);
-  font-size: var(--ch-text-lg);
+  margin: var(--ch-space-2) 0 0;
+  font-size: var(--ch-text-xl);
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -.01em;
@@ -175,45 +177,63 @@ defineExpose({
 .meta {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  overflow: hidden;
-  border-radius: var(--ch-radius-list);
-  background: var(--ch-surface-2);
+  gap: var(--ch-space-3);
+  margin-top: var(--ch-space-3);
 }
 
 .meta-item {
-  position: relative;
   display: flex;
   min-width: 0;
-  min-height: 104px;
-  flex-direction: column;
-  justify-content: center;
-  padding: var(--ch-space-2) var(--ch-space-3);
+  min-height: 96px;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-surface);
 }
 
-.meta-item + .meta-item {
-  border-left: 0;
+.meta-copy,
+.meta-item strong {
+  min-width: 0;
 }
 
-.meta-item + .meta-item::before {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 1px;
-  height: 36px;
-  transform: translateY(-50%);
-  background: var(--ch-border);
-  content: "";
+.meta-copy {
+  overflow: hidden;
 }
 
-.meta-item span,
+.meta-label,
 .meta-item strong {
   display: block;
 }
 
-.meta-item span {
+.meta-label {
   color: var(--ch-text-muted);
   font-size: var(--ch-text-xs);
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  flex: 0 0 32px;
+  place-items: center;
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-accent-soft);
+}
+
+.meta-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--ch-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .meta-item strong {
@@ -222,25 +242,34 @@ defineExpose({
   font-size: var(--ch-text-sm);
   font-weight: 600;
   line-height: 1.5;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .focus {
-  margin-top: var(--ch-space-3);
-  overflow: hidden;
-  border-bottom: 1px solid var(--ch-border);
+  margin-top: var(--ch-space-4);
+  padding: var(--ch-space-3) 0 0;
 }
 
 .focus-head {
-  min-height: 48px;
-  border-bottom: 1px solid var(--ch-border);
+  min-height: auto;
+  margin-bottom: var(--ch-space-3);
 }
 
 .section-title {
+  min-width: 0;
   color: var(--ch-text);
   font-size: var(--ch-text-sm);
   font-weight: 600;
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief .section-title {
+  color: var(--ch-accent);
 }
 
 .section-meta {
@@ -250,42 +279,60 @@ defineExpose({
   line-height: 1.5;
 }
 
-.focus dl {
-  margin: 0;
-  padding: 0 var(--ch-space-2);
-}
-
-.focus dl > div {
+.focus-list {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 16px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--ch-border);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--ch-space-2);
+  margin: 0;
+  padding: 0;
 }
 
-.focus dl > div:last-child {
-  border-bottom: 0;
+.focus-item {
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-surface);
+}
+
+.focus-marker {
+  flex: 0 0 24px;
+  color: var(--ch-accent);
+  font-family: var(--ch-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .focus dt {
-  color: var(--ch-text-muted);
+  color: var(--ch-text-secondary);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.5;
+  white-space: nowrap;
 }
 
 .focus dd {
+  flex: 1 1 auto;
+  min-width: 0;
   margin: 0;
   color: var(--ch-text-secondary);
   font-size: 14px;
   line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin: var(--ch-space-4) 0 0;
+  margin: 16px 0 0;
   background: var(--ch-surface);
 }
 
@@ -339,7 +386,7 @@ defineExpose({
 
 /* 输入区确认步骤采用紧凑规格，避免遮住过多对话。 */
 .intent-confirm.compact {
-  padding: 20px;
+  padding: 24px;
   border-color: color-mix(in srgb, var(--ch-border-strong) 72%, white);
   box-shadow: var(--ch-shadow-soft);
 }
@@ -355,25 +402,31 @@ defineExpose({
 }
 
 .compact .brief h2 {
-  margin: 8px 0 12px;
+  margin: 8px 0 0;
   font-size: var(--ch-text-md);
 }
 
 .compact .meta-item {
   min-height: 76px;
-  padding: 12px;
+  padding: 16px;
 }
 
 .compact .focus {
-  margin-top: 8px;
+  margin-top: 16px;
+  padding: 16px 0 0;
 }
 
 .compact .focus-head {
-  min-height: 40px;
+  margin-bottom: 8px;
 }
 
-.compact .focus dl > div {
-  padding: 10px 0;
+.compact .focus-item {
+  padding: 0 16px;
+}
+
+.compact .focus dt,
+.compact .focus dd {
+  font-size: var(--ch-text-xs);
 }
 
 .compact .actions {
@@ -406,21 +459,8 @@ defineExpose({
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .meta-item + .meta-item::before {
-    display: none;
-  }
-
-  .meta-item:nth-child(even)::before {
-    display: block;
-  }
-
-  .meta-item:nth-child(n + 3) {
-    border-top: 1px solid var(--ch-border);
-  }
-
-  .focus dl > div {
-    grid-template-columns: 64px minmax(0, 1fr);
-    gap: 8px;
+  .focus-list {
+    grid-template-columns: 1fr;
   }
 
   .actions {
@@ -437,12 +477,5 @@ defineExpose({
     grid-template-columns: 1fr;
   }
 
-  .meta-item:nth-child(even)::before {
-    display: none;
-  }
-
-  .meta-item:nth-child(n + 2) {
-    border-top: 1px solid var(--ch-border);
-  }
 }
 </style>

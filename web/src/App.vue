@@ -23,7 +23,7 @@ import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
 import { mergeAssistantHistory } from './composables/messageHistory.js'
 import { planTaskCards, planIntentCards, planOptionCards } from './composables/taskCardProjection.js'
-import { insertAnchoredCard, replaceAnchoredCards } from './composables/anchoredCards.js'
+import { replaceAnchoredCards } from './composables/anchoredCards.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import { ROLE_FULL } from './team-panel/roleMeta.js'
 
@@ -247,29 +247,26 @@ async function forceReloadMessages(id) {
   }
 }
 
-const REMOVABLE_KINDS = new Set(['hil', 'postcard', 'recovery', 'confirmed'])
-const RUNNING_KIND = 'running'
+const TASK_CARD_KINDS = new Set(['hil', 'postcard', 'recovery', 'confirmed', 'running'])
 
 function injectTaskCards(id) {
   const list = messagesBySession[id]
   if (!list) return
   const plan = planTaskCards(taskPolling.getGraph(id))
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (REMOVABLE_KINDS.has(list[i].kind)) list.splice(i, 1)
-  }
-  // 运行卡原址刷新进度，避免轮询每 tick 重建闪烁
-  const runningCard = plan.find((c) => c.kind === RUNNING_KIND) || null
-  const runningIdx = list.findIndex((m) => m.kind === RUNNING_KIND)
-  if (runningCard) {
-    if (runningIdx >= 0) list[runningIdx].task = runningCard.task
-    else insertAnchoredCard(list, runningCard)
-  } else if (runningIdx >= 0) {
-    list.splice(runningIdx, 1)
-  }
-  for (const card of plan) {
-    if (card.kind === RUNNING_KIND) continue
-    insertAnchoredCard(list, card)
-  }
+  // 运行卡复用旧实例只更新数据；单独插会抢到前序卡片之前。
+  const existing = new Map(
+    list.filter((message) => TASK_CARD_KINDS.has(message.kind)).map((message) => [message.id, message]),
+  )
+  replaceAnchoredCards(
+    list,
+    (message) => TASK_CARD_KINDS.has(message.kind),
+    plan.map((card) => {
+      const prior = existing.get(card.id)
+      if (!prior || card.kind !== 'running') return card
+      prior.task = card.task
+      return prior
+    }),
+  )
 }
 
 function injectIntentCard(id) {

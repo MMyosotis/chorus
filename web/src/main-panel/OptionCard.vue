@@ -82,10 +82,10 @@ defineExpose({ confirmChoice, reconsider })
           <strong>{{ opt.label }}</strong>
           <p>{{ opt.description }}</p>
         </span>
-        <span class="option-selection" :class="{ visible: selectedValue === opt.signal }" aria-hidden="true">
-          <span>已选择</span>
-          <span class="option-check">
-            <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
+        <span class="option-selection" aria-hidden="true">
+          <span v-if="selectedValue === opt.signal" class="selection-label">已选择</span>
+          <span class="option-check" :class="{ selected: selectedValue === opt.signal }">
+            <svg v-if="selectedValue === opt.signal" viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
           </span>
         </span>
       </button>
@@ -135,7 +135,7 @@ defineExpose({ confirmChoice, reconsider })
           <!-- 预留与普通选项一致的选择位，保证两种状态的文字列精确对齐。 -->
           <span class="option-selection custom-selection-spacer" aria-hidden="true">
             <span>已选择</span>
-            <span class="option-check"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg></span>
+            <span class="option-check selected"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg></span>
           </span>
         </div>
       </div>
@@ -176,7 +176,7 @@ defineExpose({ confirmChoice, reconsider })
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
 .head-copy {
@@ -242,6 +242,11 @@ defineExpose({ confirmChoice, reconsider })
   background: var(--ch-accent-soft);
 }
 
+.custom-option:not(.selected) {
+  border: 1.5px dashed var(--ch-border);
+  background: var(--ch-surface);
+}
+
 .option-item:focus-visible {
   outline: 2px solid var(--ch-accent);
   outline-offset: 0;
@@ -284,30 +289,18 @@ defineExpose({ confirmChoice, reconsider })
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  visibility: hidden;
-  opacity: 0;
-  transform: scale(.9);
   color: var(--ch-accent-soft-text);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
-  transition: opacity var(--ch-duration-fast) var(--ch-ease-out),
-    transform var(--ch-duration-fast) var(--ch-ease-out),
-    visibility 0s linear var(--ch-duration-fast);
-}
-
-.option-selection.visible {
-  visibility: visible;
-  opacity: 1;
-  transform: scale(1);
-  transition-delay: 0s;
 }
 
 .custom-option-editor {
   width: 100%;
   min-height: 40px;
   display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
@@ -327,9 +320,14 @@ defineExpose({ confirmChoice, reconsider })
   height: 20px;
   display: grid;
   place-items: center;
+  border: 1.5px solid var(--ch-text-faint);
   border-radius: 50%;
-  background: var(--ch-accent);
   color: var(--ch-on-accent);
+}
+
+.option-check.selected {
+  border-color: var(--ch-accent);
+  background: var(--ch-accent);
 }
 
 .option-check svg,
@@ -443,7 +441,7 @@ defineExpose({ confirmChoice, reconsider })
 
 /* 输入区内的 HIL 使用紧凑选择器：保留纵向选择，但不抢占对话阅读空间。 */
 .option-card.compact {
-  padding: 20px;
+  padding: 24px;
   border-color: color-mix(in srgb, var(--ch-border-strong) 72%, white);
   box-shadow: var(--ch-shadow-soft);
 }

@@ -13,6 +13,17 @@ test('虚拟卡按 message id 插入对应助手消息之后', () => {
   expect(list.map((item) => item.id)).toEqual(['m1', 'option:p1', 'm2', 'option:p2'])
 })
 
+test('同一锚点的卡片按计划顺序向后追加', () => {
+  const list = [{ id: 'm1', role: 'assistant', content: '建图' }]
+
+  replaceAnchoredCards(list, (item) => ['confirmed', 'running'].includes(item.kind), [
+    { id: 'confirmed:idea', kind: 'confirmed', anchorMessageId: 'm1' },
+    { id: 'running:script', kind: 'running', anchorMessageId: 'm1' },
+  ])
+
+  expect(list.map((item) => item.id)).toEqual(['m1', 'confirmed:idea', 'running:script'])
+})
+
 test('找不到锚点的卡片不插入到错误位置', () => {
   const list = [{ id: 'm1', role: 'assistant', content: '第一轮' }]
   replaceAnchoredCards(list, (item) => item.kind === 'option', [
