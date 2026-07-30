@@ -58,7 +58,7 @@ watch(
       displayedIntentConfirmation.value = null
       isClosingHil.value = false
       hilReleaseTimer = null
-    }, 260)
+    }, 360)
   },
   { immediate: true },
 )
