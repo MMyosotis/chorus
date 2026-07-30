@@ -29,6 +29,7 @@ class TaskPlan:
     session_id: str
     intent: Intent
     steps: list[StepSpec]
+    message_id: Optional[str] = None
     pipeline_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: float = field(default_factory=time.time)
 
@@ -82,7 +83,7 @@ class TaskPlan:
         step = self.steps[index]
         task_id = ids[index]
         task = Task(
-            id=task_id, session_id=self.session_id, pipeline_id=self.pipeline_id,
+            id=task_id, session_id=self.session_id, message_id=self.message_id, pipeline_id=self.pipeline_id,
             agent_type=step.agent_type, status=TaskStatus.PENDING,
             dependencies=[ids[dep] for dep in step.deps],
             created_at=self.created_at, updated_at=self.created_at,

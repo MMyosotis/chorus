@@ -65,6 +65,7 @@ class ToolContext:
     """传给工具运行的运行时上下文。"""
 
     session_id: Optional[str] = None
+    message_id: Optional[str] = None
 
 
 class Tool(ABC):

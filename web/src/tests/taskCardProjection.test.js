@@ -1,7 +1,7 @@
 // 任务卡投影规则单测。
 
 import { test, expect } from 'vitest'
-import { planTaskCards, planIntentCard, planOptionCard } from '../composables/taskCardProjection.js'
+import { planTaskCards, planIntentCard, planIntentCards, planOptionCard, planOptionCards } from '../composables/taskCardProjection.js'
 
 test('planTaskCards 无图返回空', () => {
   expect(planTaskCards(null)).toEqual([])
@@ -13,9 +13,9 @@ test('planTaskCards 空任务返回空', () => {
 })
 
 test('planTaskCards 待确认归校样卡', () => {
-  const plan = planTaskCards({ tasks: [{ id: 't1', status: 'awaiting_confirm', agent_type: 'idea' }] })
+  const plan = planTaskCards({ tasks: [{ id: 't1', message_id: 'm1', status: 'awaiting_confirm', agent_type: 'idea' }] })
   expect(plan).toHaveLength(1)
-  expect(plan[0]).toMatchObject({ kind: 'hil', id: 'hil:t1' })
+  expect(plan[0]).toMatchObject({ kind: 'hil', id: 'hil:t1', anchorMessageId: 'm1' })
   expect(plan[0].task.id).toBe('t1')
 })
 
@@ -63,23 +63,27 @@ test('planTaskCards 混合任务按顺序投影', () => {
   expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'running', 'hil', 'postcard'])
 })
 
-test('planIntentCard 非就绪态返回空', () => {
+test('planIntentCard 无留档返回空', () => {
   expect(planIntentCard(null)).toBeNull()
-  expect(planIntentCard({ intent_status: 'capturing' })).toBeNull()
+  expect(planIntentCard(undefined)).toBeNull()
 })
 
-test('planIntentCard 就绪态返回确认卡', () => {
-  const state = { intent_status: 'ready_to_confirm', goal: 'x' }
-  const card = planIntentCard(state)
-  expect(card).toMatchObject({ kind: 'intent-confirm', id: 'intent-confirm', role: 'assistant' })
-  expect(card.state).toBe(state)
+test('planIntentCard 待确认留档返回确认卡', () => {
+  const confirmation = { confirmation_id: 'c1', message_id: 'm1', status: 'open', topic: 'x' }
+  const card = planIntentCard(confirmation)
+  expect(card).toMatchObject({ kind: 'intent-confirm', id: 'intent-confirm:c1', role: 'assistant', anchorMessageId: 'm1' })
+  expect(card.state).toBe(confirmation)
 })
 
-test.each(['confirmed', 'dispatched'])('planIntentCard %s 状态保留只读确认卡', (intentStatus) => {
-  const state = { intent_status: intentStatus, goal: 'x' }
-  const card = planIntentCard(state)
-  expect(card).toMatchObject({ kind: 'intent-confirm', id: 'intent-confirm', role: 'assistant' })
-  expect(card.state).toBe(state)
+test('planIntentCards 已作答与待确认都保留为留档卡', () => {
+  const confirmations = [
+    { confirmation_id: 'c1', status: 'answered', topic: 'a' },
+    { confirmation_id: 'c2', status: 'open', topic: 'b' },
+  ]
+  expect(planIntentCards(confirmations)).toMatchObject([
+    { kind: 'intent-confirm', id: 'intent-confirm:c1', state: confirmations[0] },
+    { kind: 'intent-confirm', id: 'intent-confirm:c2', state: confirmations[1] },
+  ])
 })
 
 test('planOptionCard 无提问返回空', () => {
@@ -88,8 +92,19 @@ test('planOptionCard 无提问返回空', () => {
 })
 
 test('planOptionCard 有提问返回选项卡', () => {
-  const prompt = { question: '选哪个方向', options: [], allow_custom: true }
+  const prompt = { message_id: 'm1', question: '选哪个方向', options: [], allow_custom: true }
   const card = planOptionCard(prompt)
-  expect(card).toMatchObject({ kind: 'option', id: 'option:open', role: 'assistant' })
+  expect(card).toMatchObject({ kind: 'option', id: 'option:open', role: 'assistant', anchorMessageId: 'm1' })
   expect(card.prompt).toBe(prompt)
+})
+
+test('planOptionCards 已回答的选项保留为留档卡', () => {
+  const prompts = [
+    { prompt_id: 'p1', status: 'answered', question: '选哪个方向', options: [], allow_custom: true },
+    { prompt_id: 'p2', status: 'open', question: '下一步', options: [], allow_custom: true },
+  ]
+  expect(planOptionCards(prompts)).toMatchObject([
+    { kind: 'option', id: 'option:p1', prompt: prompts[0] },
+    { kind: 'option', id: 'option:p2', prompt: prompts[1] },
+  ])
 })

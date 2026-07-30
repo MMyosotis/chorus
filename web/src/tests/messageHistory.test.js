@@ -22,6 +22,15 @@ test('normalizeAssistant 工具映射并补结构', () => {
   expect(out.tools.items[0]).toEqual({ name: 't', arguments: {}, duration_ms: null, content: '', display: 't' })
 })
 
+test('normalizeAssistant 意图确认轮有正文也保留续写标记', () => {
+  const out = normalizeAssistant({
+    role: 'assistant',
+    content: '创作方向已整理，请确认。',
+    tools: [{ name: 'update_intent_state', arguments: { intent_status: 'ready_to_confirm' } }],
+  })
+  expect(out.suspended).toBe(true)
+})
+
 test('normalizeAssistant 正文与工具缺省', () => {
   const out = normalizeAssistant({})
   expect(out.content).toBe('')

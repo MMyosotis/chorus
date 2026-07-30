@@ -1,4 +1,4 @@
-"""option 路由 HTTP 适配：GET /option 与 POST /option:choose 的 404/409/200 映射。
+"""option 路由 HTTP 适配：GET /options 与 POST /option:choose 的 404/409/200 映射。
 
 只断言适配层（会话不存在->404、无 open->409），200 SSE 续跑由集成测试覆盖。
 """
@@ -26,11 +26,15 @@ class FakeSessionService:
 
 
 class FakeOptionService:
-    def __init__(self, open_prompt=None):
+    def __init__(self, open_prompt=None, prompts=None):
         self._open = open_prompt
+        self._prompts = prompts or []
 
     def get_open(self, session_id):
         return self._open
+
+    def list_by_session(self, session_id):
+        return self._prompts
 
 
 class _NoCallSupervisor:
@@ -47,6 +51,7 @@ def _open_prompt(pid="p1"):
     return OptionPrompt(
         prompt_id=pid,
         session_id="s1",
+        message_id="m-option",
         question="选哪个",
         options=[OptionItem(signal="0", label="A", description="d")],
         allow_custom=True,
@@ -65,24 +70,12 @@ def _client(session, option):
     return TestClient(app)
 
 
-def test_get_option_session_not_found():
-    r = _client(FakeSessionService(set()), FakeOptionService()).get("/api/sessions/unknown/option")
-    assert r.status_code == 404
-
-
-def test_get_option_no_open_returns_null():
-    r = _client(FakeSessionService({"s1"}), FakeOptionService(None)).get("/api/sessions/s1/option")
+def test_get_options_includes_answered_archive():
+    answered = _open_prompt()
+    answered.status = "answered"
+    r = _client(FakeSessionService({"s1"}), FakeOptionService(prompts=[answered])).get("/api/sessions/s1/options")
     assert r.status_code == 200
-    assert r.json() == {"prompt": None}
-
-
-def test_get_option_with_open_serializes():
-    r = _client(FakeSessionService({"s1"}), FakeOptionService(_open_prompt())).get("/api/sessions/s1/option")
-    assert r.status_code == 200
-    prompt = r.json()["prompt"]
-    assert prompt["question"] == "选哪个"
-    assert prompt["allow_custom"] is True
-    assert prompt["options"][0]["label"] == "A"
+    assert r.json()["prompts"][0]["status"] == "answered"
 
 
 def test_choose_option_session_not_found():

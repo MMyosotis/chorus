@@ -60,6 +60,20 @@
   --ch-info-soft: #e0f2fe;
   --ch-info-text: #0369a1;
 
+  /* Workflow statuses */
+  --ch-status-pending-bg: #eef1f5;
+  --ch-status-pending-text: #64748b;
+  --ch-status-running-bg: #6f59e0;
+  --ch-status-running-text: #ffffff;
+  --ch-status-awaiting-bg: #efedfd;
+  --ch-status-awaiting-text: #4d3fac;
+  --ch-status-complete-bg: #e4f1ec;
+  --ch-status-complete-text: #2f6b5b;
+  --ch-status-adjustment-bg: #f5ebef;
+  --ch-status-adjustment-text: #8e5968;
+  --ch-status-cancelled-bg: #f1f3f5;
+  --ch-status-cancelled-text: #8a94a3;
+
   --ch-radius-btn: 8px;
   --ch-radius-card: 16px;
   --ch-radius-panel: 20px;
@@ -76,6 +90,8 @@
     0 2px 4px color-mix(in srgb, var(--ch-text) 4%, transparent);
   --ch-shadow-lg: 0 12px 32px color-mix(in srgb, var(--ch-text) 10%, transparent),
     0 4px 8px color-mix(in srgb, var(--ch-text) 6%, transparent);
+  --ch-shadow-dropdown: 0 8px 24px color-mix(in srgb, var(--ch-text) 12%, transparent),
+    0 2px 8px color-mix(in srgb, var(--ch-text) 6%, transparent);
   --ch-shadow-focus: 0 0 0 3px color-mix(in srgb, var(--ch-accent) 18%, transparent);
   --ch-shadow-soft: 0 8px 30px color-mix(in srgb, var(--ch-text) 6%, transparent);
   --ch-shadow-soft-hover: 0 10px 28px color-mix(in srgb, var(--ch-text) 8%, transparent);
@@ -117,8 +133,15 @@
   --ch-leading-snug: 1.3;
   --ch-leading-normal: 1.6;
 
+  /* Application frame */
   --ch-rail: 240px;
-  --ch-right-rail: clamp(334px, 22vw, 340px);
+  --ch-nav-rail: 64px;
+  --ch-session-rail: 264px;
+  --ch-right-rail: 304px;
+  --ch-main-column: 1200px;
+  --ch-shell-padding: 32px;
+  --ch-panel-padding: 24px;
+  --ch-composer-gap: 24px;
   --ch-turn-gap: 32px;
 
   --ch-z-dropdown: 100;
@@ -327,6 +350,64 @@ select:focus-visible {
 .ch-badge-warning { background: var(--ch-warning-soft); color: var(--ch-warning-text); }
 .ch-badge-danger { background: var(--ch-danger-soft); color: var(--ch-danger-text); }
 .ch-badge-info { background: var(--ch-info-soft); color: var(--ch-info-text); }
+
+.ch-status-pill {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--ch-space-3);
+  border: 0;
+  border-radius: var(--ch-radius-pill);
+  font-size: var(--ch-text-xs);
+  font-weight: var(--ch-font-semibold);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ch-status-pill > i {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: currentColor;
+}
+
+.ch-status-pill.is-pending { background: var(--ch-status-pending-bg); color: var(--ch-status-pending-text); }
+.ch-status-pill.is-pending > i { border: 1.5px solid currentColor; border-radius: 50%; }
+
+.ch-status-pill.is-running { background: var(--ch-status-running-bg); color: var(--ch-status-running-text); }
+.ch-status-pill.is-running > i {
+  width: 7px;
+  height: 7px;
+  margin: 0 2.5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 24%, transparent);
+  animation: ch-status-pulse 1.8s ease-in-out infinite;
+}
+
+.ch-status-pill.is-awaiting { background: var(--ch-status-awaiting-bg); color: var(--ch-status-awaiting-text); }
+.ch-status-pill.is-awaiting > i { width: 10px; height: 10px; border: 1.5px solid currentColor; transform: rotate(45deg); }
+
+.ch-status-pill.is-complete { background: var(--ch-status-complete-bg); color: var(--ch-status-complete-text); }
+.ch-status-pill.is-complete > i { width: 5px; height: 9px; margin: 0 3px 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+
+.ch-status-pill.is-adjustment { background: var(--ch-status-adjustment-bg); color: var(--ch-status-adjustment-text); }
+.ch-status-pill.is-adjustment > i { width: auto; height: auto; font-size: 17px; font-style: normal; line-height: 1; }
+.ch-status-pill.is-adjustment > i::before { content: "↶"; }
+
+.ch-status-pill.is-cancelled { background: var(--ch-status-cancelled-bg); color: var(--ch-status-cancelled-text); }
+.ch-status-pill.is-cancelled > i { position: relative; border: 1.5px solid currentColor; border-radius: 50%; }
+.ch-status-pill.is-cancelled > i::after { position: absolute; top: 4px; right: 2px; left: 2px; height: 1.5px; border-radius: var(--ch-radius-pill); background: currentColor; content: ""; }
+
+.ch-status-pill--compact { min-height: 24px; gap: 8px; padding: 0 8px; font-weight: var(--ch-font-medium); }
+.ch-status-pill--compact > i { transform-origin: center; scale: .72; }
+.ch-status-pill--compact.is-running > i { margin: 0 1px; scale: 1; }
+
+@keyframes ch-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 20%, transparent); opacity: .68; }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, currentColor 0%, transparent); opacity: 1; }
+}
 
 .ch-chip {
   display: inline-flex;

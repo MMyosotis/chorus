@@ -76,8 +76,8 @@ const recordLeft = computed(() => {
 <template>
   <div class="running-panel">
     <header class="turn-head">
-      <AgentAvatar :agent-type="agentType" status="finished" :size="34" />
-      <span class="role">{{ roleLabel }} AI</span>
+      <AgentAvatar :agent-type="agentType" status="finished" :size="40" />
+      <span class="role">{{ roleLabel }}</span>
     </header>
     <section class="running">
       <header class="running-head">
@@ -102,7 +102,7 @@ const recordLeft = computed(() => {
           </svg>
         </span>
         <h2>{{ aside }}</h2>
-        <span class="running-status">进行中</span>
+        <span class="running-status ch-status-pill is-running"><i aria-hidden="true"></i>进行中</span>
       </header>
       <div class="running-copy">
         <div class="running-meta">
@@ -126,14 +126,11 @@ const recordLeft = computed(() => {
 
 <style scoped>
 .running-panel { width: 100%; }
-.turn-head { display: flex; align-items: center; gap: 12px; min-height: 34px; margin-bottom: 10px; }
+.turn-head { display: flex; align-items: center; gap: var(--ch-space-2); min-height: 32px; margin-bottom: var(--ch-space-3); }
 .turn-head :deep(.agent-avatar) {
-  border-color: var(--ch-ink);
-  background: var(--ch-ink);
   box-shadow: var(--ch-shadow-bubble);
-  color: var(--ch-on-ink);
 }
-.turn-head .role { color: var(--ch-text); font: 500 14px/1 var(--ch-font-sans); letter-spacing: 0; }
+.turn-head .role { color: var(--ch-text); font: 500 16px/1 var(--ch-font-sans); letter-spacing: 0; }
 .running { display: block; padding: var(--ch-space-4); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); box-shadow: var(--ch-shadow-soft); font-family: var(--ch-font-sans); }
 .running-head {
   display: flex;
@@ -206,21 +203,8 @@ const recordLeft = computed(() => {
   45% { transform: scale(1.18); opacity: .42; }
 }
 .running-status {
-  display: inline-flex;
-  min-height: 32px;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
   margin-left: auto;
-  padding: 0 var(--ch-space-3);
-  border: 0;
-  border-radius: var(--ch-radius-pill);
-  background: var(--ch-accent-soft);
-  color: var(--ch-accent-soft-text);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
 }
 .running-copy { min-width: 0; padding: 0; }
 .running-meta {

@@ -14,7 +14,7 @@ describe('roleMeta 角色映射', () => {
   it('ROLE_LABELS 覆盖四角色', () => {
     expect(ROLE_LABELS.chief).toBe('主编辑')
     expect(ROLE_LABELS.idea).toBe('选题官')
-    expect(ROLE_LABELS.finalize).toBe('汇总编辑')
+    expect(ROLE_LABELS.finalize).toBe('汇总官')
   })
 
   it('ROLE_ORDER 定序，stepOf 据此编号', () => {

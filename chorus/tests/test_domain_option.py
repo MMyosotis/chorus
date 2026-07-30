@@ -4,7 +4,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from chorus.domain.option import OptionItem, OptionPrompt, OptionPromptDef
+from chorus.domain.option import OptionAnswer, OptionItem, OptionPrompt, OptionPromptDef
 
 
 def test_option_item_rejects_unknown_fields():
@@ -38,6 +38,17 @@ def test_option_prompt_carries_identity_and_status():
     assert prompt.status == "open"
     assert prompt.created_at > 0
     assert prompt.allow_custom is False
+
+
+def test_option_prompt_can_retain_answer():
+    prompt = OptionPrompt(
+        prompt_id="p1",
+        session_id="s1",
+        question="选哪个",
+        options=[OptionItem(signal="0", label="A", description="d")],
+        answer=OptionAnswer(signal="0", label="A"),
+    )
+    assert prompt.answer.label == "A"
 
 
 def main():

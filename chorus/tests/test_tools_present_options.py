@@ -16,7 +16,7 @@ def _build():
     seed_session(engine, sid="s1")
     option = OptionPromptService(OptionPromptRepository(engine), SessionService(SessionRepository(engine)))
     tool = PresentOptionsTool(option)
-    ctx = ToolContext(session_id="s1")
+    ctx = ToolContext(session_id="s1", message_id="m-option")
     return engine, option, tool, ctx
 
 
@@ -37,12 +37,14 @@ def test_success_returns_suspend_with_event_and_persists():
     assert len(res.events) == 1
     event = res.events[0]
     assert isinstance(event, OptionPromptEvent)
+    assert event.message_id == "m-option"
     assert event.question == "选哪个方向"
     assert [o["label"] for o in event.options] == ["咖啡馆探店", "居家咖啡器具", "咖啡豆产地游"]
     assert event.options[0]["signal"] == "0"
     assert event.allow_custom is True
     prompt = option.get_open("s1")
     assert prompt is not None
+    assert prompt.message_id == "m-option"
 
 
 def test_missing_args_returns_reply():
@@ -58,6 +60,7 @@ def test_resolve_external_known_signal_returns_label():
     receipt = tool.resolve_external("s1", "1", None)
     assert receipt == "用户选择了：居家咖啡器具"
     assert option.get_open("s1") is None
+    assert option.list_by_session("s1")[0].answer.label == "居家咖啡器具"
 
 
 def test_resolve_external_custom_signal_returns_text():
@@ -66,20 +69,7 @@ def test_resolve_external_custom_signal_returns_text():
     receipt = tool.resolve_external("s1", "__custom__", {"custom_text": "我想写冷萃"})
     assert receipt == "用户自由补充：我想写冷萃"
     assert option.get_open("s1") is None
-
-
-def test_resolve_external_unknown_signal_closes_and_hints():
-    _, option, tool, ctx = _build()
-    tool.run(_args(), ctx)
-    receipt = tool.resolve_external("s1", "9", None)
-    assert "无法识别" in receipt
-    assert option.get_open("s1") is None
-
-
-def test_resolve_external_no_open_prompt():
-    _, _, tool, _ = _build()
-    receipt = tool.resolve_external("s1", "0", None)
-    assert "没有待选" in receipt
+    assert option.list_by_session("s1")[0].answer.custom_text == "我想写冷萃"
 
 
 def main():

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import { getSkillFile } from '../api.js'
 import { renderPostCardHTML, renderInline } from '../composables/renderPostCard.js'
 import { bindShell } from '../composables/bindShell.js'
@@ -10,9 +10,9 @@ const props = defineProps({
   stylesheetRef: { type: String, default: '' },
 })
 
-const srcdoc = ref('')
-const iframeHeight = ref(0)
+const previewHost = ref(null)
 const error = ref('')
+let previewRoot = null
 
 function resolveResource(ref, fallbackPath) {
   const [name, ...path] = String(ref || '').split('/')
@@ -31,18 +31,21 @@ function parseYaml(text) {
   return cfg
 }
 
-function buildSrcdoc(html, css, card, format) {
+function renderPreview(html, css, card, format) {
   const tags = card.tags || []
+  const firstParagraph = (card.sections || []).find((section) => section.kind === 'paragraph' && section.text)?.text || ''
   const slots = {
     title: renderInline(card.title, format),
     cover_url: card.cover?.url || '',
+    summary: renderInline(card.summary || firstParagraph, format),
     body: renderPostCardHTML(card, { format }),
     tags,
     has_tags: tags.length > 0,
   }
   const bound = bindShell(html, slots)
-  const resizer = `<script>(function(){const send=()=>parent.postMessage({type:'platform-preview-height',h:document.body.scrollHeight},'*');new ResizeObserver(send).observe(document.body);send();})();<\/script>`
-  return `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${bound}${resizer}</body></html>`
+  if (!previewHost.value) return
+  previewRoot ||= previewHost.value.attachShadow({ mode: 'open' })
+  previewRoot.innerHTML = `<style>${css} :host { display: block; margin: 0; padding: 0; } .preview-document { display: block; width: 100%; margin: 0 !important; padding: 0 !important; }</style><div class="preview-document">${bound}</div>`
 }
 
 async function load() {
@@ -56,42 +59,32 @@ async function load() {
       getSkillFile(preview.name, 'platform.yaml'),
     ])
     const format = parseYaml(yaml).format || 'markdown'
-    srcdoc.value = buildSrcdoc(html, css, props.card, format)
+    await nextTick()
+    renderPreview(html, css, props.card, format)
   } catch (e) {
     error.value = `平台外壳加载失败：${e.message}`
   }
 }
 
-function onMessage(event) {
-  const data = event.data
-  if (data && data.type === 'platform-preview-height' && typeof data.h === 'number') {
-    iframeHeight.value = data.h
-  }
-}
-
 onMounted(() => {
-  window.addEventListener('message', onMessage)
   load()
 })
-onBeforeUnmount(() => window.removeEventListener('message', onMessage))
 watch(() => [props.previewRef, props.stylesheetRef, props.card], load)
 </script>
 
 <template>
   <div class="platform-shell">
     <div v-if="error" class="platform-error">{{ error }}</div>
-    <iframe
+    <div
       v-else
-      class="platform-iframe"
-      :srcdoc="srcdoc"
-      :style="{ height: iframeHeight ? iframeHeight + 'px' : '600px' }"
-      sandbox="allow-scripts"
-    ></iframe>
+      ref="previewHost"
+      class="platform-preview-host"
+    ></div>
   </div>
 </template>
 
 <style scoped>
 .platform-shell { width: 100%; }
-.platform-iframe { width: 100%; border: 0; display: block; background: var(--ch-surface); }
+.platform-preview-host { width: 100%; display: block; background: var(--ch-surface); }
 .platform-error { padding: 24px; color: var(--ch-danger); font-size: 14px; text-align: center; border: 1px dashed var(--ch-border-strong); }
 </style>

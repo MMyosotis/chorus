@@ -97,7 +97,9 @@ async function onRetry() {
         <h2>{{ meta.title }}</h2>
         <p>{{ meta.description }}</p>
       </div>
-      <span :class="{ confirmed }">{{ confirmed ? '已确认' : '待确认' }}</span>
+      <span class="ch-status-pill" :class="confirmed ? 'is-complete' : 'is-awaiting'">
+        <i aria-hidden="true"></i>{{ confirmed ? '已确认' : '待确认' }}
+      </span>
     </header>
 
     <div class="review-content">
@@ -191,7 +193,7 @@ async function onRetry() {
 
 <style scoped>
 .hil-card {
-  padding: var(--ch-space-4);
+  padding: var(--ch-space-5);
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
@@ -205,6 +207,9 @@ async function onRetry() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--ch-border);
 }
 
 .review-head h2 {
@@ -217,38 +222,20 @@ async function onRetry() {
 .review-head p {
   margin: 8px 0 0;
   color: var(--ch-text-muted);
-  font-size: var(--ch-text-sm);
+  font-size: var(--ch-text-md);
   line-height: 1.5;
 }
 
 .review-head > span {
-  display: inline-flex;
-  min-height: 32px;
   flex: 0 0 auto;
   align-self: center;
-  align-items: center;
-  gap: 8px;
   margin-left: auto;
-  padding: 0 var(--ch-space-3);
-  border: 0;
-  border-radius: var(--ch-radius-pill);
-  background: var(--ch-warning-soft);
-  color: var(--ch-warning-text);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.review-head > span.confirmed {
-  background: var(--ch-success-soft);
-  color: var(--ch-success-text);
 }
 
 .review-content {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--ch-border);
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .candidates {
@@ -273,7 +260,10 @@ async function onRetry() {
   font-family: var(--ch-font-sans);
   text-align: left;
   cursor: pointer;
-  transition: border-color var(--ch-duration-fast) var(--ch-ease), background var(--ch-duration-fast) var(--ch-ease);
+  transition: border-color var(--ch-duration-fast) var(--ch-ease),
+    background var(--ch-duration-fast) var(--ch-ease),
+    box-shadow var(--ch-duration-fast) var(--ch-ease),
+    transform var(--ch-duration-fast) var(--ch-ease);
 }
 
 .candidate:not(:disabled):hover {
@@ -289,6 +279,8 @@ async function onRetry() {
 .candidate.selected {
   border-color: var(--ch-border);
   background: var(--ch-accent-soft);
+  box-shadow: var(--ch-shadow-xs);
+  transform: translateY(-1px);
 }
 
 .candidate:focus-visible {
@@ -315,10 +307,18 @@ async function onRetry() {
   justify-content: flex-end;
   gap: 10px;
   visibility: hidden;
+  opacity: 0;
+  transform: scale(.9);
+  transition: opacity var(--ch-duration-fast) var(--ch-ease-out),
+    transform var(--ch-duration-fast) var(--ch-ease-out),
+    visibility 0s linear var(--ch-duration-fast);
 }
 
 .candidate-selection.visible {
   visibility: visible;
+  opacity: 1;
+  transform: scale(1);
+  transition-delay: 0s;
 }
 
 .candidate-check {
@@ -355,7 +355,7 @@ async function onRetry() {
   margin-top: 8px;
   overflow: hidden;
   color: var(--ch-text-secondary);
-  font-size: 14px;
+  font-size: var(--ch-text-sm);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -396,7 +396,7 @@ async function onRetry() {
 .feedback label {
   display: block;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: var(--ch-text-md);
   font-weight: 600;
   line-height: 1.5;
 }
@@ -409,7 +409,7 @@ async function onRetry() {
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
   color: var(--ch-text);
-  font: 400 14px/1.5 var(--ch-font-sans);
+  font: 400 var(--ch-text-md)/1.5 var(--ch-font-sans);
   resize: vertical;
   transition: border-color var(--ch-duration-fast) var(--ch-ease);
 }
@@ -424,7 +424,7 @@ async function onRetry() {
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
-  margin-top: var(--ch-space-6);
+  margin-top: var(--ch-space-4);
 }
 
 .actions > div {
@@ -440,7 +440,7 @@ async function onRetry() {
   gap: 6px;
   padding: 0 16px;
   border-radius: var(--ch-radius-btn);
-  font: 600 14px/1 var(--ch-font-sans);
+  font: 600 var(--ch-text-md)/1 var(--ch-font-sans);
   cursor: pointer;
   transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
 }

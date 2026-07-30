@@ -3,10 +3,10 @@ import { computed, ref } from 'vue'
 
 const props = defineProps({
   state: { type: Object, default: null },
-  archived: { type: Boolean, default: false },
 })
 const emit = defineEmits(['confirm', 'revise'])
 const locking = ref(false)
+const archived = computed(() => props.state?.status === 'answered')
 
 const clean = (value, fallback = '待补充') => {
   const text = value == null ? '' : String(value).trim()
@@ -34,7 +34,7 @@ const notes = computed(() =>
 )
 
 function decide(type) {
-  if (locking.value || props.archived) return
+  if (locking.value || archived.value) return
   locking.value = true
   emit(type)
 }
@@ -47,7 +47,9 @@ function decide(type) {
         <h2>确认创作意图</h2>
         <p>确认本次创作的方向与要求</p>
       </div>
-      <span class="status">{{ archived ? '已确认' : '待确认' }}</span>
+      <span class="status ch-status-pill" :class="archived ? 'is-complete' : 'is-awaiting'">
+        <i aria-hidden="true"></i>{{ archived ? '已确认' : '待确认' }}
+      </span>
     </header>
 
     <div class="brief">
@@ -96,7 +98,7 @@ function decide(type) {
 .intent-confirm {
   position: relative;
   width: 100%;
-  padding: var(--ch-space-4);
+  padding: var(--ch-space-5);
   overflow: hidden;
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
@@ -110,6 +112,9 @@ function decide(type) {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: var(--ch-space-4);
+  padding-bottom: var(--ch-space-3);
+  border-bottom: 1px solid var(--ch-border);
 }
 
 .head-copy {
@@ -118,7 +123,7 @@ function decide(type) {
 
 .head-copy h2 {
   margin: 0;
-  font-size: var(--ch-text-xl);
+  font-size: var(--ch-text-lg);
   font-weight: 600;
   line-height: var(--ch-leading-snug);
 }
@@ -131,44 +136,26 @@ function decide(type) {
 }
 
 .status {
-  display: inline-flex;
-  min-height: 32px;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
   margin-left: auto;
-  padding: 0 var(--ch-space-3);
-  border: 0;
-  border-radius: var(--ch-radius-pill);
-  background: var(--ch-warning-soft);
-  color: var(--ch-warning-text);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.archived .status {
-  background: var(--ch-success-soft);
-  color: var(--ch-success-text);
 }
 
 .brief {
-  margin-top: 24px;
-  padding: 24px 0;
-  border-top: 1px solid var(--ch-border);
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .section-heading {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--ch-space-2);
 }
 
 .section-heading::before {
-  width: 3px;
+  width: 4px;
   height: 16px;
-  flex: 0 0 3px;
+  flex: 0 0 4px;
   border-radius: var(--ch-radius-pill);
   background: var(--ch-accent);
   content: "";
@@ -176,8 +163,8 @@ function decide(type) {
 
 .brief h2 {
   max-width: 760px;
-  margin: 12px 0 20px;
-  font-size: var(--ch-text-xl);
+  margin: var(--ch-space-3) 0 var(--ch-space-4);
+  font-size: var(--ch-text-lg);
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: -.01em;
@@ -192,12 +179,12 @@ function decide(type) {
 .meta-item {
   display: flex;
   min-width: 0;
-  min-height: 80px;
+  min-height: 72px;
   flex-direction: column;
   justify-content: center;
-  padding: 12px var(--ch-space-3);
+  padding: var(--ch-space-2) var(--ch-space-3);
   border-radius: var(--ch-radius-list);
-  background: var(--ch-muted-gradient);
+  background: var(--ch-surface-2);
 }
 
 .meta-item span,
@@ -214,7 +201,7 @@ function decide(type) {
 .meta-item strong {
   margin-top: 4px;
   color: var(--ch-text);
-  font-size: var(--ch-text-md);
+  font-size: var(--ch-text-sm);
   font-weight: 600;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -222,13 +209,13 @@ function decide(type) {
 
 .direction {
   display: flex;
-  min-height: 80px;
+  min-height: 72px;
   flex-direction: column;
   justify-content: center;
   margin-top: var(--ch-space-3);
-  padding: 12px var(--ch-space-3);
+  padding: var(--ch-space-2) var(--ch-space-3);
   border-radius: var(--ch-radius-list);
-  background: var(--ch-muted-gradient);
+  background: var(--ch-surface-2);
 }
 
 .direction span {
@@ -240,19 +227,20 @@ function decide(type) {
 .direction strong {
   margin-top: 4px;
   color: var(--ch-text);
-  font-size: var(--ch-text-md);
+  font-size: var(--ch-text-sm);
   font-weight: 600;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .focus {
+  margin-top: var(--ch-space-3);
   overflow: hidden;
   border-bottom: 1px solid var(--ch-border);
 }
 
 .focus-head {
-  min-height: 56px;
+  min-height: 48px;
   border-bottom: 1px solid var(--ch-border);
 }
 
@@ -272,12 +260,12 @@ function decide(type) {
 
 .focus dl {
   margin: 0;
-  padding: 0 16px;
+  padding: 0 var(--ch-space-2);
 }
 
 .focus dl > div {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr);
   gap: 16px;
   padding: 16px 0;
   border-bottom: 1px solid var(--ch-border);
@@ -305,6 +293,7 @@ function decide(type) {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  margin: var(--ch-space-4) 0 0;
   background: var(--ch-surface);
 }
 
@@ -363,10 +352,6 @@ function decide(type) {
 
   .section-meta {
     display: none;
-  }
-
-  .brief {
-    padding: 24px 0;
   }
 
   .brief h2 {

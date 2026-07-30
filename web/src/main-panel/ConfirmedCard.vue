@@ -13,8 +13,8 @@ const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
 <template>
   <section class="confirmed-card">
     <header class="turn-head">
-      <AgentAvatar :agent-type="agentType" status="finished" :size="34" />
-      <span class="role">{{ roleLabel }} AI</span>
+      <AgentAvatar :agent-type="agentType" status="finished" :size="40" />
+      <span class="role">{{ roleLabel }}</span>
     </header>
     <HilCard :task="task" confirmed />
   </section>
@@ -27,22 +27,19 @@ const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
 
 .turn-head {
   display: flex;
-  min-height: 34px;
+  min-height: 32px;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: var(--ch-space-2);
+  margin-bottom: var(--ch-space-3);
 }
 
 .turn-head :deep(.agent-avatar) {
-  border-color: var(--ch-ink);
-  background: var(--ch-ink);
   box-shadow: var(--ch-shadow-bubble);
-  color: var(--ch-on-ink);
 }
 
 .turn-head .role {
   color: var(--ch-text);
-  font: 500 14px/1 var(--ch-font-sans);
+  font: 500 16px/1 var(--ch-font-sans);
   letter-spacing: 0;
 }
 

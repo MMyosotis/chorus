@@ -81,7 +81,7 @@ class CreatePlanTool(Tool):
         if blocked:
             return ToolRunResult(blocked)
         try:
-            pairs = self._build_pairs(arguments, ctx.session_id)
+            pairs = self._build_pairs(arguments, ctx.session_id, ctx.message_id)
         except (KeyError, TypeError, PydanticValidationError) as e:
             return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"))
         except ValidationError as e:
@@ -100,14 +100,14 @@ class CreatePlanTool(Tool):
             "或在 ready_to_confirm 后等待用户确认。"
         )
 
-    def _build_pairs(self, arguments: dict, session_id: str):
+    def _build_pairs(self, arguments: dict, session_id: str, message_id: Optional[str]):
         """解析 steps、整份 intent 透传（不逐字段拆解）、校验、展开成 (task, content) 对。"""
         intent = Intent.model_validate(arguments["intent"])
         steps = [
             StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []))
             for step in arguments["steps"]
         ]
-        return TaskPlan(session_id=session_id, intent=intent, steps=steps).expand()
+        return TaskPlan(session_id=session_id, message_id=message_id, intent=intent, steps=steps).expand()
 
     def _persist(self, pairs):
         """逐条落库 task 与其 content。"""

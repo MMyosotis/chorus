@@ -7,7 +7,7 @@ from typing import Optional
 
 import uuid6
 
-from chorus.domain.option import OptionItem, OptionPrompt
+from chorus.domain.option import OptionAnswer, OptionItem, OptionPrompt
 from chorus.repo.option import OptionPromptRepository
 from chorus.services.session import SessionService
 
@@ -19,11 +19,12 @@ class OptionPromptService:
 
     def create(
         self, session_id: str, question: str,
-        options: list[OptionItem], allow_custom: bool,
+        options: list[OptionItem], allow_custom: bool, message_id: Optional[str] = None,
     ) -> OptionPrompt:
         prompt = OptionPrompt(
             prompt_id=str(uuid6.uuid7()),
             session_id=session_id,
+            message_id=message_id,
             question=question,
             options=options,
             allow_custom=allow_custom,
@@ -36,5 +37,8 @@ class OptionPromptService:
     def get_open(self, session_id: str) -> Optional[OptionPrompt]:
         return self._repo.find_open_by_session(session_id)
 
-    def mark_answered(self, prompt_id: str) -> None:
-        self._repo.update_answered(prompt_id)
+    def list_by_session(self, session_id: str) -> list[OptionPrompt]:
+        return self._repo.find_by_session(session_id)
+
+    def mark_answered(self, session_id: str, answer: OptionAnswer) -> None:
+        self._repo.update_answered(session_id, answer)

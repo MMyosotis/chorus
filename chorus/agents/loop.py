@@ -119,7 +119,7 @@ class AgentLoop:
         self, ctx: AgentContext, tool_calls: dict, *, strategy: LoopStrategy,
     ) -> Generator[SseEvent, None, list]:
         """按序执行工具，发钩子与气泡工具事件。"""
-        tool_ctx = ToolContext(session_id=ctx.session_id)
+        tool_ctx = ToolContext(session_id=ctx.session_id, message_id=ctx.turn.message_id)
         pairs = []
         for _, accumulator in sorted(tool_calls.items()):
             call, result = yield from self._dispatch_one(ctx, accumulator, tool_ctx, strategy)

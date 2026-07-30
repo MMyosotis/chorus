@@ -43,7 +43,9 @@ const hasRunningTool = computed(() =>
   (props.tools.items || []).some((it) => it.duration_ms == null)
 )
 
-const bareMode = computed(() => props.role === 'assistant' && props.active && !props.content)
+const bareMode = computed(() =>
+  props.role === 'assistant' && !props.content && (props.active || props.intentState || props.optionPrompt)
+)
 
 const activityState = computed(() => {
   if (props.tools.state === 'running' && hasRunningTool.value) return 'tools'
@@ -159,8 +161,8 @@ function closePreview() {
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
     <div v-if="role === 'assistant'" class="turn-head">
-      <AgentAvatar agent-type="chief" status="finished" :size="34" />
-      <span class="role">主编辑 AI</span>
+      <AgentAvatar agent-type="chief" :status="active ? 'running' : 'finished'" :size="40" />
+      <span class="role">主编辑</span>
     </div>
     <div :class="['bubble', role, { bare: bareMode }]">
       <div v-if="!hideBody" :class="role === 'user' ? 'u-body' : 'a-body'">
@@ -177,16 +179,18 @@ function closePreview() {
 
       <div v-if="imageItems.length" class="image-list">
         <div v-for="(item, idx) in imageItems" :key="`img-${idx}`" class="image-item">
-          <div v-if="isImageReady(item)" class="image-ready" @click="openPreview(item)">
-            <img :src="imageSrc(item)" :alt="imageAlt(item)" loading="lazy" />
-          </div>
-          <div v-else-if="isImageError(item)" class="image-error">
-            {{ item.content }}
-          </div>
-          <div v-else class="image-placeholder">
-            <div class="image-skeleton"></div>
-            <div class="image-placeholder-text">图片生成中…</div>
-          </div>
+          <Transition name="image-reveal" mode="out-in">
+            <div v-if="isImageReady(item)" key="ready" class="image-ready" @click="openPreview(item)">
+              <img :src="imageSrc(item)" :alt="imageAlt(item)" loading="lazy" />
+            </div>
+            <div v-else-if="isImageError(item)" key="error" class="image-error">
+              {{ item.content }}
+            </div>
+            <div v-else key="loading" class="image-placeholder">
+              <div class="image-skeleton"></div>
+              <div class="image-placeholder-text">图片生成中…</div>
+            </div>
+          </Transition>
         </div>
       </div>
 
@@ -208,7 +212,6 @@ function closePreview() {
       v-if="role === 'assistant' && intentState"
       class="standalone-intent"
       :state="intentState"
-      :archived="['confirmed', 'dispatched'].includes(intentState.intent_status)"
       @confirm="emit('intent-confirm')"
       @revise="emit('intent-revise')"
     />
@@ -273,45 +276,42 @@ function closePreview() {
 .turn-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  min-height: 34px;
+  gap: var(--ch-space-2);
+  margin-bottom: var(--ch-space-3);
+  min-height: 32px;
 }
 
 .turn-head :deep(.agent-avatar) {
-  background: var(--ch-ink);
-  border-color: var(--ch-ink);
-  color: var(--ch-on-ink);
   box-shadow: var(--ch-shadow-bubble);
 }
 
 .turn-head .role {
-  font: 500 14px/1 var(--ch-font-sans);
+  font: 500 16px/1 var(--ch-font-sans);
   color: var(--ch-text);
   letter-spacing: 0;
 }
 
 .bubble-row.user .bubble {
   width: fit-content;
-  max-width: min(620px, 72%);
+  max-width: min(640px, 72%);
   margin-left: auto;
-  padding: 14px 19px;
+  padding: var(--ch-space-3) 24px;
   background: var(--ch-user-bubble);
-  border-radius: 16px 16px 4px 16px;
+  border-radius: var(--ch-radius-card) var(--ch-radius-card) var(--ch-space-1) var(--ch-radius-card);
   box-shadow: var(--ch-shadow-bubble);
   color: var(--ch-text);
 }
 
 .bubble {
   grid-column: 1;
-  font-size: 15px;
+  font-size: var(--ch-text-md);
   word-break: break-word;
 }
 
 .bubble.user {
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
-  font-size: 15px;
+  font-size: var(--ch-text-md);
   font-weight: 400;
   line-height: 1.6;
   text-align: left;
@@ -330,14 +330,14 @@ function closePreview() {
 .bubble.assistant {
   width: 100%;
   max-width: 100%;
-  padding: 24px 26px;
+  padding: 24px;
   background: var(--ch-surface);
   border: 1px solid var(--ch-border);
-  border-radius: 18px;
+  border-radius: var(--ch-radius-card);
   box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
-  font-size: 15px;
+  font-size: var(--ch-text-md);
   font-weight: 400;
   line-height: 1.75;
   letter-spacing: 0;
@@ -364,7 +364,7 @@ function closePreview() {
 }
 
 .bubble.assistant .text :deep(p) {
-  margin: 0 0 18px;
+  margin: 0 0 var(--ch-space-3);
   line-height: 1.75;
 }
 .bubble.assistant .text :deep(p:last-child) {
@@ -374,7 +374,7 @@ function closePreview() {
 .bubble.assistant .text :deep(h2),
 .bubble.assistant .text :deep(h3),
 .bubble.assistant .text :deep(h4) {
-  margin: 24px 0 10px;
+  margin: var(--ch-space-4) 0 var(--ch-space-2);
   font-family: var(--ch-font-sans);
   font-size: 16px;
   font-weight: 600;
@@ -389,8 +389,8 @@ function closePreview() {
 }
 .bubble.assistant .text :deep(ul),
 .bubble.assistant .text :deep(ol) {
-  margin: 0 0 18px;
-  padding-left: 22px;
+  margin: 0 0 var(--ch-space-3);
+  padding-left: var(--ch-space-4);
   line-height: 1.75;
 }
 .bubble.assistant .text :deep(li) {
@@ -400,8 +400,8 @@ function closePreview() {
   margin-bottom: 0;
 }
 .bubble.assistant .text :deep(code) {
-  padding: 1px 5px;
-  border-radius: 6px;
+  padding: var(--ch-space-1) var(--ch-space-2);
+  border-radius: var(--ch-radius-btn);
   background: var(--ch-divider-subtle);
   font-family: var(--ch-font-mono);
   font-size: 14px;
@@ -409,11 +409,11 @@ function closePreview() {
 .bubble.assistant .text :deep(pre) {
   padding: 16px;
   border: 1px solid var(--ch-border);
-  border-radius: 10px;
+  border-radius: var(--ch-radius-btn);
   background: var(--ch-divider-subtle);
   color: var(--ch-text);
   overflow-x: auto;
-  margin: 0 0 18px;
+  margin: 0 0 var(--ch-space-3);
   font-size: 14px;
   line-height: 1.7;
 }
@@ -424,8 +424,8 @@ function closePreview() {
   font-size: inherit;
 }
 .bubble.assistant .text :deep(blockquote) {
-  margin: 0 0 18px;
-  padding: 2px 16px;
+  margin: 0 0 var(--ch-space-3);
+  padding: var(--ch-space-1) var(--ch-space-3);
   border-left: 2px solid var(--ch-accent);
   color: var(--ch-text-secondary);
 }
@@ -435,14 +435,14 @@ function closePreview() {
 }
 .bubble.assistant .text :deep(table) {
   border-collapse: collapse;
-  margin: 0 0 18px;
+  margin: 0 0 var(--ch-space-3);
   width: 100%;
   table-layout: auto;
 }
 .bubble.assistant .text :deep(th),
 .bubble.assistant .text :deep(td) {
   border: 1px solid var(--ch-border);
-  padding: 8px 14px;
+  padding: var(--ch-space-2) var(--ch-space-3);
   line-height: 1.7;
   word-break: break-word;
 }
@@ -454,18 +454,18 @@ function closePreview() {
 .bubble.assistant .text :deep(hr) {
   border: none;
   border-top: 1px solid var(--ch-divider-subtle);
-  margin: 18px 0;
+  margin: var(--ch-space-3) 0;
 }
 
 .msg-actions {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-top: 22px;
+  margin-top: var(--ch-space-3);
 }
 .act-btn {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   padding: 0;
@@ -521,8 +521,8 @@ function closePreview() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   color: var(--ch-accent);
   transform-origin: center;
@@ -579,9 +579,9 @@ function closePreview() {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin: 12px 0 0;
+  margin: var(--ch-space-3) 0 0;
   font-family: var(--ch-font-sans);
-  font-size: 13px;
+  font-size: var(--ch-text-sm);
   line-height: 1.5;
   color: var(--ch-text-faint);
 }
@@ -595,8 +595,8 @@ function closePreview() {
 }
 
 .plan-card {
-  margin: 0 0 20px;
-  padding: 18px 0;
+  margin: 0 0 var(--ch-space-4);
+  padding: var(--ch-space-3) 0;
   border-top: 1px solid var(--ch-divider-subtle);
   border-bottom: 1px solid var(--ch-divider-subtle);
   background: transparent;
@@ -608,19 +608,19 @@ function closePreview() {
 .plan-header {
   font-family: var(--ch-font-sans);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--ch-text-sm);
   color: var(--ch-text-secondary);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  margin-bottom: 12px;
+  margin-bottom: var(--ch-space-3);
   line-height: 1.5;
 }
 
 .plan-steps {
   margin: 0;
-  padding-left: 22px;
+  padding-left: var(--ch-space-4);
   color: var(--ch-text);
-  font-size: 15px;
+  font-size: var(--ch-text-md);
   line-height: 1.75;
 }
 
@@ -632,11 +632,26 @@ function closePreview() {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin: 16px 0 4px;
+  margin: var(--ch-space-3) 0 var(--ch-space-1);
 }
 
 .image-item {
   max-width: 280px;
+}
+
+.image-reveal-enter-active,
+.image-reveal-leave-active {
+  transition: opacity 180ms var(--ch-ease-out), transform 180ms var(--ch-ease-out);
+}
+
+.image-reveal-enter-from {
+  opacity: 0;
+  transform: scale(.985);
+}
+
+.image-reveal-leave-to {
+  opacity: 0;
+  transform: scale(.99);
 }
 
 .image-ready {
@@ -654,7 +669,7 @@ function closePreview() {
   width: 100%;
   height: auto;
   border: 1px solid var(--ch-border);
-  border-radius: 10px;
+  border-radius: var(--ch-radius-btn);
   box-shadow: none;
 }
 
@@ -663,7 +678,7 @@ function closePreview() {
   width: 100%;
   aspect-ratio: 1 / 1;
   border: 1px solid var(--ch-border);
-  border-radius: 10px;
+  border-radius: var(--ch-radius-btn);
   overflow: hidden;
   background: var(--ch-divider-subtle);
 }
@@ -693,8 +708,8 @@ function closePreview() {
 }
 
 .image-error {
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border-radius: var(--ch-radius-btn);
   background: var(--ch-danger-soft);
   color: var(--ch-danger);
   font-size: var(--ch-text-xs);
@@ -726,7 +741,7 @@ function closePreview() {
   width: auto;
   height: auto;
   object-fit: contain;
-  border-radius: 10px;
+  border-radius: var(--ch-radius-btn);
   box-shadow: var(--ch-shadow-preview);
   cursor: default;
 }

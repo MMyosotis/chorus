@@ -7,6 +7,7 @@ from __future__ import annotations
 from chorus.domain.task import ACTIVE_STATUSES
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
+from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.session import SessionRepository
 from chorus.services.intent_state import IntentStateService
@@ -33,10 +34,10 @@ def _build():
     seed_session(engine, sid="s1")
     repo = TaskRepository(engine)
     content_repo = TaskContentRepository(engine)
-    intent = IntentStateService(IntentStateRepository(engine), SessionService(SessionRepository(engine)))
+    intent = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), SessionService(SessionRepository(engine)))
     intent.patch_status("s1", "confirmed")
     tool = CreatePlanTool(repo, content_repo, intent)
-    ctx = ToolContext(session_id="s1")
+    ctx = ToolContext(session_id="s1", message_id="m-plan")
     return engine, repo, content_repo, tool, ctx
 
 
@@ -51,6 +52,7 @@ def test_success_returns_terminal_and_persists_tasks():
     tasks = repo.find_by_session_statuses("s1", ACTIVE_STATUSES)
     assert {t.agent_type for t in tasks} == {"idea", "finalize"}
     assert all(t.session_id == "s1" for t in tasks)
+    assert all(t.message_id == "m-plan" for t in tasks)
     assert all(t.created_at > 0 for t in tasks)  # 时间戳已落库
     # 内容行同落：每条任务对应一条内容
     contents = content_repo.load_many([t.id for t in tasks])
@@ -64,7 +66,7 @@ def test_unconfirmed_intent_blocks_plan_creation():
     seed_session(engine, sid="s1")
     repo = TaskRepository(engine)
     content_repo = TaskContentRepository(engine)
-    intent = IntentStateService(IntentStateRepository(engine), SessionService(SessionRepository(engine)))
+    intent = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), SessionService(SessionRepository(engine)))
     tool = CreatePlanTool(repo, content_repo, intent)
     outcome = tool.run(_args(), ToolContext(session_id="s1")).outcome
     assert isinstance(outcome, Reply)

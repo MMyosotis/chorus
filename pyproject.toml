@@ -5,6 +5,7 @@ description = "多智能体爆款图文博文创作助手"
 requires-python = ">=3.9"
 dependencies = [
     "openai>=2.44.0",
+    "httpx[socks]>=0.28.1",
     "python-dotenv>=1.0.0",
     "fastapi>=0.110.0",
     "mistune>=3.3,<4",

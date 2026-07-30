@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import ValidationError
 
-from chorus.domain.intent import IntentStateUpdate
+from chorus.domain.intent import IntentConfirmationAnswer, IntentStateUpdate
 from chorus.services.intent_state import IntentStateService
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
@@ -63,6 +63,7 @@ class UpdateIntentStateTool(Tool):
 
         state = self._intent.update_from_tool(ctx.session_id, update)
         if state.intent_status == "ready_to_confirm":
+            self._intent.open_confirmation(ctx.session_id, state, ctx.message_id)
             return ToolRunResult(Suspend(
                 f"intent_state updated: status=ready_to_confirm, "
                 f"version={state.version}. 等待用户拍板。"
@@ -75,10 +76,16 @@ class UpdateIntentStateTool(Tool):
     def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
         """用户对确认卡的两类回应：同意进入 confirmed，要求调整回到澄清。"""
         if signal == "confirm":
+            self._intent.mark_confirmation_answered(
+                session_id, IntentConfirmationAnswer(signal="confirm", label="确认并开始创作"),
+            )
             state = self._intent.patch_status(session_id, "confirmed")
             return (
                 f"用户已确认创作方案，意图进入 confirmed（version={state.version}）。"
                 "本轮立即调用 create_plan 建立创作任务，不要再追问、不要再输出确认话术。"
             )
+        self._intent.mark_confirmation_answered(
+            session_id, IntentConfirmationAnswer(signal="reopen", label="继续调整"),
+        )
         state = self._intent.patch_status(session_id, "needs_clarification")
         return f"用户要求继续调整，意图回到 needs_clarification（version={state.version}）"

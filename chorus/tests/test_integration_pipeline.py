@@ -18,6 +18,7 @@ from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.engine import build_engine
+from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
@@ -108,7 +109,7 @@ def _build_assembly():
     # 扁平 hook 注册表：4 个 trace 观测点
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    intent_state = IntentStateService(IntentStateRepository(engine), session_svc)
+    intent_state = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc)
     tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, intent_state)], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)

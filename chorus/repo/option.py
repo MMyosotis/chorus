@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 
-from chorus.domain.option import OptionPrompt, OptionPromptDef
+from chorus.domain.option import OptionAnswer, OptionPrompt, OptionPromptDef
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
 from chorus.repo.models import OptionPromptRecord
@@ -49,10 +49,27 @@ class OptionPromptRepository(BaseRepository):
         ).first()
         return _to_domain(r) if r else None
 
+    @read
+    def find_by_session(self, db, session_id: str) -> list[OptionPrompt]:
+        rows = db.scalars(
+            select(OptionPromptRecord)
+            .where(OptionPromptRecord.session_id == session_id)
+            .order_by(OptionPromptRecord.created_at.asc())
+        ).all()
+        return [_to_domain(row) for row in rows]
+
     @write
-    def update_answered(self, db, prompt_id: str) -> None:
-        db.execute(
-            update(OptionPromptRecord)
-            .where(OptionPromptRecord.prompt_id == prompt_id)
-            .values(status="answered")
-        )
+    def update_answered(self, db, session_id: str, answer: OptionAnswer) -> None:
+        record = db.scalars(
+            select(OptionPromptRecord)
+            .where(
+                OptionPromptRecord.session_id == session_id,
+                OptionPromptRecord.status == "open",
+            )
+            .order_by(OptionPromptRecord.created_at.desc())
+            .limit(1)
+        ).first()
+        prompt = dict(record.prompt)
+        prompt["answer"] = answer.model_dump(mode="json", exclude_none=True)
+        record.prompt = prompt
+        record.status = "answered"

@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 
-import { ROLE_INITIALS, ROLE_LABELS } from './roleMeta.js'
+import { ROLE_LABELS } from './roleMeta.js'
 
 const props = defineProps({
   agentType: { type: String, default: 'chief' },
@@ -13,7 +13,10 @@ const props = defineProps({
 
 const online = computed(() => ['running', 'awaiting_confirm'].includes(props.status))
 const label = computed(() => ROLE_LABELS[props.agentType] || '团队成员')
-const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
+const avatarSrc = computed(() => {
+  const assetName = ROLE_LABELS[props.agentType] ? props.agentType : 'chief'
+  return `/team-avatars/${assetName}.png`
+})
 </script>
 
 <template>
@@ -24,7 +27,7 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
     :title="label"
     :aria-label="label"
   >
-    {{ initial }}
+    <img class="agent-avatar-image" :src="avatarSrc" alt="" aria-hidden="true" />
     <i v-if="online" aria-hidden="true"></i>
   </span>
 </template>
@@ -37,14 +40,16 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
   display: grid;
   flex: 0 0 var(--avatar-size);
   place-items: center;
-  border: 1px solid var(--ch-accent-soft);
+  border: 0;
   border-radius: 50%;
-  background: var(--ch-accent-soft);
-  color: var(--ch-accent-soft-text);
-  font-family: var(--ch-font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1;
+}
+
+.agent-avatar-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
 }
 
 .agent-avatar i {
@@ -63,14 +68,16 @@ const initial = computed(() => ROLE_INITIALS[props.agentType] || '员')
 }
 
 .agent-avatar.standby {
-  opacity: .55;
-  filter: saturate(.4);
+  opacity: .65;
 }
 
-.agent-avatar.inactive {
-  border-color: var(--ch-border);
-  background: var(--ch-muted-gradient);
-  color: var(--ch-text-faint);
+.agent-avatar.standby .agent-avatar-image,
+.agent-avatar.inactive .agent-avatar-image {
+  filter: grayscale(1) saturate(.12);
+}
+
+.agent-avatar.inactive .agent-avatar-image {
+  opacity: .58;
 }
 
 @keyframes avatarPulse {

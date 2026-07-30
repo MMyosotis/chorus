@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.events import IntentStateEvent
+from chorus.domain.intent import IntentConfirmation
 from chorus.domain.message import MessageView
 from chorus.domain.option import OptionPrompt
 from chorus.domain.trace import TraceEntry
@@ -196,28 +197,47 @@ def choose_option(
     return sse_stream(_resume_option(session_id, req, supervisor, tools))
 
 
-@router.get("/{session_id}/option")
-def get_open_option(
+@router.get("/{session_id}/options")
+def list_option_prompts(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
     option: OptionPromptService = Depends(provide_option_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    prompt = option.get_open(session_id)
-    return {"prompt": _option_prompt_to_dict(prompt) if prompt else None}
+    return {"prompts": [_option_prompt_to_dict(prompt) for prompt in option.list_by_session(session_id)]}
+
+
+@router.get("/{session_id}/intent-confirmations")
+def list_intent_confirmations(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    intent: IntentStateService = Depends(provide_intent_state_service),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"confirmations": [_confirmation_to_dict(confirmation) for confirmation in intent.list_confirmations(session_id)]}
 
 
 def _option_prompt_to_dict(prompt: OptionPrompt) -> dict:
     return {
+        "prompt_id": prompt.prompt_id,
+        "message_id": prompt.message_id,
         "question": prompt.question,
         "options": [item.model_dump() for item in prompt.options],
         "allow_custom": prompt.allow_custom,
+        "status": prompt.status,
+        "answer": prompt.answer.model_dump(exclude_none=True) if prompt.answer else None,
+        "created_at": prompt.created_at,
     }
 
 
+def _confirmation_to_dict(confirmation: IntentConfirmation) -> dict:
+    return confirmation.model_dump(mode="json", exclude={"session_id"}, exclude_none=True)
+
+
 def _view_to_dict(view: MessageView) -> dict:
-    item: dict = {"role": view.role, "content": view.content}
+    item: dict = {"id": view.id, "role": view.role, "content": view.content}
     if view.role == "assistant":
         item["thinking"] = [seg.model_dump() for seg in view.thinking]
         item["tools"] = [tool.model_dump() for tool in view.tools]

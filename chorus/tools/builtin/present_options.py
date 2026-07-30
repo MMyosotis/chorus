@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from chorus.domain.events import OptionPromptEvent
-from chorus.domain.option import OptionItem
+from chorus.domain.option import OptionAnswer, OptionItem
 from chorus.services.option import OptionPromptService
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
@@ -73,8 +73,11 @@ class PresentOptionsTool(Tool):
             question=question,
             options=items,
             allow_custom=allow_custom,
+            message_id=ctx.message_id,
         )
         event = OptionPromptEvent(
+            prompt_id=prompt.prompt_id,
+            message_id=prompt.message_id,
             question=prompt.question,
             options=[item.model_dump() for item in prompt.options],
             allow_custom=prompt.allow_custom,
@@ -86,13 +89,13 @@ class PresentOptionsTool(Tool):
 
     def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
         prompt = self._options.get_open(session_id)
-        if prompt is None:
-            return "没有待选的提问，请直接继续。"
-        self._options.mark_answered(prompt.prompt_id)
         if signal == _CUSTOM_SIGNAL:
             custom_text = ((payload or {}).get("custom_text") or "").strip()
+            self._options.mark_answered(
+                session_id,
+                OptionAnswer(signal=signal, label="补充你的想法", custom_text=custom_text),
+            )
             return f"用户自由补充：{custom_text or '（空）'}"
-        label = next((o.label for o in prompt.options if o.signal == signal), None)
-        if label is None:
-            return f"用户的选择 {signal} 无法识别，请重新征询。"
+        label = next((option.label for option in prompt.options if option.signal == signal))
+        self._options.mark_answered(session_id, OptionAnswer(signal=signal, label=label))
         return f"用户选择了：{label}"

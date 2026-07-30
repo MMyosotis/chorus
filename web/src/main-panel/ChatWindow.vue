@@ -56,7 +56,16 @@ function followBottom(behavior = 'auto') {
   scrollToBottom(behavior)
 }
 
-defineExpose({ scrollToBottom, followBottom, openPreview })
+function scrollToTask(taskId) {
+  if (!taskId) return
+  nextTick(() => {
+    const target = [...(container.value?.querySelectorAll('[data-task-id]') || [])]
+      .find((element) => element.dataset.taskId === String(taskId))
+    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+defineExpose({ scrollToBottom, followBottom, scrollToTask, openPreview })
 
 const previewTask = ref(null)
 function openPreview(task) { previewTask.value = task }
@@ -94,17 +103,27 @@ const displayMessages = computed(() => {
   for (const message of props.messages) {
     if (message.kind === 'intent-confirm') {
       const previous = result[result.length - 1]
-      if (previous && previous.role === 'assistant' && !previous.kind) {
+      if (
+        previous && previous.role === 'assistant' && !previous.kind && !previous.intentState && !previous.optionPrompt &&
+        previous.id === message.anchorMessageId
+      ) {
         result[result.length - 1] = { ...previous, intentState: message.state }
         continue
       }
+      result.push({ ...message, content: '', intentState: message.state })
+      continue
     }
     if (message.kind === 'option') {
       const previous = result[result.length - 1]
-      if (previous && previous.role === 'assistant' && !previous.kind) {
+      if (
+        previous && previous.role === 'assistant' && !previous.kind && !previous.intentState && !previous.optionPrompt &&
+        previous.id === message.anchorMessageId
+      ) {
         result[result.length - 1] = { ...previous, optionPrompt: message.prompt }
         continue
       }
+      result.push({ ...message, content: '', optionPrompt: message.prompt })
+      continue
     }
     result.push(message)
   }
@@ -162,11 +181,11 @@ watch(
     <slot name="scroll-header"></slot>
     <div class="chat-inner">
       <TransitionGroup name="flow-stage" tag="div" class="flow-list">
-        <div v-for="(msg, idx) in displayMessages" :key="messageKey(msg, idx)" class="flow-entry">
+        <div v-for="(msg, idx) in displayMessages" :key="messageKey(msg, idx)" class="flow-entry" :data-task-id="msg.task?.id">
           <div v-if="msg.kind === 'hil'" class="hil-panel">
             <header class="task-turn-head">
-              <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="34" />
-              <span>{{ taskRoleLabel(msg.task) }} AI</span>
+              <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="36" />
+              <span>{{ taskRoleLabel(msg.task) }}</span>
             </header>
             <HilCard
               :task="msg.task"
@@ -181,8 +200,8 @@ watch(
           <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
           <div v-else-if="msg.kind === 'recovery'" class="recovery-panel">
             <header class="task-turn-head">
-              <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="34" />
-              <span>{{ taskRoleLabel(msg.task) }} AI</span>
+              <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="36" />
+              <span>{{ taskRoleLabel(msg.task) }}</span>
             </header>
             <RecoveryCard
               :task="msg.task"
@@ -194,7 +213,7 @@ watch(
           <MessageBubble
             v-else
             :role="msg.role"
-            :content="msg.content"
+            :content="msg.content || ''"
             :thinking="msg.thinking"
             :tools="msg.tools"
             :intent-state="msg.intentState"
@@ -209,12 +228,15 @@ watch(
       </TransitionGroup>
       <div v-if="messages.length === 0" class="empty-hint">
         <div class="empty-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></svg>
+          <svg viewBox="0 0 18 18" aria-hidden="true">
+            <path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z" />
+            <path d="M14.5 11.5C14.5 12.75 15.4 14 16.3 14C15.4 14 14.5 15.25 14.5 16.5C14.5 15.25 13.6 14 12.7 14C13.6 14 14.5 12.75 14.5 11.5Z" />
+          </svg>
         </div>
         <h2>今天想创作什么？</h2>
         <p>描述你的想法，我会和创作团队一起把它变成完整作品。</p>
         <div class="starter-grid">
-          <button type="button"><span class="starter-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z"/><path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14z"/></svg></span><b>策划选题</b><small>从一个想法梳理内容方向</small></button>
+          <button type="button"><span class="starter-icon starter-icon-topic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c3.2-.4 5.8.2 8 1.9 2.2-1.7 4.8-2.3 8-1.9v12.3c-3.2-.4-5.8.2-8 1.9-2.2-1.7-4.8-2.3-8-1.9V5.5Z"/><path d="M12 7.4v12.3M6.8 10.2h2.5M14.7 10.2h2.5M6.8 13.3h2.5"/></svg></span><b>策划选题</b><small>从一个想法梳理内容方向</small></button>
           <button type="button"><span class="starter-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></span><b>创作文案</b><small>生成结构清晰的发布内容</small></button>
           <button type="button"><span class="starter-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg></span><b>视觉构思</b><small>探索画面风格与配图方案</small></button>
         </div>
@@ -240,7 +262,7 @@ watch(
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 0 24px;
+  padding: 0 0 var(--ch-space-5);
   background: transparent;
   scrollbar-width: none;
 }
@@ -281,20 +303,30 @@ watch(
   margin-bottom: 24px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--ch-accent) 10%, var(--ch-border));
+  border-radius: 50%;
   background: var(--ch-accent-subtle);
   color: var(--ch-accent);
-  box-shadow: none;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--ch-accent) 8%, transparent);
 }
-.empty-mark svg { width: 32px; height: 32px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.empty-mark svg { width: 32px; height: 32px; fill: currentColor; stroke: none; }
 .empty-hint h2 { margin: 0; color: var(--ch-text); font: 600 24px/1.3 var(--ch-font-sans); }
 .empty-hint > p { max-width: 480px; margin: 0 0 24px; color: var(--ch-text-faint); font: 400 14px/1.6 var(--ch-font-sans); }
-.starter-grid { width: min(100%, 640px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.starter-grid button { min-height: 144px; display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--ch-border); border-radius: 16px; background: var(--ch-surface); color: var(--ch-text); text-align: left; cursor: default; box-shadow: none; }
+.starter-grid { width: min(100%, 704px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.starter-grid button { min-height: 152px; display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--ch-border); border-radius: 16px; background: var(--ch-surface); color: var(--ch-text); text-align: left; cursor: default; box-shadow: none; }
 .starter-grid .starter-icon { display: inline-flex; margin-bottom: 24px; color: var(--ch-accent); }
-.starter-grid .starter-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.starter-grid b { margin-bottom: 8px; font: 600 14px/1.4 var(--ch-font-sans); }
-.starter-grid small { color: var(--ch-text-muted); font: 400 12px/1.5 var(--ch-font-sans); }
+.starter-grid .starter-icon svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.starter-grid .starter-icon-topic svg { width: 24px; height: 24px; }
+.starter-grid b { margin-bottom: 8px; font: 600 16px/1.4 var(--ch-font-sans); }
+.starter-grid small {
+  align-self: stretch;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ch-text-muted);
+  font: 400 14px/1.5 var(--ch-font-sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .chat-inner :deep(.hil-card),
 .chat-inner :deep(.recovery-card),
@@ -317,28 +349,25 @@ watch(
 
 .task-turn-head {
   display: flex;
-  min-height: 34px;
+  min-height: 32px;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: var(--ch-space-2);
+  margin-bottom: var(--ch-space-3);
 }
 
 .task-turn-head :deep(.agent-avatar) {
-  border-color: var(--ch-ink);
-  background: var(--ch-ink);
   box-shadow: var(--ch-shadow-bubble);
-  color: var(--ch-on-ink);
 }
 
 .task-turn-head > span {
   color: var(--ch-text);
-  font: 500 14px/1 var(--ch-font-sans);
+  font: 500 16px/1 var(--ch-font-sans);
   letter-spacing: 0;
 }
 
-.preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: flex-start; justify-content: center; padding: 40px 20px; background: var(--ch-overlay); overflow-y: auto; }
-.preview-frame { position: relative; width: min(100%, 880px); background: var(--ch-surface); padding: 32px 24px 24px; border-radius: var(--ch-radius-card); box-shadow: var(--ch-shadow-lg); }
-.preview-close { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; background: transparent; color: var(--ch-text-muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--ch-overlay); overflow: hidden; }
+.preview-frame { position: relative; width: min(100%, 880px); height: min(680px, calc(100dvh - 40px)); overflow: hidden; background: var(--ch-surface); border-radius: var(--ch-radius-card); box-shadow: var(--ch-shadow-lg); }
+.preview-close { position: absolute; z-index: 1; top: 10px; right: 10px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--ch-surface) 84%, transparent); color: var(--ch-text-muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .preview-close:hover { color: var(--ch-text); }
 .preview-modal-enter-active, .preview-modal-leave-active { transition: opacity .2s; }
 .preview-modal-enter-from, .preview-modal-leave-to { opacity: 0; }

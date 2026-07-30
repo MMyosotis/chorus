@@ -10,7 +10,7 @@ const props = defineProps({
   focusedTaskId: { type: String, default: null },
   intentState: { type: Object, default: null },
 })
-defineEmits(['preview-task'])
+defineEmits(['focus-task'])
 
 const tasks = computed(() => props.graph?.tasks || [])
 </script>
@@ -25,7 +25,7 @@ const tasks = computed(() => props.graph?.tasks || [])
         <div class="section-divider" aria-hidden="true"></div>
         <PipelineTimeline :tasks="tasks" />
         <div class="section-divider" aria-hidden="true"></div>
-        <ArtifactsCard :tasks="tasks" @preview-task="$emit('preview-task')" />
+        <ArtifactsCard :tasks="tasks" @focus-task="$emit('focus-task', $event)" />
       </div>
     </div>
   </aside>
@@ -49,13 +49,13 @@ const tasks = computed(() => props.graph?.tasks || [])
   display: flex;
   flex-direction: column;
   overflow: visible;
-  padding: 30px var(--ch-space-4) 30px 0;
+  padding: 24px var(--ch-space-3) 24px 0;
 }
 
 .team-surface {
   flex: 1;
   min-height: 0;
-  padding: 26px var(--ch-space-4) var(--ch-space-4) var(--ch-space-4);
+  padding: var(--ch-panel-padding);
   overflow-x: hidden;
   overflow-y: auto;
   border: 1px solid var(--ch-border);
@@ -69,14 +69,14 @@ const tasks = computed(() => props.graph?.tasks || [])
 .right-title {
   color: var(--ch-ink);
   font-family: var(--ch-font-sans);
-  font-size: var(--ch-text-xl);
+  font-size: var(--ch-text-lg);
   font-weight: var(--ch-font-semibold);
   line-height: 1.4;
 }
 
 .section-divider {
   height: 1px;
-  margin: var(--ch-space-4) 0;
+  margin: 24px 0;
   background: var(--ch-border);
 }
 </style>

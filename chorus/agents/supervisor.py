@@ -14,7 +14,6 @@ from chorus.domain.events import (
     BusyEvent,
     DoneEvent,
     ErrorEvent,
-    IntentStateEvent,
     MessageStartEvent,
     SseEvent,
     SuspendEvent,
@@ -35,8 +34,6 @@ from chorus.tools import ToolCall, ToolDispatch
 from chorus.tools.framework import Suspend
 
 
-_INTENT_EVENT_TOOLS = {"update_intent_state", "create_plan"}
-
 _SUPERVISOR_MAX_STEPS = 20
 
 _logger = get_logger("supervisor")
@@ -56,10 +53,8 @@ class SupervisorLoopStrategy:
         self._intent_state = intent_state
         self._skill_loader = skill_loader
         self._tool_names = tool_names
-        self._pending_intent_events: list = []
 
     def before_turn(self):
-        self._pending_intent_events = []
         return True
 
     def message_start(self, ctx):
@@ -84,10 +79,7 @@ class SupervisorLoopStrategy:
         pass
 
     def after_dispatch(self, call, dispatch):
-        if call.name in _INTENT_EVENT_TOOLS:
-            self._pending_intent_events.append(
-                IntentStateEvent(state=self._intent_state.get(self.session_id).model_dump(mode="json"))
-            )
+        pass
 
     def after_tools(self, ctx, result, pairs):
         """成对落库，据是否命中挂起决定续跑或关流。"""
@@ -106,8 +98,9 @@ class SupervisorLoopStrategy:
             )
 
         self._session.touch(self.session_id)
-        events = list(self._pending_intent_events)
-        self._pending_intent_events = []
+        events = self._intent_state.events_for_turn(
+            self.session_id, ctx.turn.message_id, (call.name for call, _ in pairs),
+        )
         events.extend(event for _, dispatch in pairs for event in dispatch.events)
 
         if suspend is not None:

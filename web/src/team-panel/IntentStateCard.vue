@@ -61,7 +61,7 @@ function displayValue(value) {
     </div>
 
     <div v-if="specEntries.length || styleTags.length" class="tags">
-      <div v-if="specEntries.length" class="spec-tags">
+      <TransitionGroup v-if="specEntries.length" name="intent-tag" tag="div" class="spec-tags">
         <span
           v-for="entry in specEntries"
           :key="entry.key"
@@ -69,15 +69,15 @@ function displayValue(value) {
           :class="{ 'tag-count': entry.key === 'image-count' }"
           :title="displayValue(entry.value)"
         >{{ displayValue(entry.value) }}</span>
-      </div>
-      <div v-if="styleTags.length" class="style-tags">
+      </TransitionGroup>
+      <TransitionGroup v-if="styleTags.length" name="intent-tag" tag="div" class="style-tags">
         <span
           v-for="tag in styleTags"
           :key="tag"
           class="tag style-tag"
           :title="tag"
         >{{ tag }}</span>
-      </div>
+      </TransitionGroup>
     </div>
 
     <div class="intent-progress">
@@ -157,43 +157,23 @@ function displayValue(value) {
   color: var(--ch-text-muted);
 }
 
-.intent-status.live {
-  background: var(--ch-ink);
-  color: var(--ch-on-ink);
-}
-
-.intent-status.live i {
-  background: var(--ch-on-ink);
-  animation: intentPulse 1.8s ease-in-out infinite;
-}
-
-.intent-status.executing {
-  background: var(--ch-ink);
-  color: var(--ch-on-ink);
-}
-
-.intent-status.executing i {
-  background: var(--ch-on-ink);
-  animation: intentStatusPulse 1.8s ease-in-out infinite;
-}
-
-.intent-status.attention {
-  background: var(--ch-ink);
-  color: var(--ch-on-ink);
-}
-
-.intent-status.attention i {
-  background: var(--ch-on-ink);
-}
-
+.intent-status.live,
+.intent-status.executing,
+.intent-status.attention,
 .intent-status.ready {
   background: var(--ch-ink);
   color: var(--ch-on-ink);
 }
 
+.intent-status.live i,
+.intent-status.executing i,
+.intent-status.attention i,
 .intent-status.ready i {
   background: var(--ch-on-ink);
 }
+
+.intent-status.live i { animation: intentPulse 1.8s ease-in-out infinite; }
+.intent-status.executing i { animation: intentStatusPulse 1.8s ease-in-out infinite; }
 
 .intent-summary {
   margin-top: var(--ch-space-4);
@@ -234,13 +214,25 @@ function displayValue(value) {
   padding: 2px var(--ch-space-2);
   overflow: hidden;
   border-radius: var(--ch-radius-pill);
-  background: var(--ch-muted-gradient);
+  background: var(--ch-surface-2);
   color: var(--ch-text-secondary);
   font-size: var(--ch-text-xs);
   font-weight: var(--ch-font-medium);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.intent-tag-enter-active,
+.intent-tag-leave-active {
+  transition: opacity var(--ch-duration-fast) var(--ch-ease-out),
+    transform var(--ch-duration-fast) var(--ch-ease-out);
+}
+
+.intent-tag-enter-from,
+.intent-tag-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 .spec-tag:not(.tag-count) {
@@ -266,7 +258,7 @@ function displayValue(value) {
   margin-top: var(--ch-space-3);
   padding: 18px;
   border-radius: 14px;
-  background: var(--ch-muted-gradient);
+  background: var(--ch-surface-2);
 }
 
 .progress-line {
@@ -311,12 +303,8 @@ function displayValue(value) {
 }
 
 @keyframes intentStatusPulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ch-on-ink) 34%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 4px transparent;
-  }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ch-on-ink) 34%, transparent); }
+  50% { box-shadow: 0 0 0 4px transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {

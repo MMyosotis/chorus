@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -69,3 +69,27 @@ class IntentState(IntentSnapshot):
     session_id: str
     version: int = 0
     updated_at: float = Field(default_factory=time.time)
+
+
+ConfirmationStatus = Literal["open", "answered"]
+
+
+class IntentConfirmationAnswer(BaseModel):
+    """用户对一次意图确认的回应：确认进入创作或要求继续调整。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    signal: str
+    label: str
+
+
+class IntentConfirmation(IntentSnapshot):
+    """意图确认留档：待确认时固化的意图快照加持久化身份与作答状态。"""
+
+    confirmation_id: str
+    session_id: str
+    # 触发意图状态更新的助手消息，前端据此将卡原位挂回对话。
+    message_id: Optional[str] = None
+    status: ConfirmationStatus = "open"
+    answer: Optional[IntentConfirmationAnswer] = None
+    created_at: float = Field(default_factory=time.time)

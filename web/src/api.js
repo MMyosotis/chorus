@@ -88,16 +88,28 @@ export function chooseOption(id, body, onEvent) {
   }, onEvent)
 }
 
-export async function fetchOpenOption(id) {
-  const res = await fetch(`${BASE}/${id}/option`)
+export async function fetchOptionHistory(id) {
+  const res = await fetch(`${BASE}/${id}/options`)
   if (res.status === 404) {
     const err = new Error('session not found')
     err.status = 404
     throw err
   }
-  if (!res.ok) throw new Error(`open option failed: ${res.status}`)
+  if (!res.ok) throw new Error(`option history failed: ${res.status}`)
   const data = await res.json()
-  return data.prompt || null
+  return data.prompts || []
+}
+
+export async function getIntentConfirmations(id) {
+  const res = await fetch(`${BASE}/${id}/intent-confirmations`)
+  if (res.status === 404) {
+    const err = new Error('session not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`intent confirmations failed: ${res.status}`)
+  const data = await res.json()
+  return data.confirmations || []
 }
 
 export function streamChat(id, message, onEvent) {

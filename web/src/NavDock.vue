@@ -1,6 +1,7 @@
 <script setup>
 defineProps({
   sidebarOpen: { type: Boolean, default: false },
+  settingsOpen: { type: Boolean, default: false },
 })
 defineEmits(['toggle-sidebar', 'open-settings'])
 </script>
@@ -24,9 +25,9 @@ defineEmits(['toggle-sidebar', 'open-settings'])
       <button
         type="button"
         class="dock-item"
-        :class="{ active: sidebarOpen }"
+        :class="{ active: sidebarOpen && !settingsOpen }"
         aria-label="会话"
-        :aria-pressed="sidebarOpen"
+        :aria-pressed="sidebarOpen && !settingsOpen"
         @click="$emit('toggle-sidebar')"
       >
         <svg viewBox="0 0 24 24"><path d="M8 18c-2.8 0-5-2.3-5-5.1V10c0-3.3 2.7-6 6-6h6c3.3 0 6 2.7 6 6v2.9c0 2.8-2.2 5.1-5 5.1h-1.4L12 20l-2.6-2H8Z"></path><circle cx="9" cy="11" r=".8"></circle><circle cx="15" cy="11" r=".8"></circle></svg>
@@ -40,26 +41,36 @@ defineEmits(['toggle-sidebar', 'open-settings'])
         <svg viewBox="0 0 24 24"><circle cx="8.3" cy="8" r="3"></circle><circle cx="16.5" cy="9" r="2.4"></circle><path d="M2.8 20c.3-4 2-6 5.5-6s5.3 2 5.6 6M13.7 15.3c3.8-.4 6 1.2 6.5 4.7"></path></svg>
       </button>
 
-      <button type="button" class="dock-item" aria-label="设置" @click="$emit('open-settings')">
+    </div>
+
+    <div class="dock-spacer" aria-hidden="true"></div>
+
+    <div class="dock-footer">
+      <button
+        type="button"
+        class="dock-item"
+        :class="{ active: settingsOpen }"
+        aria-label="设置"
+        :aria-pressed="settingsOpen"
+        @click="$emit('open-settings')"
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 13a7.97 7.97 0 0 0 0-2l2-1.5-2-3.4-2.4.9a8 8 0 0 0-1.7-1L15 3.5H9l-.3 2.5a8 8 0 0 0-1.7 1l-2.4-.9-2 3.4L4.6 11a7.97 7.97 0 0 0 0 2l-2 1.5 2 3.4 2.4-.9a8 8 0 0 0 1.7 1l.3 2.5h6l.3-2.5a8 8 0 0 0 1.7-1l2.4.9 2-3.4-2-1.5Z" />
         </svg>
       </button>
+
+      <button type="button" class="dock-item dock-profile" aria-label="账户">
+        <span>稿</span>
+      </button>
     </div>
-
-    <div class="dock-spacer" aria-hidden="true"></div>
-
-    <button type="button" class="dock-item dock-profile" aria-label="账户">
-      <span>稿</span>
-    </button>
   </nav>
 </template>
 
 <style scoped>
 .nav-dock {
-  width: 80px;
-  flex: 0 0 80px;
+  width: var(--ch-nav-rail);
+  flex: 0 0 var(--ch-nav-rail);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -70,21 +81,21 @@ defineEmits(['toggle-sidebar', 'open-settings'])
 }
 
 .dock-logo {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  margin-bottom: 40px;
+  margin-bottom: 32px;
   border: 0;
   background: transparent;
   cursor: default;
 }
 
 .dock-logo svg {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   stroke: none;
 }
 
@@ -97,8 +108,8 @@ defineEmits(['toggle-sidebar', 'open-settings'])
 }
 
 .dock-item {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,8 +134,8 @@ defineEmits(['toggle-sidebar', 'open-settings'])
 }
 
 .dock-item svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -134,6 +145,13 @@ defineEmits(['toggle-sidebar', 'open-settings'])
 
 .dock-spacer {
   flex: 1;
+}
+
+.dock-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
 }
 
 .dock-profile {

@@ -1,11 +1,11 @@
 ---
 name: web-blog
-description: 网页博客（web-blog）平台创作包。当创作意图的 platform 为网页博客，或用户未指定平台而需要默认长文渲染时使用。提供长文结构、配图规格、PostCard 装配策略和预览资源引用；各子 Agent 只读取自己的 references 文件。
+description: 网页博客（web-blog）平台创作包。当创作意图的 platform 为网页博客，或用户未指定平台而需要默认长文渲染时使用。提供长文结构、配图规格、PostCard 装配策略和浏览器式网页阅读预览；各子 Agent 只读取自己的 references 文件。
 ---
 
 # 网页博客（web-blog）
 
-把创作意图转成可由 Chorus 统一 PostCard 渲染的网页博客长文。
+把创作意图转成可由 Chorus 统一 PostCard 渲染的网页博客长文。预览采用固定横向浏览器卡片：浏览器顶部和站点导航固定，正文区域在卡片内纵向滚动，呈现真实网页阅读体验。
 
 ## 使用原则
 

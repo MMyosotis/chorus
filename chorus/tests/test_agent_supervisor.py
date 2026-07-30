@@ -12,6 +12,7 @@ from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.engine import build_engine
+from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
@@ -81,7 +82,7 @@ def _setup():
 def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, fake_client):
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     hooks = HookRegistry()
-    intent_state = IntentStateService(IntentStateRepository(engine), session_svc)
+    intent_state = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc)
     tool_dispatcher = ToolDispatch([
         CreatePlanTool(task_repo, content_repo, intent_state),
         LoadSkillTool(skill_loader),
@@ -333,6 +334,9 @@ def test_update_intent_state_ready_to_confirm_finishes():
     # 历史：user + assistant(无正文, tool_calls) + tool(占位)，无后续纯文本轮
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]
+    intent_event = next(event for event in events if event.type == "intent_state")
+    assert intent_event.state["message_id"] == msgs[1].id
+    assert intent_event.state["confirmation_id"]
     assert msgs[1].content is None
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "update_intent_state"

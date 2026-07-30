@@ -11,6 +11,17 @@ export function mapToolItem(it) {
   }
 }
 
+function waitsForIntentConfirmation(toolItems) {
+  return toolItems.some((item) =>
+    item.name === 'update_intent_state' &&
+    item.arguments?.intent_status === 'ready_to_confirm'
+  )
+}
+
+function hostsHilCard(toolItems) {
+  return waitsForIntentConfirmation(toolItems) || toolItems.some((item) => item.name === 'present_options')
+}
+
 export function normalizeAssistant(msg) {
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
   const text = (msg.content || '').trim()
@@ -21,8 +32,9 @@ export function normalizeAssistant(msg) {
     tools: { state: 'idle', items: toolItems.map(mapToolItem) },
     created_at: msg.created_at ?? Date.now() / 1000,
     id: msg.id || null,
-    // 无正文但有工具：挂起轮，作确认卡宿主，resume 据此复用气泡续写
-    suspended: !text && toolItems.length > 0,
+    // 等待用户确认的轮次即使已有正文，也须在历史重载后保留续写标记；
+    // 否则确认后的建图步骤会另起一个无正文气泡。
+    suspended: (!text && toolItems.length > 0) || waitsForIntentConfirmation(toolItems),
   }
 }
 
@@ -33,12 +45,15 @@ export function mergeAssistantHistory(raw) {
 
   for (const m of raw) {
     if (m.role !== 'assistant') {
-      result.push({ role: m.role, content: m.content, created_at: m.created_at ?? Date.now() / 1000 })
+      result.push({ id: m.id || null, role: m.role, content: m.content, created_at: m.created_at ?? Date.now() / 1000 })
       segBubble = null
       continue
     }
     const hasContent = !!(m.content && m.content.trim())
     const hasTools = Array.isArray(m.tools) && m.tools.length > 0
+    const hilHost = hostsHilCard(m.tools || [])
+    // 挂起工具所在消息必须保留自身 id，不能被相邻助手轮次合并吞掉。
+    if (hilHost) segBubble = null
     if (segBubble) {
       if (hasContent) {
         segBubble.content += (segBubble.content ? '\n\n' : '') + m.content
@@ -49,6 +64,7 @@ export function mergeAssistantHistory(raw) {
       segBubble = normalizeAssistant({ role: 'assistant', content: m.content, tools: m.tools, id: m.id })
       result.push(segBubble)
     }
+    if (hilHost) segBubble = null
   }
   return result
 }

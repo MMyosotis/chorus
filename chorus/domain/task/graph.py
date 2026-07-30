@@ -25,6 +25,7 @@ class TaskNodeView:
     """任务图节点投影：调度行 + 运行期进度 + 产物 + 错误。"""
 
     id: str
+    message_id: Optional[str]
     agent_type: str
     status: str
     updated_at: float
@@ -61,6 +62,7 @@ def build_task_graph(
         artifacts = art.artifacts if art else None
         nodes.append(TaskNodeView(
             id=task.id,
+            message_id=task.message_id,
             agent_type=task.agent_type,
             status=task.status,
             updated_at=task.updated_at,
@@ -81,6 +83,7 @@ def dump_task_graph(graph: TaskGraph) -> dict:
         "active": graph.active,
         "tasks": [{
             "id": node.id,
+            "message_id": node.message_id,
             "agent_type": node.agent_type,
             "status": node.status,
             "updated_at": node.updated_at,

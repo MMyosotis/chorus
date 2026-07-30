@@ -2,14 +2,22 @@
 import { computed } from 'vue'
 
 import AgentAvatar from './AgentAvatar.vue'
-import { ROLE_ORDER } from './roleMeta.js'
+import { ROLE_LABELS, ROLE_ORDER } from './roleMeta.js'
 
 const props = defineProps({
   tasks: { type: Array, default: () => [] },
 })
 
 const members = computed(() => {
-  return ROLE_ORDER.map((agentType) => {
+  return ['chief', ...ROLE_ORDER].map((agentType) => {
+    if (agentType === 'chief') {
+      return {
+        id: 'chief',
+        agent_type: agentType,
+        status: 'finished',
+        inactive: false,
+      }
+    }
     const assigned = props.tasks.filter((task) => task.agent_type === agentType)
     const task = assigned.find((item) => item.status === 'running') || assigned.at(-1)
     return {
@@ -30,14 +38,15 @@ const members = computed(() => {
 
     <div class="team-compact">
       <div class="avatar-group">
-        <AgentAvatar
-          v-for="member in members"
-          :key="member.id"
-          :agent-type="member.agent_type"
-          :status="member.status"
-          :inactive="member.inactive"
-          :size="32"
-        />
+        <div v-for="member in members" :key="member.id" class="team-member">
+          <AgentAvatar
+            :agent-type="member.agent_type"
+            :status="member.status"
+            :inactive="member.inactive"
+            :size="40"
+          />
+          <span>{{ ROLE_LABELS[member.agent_type] }}</span>
+        </div>
       </div>
     </div>
   </section>
@@ -71,6 +80,19 @@ const members = computed(() => {
 
 .avatar-group {
   display: flex;
+  justify-content: space-between;
   gap: 8px;
 }
+
+.team-member {
+  display: grid;
+  min-width: 40px;
+  justify-items: center;
+  gap: 8px;
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
 </style>

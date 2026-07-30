@@ -1,18 +1,15 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { planArtifacts } from '../composables/artifactsProjection.js'
 import { ROLE_LABELS } from './roleMeta.js'
 
 const props = defineProps({ tasks: { type: Array, default: () => [] } })
-const emit = defineEmits(['preview-task'])
+const emit = defineEmits(['focus-task'])
 
 const rows = computed(() => planArtifacts(props.tasks))
 const hasRows = computed(() => rows.value.length > 0)
 
-const previewSrc = ref('')
-function openImage(url) { if (url) previewSrc.value = url }
-function closeImage() { previewSrc.value = '' }
-function openFinalize(row) { emit('preview-task', row.task) }
+function focusTask(row) { emit('focus-task', row.task) }
 </script>
 
 <template>
@@ -23,57 +20,55 @@ function openFinalize(row) { emit('preview-task', row.task) }
 
     <p v-if="!hasRows" class="artifacts-empty">尚无产出，创作开始后这里会汇总每步成果</p>
 
-    <ul v-else class="artifacts-list">
-      <li v-for="row in rows" :key="row.kind" class="artifact-row">
-        <span class="artifact-icon" aria-hidden="true">
-          <svg v-if="row.kind === 'idea'" viewBox="0 0 24 24">
-            <path d="M9 18h6M10 22h4M8.4 14.6A7 7 0 1 1 15.6 14.6C14.6 15.4 14 16.1 14 17h-4c0-.9-.6-1.6-1.6-2.4Z" />
-          </svg>
-          <svg v-else-if="row.kind === 'script'" viewBox="0 0 24 24">
-            <path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6" />
-          </svg>
-          <svg v-else-if="row.kind === 'image'" viewBox="0 0 24 24">
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <circle cx="8.5" cy="9" r="1.5" />
-            <path d="m4 17 5-5 3 3 2-2 6 6" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24">
-            <path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6" />
-          </svg>
-        </span>
-        <div class="artifact-body">
-          <span class="artifact-role">{{ ROLE_LABELS[row.kind] }}</span>
+    <TransitionGroup v-else name="artifact-row" tag="ul" class="artifacts-list">
+      <li v-for="row in rows" :key="row.kind">
+        <button
+          type="button"
+          class="artifact-row"
+          :aria-label="`跳转到${ROLE_LABELS[row.kind]}卡片`"
+          @click="focusTask(row)"
+        >
+          <span class="artifact-icon" aria-hidden="true">
+            <svg v-if="row.kind === 'idea'" viewBox="0 0 24 24">
+              <path d="M9 18h6M10 22h4M8.4 14.6A7 7 0 1 1 15.6 14.6C14.6 15.4 14 16.1 14 17h-4c0-.9-.6-1.6-1.6-2.4Z" />
+            </svg>
+            <svg v-else-if="row.kind === 'script'" viewBox="0 0 24 24">
+              <path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6" />
+            </svg>
+            <svg v-else-if="row.kind === 'image'" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <circle cx="8.5" cy="9" r="1.5" />
+              <path d="m4 17 5-5 3 3 2-2 6 6" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24">
+              <path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6" />
+            </svg>
+          </span>
+          <div class="artifact-body">
+            <span class="artifact-role">{{ ROLE_LABELS[row.kind] }}</span>
 
-          <p v-if="row.kind === 'idea'" class="artifact-text" :title="row.title">
-            {{ row.title || '已确定选题' }}
-          </p>
+            <p v-if="row.kind === 'idea'" class="artifact-text" :title="row.title">
+              {{ row.title || '已确定选题' }}
+            </p>
 
-          <p v-else-if="row.kind === 'script'" class="artifact-text">
-            {{ row.charCount }} 字 · {{ row.blockCount }} 段
-          </p>
+            <p v-else-if="row.kind === 'script'" class="artifact-text">
+              {{ row.charCount }} 字 · {{ row.blockCount }} 段
+            </p>
 
-          <template v-else-if="row.kind === 'image'">
-            <p class="artifact-text">{{ row.images.length }} 张配图</p>
-          </template>
+            <template v-else-if="row.kind === 'image'">
+              <p class="artifact-text">{{ row.images.length }} 张配图</p>
+            </template>
 
-          <template v-else-if="row.kind === 'finalize'">
-            <p class="artifact-text">{{ row.title || '已交付成品' }}</p>
-          </template>
-        </div>
-        <span class="artifact-arrow" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg>
-        </span>
-      </li>
-    </ul>
-
-    <Teleport to="body">
-      <div v-if="previewSrc" class="image-overlay" @click="closeImage">
-        <img :src="previewSrc" alt="配图预览" />
-        <button type="button" class="overlay-close" aria-label="关闭预览" @click.stop="closeImage">
-          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            <template v-else-if="row.kind === 'finalize'">
+              <p class="artifact-text">{{ row.title || '已交付成品' }}</p>
+            </template>
+          </div>
+          <span class="artifact-arrow" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg>
+          </span>
         </button>
-      </div>
-    </Teleport>
+      </li>
+    </TransitionGroup>
   </section>
 </template>
 
@@ -114,11 +109,37 @@ function openFinalize(row) { emit('preview-task', row.task) }
 
 .artifact-row {
   position: relative;
+  width: 100%;
+  border: 0;
+  margin: 0;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 14px;
   gap: var(--ch-space-3);
   align-items: center;
   padding-right: var(--ch-space-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.artifact-row-enter-active,
+.artifact-row-leave-active,
+.artifact-row-move {
+  transition: opacity var(--ch-duration-normal) var(--ch-ease-out),
+    transform var(--ch-duration-normal) var(--ch-ease-out);
+}
+
+.artifact-row-enter-from,
+.artifact-row-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.artifact-row-leave-active {
+  position: absolute;
+  width: 100%;
 }
 
 .artifact-row::before {
@@ -131,8 +152,14 @@ function openFinalize(row) { emit('preview-task', row.task) }
   transition: background var(--ch-duration-fast) var(--ch-ease);
 }
 
-.artifact-row:hover::before {
+.artifact-row:hover::before,
+.artifact-row:focus-visible::before {
   background: var(--ch-muted-gradient);
+}
+
+.artifact-row:focus-visible {
+  outline: 2px solid var(--ch-focus-ring, var(--ch-border-strong));
+  outline-offset: 4px;
 }
 
 .artifact-icon {
@@ -154,7 +181,7 @@ function openFinalize(row) { emit('preview-task', row.task) }
   height: 16px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.5;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -210,65 +237,15 @@ function openFinalize(row) { emit('preview-task', row.task) }
   stroke-linejoin: round;
 }
 
-.artifact-row:hover .artifact-arrow {
+.artifact-row:hover .artifact-arrow,
+.artifact-row:focus-visible .artifact-arrow {
   opacity: 1;
   transform: translateX(2px);
-}
-
-.image-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--ch-space-6);
-  background: var(--ch-overlay-strong);
-  backdrop-filter: blur(8px);
-  cursor: zoom-out;
-}
-
-.image-overlay img {
-  max-width: min(90vw, 720px);
-  max-height: 80vh;
-  border-radius: var(--ch-radius-card);
-  object-fit: contain;
-}
-
-.overlay-close {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: var(--ch-overlay-control);
-  color: var(--ch-on-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .2s ease-out;
-}
-
-.overlay-close:hover {
-  background: var(--ch-overlay-control-hover);
-}
-
-.overlay-close svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .artifact-row::before,
   .artifact-arrow,
-  .overlay-close { transition: none; }
+  .artifact-row { scroll-behavior: auto; }
 }
 </style>

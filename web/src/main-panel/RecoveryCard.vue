@@ -78,7 +78,7 @@ async function onCancel() {
 
 <style scoped>
 .recovery-card {
-  padding: var(--ch-space-4);
+  padding: var(--ch-space-5);
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
   background: var(--ch-surface);
@@ -91,6 +91,9 @@ async function onCancel() {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: var(--ch-space-4);
+  padding-bottom: var(--ch-space-4);
+  border-bottom: 1px solid var(--ch-border);
 }
 .recovery-head h2 {
   margin: 0;
@@ -119,9 +122,9 @@ async function onCancel() {
   white-space: nowrap;
 }
 .recovery-content {
-  margin-top: var(--ch-space-4);
-  padding-top: var(--ch-space-4);
-  border-top: 1px solid var(--ch-border);
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 .recovery-message {
   padding: var(--ch-space-3);

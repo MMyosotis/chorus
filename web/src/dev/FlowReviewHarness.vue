@@ -53,21 +53,31 @@ watch(current, async (stage) => {
   })
 })
 
-const intentState = computed(() => ({
-  intent_status: ['conversation', 'thinking'].includes(current.value.type) ? 'capturing' : current.value.type === 'intent' ? 'ready_to_confirm' : current.value.type === 'complete' ? 'confirmed' : 'dispatched',
-  topic: '从一个人的停留体验切入城市空间，以观察和情绪组织内容，避开广告式卖点罗列。',
-  platform: '小红书',
-  format: '图文探店',
-  style: '真实、克制、有观察感',
-  image_count: 3,
-  extra: {
-    感受: '一个人安静停留，不赶时间',
-    店铺: '由选题编辑选择合适的小众咖啡馆',
-    叙事: '从停留体验切入，以空间观察和城市情绪组织内容',
-    禁用: '不使用硬广表达，不堆砌卖点',
-  },
-  progress_percent: ['conversation', 'thinking'].includes(current.value.type) ? 58 : 100,
-}))
+const intentState = computed(() => {
+  const intentStatus = ['conversation', 'thinking'].includes(current.value.type)
+    ? 'capturing'
+    : current.value.type === 'intent'
+      ? 'ready_to_confirm'
+      : current.value.type === 'complete'
+        ? 'confirmed'
+        : 'dispatched'
+  return {
+    intent_status: intentStatus,
+    status: ['confirmed', 'dispatched'].includes(intentStatus) ? 'answered' : 'open',
+    topic: '从一个人的停留体验切入城市空间，以观察和情绪组织内容，避开广告式卖点罗列。',
+    platform: '小红书',
+    format: '图文探店',
+    style: '真实、克制、有观察感',
+    image_count: 3,
+    extra: {
+      感受: '一个人安静停留，不赶时间',
+      店铺: '由选题编辑选择合适的小众咖啡馆',
+      叙事: '从停留体验切入，以空间观察和城市情绪组织内容',
+      禁用: '不使用硬广表达，不堆砌卖点',
+    },
+    progress_percent: ['conversation', 'thinking'].includes(current.value.type) ? 58 : 100,
+  }
+})
 
 function art(label, from, to) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient><filter id="n"><feTurbulence baseFrequency=".72" numOctaves="3" stitchTiles="stitch"/><feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 .08 0"/></filter></defs><rect width="480" height="600" fill="url(#g)"/><rect width="480" height="600" filter="url(#n)" opacity=".55"/><path d="M70 420h340M105 120v300M375 150v270" stroke="#f8f5ed" stroke-opacity=".45" stroke-width="2"/><text x="240" y="300" text-anchor="middle" fill="#fffdf8" font-family="serif" font-size="25" letter-spacing="5">${label}</text></svg>`
@@ -215,7 +225,12 @@ function optionMessages() {
   const items = []
   for (const scenario of optionScenarios) {
     items.push({ id: `audit-option-intro-${scenario.prompt.options.length}`, role: 'assistant', content: `**${scenario.headline}**\n\n${scenario.intro}`, thinking: { state: 'idle' }, tools: { state: 'idle', items: [] } })
-    items.push({ id: `audit-option-card-${scenario.prompt.options.length}`, kind: 'option', role: 'assistant', prompt: scenario.prompt })
+    items.push({
+      id: `audit-option-card-${scenario.headline}`,
+      kind: 'option',
+      role: 'assistant',
+      prompt: scenario.prompt,
+    })
   }
   return items
 }

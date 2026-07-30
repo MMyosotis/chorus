@@ -3,7 +3,6 @@ import { ref, reactive, computed, watch, nextTick, onMounted, defineAsyncCompone
 import ChatWindow from './main-panel/ChatWindow.vue'
 import InputBar from './main-panel/InputBar.vue'
 import ManuscriptHeader from './main-panel/ManuscriptHeader.vue'
-import ConsolePanel from './main-panel/ConsolePanel.vue'
 import SessionSidebar from './SessionSidebar.vue'
 import NavDock from './NavDock.vue'
 import {
@@ -14,15 +13,17 @@ import {
   fetchMessages,
   streamChat,
   getIntentState,
+  getIntentConfirmations,
   confirmIntent,
   reopenIntent,
   chooseOption,
-  fetchOpenOption,
+  fetchOptionHistory,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
 import { mergeAssistantHistory } from './composables/messageHistory.js'
-import { planTaskCards, planIntentCard, planOptionCard } from './composables/taskCardProjection.js'
+import { planTaskCards, planIntentCards, planOptionCards } from './composables/taskCardProjection.js'
+import { insertAnchoredCard, replaceAnchoredCards } from './composables/anchoredCards.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import { ROLE_FULL } from './team-panel/roleMeta.js'
 
@@ -37,13 +38,13 @@ const sessions = ref([])
 const messagesBySession = reactive({})
 const streamingBySession = reactive({})
 const intentStateBySession = reactive({})
-const optionPromptBySession = reactive({})
+const intentConfirmationsBySession = reactive({})
+const optionPromptsBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
-const leftRailOpen = ref(false)
+const leftRailOpen = ref(true)
 const rightRailOpen = ref(false)
-const consoleOpen = ref(false)
-const consoleTab = ref('trace')
+const settingsOpen = ref(false)
 
 const focusedTaskId = ref(null)
 
@@ -51,13 +52,36 @@ function onTaskFocus(taskId) {
   focusedTaskId.value = taskId
 }
 
-function openConsole(tab) {
-  consoleTab.value = tab
-  consoleOpen.value = true
+function openSettings() {
+  if (settingsOpen.value) {
+    collapseSidebar()
+    return
+  }
+  rightRailOpen.value = false
+  settingsOpen.value = true
+  leftRailOpen.value = true
 }
 
-function onPreviewTask(task) {
-  chatWindowRef.value?.openPreview(task)
+function toggleSidebar() {
+  if (settingsOpen.value) {
+    settingsOpen.value = false
+    leftRailOpen.value = true
+    return
+  }
+  if (leftRailOpen.value) {
+    collapseSidebar()
+  } else {
+    leftRailOpen.value = true
+  }
+}
+
+function collapseSidebar() {
+  settingsOpen.value = false
+  leftRailOpen.value = false
+}
+
+function onArtifactFocus(task) {
+  chatWindowRef.value?.scrollToTask(task?.id)
 }
 
 const messages = computed(() => messagesBySession[activeId.value] || [])
@@ -66,8 +90,12 @@ const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
 const activeCompleted = computed(() => (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished'))
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
-const activeOptionPrompt = computed(() => optionPromptBySession[activeId.value] || null)
-const awaitingConfirm = computed(() => activeIntentState.value?.intent_status === 'ready_to_confirm')
+const activeConfirmations = computed(() => intentConfirmationsBySession[activeId.value] || [])
+const activeConfirmation = computed(() => activeConfirmations.value.find((confirmation) => confirmation.status === 'open') || null)
+const activeOptionPrompt = computed(() =>
+  (optionPromptsBySession[activeId.value] || []).find((prompt) => prompt.status === 'open') || null
+)
+const awaitingConfirm = computed(() => !!activeConfirmation.value)
 const awaitingOption = computed(() => !!activeOptionPrompt.value)
 const activeTitle = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
@@ -143,11 +171,19 @@ async function loadIntentState(id) {
   }
 }
 
-async function loadOpenOption(id) {
+async function loadOptionHistory(id) {
   try {
-    optionPromptBySession[id] = await fetchOpenOption(id)
+    optionPromptsBySession[id] = await fetchOptionHistory(id)
   } catch {
-    optionPromptBySession[id] = null
+    optionPromptsBySession[id] = []
+  }
+}
+
+async function loadIntentConfirmations(id) {
+  try {
+    intentConfirmationsBySession[id] = await getIntentConfirmations(id)
+  } catch {
+    intentConfirmationsBySession[id] = []
   }
 }
 
@@ -177,8 +213,9 @@ async function commitSessionSwitch(id, selectionToken) {
 async function selectSession(id) {
   if (!id || id === activeId.value) return
   const selectionToken = ++sessionSelectionToken
-  leftRailOpen.value = false
-  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id), loadOpenOption(id)])
+  // 窄屏侧栏为覆盖层，切换后收起以展示对话；桌面端则保持用户展开状态。
+  if (window.matchMedia('(max-width: 780px)').matches) leftRailOpen.value = false
+  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id), loadIntentConfirmations(id), loadOptionHistory(id)])
   if (selectionToken !== sessionSelectionToken) return
   if (!messagesReady) {
     if (sessions.value.length > 0) await selectSession(sessions.value[0].id)
@@ -197,8 +234,10 @@ async function selectSession(id) {
 
 async function forceReloadMessages(id) {
   try {
-    const raw = await fetchMessages(id)
+    const [raw, prompts, confirmations] = await Promise.all([fetchMessages(id), fetchOptionHistory(id), getIntentConfirmations(id)])
     messagesBySession[id] = mergeAssistantHistory(raw)
+    optionPromptsBySession[id] = prompts
+    intentConfirmationsBySession[id] = confirmations
     injectTaskCards(id)
     injectIntentCard(id)
     injectOptionCard(id)
@@ -222,48 +261,43 @@ function injectTaskCards(id) {
   const runningIdx = list.findIndex((m) => m.kind === RUNNING_KIND)
   if (runningCard) {
     if (runningIdx >= 0) list[runningIdx].task = runningCard.task
-    else list.push(runningCard)
+    else insertAnchoredCard(list, runningCard)
   } else if (runningIdx >= 0) {
     list.splice(runningIdx, 1)
   }
   for (const card of plan) {
     if (card.kind === RUNNING_KIND) continue
-    if (card.kind === 'confirmed') {
-      const idx = list.findIndex((m) => m.kind === RUNNING_KIND)
-      list.splice(idx >= 0 ? idx : list.length, 0, card)
-    } else {
-      list.push(card)
-    }
+    insertAnchoredCard(list, card)
   }
 }
 
 function injectIntentCard(id) {
   const list = messagesBySession[id]
   if (!list) return
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].kind === 'intent-confirm') list.splice(i, 1)
-  }
-  const card = planIntentCard(intentStateBySession[id])
-  if (card) list.push(card)
+  replaceAnchoredCards(
+    list,
+    (message) => message.kind === 'intent-confirm',
+    planIntentCards(intentConfirmationsBySession[id]),
+  )
 }
 
 function injectOptionCard(id) {
   const list = messagesBySession[id]
   if (!list) return
-  for (let i = list.length - 1; i >= 0; i--) {
-    if (list[i].kind === 'option') list.splice(i, 1)
-  }
-  const card = planOptionCard(optionPromptBySession[id])
-  if (card) list.push(card)
+  replaceAnchoredCards(
+    list,
+    (message) => message.kind === 'option',
+    planOptionCards(optionPromptsBySession[id]),
+  )
 }
 
-watch(activeIntentState, () => {
+watch(() => intentConfirmationsBySession[activeId.value], () => {
   if (activeId.value) injectIntentCard(activeId.value)
-})
+}, { deep: true })
 
-watch(activeOptionPrompt, () => {
+watch(() => optionPromptsBySession[activeId.value], () => {
   if (activeId.value) injectOptionCard(activeId.value)
-})
+}, { deep: true })
 
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
@@ -291,7 +325,8 @@ async function onCreate() {
     sessions.value.unshift(meta)
     messagesBySession[meta.id] = []
     intentStateBySession[meta.id] = null
-    optionPromptBySession[meta.id] = null
+    intentConfirmationsBySession[meta.id] = []
+    optionPromptsBySession[meta.id] = []
     activeId.value = meta.id
     loadIntentState(meta.id)
   } catch (e) {
@@ -311,11 +346,12 @@ async function onDelete(id) {
   delete messagesBySession[id]
   delete streamingBySession[id]
   delete intentStateBySession[id]
-  delete optionPromptBySession[id]
+  delete intentConfirmationsBySession[id]
+  delete optionPromptsBySession[id]
   if (wasActive) {
     if (sessions.value.length > 0) {
       activeId.value = sessions.value[0].id
-      await Promise.all([loadMessages(activeId.value), loadIntentState(activeId.value)])
+      await Promise.all([loadMessages(activeId.value), loadIntentState(activeId.value), loadIntentConfirmations(activeId.value), loadOptionHistory(activeId.value)])
     } else {
       await onCreate()
     }
@@ -416,14 +452,28 @@ function createStreamHandler(sessionId) {
     }
     if (payload.type === 'intent_state') {
       intentStateBySession[sessionId] = payload.state
+      if (payload.state?.intent_status === 'ready_to_confirm') {
+        const confirmations = intentConfirmationsBySession[sessionId] || (intentConfirmationsBySession[sessionId] = [])
+        const openIdx = confirmations.findIndex((confirmation) => confirmation.status === 'open')
+        const confirmation = { ...payload.state, status: 'open' }
+        if (openIdx >= 0) confirmations.splice(openIdx, 1, confirmation)
+        else confirmations.push(confirmation)
+      }
       return
     }
     if (payload.type === 'option_prompt') {
-      optionPromptBySession[sessionId] = {
+      const prompts = optionPromptsBySession[sessionId] || (optionPromptsBySession[sessionId] = [])
+      const openIdx = prompts.findIndex((prompt) => prompt.status === 'open')
+      const prompt = {
+        prompt_id: payload.prompt_id,
+        message_id: payload.message_id,
         question: payload.question,
         options: payload.options,
         allow_custom: payload.allow_custom,
+        status: 'open',
       }
+      if (openIdx >= 0) prompts.splice(openIdx, 1, prompt)
+      else prompts.push(prompt)
       return
     }
 
@@ -551,19 +601,38 @@ async function onSend(text) {
 async function onIntentConfirm() {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
+  const confirmation = activeConfirmation.value
+  if (confirmation) {
+    confirmation.status = 'answered'
+    confirmation.answer = { signal: 'confirm', label: '确认并开始创作' }
+  }
   await runAssistantStream(sessionId, (onEvent) => confirmIntent(sessionId, onEvent))
 }
 
 async function onIntentRevise() {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
+  const confirmation = activeConfirmation.value
+  if (confirmation) {
+    confirmation.status = 'answered'
+    confirmation.answer = { signal: 'reopen', label: '继续调整' }
+  }
   await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
 }
 
 async function onOptionChoose(payload) {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
-  optionPromptBySession[sessionId] = null
+  const prompt = activeOptionPrompt.value
+  if (prompt) {
+    const selected = prompt.options.find((option) => option.signal === payload.signal)
+    prompt.status = 'answered'
+    prompt.answer = {
+      signal: payload.signal,
+      label: selected?.label || '补充你的想法',
+      ...(payload.custom_text ? { custom_text: payload.custom_text } : {}),
+    }
+  }
   await runAssistantStream(sessionId, (onEvent) => chooseOption(sessionId, payload, onEvent))
 }
 
@@ -587,11 +656,12 @@ onMounted(async () => {
 <template>
   <FlowReviewHarness v-if="uiReviewMode" />
   <template v-else>
-  <div class="app-shell" :class="{ 'sidebar-open': leftRailOpen }">
+  <div class="app-shell" :class="{ 'sidebar-open': leftRailOpen, 'settings-open': settingsOpen }">
     <NavDock
       :sidebar-open="leftRailOpen"
-      @toggle-sidebar="leftRailOpen = !leftRailOpen"
-      @open-settings="openConsole('settings')"
+      :settings-open="settingsOpen"
+      @toggle-sidebar="toggleSidebar"
+      @open-settings="openSettings"
     />
     <SessionSidebar
       :class="{ 'is-open': leftRailOpen }"
@@ -600,10 +670,13 @@ onMounted(async () => {
       :streaming-map="streamingBySession"
       :active-working="hasActiveTask || awaitingConfirm || awaitingOption || streaming"
       :active-completed="activeCompleted"
+      :settings-open="settingsOpen"
+      :expanded="leftRailOpen || settingsOpen"
       @select="selectSession"
       @create="onCreate"
       @delete="onDelete"
       @rename="onRename"
+      @collapse="collapseSidebar"
     />
     <main class="main-panel">
       <nav class="mobile-bar" aria-label="移动端栏目导航">
@@ -643,13 +716,7 @@ onMounted(async () => {
       :focused-task-id="focusedTaskId"
       :intent-state="activeIntentState"
       @focus="onTaskFocus"
-      @preview-task="onPreviewTask"
-    />
-    <ConsolePanel
-      v-model:open="consoleOpen"
-      v-model:tab="consoleTab"
-      :active-id="activeId"
-      :trace-store="traceStore"
+      @focus-task="onArtifactFocus"
     />
     <button v-if="leftRailOpen || rightRailOpen" class="rail-scrim" type="button" aria-label="关闭侧栏" @click="leftRailOpen = false; rightRailOpen = false"></button>
   </div>
@@ -658,7 +725,9 @@ onMounted(async () => {
 
 <style scoped>
 .app-shell {
-  --ch-left-inset: 80px;
+  --ch-sidebar-width: 0px;
+  --ch-sidebar-motion-duration: 320ms;
+  --ch-sidebar-motion-ease: cubic-bezier(.2, .72, .25, 1);
   display: flex;
   min-height: 100dvh;
   width: 100%;
@@ -668,18 +737,21 @@ onMounted(async () => {
 }
 
 .app-shell.sidebar-open {
-  --ch-left-inset: 352px;
+  --ch-sidebar-width: var(--ch-session-rail);
+}
+
+.app-shell.settings-open {
+  --ch-sidebar-width: min(480px, calc(100vw - var(--ch-nav-rail)));
 }
 
 .main-panel {
-  --ws-main-pad: 48px;
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
   height: 100dvh;
   overflow: hidden;
-  padding: 32px var(--ws-main-pad) 24px;
+  padding: 24px var(--ch-space-5);
 }
 
 .mobile-bar { display: none; }
@@ -693,6 +765,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  width: min(100%, var(--ch-main-column));
+  margin: 0 auto;
 }
 
 .paper-shell {
@@ -752,8 +826,23 @@ onMounted(async () => {
   }
 
   .app-shell > :deep(.sidebar) {
-    width: calc(var(--ch-left-inset) - 80px);
-    transition: width var(--ch-duration-normal) var(--ch-ease-out);
+    width: var(--ch-sidebar-width);
+    transition: width var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease);
+  }
+
+  .app-shell > :deep(.team-panel) {
+    transition: flex-basis var(--ch-duration-normal) var(--ch-ease-out),
+      opacity var(--ch-duration-fast) var(--ch-ease-out),
+      width var(--ch-duration-normal) var(--ch-ease-out);
+  }
+
+  .app-shell.settings-open > :deep(.team-panel) {
+    width: 0;
+    flex-basis: 0;
+    min-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
   }
 }
 
@@ -766,8 +855,8 @@ onMounted(async () => {
   }
 
   .app-shell > :deep(.sidebar) {
-    width: calc(var(--ch-left-inset) - 80px);
-    transition: width var(--ch-duration-normal) var(--ch-ease-out);
+    width: var(--ch-sidebar-width);
+    transition: width var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease);
   }
 }
 
@@ -782,14 +871,14 @@ onMounted(async () => {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px;
+    gap: var(--ch-space-2);
+    padding: 0 var(--ch-space-3);
     background: var(--ch-surface);
     border-bottom: 1px solid var(--ch-border);
   }
   .mobile-bar button {
     min-height: 36px;
-    padding: 0 8px;
+    padding: 0 var(--ch-space-2);
     border: 0;
     background: transparent;
     color: var(--ch-accent);
@@ -838,5 +927,11 @@ onMounted(async () => {
     box-shadow: var(--ch-shadow-lg);
   }
   :deep(.team-panel.is-open) { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell > :deep(.sidebar) {
+    transition: none;
+  }
 }
 </style>
