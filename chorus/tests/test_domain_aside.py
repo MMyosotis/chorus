@@ -17,7 +17,7 @@ def test_generate_returns_default_on_exception():
     client = MagicMock()
     client.chat.completions.create.side_effect = RuntimeError("network")
     gen = AsideGenerator(client, "deepseek-flash")
-    assert gen.generate("script", "invoke") == "我在打磨这段文案"
+    assert gen.generate("script", "invoke") == "我正在撰写正文"
 
 
 def test_generate_returns_default_on_empty():
@@ -26,7 +26,7 @@ def test_generate_returns_default_on_empty():
         choices=[MagicMock(message=MagicMock(content=""))]
     )
     gen = AsideGenerator(client, "deepseek-flash")
-    assert gen.generate("idea", "invoke") == "我在琢磨一个好选题"
+    assert gen.generate("idea", "invoke") == "我正在调研候选选题"
 
 
 def test_generate_truncates_long_aside():
