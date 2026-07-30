@@ -91,7 +91,6 @@ class TaskPlan:
         content = TaskContent(
             task_id=task_id,
             invoke_message=self._render_skeleton(step),
-            progress_total=self.intent.image_count if step.agent_type == "image" else None,
         )
         return task, content
 

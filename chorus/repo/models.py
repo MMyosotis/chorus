@@ -98,7 +98,6 @@ class TaskContentRecord(Base):
         String, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True
     )
     invoke_message: Mapped[str] = mapped_column(Text, nullable=False)
-    progress_total: Mapped[Optional[int]] = mapped_column(Integer)
     error: Mapped[Optional[str]] = mapped_column(Text)
     feedback: Mapped[Optional[str]] = mapped_column(Text)
 

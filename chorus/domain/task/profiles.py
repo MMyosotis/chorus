@@ -67,9 +67,9 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_parser=parse_idea_md,
         composing_label="个候选",
         activity_lines={
-            "thinking": "先翻翻最近的热点",
-            "searching": "翻翻热点",
-            "composing": "笔尖正在落纸",
+            "thinking": "正在梳理选题",
+            "searching": "正在搜索",
+            "composing": "正在撰写",
         },
     ),
     "script": AgentProfile(
@@ -81,9 +81,9 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_parser=parse_script_md,
         composing_label="段",
         activity_lines={
-            "thinking": "先在脑子里理一理",
-            "searching": "查查资料",
-            "composing": "笔尖正在落纸",
+            "thinking": "正在构思文案",
+            "searching": "正在搜索",
+            "composing": "正在撰写",
         },
     ),
     "image": AgentProfile(
@@ -95,9 +95,9 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_parser=parse_image_md,
         composing_label="张",
         activity_lines={
-            "thinking": "先在脑子里画一画",
-            "drawing": "作画",
-            "composing": "笔尖正在落纸",
+            "thinking": "正在构思配图",
+            "drawing": "正在生成图片",
+            "composing": "正在撰写",
         },
     ),
     "finalize": AgentProfile(
@@ -109,8 +109,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
         artifacts_parser=parse_postcard_md,
         composing_label="节",
         activity_lines={
-            "thinking": "先在脑子里理一理结构",
-            "composing": "笔尖正在落纸",
+            "thinking": "正在梳理结构",
+            "composing": "正在撰写",
         },
     ),
 }

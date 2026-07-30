@@ -160,7 +160,7 @@ def test_get_graph_includes_progress_and_timestamps():
         status="running", dependencies=[],
         created_at=0.0, updated_at=10.0,
     ))
-    content_repo.insert(TaskContent(task_id="t1", invoke_message="x", progress_total=3))
+    content_repo.insert(TaskContent(task_id="t1", invoke_message="x"))
     progress_repo = TaskProgressRepository(engine)
     progress_repo.set_composing("t1", 120, 2)
     progress_repo.set_composing_label("t1", "张")
@@ -171,8 +171,6 @@ def test_get_graph_includes_progress_and_timestamps():
     assert t.progress.composing_chars == 120
     assert t.progress.composing_units == 2
     assert t.progress.composing_label == "张"
-    # 配图分母（共 N 张）随内容行透进节点
-    assert t.progress_total == 3
     # error 取自内容表（此处未写 → None）
     assert t.error is None
 

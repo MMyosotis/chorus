@@ -138,12 +138,12 @@ def test_activity_line_injected_into_graph():
     data = dump_task_graph(graph)
     node = data["tasks"][0]
     assert node["progress"]["activity_kind"] == "drawing"
-    assert node["progress"]["activity_line"] == "作画"
+    assert node["progress"]["activity_line"] == "正在生成图片"
     # 角色差异：选题官思考态台词与配图官不同
     idea_task = _mk(TaskStatus.RUNNING, id="idea", agent_type="idea")
     idea_prog = TaskProgress(task_id="idea", activity_kind="thinking")
     idea_graph = build_task_graph("p", [idea_task], {}, {"idea": idea_prog}, {}, True)
-    assert dump_task_graph(idea_graph)["tasks"][0]["progress"]["activity_line"] == "先翻翻最近的热点"
+    assert dump_task_graph(idea_graph)["tasks"][0]["progress"]["activity_line"] == "正在梳理选题"
 
 
 def test_validate_steps_ok():
@@ -206,15 +206,6 @@ def test_expand_pipeline():
     assert all(c.task_id == t.id for t, c in pairs)
 
 
-def test_expand_pipeline_image_progress_total():
-    """image 步骤的 progress_total 落进 TaskContent，调度行不携带。"""
-    intent = Intent(topic="t", image_count=4)
-    steps = [StepSpec("image", []), StepSpec("finalize", [0])]
-    pairs = TaskPlan(session_id="s", intent=intent, steps=steps).expand()
-    image_task, image_content = next(p for p in pairs if p[0].agent_type == "image")
-    assert image_content.progress_total == 4
-
-
 def test_render_invoke_message_injects_deps_and_feedback():
     content = TaskContent(
         task_id="t", invoke_message="骨架",
@@ -267,16 +258,6 @@ def _task(tid, deps=None, created_at=0.0):
         status="pending", dependencies=deps or [],
         created_at=created_at, updated_at=0.0,
     )
-
-
-def test_graph_node_exposes_progress_total():
-    """配图分母随内容行透进任务图节点并序列化，前端据此显示共 N 张。"""
-    task = _mk(TaskStatus.RUNNING, id="img", agent_type="image")
-    content = TaskContent(task_id="img", invoke_message="x", progress_total=3)
-    graph = build_task_graph("p", [task], {}, {}, {"img": content}, True)
-    node = graph.nodes[0]
-    assert node.progress_total == 3
-    assert dump_task_graph(graph)["tasks"][0]["progress_total"] == 3
 
 
 def test_artifact_display_title():

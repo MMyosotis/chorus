@@ -115,7 +115,7 @@ def _mk_task(task_repo, content_repo, owner_id=100.0, status="running", agent_ty
         created_at=0.0, updated_at=0.0, owner_id=owner_id,
     )
     task_repo.insert(task)
-    content_repo.insert(TaskContent(task_id="t1", invoke_message="骨架", progress_total=3))
+    content_repo.insert(TaskContent(task_id="t1", invoke_message="骨架"))
     return task
 
 

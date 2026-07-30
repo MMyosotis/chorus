@@ -26,11 +26,10 @@ def _repo():
 def test_insert_and_load():
     repo, engine = _repo()
     _seed_task(engine, "t1")
-    repo.insert(TaskContent(task_id="t1", invoke_message="骨架：主题=测试", progress_total=3))
+    repo.insert(TaskContent(task_id="t1", invoke_message="骨架：主题=测试"))
     got = repo.load("t1")
     assert got is not None
     assert got.invoke_message == "骨架：主题=测试"
-    assert got.progress_total == 3
     assert repo.load("nope") is None
 
 

@@ -32,7 +32,6 @@ class TaskNodeView:
     progress: Optional[TaskProgress] = None
     artifacts: Optional[Union[IdeaArtifacts, ScriptArtifacts, ImageArtifacts, PostCard]] = None
     error: Optional[str] = None
-    progress_total: Optional[int] = None
     title: Optional[str] = None
 
 
@@ -69,7 +68,6 @@ def build_task_graph(
             progress=progress.get(task.id),
             artifacts=artifacts,
             error=content.error if content else None,
-            progress_total=content.progress_total if content else None,
             title=artifacts.display_title if artifacts else None,
         ))
 
@@ -90,7 +88,6 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "progress": _dump_progress_with_line(node) if node.progress else None,
             "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
             "error": node.error,
-            "progress_total": node.progress_total,
             "title": node.title,
         } for node in graph.nodes],
     }

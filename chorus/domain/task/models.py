@@ -56,7 +56,6 @@ class TaskContent:
 
     task_id: str
     invoke_message: str
-    progress_total: Optional[int] = None
     error: Optional[str] = None
     feedback: Optional[str] = None
 

@@ -11,10 +11,10 @@ _ROLE_HINT = {
     "finalize": "汇总官",
 }
 _DEFAULT_ASIDE = {
-    "idea": "我在琢磨一个好选题",
-    "script": "我在打磨这段文案",
-    "image": "我在构思一张画面",
-    "finalize": "我在收拢这篇成稿",
+    "idea": "我正在调研候选选题",
+    "script": "我正在撰写正文",
+    "image": "我正在生成配图",
+    "finalize": "我正在整合成品",
 }
 
 
@@ -29,8 +29,8 @@ class AsideGenerator:
         fallback = _DEFAULT_ASIDE.get(agent_type, "我正在准备中")
         role = _ROLE_HINT.get(agent_type, agent_type)
         prompt = (
-            f"你是{role}。请基于以下任务说明，用一句话（不超过20字）描述你接下来打算怎么写，"
-            "要有画面感、文艺、第一人称口吻，仅返回这句话。\n\n"
+            f"你是{role}。请基于以下任务说明，用一句话（不超过20字）以第一人称描述你正在做什么，"
+            "直白、功能性、不文艺、不画面感，仅返回这句话。\n\n"
             f"{invoke[:500]}"
         )
         try:
