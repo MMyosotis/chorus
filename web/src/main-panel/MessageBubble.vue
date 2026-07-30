@@ -2,9 +2,9 @@
 import { computed, ref } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import IntentConfirmCard from './IntentConfirmCard.vue'
-import OptionCard from './OptionCard.vue'
+import HilRecap from './HilRecap.vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
+import { resolveActivityState } from '../composables/messageActivity.js'
 
 const props = defineProps({
   role: { type: String, required: true },
@@ -18,12 +18,9 @@ const props = defineProps({
     type: Object,
     default: () => ({ state: 'idle', items: [] }),
   },
-  intentState: { type: Object, default: null },
-  optionPrompt: { type: Object, default: null },
+  recaps: { type: Array, default: () => [] },
   suspended: { type: Boolean, default: false },
 })
-
-const emit = defineEmits(['intent-confirm', 'intent-revise', 'option-choose'])
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -39,21 +36,11 @@ const formattedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
-const hasRunningTool = computed(() =>
-  (props.tools.items || []).some((it) => it.duration_ms == null)
-)
-
 const bareMode = computed(() =>
-  props.role === 'assistant' && !props.content && (props.active || props.intentState || props.optionPrompt)
+  props.role === 'assistant' && !props.content && (props.active || props.recaps.length > 0)
 )
 
-const activityState = computed(() => {
-  if (props.tools.state === 'running' && hasRunningTool.value) return 'tools'
-  if (props.active && !props.content) {
-    return props.thinking.state === 'running' ? 'thinking' : 'preparing'
-  }
-  return 'idle'
-})
+const activityState = computed(() => resolveActivityState(props))
 
 const runningTool = computed(() => {
   const items = props.tools.items || []
@@ -64,11 +51,13 @@ const runningTool = computed(() => {
 })
 
 const activityLabel = computed(() => {
-  if (activityState.value === 'thinking') return '酝酿中'
+  if (activityState.value === 'thinking') return '正在思考'
   if (activityState.value === 'tools') {
-    return runningTool.value?.running_label || '落笔中'
+    const label = runningTool.value?.running_label || '处理'
+    const action = label.replace(/^正在/, '').replace(/中$/, '')
+    return `正在${action}`
   }
-  if (activityState.value === 'preparing') return '铺纸中'
+  if (activityState.value === 'preparing') return '正在准备'
   return ''
 })
 
@@ -161,8 +150,20 @@ function closePreview() {
 <template>
   <div :class="['bubble-row', role, { bare: bareMode }]">
     <div v-if="role === 'assistant'" class="turn-head">
-      <AgentAvatar agent-type="chief" :status="active ? 'running' : 'finished'" :size="40" />
+      <AgentAvatar agent-type="chief" status="finished" :size="40" />
       <span class="role">主编辑</span>
+      <div
+        v-if="activityState !== 'idle'"
+        class="status-card"
+        :class="activityState"
+        aria-live="polite"
+      >
+        <span class="label-stage">
+          <Transition name="label-swap">
+            <span class="status-text" :key="activityLabel">{{ activityLabel }}</span>
+          </Transition>
+        </span>
+      </div>
     </div>
     <div :class="['bubble', role, { bare: bareMode }]">
       <div v-if="!hideBody" :class="role === 'user' ? 'u-body' : 'a-body'">
@@ -208,45 +209,13 @@ function closePreview() {
       </div>
     </div>
 
-    <IntentConfirmCard
-      v-if="role === 'assistant' && intentState"
-      class="standalone-intent"
-      :state="intentState"
-      @confirm="emit('intent-confirm')"
-      @revise="emit('intent-revise')"
-    />
-
-    <OptionCard
-      v-if="role === 'assistant' && optionPrompt"
-      class="standalone-option"
-      :prompt="optionPrompt"
-      @choose="emit('option-choose', $event)"
-    />
-
-    <div v-if="content && activityState === 'tools'" class="tool-running-line" aria-hidden="true">
-      <span class="spark" aria-hidden="true">
-        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z"/></svg>
-      </span>
-      <span class="label-stage">
-        <Transition name="label-swap">
-          <span class="tool-running-label" :key="runningTool?.running_label">{{ runningTool?.running_label || '落笔中' }}</span>
-        </Transition>
-      </span>
-    </div>
-
-    <div
-      v-if="activityState !== 'idle' && !(activityState === 'tools' && content)"
-      class="status-card"
-      :class="activityState"
-    >
-      <span class="spark" aria-hidden="true">
-        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z"/></svg>
-      </span>
-      <span class="label-stage">
-        <Transition name="label-swap">
-          <span class="status-text" :key="activityLabel">{{ activityLabel }}</span>
-        </Transition>
-      </span>
+    <div v-if="role === 'assistant' && recaps.length" class="hil-recaps">
+      <HilRecap
+        v-for="recap in recaps"
+        :key="recap.id"
+        :intent-state="recap.intentState"
+        :option-prompt="recap.optionPrompt"
+      />
     </div>
   </div>
 
@@ -286,7 +255,7 @@ function closePreview() {
 }
 
 .turn-head .role {
-  font: 500 16px/1 var(--ch-font-sans);
+  font: 500 16px/20px var(--ch-font-sans);
   color: var(--ch-text);
   letter-spacing: 0;
 }
@@ -342,14 +311,6 @@ function closePreview() {
   line-height: 1.75;
   letter-spacing: 0;
   text-align: left;
-}
-
-.standalone-intent {
-  margin-top: 16px;
-}
-
-.standalone-option {
-  margin-top: 16px;
 }
 
 .bubble.assistant.bare {
@@ -457,6 +418,17 @@ function closePreview() {
   margin: var(--ch-space-3) 0;
 }
 
+.hil-recaps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ch-space-2);
+  margin-top: 10px;
+}
+
+.hil-recaps :deep(.hil-recap) {
+  margin-top: 0;
+}
+
 .msg-actions {
   display: flex;
   align-items: center;
@@ -495,58 +467,24 @@ function closePreview() {
 
 .status-card {
   width: fit-content;
-  min-width: 112px;
-  min-height: 32px;
-  margin: var(--ch-space-2) 0 0;
+  min-height: 20px;
+  margin-left: -4px;
   display: flex;
   align-items: center;
-  gap: var(--ch-space-2);
   user-select: none;
-  color: var(--ch-text-faint);
   font-family: var(--ch-font-sans);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 20px;
 }
 
-.bubble-row.bare .status-card {
-  margin-top: 0;
-}
-
 .status-text {
-  color: var(--ch-accent);
-  font-weight: 400;
-}
-
-.spark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: var(--ch-accent);
-  transform-origin: center;
-  will-change: transform, opacity;
-  animation: spark-breath .8s cubic-bezier(.45, 0, .55, 1) infinite alternate;
-}
-.status-card .spark {
-  width: 20px;
-  height: 20px;
-}
-.spark svg {
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-}
-@keyframes spark-breath {
-  from {
-    opacity: .36;
-    transform: scale(.76);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1.12);
-  }
+  color: transparent;
+  font-weight: 500;
+  background: linear-gradient(100deg, var(--ch-accent-active) 14%, var(--ch-accent) 34%, color-mix(in srgb, var(--ch-accent-2) 44%, var(--ch-surface)) 50%, var(--ch-accent) 66%, var(--ch-accent-active) 86%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: status-shimmer 1.8s linear infinite;
 }
 
 .label-stage {
@@ -557,8 +495,7 @@ function closePreview() {
   overflow: hidden;
   vertical-align: bottom;
 }
-.status-text,
-.tool-running-label {
+.status-text {
   grid-area: stack;
   white-space: nowrap;
   transition: transform 0.4s ease, opacity 0.4s ease;
@@ -575,18 +512,8 @@ function closePreview() {
   transition: transform 0.2s ease, opacity 0.18s ease;
 }
 
-.tool-running-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: var(--ch-space-3) 0 0;
-  font-family: var(--ch-font-sans);
-  font-size: var(--ch-text-sm);
-  line-height: 1.5;
-  color: var(--ch-text-faint);
-}
-.tool-running-label {
-  font-weight: 400;
+@keyframes status-shimmer {
+  to { background-position: -200% 0; }
 }
 
 .plan-list {
@@ -771,6 +698,6 @@ function closePreview() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spark { animation: none; opacity: 0.7; }
+  .status-text { animation: none; }
 }
 </style>

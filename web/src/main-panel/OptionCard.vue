@@ -3,6 +3,8 @@ import { computed, nextTick, ref } from 'vue'
 
 const props = defineProps({
   prompt: { type: Object, required: true },
+  hideActions: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
 })
 const emit = defineEmits(['choose'])
 const locking = ref(false)
@@ -48,17 +50,19 @@ function confirmChoice() {
   if (customSelected.value) payload.custom_text = customText.value.trim()
   emit('choose', payload)
 }
+
+defineExpose({ confirmChoice, reconsider })
 </script>
 
 <template>
-  <section class="option-card" :class="{ archived }">
+  <section class="option-card" :class="{ archived, compact }">
     <header class="card-head">
       <div class="head-copy">
         <h2>{{ prompt.question }}</h2>
         <p>{{ archived ? '已确认本次选择' : '选择一个方向，或补充你的想法' }}</p>
       </div>
-      <span class="status ch-status-pill" :class="archived ? 'is-complete' : 'is-pending'">
-        <i aria-hidden="true"></i>{{ archived ? '已确认' : '待选择' }}
+      <span class="status ch-status-pill" :class="archived ? 'is-complete' : 'is-awaiting'">
+        <i aria-hidden="true"></i>{{ archived ? '已确认' : '待确认' }}
       </span>
     </header>
 
@@ -86,46 +90,58 @@ function confirmChoice() {
         </span>
       </button>
 
-      <Transition name="custom-option" mode="out-in">
-        <button
-          v-if="prompt.allow_custom && !customSelected"
-          key="prompt"
-          class="option-item custom-option"
-          type="button"
-          role="radio"
-          :aria-checked="false"
-          :disabled="locking || archived"
-          @click="selectOption('__custom__')"
-        >
+      <button
+        v-if="prompt.allow_custom && !customSelected"
+        class="option-item custom-option"
+        type="button"
+        role="radio"
+        :aria-checked="false"
+        :disabled="locking || archived"
+        @click="selectOption('__custom__')"
+      >
+        <span class="option-copy">
+          <strong>补充你的想法</strong>
+          <p>写下你希望突出呈现的角度或内容。</p>
+        </span>
+        <span class="custom-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+        </span>
+      </button>
+
+      <div
+        v-else-if="prompt.allow_custom"
+        class="option-item custom-option selected"
+        :class="{ disabled: locking || archived }"
+        role="radio"
+        :aria-checked="true"
+      >
+        <div class="custom-option-editor">
           <span class="option-copy">
             <strong>补充你的想法</strong>
-            <p>写下你希望突出呈现的角度或内容。</p>
+            <span class="custom-editor-value">
+              <span v-if="archived" class="custom-answer">{{ archivedCustomText }}</span>
+              <input
+                v-else
+                ref="customInput"
+                v-model="customText"
+                class="custom-input"
+                type="text"
+                placeholder="写下你希望突出呈现的角度或内容"
+                :disabled="locking || archived"
+                @keydown.enter="confirmChoice"
+              />
+            </span>
           </span>
-          <span class="custom-chevron" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+          <!-- 预留与普通选项一致的选择位，保证两种状态的文字列精确对齐。 -->
+          <span class="option-selection custom-selection-spacer" aria-hidden="true">
+            <span>已选择</span>
+            <span class="option-check"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg></span>
           </span>
-        </button>
-
-        <div v-else-if="prompt.allow_custom" key="input" class="option-item custom-option selected">
-          <div class="option-copy">
-            <strong>补充你的想法</strong>
-            <p v-if="archived" class="custom-answer">{{ archivedCustomText }}</p>
-            <input
-              v-else
-              ref="customInput"
-              v-model="customText"
-              class="custom-input"
-              type="text"
-              placeholder="写下你希望突出呈现的角度或内容"
-              :disabled="locking || archived"
-              @keydown.enter="confirmChoice"
-            />
-          </div>
         </div>
-      </Transition>
+      </div>
     </div>
 
-    <footer v-if="!archived" class="actions">
+    <footer v-if="!archived && !hideActions" class="actions">
       <p v-if="error" class="action-error" role="alert">{{ error }}</p>
       <div>
         <button class="secondary" type="button" @click="reconsider">
@@ -160,6 +176,7 @@ function confirmChoice() {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-bottom: 16px;
 }
 
 .head-copy {
@@ -189,7 +206,6 @@ function confirmChoice() {
 .options {
   display: grid;
   gap: var(--ch-space-3);
-  margin-top: 24px;
 }
 
 .option-item {
@@ -211,7 +227,7 @@ function confirmChoice() {
     transform var(--ch-duration-fast) var(--ch-ease);
 }
 
-.option-item:hover:not(:disabled) {
+.option-item:hover:not(:disabled):not(.disabled) {
   background: var(--ch-surface-2);
   border-color: var(--ch-border-strong);
 }
@@ -219,8 +235,6 @@ function confirmChoice() {
 .option-item.selected {
   border-color: var(--ch-border);
   background: var(--ch-accent-soft);
-  box-shadow: var(--ch-shadow-xs);
-  transform: translateY(-1px);
 }
 
 .option-item.selected:hover:not(:disabled) {
@@ -234,6 +248,11 @@ function confirmChoice() {
 }
 
 .option-item:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.option-item.disabled {
   cursor: default;
   opacity: 1;
 }
@@ -285,20 +304,22 @@ function confirmChoice() {
   transition-delay: 0s;
 }
 
-.custom-option-enter-active,
-.custom-option-leave-active {
-  transition: opacity var(--ch-duration-fast) var(--ch-ease-out),
-    transform var(--ch-duration-normal) var(--ch-ease-out);
+.custom-option-editor {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
 }
 
-.custom-option-enter-from {
-  opacity: 0;
-  transform: translateY(-6px);
+.custom-option-editor .option-copy {
+  display: block;
 }
 
-.custom-option-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
+.custom-editor-value {
+  min-width: 0;
 }
 
 .option-check {
@@ -330,14 +351,15 @@ function confirmChoice() {
 }
 
 .custom-chevron {
+  width: 64px;
   display: grid;
-  place-items: center;
+  place-items: center end;
   color: var(--ch-text-muted);
+  transition: transform var(--ch-duration-fast) var(--ch-ease-out);
 }
 
 .custom-input {
   width: 100%;
-  margin-top: 12px;
   flex: 1;
   min-width: 0;
   min-height: 40px;
@@ -419,9 +441,99 @@ function confirmChoice() {
   white-space: nowrap;
 }
 
+/* 输入区内的 HIL 使用紧凑选择器：保留纵向选择，但不抢占对话阅读空间。 */
+.option-card.compact {
+  padding: 20px;
+  border-color: color-mix(in srgb, var(--ch-border-strong) 72%, white);
+  box-shadow: var(--ch-shadow-soft);
+}
+
+.compact .head-copy h2 {
+  font-size: var(--ch-text-lg);
+}
+
+.compact .head-copy p {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--ch-text-xs);
+}
+
+.compact .options {
+  gap: 8px;
+}
+
+.compact .option-item {
+  min-height: 58px;
+  padding: 10px 14px;
+  border-radius: 12px;
+}
+
+.compact .option-copy {
+  display: grid;
+  grid-template-columns: minmax(132px, .3fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.compact .option-item strong {
+  font-size: var(--ch-text-sm);
+}
+
+.compact .option-item p {
+  display: block;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--ch-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact .custom-option-editor {
+  height: 36px;
+  min-height: 0;
+  padding: 0;
+}
+
+.compact .custom-option-editor .option-copy {
+  display: grid;
+  grid-template-columns: minmax(132px, .3fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.compact .custom-input {
+  height: 36px;
+  min-height: 0;
+  font-size: var(--ch-text-xs);
+}
+
+.compact .actions {
+  margin-top: 16px;
+}
+
+.compact .actions button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
 @media (max-width: 700px) {
   .option-card {
     padding: 16px;
+  }
+
+  .option-card.compact {
+    padding: 16px;
+  }
+
+  .compact .option-copy,
+  .compact .custom-option-editor .option-copy {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .compact .option-item p {
+    overflow: visible;
+    white-space: normal;
   }
 
   .actions {

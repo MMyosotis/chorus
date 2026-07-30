@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 
 const props = defineProps({
   state: { type: Object, default: null },
+  hideActions: { type: Boolean, default: false },
+  compact: { type: Boolean, default: false },
 })
 const emit = defineEmits(['confirm', 'revise'])
 const locking = ref(false)
@@ -14,10 +16,10 @@ const clean = (value, fallback = '待补充') => {
 }
 
 const title = computed(() => clean(props.state?.topic, '请确认这次创作方向'))
-const direction = computed(() => clean(props.state?.style, '风格自由发挥'))
 const meta = computed(() => [
   { label: '发布平台', value: clean(props.state?.platform) },
   { label: '内容体裁', value: clean(props.state?.format) },
+  { label: '表达风格', value: clean(props.state?.style, '风格自由发挥') },
   {
     label: '配图规划',
     value: props.state?.image_count != null ? `${props.state.image_count} 张` : '待确定',
@@ -38,10 +40,15 @@ function decide(type) {
   locking.value = true
   emit(type)
 }
+
+defineExpose({
+  confirm: () => decide('confirm'),
+  revise: () => decide('revise'),
+})
 </script>
 
 <template>
-  <section class="intent-confirm" :class="{ archived }">
+  <section class="intent-confirm" :class="{ archived, compact }">
     <header class="card-head">
       <div class="head-copy">
         <h2>确认创作意图</h2>
@@ -63,10 +70,6 @@ function decide(type) {
           <strong>{{ item.value }}</strong>
         </div>
       </div>
-      <div class="direction">
-        <span>表达风格</span>
-        <strong>{{ direction }}</strong>
-      </div>
     </div>
 
     <section v-if="notes.length" class="focus">
@@ -82,7 +85,7 @@ function decide(type) {
       </dl>
     </section>
 
-    <footer v-if="!archived" class="actions">
+    <footer v-if="!archived && !hideActions" class="actions">
       <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
         继续调整
       </button>
@@ -98,7 +101,7 @@ function decide(type) {
 .intent-confirm {
   position: relative;
   width: 100%;
-  padding: var(--ch-space-5);
+  padding: var(--ch-space-4);
   overflow: hidden;
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-card);
@@ -112,26 +115,25 @@ function decide(type) {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: var(--ch-space-4);
-  padding-bottom: var(--ch-space-3);
-  border-bottom: 1px solid var(--ch-border);
+  margin-bottom: 16px;
 }
 
 .head-copy {
   min-width: 0;
 }
 
-.head-copy h2 {
+.card-head h2 {
   margin: 0;
-  font-size: var(--ch-text-lg);
+  font-size: var(--ch-text-xl);
   font-weight: 600;
   line-height: var(--ch-leading-snug);
+  overflow-wrap: anywhere;
 }
 
-.head-copy p {
+.card-head p {
   margin: 8px 0 0;
   color: var(--ch-text-muted);
-  font-size: var(--ch-text-sm);
+  font-size: var(--ch-text-md);
   line-height: 1.5;
 }
 
@@ -172,19 +174,35 @@ function decide(type) {
 
 .meta {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--ch-space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-surface-2);
 }
 
 .meta-item {
+  position: relative;
   display: flex;
   min-width: 0;
-  min-height: 72px;
+  min-height: 104px;
   flex-direction: column;
   justify-content: center;
   padding: var(--ch-space-2) var(--ch-space-3);
-  border-radius: var(--ch-radius-list);
-  background: var(--ch-surface-2);
+}
+
+.meta-item + .meta-item {
+  border-left: 0;
+}
+
+.meta-item + .meta-item::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 1px;
+  height: 36px;
+  transform: translateY(-50%);
+  background: var(--ch-border);
+  content: "";
 }
 
 .meta-item span,
@@ -199,32 +217,6 @@ function decide(type) {
 }
 
 .meta-item strong {
-  margin-top: 4px;
-  color: var(--ch-text);
-  font-size: var(--ch-text-sm);
-  font-weight: 600;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.direction {
-  display: flex;
-  min-height: 72px;
-  flex-direction: column;
-  justify-content: center;
-  margin-top: var(--ch-space-3);
-  padding: var(--ch-space-2) var(--ch-space-3);
-  border-radius: var(--ch-radius-list);
-  background: var(--ch-surface-2);
-}
-
-.direction span {
-  color: var(--ch-text-muted);
-  font-size: var(--ch-text-xs);
-  line-height: 1.5;
-}
-
-.direction strong {
   margin-top: 4px;
   color: var(--ch-text);
   font-size: var(--ch-text-sm);
@@ -345,8 +337,60 @@ function decide(type) {
   stroke-width: 2;
 }
 
+/* 输入区确认步骤采用紧凑规格，避免遮住过多对话。 */
+.intent-confirm.compact {
+  padding: 20px;
+  border-color: color-mix(in srgb, var(--ch-border-strong) 72%, white);
+  box-shadow: var(--ch-shadow-soft);
+}
+
+.compact .head-copy h2 {
+  font-size: var(--ch-text-lg);
+}
+
+.compact .head-copy p {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--ch-text-xs);
+}
+
+.compact .brief h2 {
+  margin: 8px 0 12px;
+  font-size: var(--ch-text-md);
+}
+
+.compact .meta-item {
+  min-height: 76px;
+  padding: 12px;
+}
+
+.compact .focus {
+  margin-top: 8px;
+}
+
+.compact .focus-head {
+  min-height: 40px;
+}
+
+.compact .focus dl > div {
+  padding: 10px 0;
+}
+
+.compact .actions {
+  margin-top: 16px;
+}
+
+.compact .actions button {
+  min-height: 36px;
+  padding: 0 14px;
+}
+
 @media (max-width: 700px) {
   .intent-confirm {
+    padding: 16px;
+  }
+
+  .intent-confirm.compact {
     padding: 16px;
   }
 
@@ -360,6 +404,18 @@ function decide(type) {
 
   .meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meta-item + .meta-item::before {
+    display: none;
+  }
+
+  .meta-item:nth-child(even)::before {
+    display: block;
+  }
+
+  .meta-item:nth-child(n + 3) {
+    border-top: 1px solid var(--ch-border);
   }
 
   .focus dl > div {
@@ -379,6 +435,14 @@ function decide(type) {
 @media (max-width: 460px) {
   .meta {
     grid-template-columns: 1fr;
+  }
+
+  .meta-item:nth-child(even)::before {
+    display: none;
+  }
+
+  .meta-item:nth-child(n + 2) {
+    border-top: 1px solid var(--ch-border);
   }
 }
 </style>

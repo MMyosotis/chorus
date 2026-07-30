@@ -7,6 +7,7 @@ import ArtifactsCard from './ArtifactsCard.vue'
 
 const props = defineProps({
   graph: { type: Object, default: null },
+  chiefWorking: { type: Boolean, default: false },
   focusedTaskId: { type: String, default: null },
   intentState: { type: Object, default: null },
 })
@@ -23,7 +24,7 @@ const tasks = computed(() => props.graph?.tasks || [])
         <div class="section-divider" aria-hidden="true"></div>
         <IntentStateCard :state="intentState" />
         <div class="section-divider" aria-hidden="true"></div>
-        <PipelineTimeline :tasks="tasks" />
+        <PipelineTimeline :tasks="tasks" :chief-working="chiefWorking" />
         <div class="section-divider" aria-hidden="true"></div>
         <ArtifactsCard :tasks="tasks" @focus-task="$emit('focus-task', $event)" />
       </div>

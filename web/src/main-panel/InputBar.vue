@@ -1,5 +1,7 @@
 <script setup>
-import { ref, nextTick, computed } from 'vue'
+import { ref, nextTick, computed, watch } from 'vue'
+import IntentConfirmCard from './IntentConfirmCard.vue'
+import OptionCard from './OptionCard.vue'
 
 const props = defineProps({
   streaming: { type: Boolean, default: false },
@@ -7,14 +9,50 @@ const props = defineProps({
   awaitingConfirm: { type: Boolean, default: false },
   awaitingOption: { type: Boolean, default: false },
   archived: { type: Boolean, default: false },
+  intentConfirmation: { type: Object, default: null },
+  optionPrompt: { type: Object, default: null },
 })
 
-const emit = defineEmits(['send'])
+const emit = defineEmits(['send', 'intent-confirm', 'intent-revise', 'option-choose'])
 
 const inputText = ref('')
 const textarea = ref(null)
 
 const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm || props.awaitingOption || props.archived)
+const hasHil = computed(() => !!(props.intentConfirmation || props.optionPrompt))
+const displayedOptionPrompt = ref(null)
+const displayedIntentConfirmation = ref(null)
+let hilReleaseTimer = null
+const hasHilStage = computed(() =>
+  hasHil.value || !!displayedOptionPrompt.value || !!displayedIntentConfirmation.value,
+)
+
+watch(
+  () => [props.optionPrompt, props.intentConfirmation],
+  ([optionPrompt, intentConfirmation]) => {
+    if (hilReleaseTimer) {
+      clearTimeout(hilReleaseTimer)
+      hilReleaseTimer = null
+    }
+    if (optionPrompt) {
+      displayedOptionPrompt.value = optionPrompt
+      displayedIntentConfirmation.value = null
+      return
+    }
+    if (intentConfirmation) {
+      displayedIntentConfirmation.value = intentConfirmation
+      displayedOptionPrompt.value = null
+      return
+    }
+    // 收起动画结束后再卸载卡片，避免确认后内容瞬间消失。
+    hilReleaseTimer = setTimeout(() => {
+      displayedOptionPrompt.value = null
+      displayedIntentConfirmation.value = null
+      hilReleaseTimer = null
+    }, 360)
+  },
+  { immediate: true },
+)
 const placeholder = computed(() => {
   if (props.archived) return '本篇已定稿存档，请新建会话开始下一篇'
   if (props.awaitingOption) return '请先在上方选择一个选项'
@@ -55,68 +93,114 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="input-bar" :class="{ 'is-disabled': disabled, archived }">
-    <div class="input-editor">
-      <div class="input-editor-content">
-        <textarea
-          ref="textarea"
-          v-model="inputText"
-          class="input-field"
-          :placeholder="placeholder"
-          rows="1"
-          :disabled="disabled"
-          @keydown="handleKeydown"
-          @input="adjustHeight"
-        ></textarea>
-        <div class="input-toolbar">
-          <div class="tool-group">
-            <button class="tool-btn" type="button" aria-label="附件" :disabled="disabled">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 11.5-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
-              <span>附件</span>
-            </button>
-            <button class="tool-btn" type="button" aria-label="联网搜索" :disabled="disabled">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-              <span>联网搜索</span>
-            </button>
-            <button class="tool-btn" type="button" aria-label="智能推荐" :disabled="disabled">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
-              <span>智能推荐</span>
-            </button>
+  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage }">
+    <div class="input-stage-shell" :class="{ 'has-hil': hasHil }">
+    <div class="input-stage" :class="{ 'has-hil': hasHil }">
+      <div class="stage-slot input-slot" :aria-hidden="hasHil">
+        <div class="input-bar" :class="{ 'is-disabled': disabled, archived }">
+          <div class="input-editor">
+            <div class="input-editor-content">
+              <textarea
+                ref="textarea"
+                v-model="inputText"
+                class="input-field"
+                :placeholder="placeholder"
+                rows="1"
+                :disabled="disabled"
+                @keydown="handleKeydown"
+                @input="adjustHeight"
+              ></textarea>
+              <div class="input-toolbar">
+                <div class="tool-group">
+                  <button class="tool-btn" type="button" aria-label="附件" :disabled="disabled">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 11.5-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
+                    <span>附件</span>
+                  </button>
+                  <button class="tool-btn" type="button" aria-label="联网搜索" :disabled="disabled">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <span>联网搜索</span>
+                  </button>
+                  <button class="tool-btn" type="button" aria-label="智能推荐" :disabled="disabled">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
+                    <span>智能推荐</span>
+                  </button>
+                </div>
+                <div class="tool-group right">
+                  <button class="icon-btn" type="button" aria-label="语音输入" :disabled="disabled">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                  </button>
+                  <button
+                    class="send-btn"
+                    :disabled="disabled || !inputText.trim()"
+                    @click="send"
+                    aria-label="发送"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="tool-group right">
-            <button class="icon-btn" type="button" aria-label="语音输入" :disabled="disabled">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-            </button>
-            <button
-              class="send-btn"
-              :disabled="disabled || !inputText.trim()"
-              @click="send"
-              aria-label="发送"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
-            </button>
+
+          <div class="input-wait" :aria-hidden="!disabled">
+            <div class="input-wait-content">
+              <p class="input-wait-message" role="status">{{ placeholder }}</p>
+              <button class="send-btn is-waiting" type="button" disabled aria-label="正在等待">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6.5v5.8l3.7 2.3"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="input-wait" :aria-hidden="!disabled">
-      <div class="input-wait-content">
-        <p class="input-wait-message" role="status">{{ placeholder }}</p>
-        <button class="send-btn is-waiting" type="button" disabled aria-label="正在等待">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6.5v5.8l3.7 2.3"/></svg>
-        </button>
+      <div class="stage-slot hil-slot" :aria-hidden="!hasHil">
+        <section v-if="displayedOptionPrompt || displayedIntentConfirmation" class="input-hil-card" aria-label="补充创作信息">
+        <OptionCard
+          v-if="displayedOptionPrompt"
+          compact
+          :prompt="displayedOptionPrompt"
+          @choose="emit('option-choose', $event)"
+        />
+        <IntentConfirmCard
+          v-else
+          compact
+          :state="displayedIntentConfirmation"
+          @confirm="emit('intent-confirm')"
+          @revise="emit('intent-revise')"
+        />
+        </section>
       </div>
+    </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+.input-zone { flex-shrink: 0; width: calc(100% - 32px); margin: 0 auto; }
+
+/* HIL 从底部输入区向上展开；它覆盖对话末端，顶部圆角朝下方打开。 */
+.input-zone.has-hil-stage {
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(0 round var(--ch-radius-card));
+  border: 1px solid color-mix(in srgb, var(--ch-accent) 48%, var(--ch-border));
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface);
+  box-shadow: var(--ch-shadow-soft);
+  transition: border-color 180ms ease;
+}
+
 .input-bar {
   flex-shrink: 0;
   position: relative;
-  width: calc(100% - 32px);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   padding: var(--ch-space-4) var(--ch-space-4) var(--ch-space-3);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -133,6 +217,64 @@ defineExpose({ focus })
 .input-bar.is-disabled {
   padding: 8px 16px 8px 16px;
   border-radius: 999px;
+}
+
+.input-stage-shell {
+  isolation: isolate;
+  overflow: hidden;
+  transform: translateZ(0);
+  border-radius: var(--ch-radius-xl);
+  background: transparent;
+  transition: box-shadow 360ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.input-stage-shell.has-hil {
+  border-radius: var(--ch-radius-card);
+  box-shadow: none;
+}
+
+.input-stage {
+  display: grid;
+  overflow: hidden;
+  border-radius: var(--ch-radius-xl);
+  clip-path: inset(0 round var(--ch-radius-xl));
+  grid-template-rows: 1fr 0fr;
+  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.input-stage.has-hil {
+  border-radius: var(--ch-radius-card);
+  clip-path: inset(0 round var(--ch-radius-card));
+  grid-template-rows: 0fr 1fr;
+}
+
+.stage-slot {
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--ch-radius-xl);
+  transition: opacity 180ms ease, transform 360ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.input-slot { opacity: 1; transform: translateY(0); }
+.hil-slot { opacity: 0; transform: translateY(12px); }
+.input-stage.has-hil .input-slot { opacity: 0; transform: translateY(-8px); }
+.input-stage.has-hil .hil-slot {
+  border-radius: var(--ch-radius-card);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.input-hil-card {
+  width: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.input-hil-card :deep(.option-card),
+.input-hil-card :deep(.intent-confirm) {
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
 }
 
 .input-editor,
@@ -198,7 +340,7 @@ defineExpose({ focus })
 }
 
 @media (min-width: 781px) {
-  .input-bar {
+  .input-zone {
     width: 100%;
     margin: 0;
   }
@@ -353,7 +495,10 @@ defineExpose({ focus })
 @media (prefers-reduced-motion: reduce) {
   .input-bar,
   .input-editor,
-  .input-wait { transition: none; }
+  .input-wait,
+  .input-stage-shell,
+  .input-stage,
+  .stage-slot { transition: none; }
 }
 
 @media (max-width: 780px) {

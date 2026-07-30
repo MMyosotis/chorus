@@ -126,6 +126,7 @@ function makeEmptyAssistant(id) {
     tools: { state: 'idle', items: [] },
     created_at: Date.now() / 1000,
     id: id || null,
+    messageIds: id ? [id] : [],
     suspended: false,
   }
 }
@@ -277,7 +278,7 @@ function injectIntentCard(id) {
   replaceAnchoredCards(
     list,
     (message) => message.kind === 'intent-confirm',
-    planIntentCards(intentConfirmationsBySession[id]),
+    planIntentCards((intentConfirmationsBySession[id] || []).filter((confirmation) => confirmation.status === 'answered')),
   )
 }
 
@@ -287,7 +288,7 @@ function injectOptionCard(id) {
   replaceAnchoredCards(
     list,
     (message) => message.kind === 'option',
-    planOptionCards(optionPromptsBySession[id]),
+    planOptionCards((optionPromptsBySession[id] || []).filter((prompt) => prompt.status === 'answered')),
   )
 }
 
@@ -486,13 +487,20 @@ function createStreamHandler(sessionId) {
       if (last && last.role === 'assistant' && last.suspended) {
         assistantIdx = lastIdx
         last.suspended = false
+        // 每轮请求一开始就展示同一条气泡内的过程提示；工具状态会在调用时覆盖它。
+        last.thinking.state = 'running'
         pendingRoundSep = true
         return
       }
       const c = cur()
       // 同回合复用当前气泡：纯工具轮不新建，工具挂到本回合气泡上
-      if (!c) startNewAssistant(payload.id)
-      else if (c.content) pendingRoundSep = true
+      if (!c) {
+        startNewAssistant(payload.id)
+        cur().thinking.state = 'running'
+      } else {
+        c.thinking.state = 'running'
+        if (c.content) pendingRoundSep = true
+      }
     } else if (payload.type === 'suspend') {
       const c = cur()
       if (c) c.suspended = true
@@ -504,7 +512,9 @@ function createStreamHandler(sessionId) {
       if (!c) return
       // 思考段结束不翻转状态：酝酿中持续到正文出现，避免回跳铺纸中
     } else if (payload.type === 'token') {
-      ensureAssistant()
+      const c = ensureAssistant()
+      // 正文持续输出本身就是最直接的进度反馈，避免与状态条重复。
+      c.thinking.state = 'idle'
       if (pendingRoundSep) {
         charQueue.push('\n\n')
         pendingRoundSep = false
@@ -707,12 +717,26 @@ onMounted(async () => {
             </ChatWindow>
           </article>
         </Transition>
-        <InputBar ref="inputBarRef" :streaming="streaming" :has-active-task="hasActiveTask" :awaiting-confirm="awaitingConfirm" :awaiting-option="awaitingOption" :archived="activeCompleted" @send="onSend" />
+        <InputBar
+          ref="inputBarRef"
+          :streaming="streaming"
+          :has-active-task="hasActiveTask"
+          :awaiting-confirm="awaitingConfirm"
+          :awaiting-option="awaitingOption"
+          :archived="activeCompleted"
+          :intent-confirmation="activeConfirmation"
+          :option-prompt="activeOptionPrompt"
+          @send="onSend"
+          @intent-confirm="onIntentConfirm"
+          @intent-revise="onIntentRevise"
+          @option-choose="onOptionChoose"
+        />
       </div>
     </main>
     <TeamPanel
       :class="{ 'is-open': rightRailOpen }"
       :graph="activeGraph"
+      :chief-working="streaming"
       :focused-task-id="focusedTaskId"
       :intent-state="activeIntentState"
       @focus="onTaskFocus"
@@ -777,6 +801,7 @@ onMounted(async () => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 @media (min-width: 781px) {

@@ -2,7 +2,7 @@
 :root {
   --ch-canvas: #fafafb;
   --ch-surface: #ffffff;
-  --ch-surface-2: #f8fafc;
+  --ch-surface-2: #f6f6fa;
   --ch-canvas-gradient: linear-gradient(180deg, var(--ch-canvas), var(--ch-surface-2));
   --ch-surface-glass-soft: color-mix(in srgb, var(--ch-surface) 76%, transparent);
   --ch-surface-glass-strong: color-mix(in srgb, var(--ch-surface) 92%, transparent);

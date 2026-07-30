@@ -98,7 +98,7 @@ scheduler 占槽 pending->running 后 submit 到线程池。`run(task_id)`：loa
 #### 共用约定
 - 路由用同步 `def`，FastAPI 线程池执行；消息逐条 append 入库（产生即入库）。同 session 的 messages 写入靠前端 disable 单流兜底（无后端会话锁强制），`MessageService` 直接 `append` 一次直写。
 - **无会话级锁**：同会话并发 chat 无后端强制串行，靠前端 `disable` 兜底；sqlite `busy_timeout` 防写冲突 corruption，但不保证消息顺序与上下文一致。subagent/scheduler 写 task_artifacts/task_progress，不经 chat 路径。
-- **每个 supervisor OpenAI 轮次 = 一条 assistant 历史消息 = 一个前端气泡**。`message_start` 通知前端建气泡；thinking/tools 元数据由 `TraceRepository.aggregate_message_trace(message_id)` 重建。
+- **一条用户交互链路 = 一个前端 assistant 气泡**。supervisor 每个 OpenAI 轮次仍各自落一条 assistant 历史消息，前端将同一用户消息之后、HIL 挂起/续跑期间的轮次归并为同一气泡；`message_start` 只标记流式轮次开始。thinking/tools 元数据由 `TraceRepository.aggregate_message_trace(message_id)` 重建。
 - `MessageService.build_provider_messages()` 是传给 LLM 的消息序列**唯一**构建点：`[system] + 按 seq 的 user/assistant/tool 历史消息`。
 - **异常分级**：核心步骤 fail-closed（append user / 构建 prompt / 落 assistant 消息失败即上抛）；工具可预料失败内部收口返 `Reply` 让模型重试，仅意外异常由 `dispatch` fail-open 兜底；扩展 hook fail-open（经 `trigger`，失败只记日志）。
 

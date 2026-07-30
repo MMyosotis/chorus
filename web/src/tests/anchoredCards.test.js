@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { replaceAnchoredCards } from '../composables/anchoredCards.js'
+import { insertAnchoredCard, replaceAnchoredCards } from '../composables/anchoredCards.js'
 
 test('虚拟卡按 message id 插入对应助手消息之后', () => {
   const list = [
@@ -19,4 +19,13 @@ test('找不到锚点的卡片不插入到错误位置', () => {
     { id: 'option:legacy', kind: 'option', anchorMessageId: 'missing' },
   ])
   expect(list.map((item) => item.id)).toEqual(['m1'])
+})
+
+test('虚拟卡可锚定到合并气泡中的后续消息', () => {
+  const list = [{ id: 'm1', messageIds: ['m1', 'm2'], role: 'assistant' }]
+
+  insertAnchoredCard(list, { id: 'option:p2', kind: 'option', anchorMessageId: 'm2' })
+
+  expect(list).toHaveLength(2)
+  expect(list[1]).toMatchObject({ id: 'option:p2', anchorMessageId: 'm2' })
 })

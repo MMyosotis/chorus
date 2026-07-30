@@ -1,7 +1,7 @@
 // 助手历史合并规则单测。
 
 import { test, expect } from 'vitest'
-import { mapToolItem, normalizeAssistant, mergeAssistantHistory } from '../composables/messageHistory.js'
+import { containsMessageId, mapToolItem, normalizeAssistant, mergeAssistantHistory } from '../composables/messageHistory.js'
 
 test('mapToolItem 正常映射', () => {
   const out = mapToolItem({ name: 'load_skill', arguments: { x: 1 }, duration_ms: 5, content: 'c', display: 'd' })
@@ -27,6 +27,25 @@ test('normalizeAssistant 意图确认轮有正文也保留续写标记', () => {
     role: 'assistant',
     content: '创作方向已整理，请确认。',
     tools: [{ name: 'update_intent_state', arguments: { intent_status: 'ready_to_confirm' } }],
+  })
+  expect(out.suspended).toBe(true)
+})
+
+test('normalizeAssistant 选项征询轮有正文也保留续写标记', () => {
+  const out = normalizeAssistant({
+    role: 'assistant',
+    content: '请选择一个方向。',
+    tools: [{
+      name: 'present_options',
+      arguments: {
+        question: '选择一个方向',
+        options: [
+          { label: '故事', description: '叙事感更强' },
+          { label: '攻略', description: '实用信息为主' },
+          { label: '评论', description: '表达明确观点' },
+        ],
+      },
+    }],
   })
   expect(out.suspended).toBe(true)
 })
@@ -81,6 +100,75 @@ test('mergeAssistantHistory 同气泡后续轮正文与工具均追加', () => {
   expect(out).toHaveLength(1)
   expect(out[0].content).toBe('首段\n\n次段')
   expect(out[0].tools.items.map((item) => item.name)).toEqual(['a', 'b'])
+})
+
+test('mergeAssistantHistory 选项卡后的续写合并回选项卡宿主', () => {
+  const raw = [
+    { role: 'user', content: '开始创作' },
+    {
+      id: 'direction-choice',
+      role: 'assistant',
+      content: '请选择一个方向。',
+      tools: [{
+        name: 'present_options',
+        arguments: {
+          question: '选择方向',
+          options: [
+            { label: '生活感悟', description: '记录日常体验' },
+            { label: '城市观察', description: '关注城市情绪' },
+            { label: '探店攻略', description: '提供实用信息' },
+          ],
+        },
+      }],
+    },
+    {
+      role: 'assistant',
+      content: '已选生活感悟，接下来补充平台。',
+      tools: [{ name: 'update_intent_state' }],
+    },
+    {
+      id: 'platform-choice',
+      role: 'assistant',
+      content: '请选择发布平台。',
+      tools: [{
+        name: 'present_options',
+        arguments: {
+          question: '选择平台',
+          options: [
+            { label: '小红书', description: '适合图文种草' },
+            { label: '公众号', description: '适合长文阅读' },
+            { label: '微博', description: '适合热点讨论' },
+          ],
+        },
+      }],
+    },
+  ]
+
+  const out = mergeAssistantHistory(raw)
+
+  expect(out).toHaveLength(2)
+  expect(out[1].id).toBe('direction-choice')
+  expect(out[1].content).toBe('请选择一个方向。\n\n已选生活感悟，接下来补充平台。\n\n请选择发布平台。')
+  expect(out[1].tools.items.map((item) => item.name)).toEqual([
+    'present_options', 'update_intent_state', 'present_options',
+  ])
+  expect(out[1].suspended).toBe(true)
+  expect(containsMessageId(out[1], 'platform-choice')).toBe(true)
+})
+
+test('mergeAssistantHistory 失败的选项工具调用不创建空气泡', () => {
+  const raw = [
+    { role: 'user', content: '写一篇小红书' },
+    { role: 'assistant', content: '你更倾向于哪种体裁？', tools: [] },
+    { role: 'assistant', content: '', tools: [{ name: 'present_options', arguments: {} }] },
+    { role: 'assistant', content: '抱歉，刚才工具调用参数没填全。重来——\n\n你更倾向于哪种体裁？', tools: [] },
+  ]
+
+  const out = mergeAssistantHistory(raw)
+
+  expect(out).toHaveLength(2)
+  expect(out[1].content).toContain('抱歉，刚才工具调用参数没填全')
+  expect(out[1].tools.items.map((item) => item.name)).toEqual(['present_options'])
 })
 
 test('mergeAssistantHistory 尾部无正文工具轮合并到当前助手气泡', () => {

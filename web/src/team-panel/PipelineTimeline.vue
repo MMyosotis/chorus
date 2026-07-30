@@ -6,6 +6,7 @@ import { ROLE_LABELS, ROLE_ORDER } from './roleMeta.js'
 
 const props = defineProps({
   tasks: { type: Array, default: () => [] },
+  chiefWorking: { type: Boolean, default: false },
 })
 
 const members = computed(() => {
@@ -14,7 +15,7 @@ const members = computed(() => {
       return {
         id: 'chief',
         agent_type: agentType,
-        status: 'finished',
+        status: props.chiefWorking ? 'running' : 'finished',
         inactive: false,
       }
     }

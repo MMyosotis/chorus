@@ -221,6 +221,15 @@ const optionScenarios = [
   },
 ]
 
+const activeOptionPrompt = computed(() => {
+  if (current.value.type !== 'option') return null
+  return {
+    ...optionScenarios[0].prompt,
+    prompt_id: 'audit-option-active',
+    status: 'open',
+  }
+})
+
 function optionMessages() {
   const items = []
   for (const scenario of optionScenarios) {
@@ -292,7 +301,14 @@ const messages = computed(() => {
             <ManuscriptHeader :kicker="stageKicker" title="城市小众咖啡馆探店" />
           </template>
         </ChatWindow>
-        <InputBar :streaming="current.type === 'thinking'" :has-active-task="current.type === 'run'" :awaiting-confirm="current.type === 'intent'" />
+        <InputBar
+          :streaming="current.type === 'thinking'"
+          :has-active-task="current.type === 'run'"
+          :awaiting-confirm="current.type === 'intent'"
+          :awaiting-option="current.type === 'option'"
+          :intent-confirmation="current.type === 'intent' ? intentState : null"
+          :option-prompt="activeOptionPrompt"
+        />
       </article>
     </main>
 
@@ -310,12 +326,21 @@ const messages = computed(() => {
 .audit-steps { flex: 1; min-height: 0; margin-top: var(--ch-space-4); overflow-y: auto; border-top: 1px solid var(--ch-border-strong); }.audit-steps button { width: 100%; min-height: 40px; display: grid; grid-template-columns: 24px 1fr; align-items: center; padding: 0 var(--ch-space-1); border: 0; border-bottom: 1px dashed var(--ch-border); background: transparent; color: var(--ch-text-secondary); text-align: left; font: 500 12px/1.3 var(--ch-font-sans); cursor: pointer; transition: color .18s ease, background-color .18s ease; }.audit-steps button span { color: var(--ch-text-muted); font-variant-numeric: tabular-nums; }.audit-steps button.current { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: 600; }.audit-steps button.current span { color: var(--ch-accent-soft-text); }
 .audit-pager { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ch-space-2); margin-top: var(--ch-space-3); }.audit-pager button { min-width: 0; min-height: 32px; padding: 0 var(--ch-space-2); border: 1px solid var(--ch-border-strong); border-radius: var(--ch-radius-btn); background: transparent; color: var(--ch-text-secondary); font: 600 12px/1 var(--ch-font-sans); cursor: pointer; }.audit-pager button:disabled { opacity: .3; cursor: default; }
 .audit-main { flex: 1; min-width: 0; padding: var(--ch-space-4); overflow: visible; }
+.audit-paper { position: relative; }
 .audit-paper :deep(.chat-window) { flex: 0 0 auto; overflow: visible; scrollbar-gutter: auto; }
 .audit-paper :deep(.input-bar) {
   position: fixed;
   left: calc(var(--ch-rail) + (100% - var(--ch-rail) - var(--ch-right-rail)) / 2);
   transform: translateX(-50%);
   width: calc(100% - var(--ch-rail) - var(--ch-right-rail) - 48px);
+}
+.audit-paper :deep(.input-zone.has-hil-stage) {
+  position: fixed;
+  right: auto;
+  bottom: 24px;
+  left: calc(var(--ch-rail) + (100% - var(--ch-rail) - var(--ch-right-rail)) / 2);
+  width: calc(100% - var(--ch-rail) - var(--ch-right-rail) - 48px);
+  transform: translateX(-50%);
 }
 .audit-shell > :deep(.team-panel) { position: sticky; top: 0; height: 100dvh; }
 @media(min-width:781px) and (max-width:1180px){
@@ -325,10 +350,21 @@ const messages = computed(() => {
     left:calc((100% + var(--ch-rail)) / 2);
     width:calc(100% - var(--ch-rail) - 48px);
   }
+  .audit-paper :deep(.input-zone.has-hil-stage){
+    left:calc((100% + var(--ch-rail)) / 2);
+    width:calc(100% - var(--ch-rail) - 48px);
+  }
 }
 @media(max-width:780px){
   .audit-nav{display:none}
   .audit-main{padding:0}
   .audit-paper{width:100%}
+  .audit-paper :deep(.input-zone.has-hil-stage){
+    right: 16px;
+    bottom: 16px;
+    left: 16px;
+    width: auto;
+    transform: none;
+  }
 }
 </style>

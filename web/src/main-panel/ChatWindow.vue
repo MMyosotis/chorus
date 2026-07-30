@@ -9,6 +9,7 @@ import RecoveryCard from './RecoveryCard.vue'
 import ConfirmedCard from './ConfirmedCard.vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
 import { ROLE_FULL } from '../team-panel/roleMeta.js'
+import { containsMessageId } from '../composables/messageHistory.js'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -104,25 +105,31 @@ const displayMessages = computed(() => {
     if (message.kind === 'intent-confirm') {
       const previous = result[result.length - 1]
       if (
-        previous && previous.role === 'assistant' && !previous.kind && !previous.intentState && !previous.optionPrompt &&
-        previous.id === message.anchorMessageId
+        previous && previous.role === 'assistant' && !previous.kind &&
+        containsMessageId(previous, message.anchorMessageId)
       ) {
-        result[result.length - 1] = { ...previous, intentState: message.state }
+        result[result.length - 1] = {
+          ...previous,
+          recaps: [...(previous.recaps || []), { id: message.id, intentState: message.state }],
+        }
         continue
       }
-      result.push({ ...message, content: '', intentState: message.state })
+      result.push({ ...message, content: '', recaps: [{ id: message.id, intentState: message.state }] })
       continue
     }
     if (message.kind === 'option') {
       const previous = result[result.length - 1]
       if (
-        previous && previous.role === 'assistant' && !previous.kind && !previous.intentState && !previous.optionPrompt &&
-        previous.id === message.anchorMessageId
+        previous && previous.role === 'assistant' && !previous.kind &&
+        containsMessageId(previous, message.anchorMessageId)
       ) {
-        result[result.length - 1] = { ...previous, optionPrompt: message.prompt }
+        result[result.length - 1] = {
+          ...previous,
+          recaps: [...(previous.recaps || []), { id: message.id, optionPrompt: message.prompt }],
+        }
         continue
       }
-      result.push({ ...message, content: '', optionPrompt: message.prompt })
+      result.push({ ...message, content: '', recaps: [{ id: message.id, optionPrompt: message.prompt }] })
       continue
     }
     result.push(message)
@@ -216,8 +223,7 @@ watch(
             :content="msg.content || ''"
             :thinking="msg.thinking"
             :tools="msg.tools"
-            :intent-state="msg.intentState"
-            :option-prompt="msg.optionPrompt"
+            :recaps="msg.recaps"
             :suspended="msg.suspended"
             :active="streaming && idx === displayMessages.length - 1 && msg.role === 'assistant'"
             @intent-confirm="$emit('intent-confirm')"
