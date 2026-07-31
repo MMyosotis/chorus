@@ -1,13 +1,13 @@
 # 网页博客成品装配
 
-供 finalize 角色把前置产物装配成网页博客 PostCard。Markdown 节点格式遵循 system prompt。
+供 finalize 角色把前置产物装配成网页博客成品。front matter 写法和正文结构约束由 system prompt 规定，本文件只给内容取舍与资源路径。
 
 ## 装配来源
 
 - 标题使用 idea 产物中已选定的候选，不另起。
 - 正文保留 script 产物的小节、段落、列表和引用关系，只做装配所需的排列。
 - 把 image 产物放到语义相关的小节后，不要全部堆在开头或末尾。
-- 从主题和正文提炼 2-4 个具体标签。
+- 从主题和正文提炼 2-4 个具体标签写入 tags。
 
 ## 排版取舍
 
@@ -18,10 +18,9 @@
 
 ## 成品资源
 
-最终产物的第一、二行分别原样写入：
+front matter 中的资源引用原样写入本包预览路径：
 
-`<!-- preview_ref: web-blog/preview/desktop.html -->`
+- `preview_ref: web-blog/preview/desktop.html`
+- `stylesheet_ref: web-blog/preview/desktop.css`
 
-`<!-- stylesheet_ref: web-blog/preview/desktop.css -->`
-
-两行之间不留空行。不读取或复述 preview 文件内容；资源由前端根据这两个引用加载。
+不读取或复述 preview 文件内容；资源由前端根据这两条引用加载。

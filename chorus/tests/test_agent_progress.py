@@ -125,11 +125,11 @@ def _idea_md():
 
 
 def _image_md():
-    """构造合法 image 产出 markdown：三张图、url 留空。"""
+    """构造合法 image 产出 markdown：三张图,首张有 url、后两张留空(产物不全交 HIL)。"""
     return (
-        "### 图 1\nurl：\ncaption：街景\n\n"
-        "### 图 2\nurl：\ncaption：人物\n\n"
-        "### 图 3\nurl：\ncaption：收尾"
+        "![街景](http://x/a.png)\n\n"
+        "![人物]()\n\n"
+        "![收尾]()"
     )
 
 

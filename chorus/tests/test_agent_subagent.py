@@ -160,14 +160,16 @@ def test_subagent_finalize_awaiting_confirm():
     """finalize 子 Agent：产出 PostCard → 翻转 running→awaiting_confirm（成品也需人工确认）。"""
     engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
-    content = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
-               "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
-               "# 夏日晚风\n\n一段\n\n#标签：#夏天")
+    content = ("---\n"
+               "preview_ref: web-blog/preview/desktop.html\n"
+               "stylesheet_ref: web-blog/preview/desktop.css\n"
+               "summary: 摘要\ntags: [夏天]\n"
+               "---\n\n# 夏日晚风\n\n一段")
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
-    assert art_repo.load("t1").artifacts.title == "夏日晚风"
+    assert art_repo.load("t1").artifacts.meta["title"] == "夏日晚风"
 
 
 def test_subagent_react_with_tool():

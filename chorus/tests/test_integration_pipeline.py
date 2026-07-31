@@ -69,9 +69,11 @@ def _idea_content() -> str:
 
 
 def _finalize_content() -> str:
-    return ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
-            "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
-            "# 夏日晚风\n\n蝉鸣与晚风。\n\n#标签：#夏天")
+    return ("---\n"
+            "preview_ref: web-blog/preview/desktop.html\n"
+            "stylesheet_ref: web-blog/preview/desktop.css\n"
+            "summary: 蝉鸣与晚风\ntags: [夏天]\n"
+            "---\n\n# 夏日晚风\n\n蝉鸣与晚风。")
 
 
 def _plan_args() -> dict:

@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { firstImageUrl, firstParagraphText } from '../composables/renderPostCard.js'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -10,14 +11,14 @@ defineEmits(['preview'])
 
 const card = computed(() => props.task.artifacts || {})
 
-const platformLabel = computed(() => {
-  const ref = props.task.artifacts?.meta?.preview_ref || ''
-  return String(ref).split('/')[0] || 'web-blog'
-})
+const platformLabel = computed(() => props.task.artifacts.meta.preview_ref.split('/')[0])
+
+const coverUrl = computed(() => firstImageUrl(card.value))
+
+const title = computed(() => card.value.meta?.title || '')
 
 const firstParagraph = computed(() => {
-  const section = (card.value.sections || []).find((s) => s.kind === 'paragraph' && s.text)
-  const text = String(section?.text || '').replace(/\n/g, ' ').trim()
+  const text = firstParagraphText(card.value.markdown)
   return text.length > 80 ? text.slice(0, 80) + '…' : text
 })
 
@@ -31,10 +32,10 @@ const isFinished = computed(() => props.task.status === 'finished')
       <span>已完成</span>
     </div>
     <div class="artifact-card">
-      <img v-if="card.cover && card.cover.url" :src="card.cover.url" :alt="card.cover.caption || ''" class="ac-cover" loading="lazy" />
+      <img v-if="coverUrl" :src="coverUrl" class="ac-cover" loading="lazy" />
       <div class="ac-body">
         <div class="ac-platform">发布到 {{ platformLabel }}</div>
-        <h3 v-if="card.title" class="ac-title">{{ card.title }}</h3>
+        <h3 v-if="title" class="ac-title">{{ title }}</h3>
         <p v-if="firstParagraph" class="ac-excerpt">{{ firstParagraph }}</p>
         <button class="ac-expand" @click="$emit('preview')">查看完整成品</button>
       </div>

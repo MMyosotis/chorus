@@ -25,4 +25,4 @@ description: 网页博客（web-blog）平台创作包。当创作意图的 plat
 - `preview/desktop.html`
 - `preview/desktop.css`
 
-预览文件由前端读取。子 Agent 不读它们的内容，汇总官只按 `references/finalize.md` 抄写资源引用。
+预览文件由前端读取。子 Agent 不读它们的内容，汇总官只按 `references/finalize.md` 把资源引用写入成品 front matter。

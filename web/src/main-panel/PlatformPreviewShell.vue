@@ -1,7 +1,7 @@
 <script setup>
 import { ref, watch, onMounted, nextTick } from 'vue'
 import { getSkillFile } from '../api.js'
-import { renderPostCardHTML, renderInline } from '../composables/renderPostCard.js'
+import { renderPostCardHTML, renderInline, parseFrontMatter, firstImageUrl, firstParagraphText } from '../composables/renderPostCard.js'
 import { bindShell } from '../composables/bindShell.js'
 
 const props = defineProps({
@@ -32,12 +32,13 @@ function parseYaml(text) {
 }
 
 function renderPreview(html, css, card, format) {
-  const tags = card.tags || []
-  const firstParagraph = (card.sections || []).find((section) => section.kind === 'paragraph' && section.text)?.text || ''
+  const fm = parseFrontMatter(card.markdown)
+  const tags = Array.isArray(fm.tags) ? fm.tags : (fm.tags ? [fm.tags] : [])
+  const summary = fm.summary || firstParagraphText(card.markdown)
   const slots = {
-    title: renderInline(card.title, format),
-    cover_url: card.cover?.url || '',
-    summary: renderInline(card.summary || firstParagraph, format),
+    title: renderInline(card.meta.title, format),
+    cover_url: firstImageUrl(card),
+    summary: renderInline(summary, format),
     body: renderPostCardHTML(card, { format }),
     tags,
     has_tags: tags.length > 0,

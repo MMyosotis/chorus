@@ -165,7 +165,7 @@ class SubagentLoopStrategy:
             _logger.debug("format self-correction", extra={"task_id": self.task.id})
             self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
             self.history.append({"role": "assistant", "content": content or None})
-            self.history.append({"role": "user", "content": e.correction})
+            self.history.append({"role": "user", "content": f"{e.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"})
             return LoopAction(LoopSignal.CONTINUE, [])
 
         self._finalize(self.task, artifacts, self.owner_id)

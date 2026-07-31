@@ -11,26 +11,22 @@ from chorus.domain.task.markdown import (
 from chorus.domain.task.progress import UnitCounter
 
 
-def test_parse_script_md_heading_paragraph_list_quote():
-    body = "## 阳台上的光\n\n阳台上的光，是慢慢挪过来的。\n\n- 粗陶杯\n- 粗砂糖\n\n> 秋天不是用来赶的。"
+def test_parse_script_md_returns_markdown():
+    body = "# 阳台上的光\n\n阳台上的光，是慢慢挪过来的。\n\n- 粗陶杯\n- 粗砂糖\n\n> 秋天不是用来赶的。"
     out = parse_script_md(body)
-    assert out["blocks"] == [
-        {"kind": "heading", "text": "阳台上的光"},
-        {"kind": "paragraph", "text": "阳台上的光，是慢慢挪过来的。"},
-        {"kind": "list", "text": "粗陶杯\n粗砂糖"},
-        {"kind": "quote", "text": "秋天不是用来赶的。"},
-    ]
+    assert out["markdown"] == body
 
 
-def test_parse_script_md_consecutive_paragraphs():
-    body = "第一段。\n\n第二段。"
-    out = parse_script_md(body)
-    assert [b["kind"] for b in out["blocks"]] == ["paragraph", "paragraph"]
-    assert out["blocks"][0]["text"] == "第一段。"
+def test_parse_script_md_requires_single_h1():
+    """无 # 大标题或多个 # 大标题都抛错让模型自纠。"""
+    with pytest.raises(ValidationError):
+        parse_script_md("## 小标题\n\n正文")
+    with pytest.raises(ValidationError):
+        parse_script_md("# 一\n\n正文\n\n# 二")
 
 
 def test_parse_script_md_empty_body_raises():
-    """空正文不返空块，直接抛错让模型自纠。"""
+    """空正文直接抛错让模型自纠。"""
     with pytest.raises(ValidationError):
         parse_script_md("")
 
@@ -45,51 +41,59 @@ def test_parse_idea_md_candidates():
 
 
 def test_parse_image_md_captions():
-    body = "### 图 1\nurl：\ncaption：阳台俯拍\n\n### 图 2\nurl：\ncaption：侧拍暖光"
+    body = "![阳台俯拍](http://x/a.png)\n\n![侧拍暖光](http://x/b.png)"
     out = parse_image_md(body)
-    assert out["images"] == [{"url": "", "caption": "阳台俯拍"}, {"url": "", "caption": "侧拍暖光"}]
+    assert out["images"] == [{"url": "http://x/a.png", "caption": "阳台俯拍"}, {"url": "http://x/b.png", "caption": "侧拍暖光"}]
 
 
-def test_parse_image_md_urls():
-    """url： 行抽进 ImageItem.url，缺 url 行留空。"""
-    body = "### 图 1\nurl：http://x/a.png\ncaption：阳台\n\n### 图 2\nurl：\ncaption：侧拍"
-    out = parse_image_md(body)
-    assert out["images"][0] == {"url": "http://x/a.png", "caption": "阳台"}
-    assert out["images"][1] == {"url": "", "caption": "侧拍"}
+def test_parse_image_md_all_empty_url_raises():
+    """全部 url 为空抛错让模型自纠。"""
+    with pytest.raises(ValidationError):
+        parse_image_md("![阳台]()\n\n![侧拍]()")
 
 
-def test_parse_postcard_md_tree():
-    body = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
-            "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
-            "# 秋日阳台\n\n## 关于这杯\n\n阳台上的光，慢慢挪过来。\n\n"
-            "> 秋天不是用来赶的。\n\n![俯拍](http://x/2.png)\n\n#标签：#秋日 #阳台")
-    out = parse_postcard_md(body)
-    assert out["title"] == "秋日阳台"
-    assert out["tags"] == ["#秋日", "#阳台"]
-    kinds = [s["kind"] for s in out["sections"]]
-    assert "heading" in kinds and "quote" in kinds and "image" in kinds
-    image_block = next(s for s in out["sections"] if s["kind"] == "image")
-    assert image_block["image"]["url"] == "http://x/2.png"
+def test_parse_image_md_empty_raises():
+    """无图片抛错让模型自纠。"""
+    with pytest.raises(ValidationError):
+        parse_image_md("只有文字")
 
 
-def test_parse_postcard_md_image_with_alt():
-    """![caption](url) 抽 url 与 alt caption。"""
-    body = ("<!-- preview_ref: a/b -->\n<!-- stylesheet_ref: a/c -->\n\n"
-            "# t\n\n![俯拍](http://x/3.png)\n\n#标签：#x")
-    out = parse_postcard_md(body)
-    image_block = next(s for s in out["sections"] if s["kind"] == "image")
-    assert image_block["image"] == {"url": "http://x/3.png", "caption": "俯拍"}
-
-
-def test_parse_postcard_md_meta_refs():
-    """开头资源引用抽进 meta，不进正文 sections。"""
-    body = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
-            "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
-            "# 标题\n\n正文。\n\n#标签：#话题")
+def test_parse_postcard_md_strips_refs_to_meta():
+    """front matter 抽资源引用入 meta、剩 summary/tags 留在正文，标题取首个 #。"""
+    body = ("---\n"
+            "preview_ref: web-blog/preview/desktop.html\n"
+            "stylesheet_ref: web-blog/preview/desktop.css\n"
+            "summary: 一句话摘要\n"
+            "tags: [秋日, 阳台]\n"
+            "---\n\n"
+            "# 秋日阳台\n\n## 关于这杯\n\n阳台上的光。\n\n"
+            "> 秋天不是用来赶的。\n\n![俯拍](http://x/2.png)")
     out = parse_postcard_md(body)
     assert out["meta"]["preview_ref"] == "web-blog/preview/desktop.html"
     assert out["meta"]["stylesheet_ref"] == "web-blog/preview/desktop.css"
-    assert out["title"] == "标题"
+    assert out["meta"]["title"] == "秋日阳台"
+    assert "preview_ref" not in out["markdown"]
+    assert "stylesheet_ref" not in out["markdown"]
+    assert "summary: 一句话摘要" in out["markdown"]
+    assert "tags: [秋日, 阳台]" in out["markdown"]
+    assert "# 秋日阳台" in out["markdown"]
+    assert "![俯拍](http://x/2.png)" in out["markdown"]
+
+
+def test_parse_postcard_md_image_with_alt():
+    """![caption](url) 原样保留在 markdown 正文里。"""
+    body = ("---\npreview_ref: a/b\nstylesheet_ref: a/c\nsummary: s\ntags: [x]\n---\n\n"
+            "# t\n\n![俯拍](http://x/3.png)")
+    out = parse_postcard_md(body)
+    assert out["meta"]["title"] == "t"
+    assert "![俯拍](http://x/3.png)" in out["markdown"]
+
+
+def test_parse_postcard_md_requires_refs():
+    """front matter 缺资源引用字段抛校验错。"""
+    body = "---\nsummary: s\ntags: [x]\n---\n\n# 标题\n\n正文。"
+    with pytest.raises(ValidationError):
+        parse_postcard_md(body)
 
 
 def test_unit_counter_counts_heading_lines():

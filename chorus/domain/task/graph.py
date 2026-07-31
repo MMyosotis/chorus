@@ -32,7 +32,6 @@ class TaskNodeView:
     progress: Optional[TaskProgress] = None
     artifacts: Optional[Union[IdeaArtifacts, ScriptArtifacts, ImageArtifacts, PostCard]] = None
     error: Optional[str] = None
-    title: Optional[str] = None
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -68,7 +67,6 @@ def build_task_graph(
             progress=progress.get(task.id),
             artifacts=artifacts,
             error=content.error if content else None,
-            title=artifacts.display_title if artifacts else None,
         ))
 
     return TaskGraph(pipeline_id=pipeline_id, active=active, nodes=nodes)
@@ -88,7 +86,6 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "progress": _dump_progress_with_line(node) if node.progress else None,
             "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
             "error": node.error,
-            "title": node.title,
         } for node in graph.nodes],
     }
 

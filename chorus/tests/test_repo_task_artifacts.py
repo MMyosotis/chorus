@@ -10,10 +10,7 @@ from chorus.domain.task import (
     ImageArtifacts,
     ImageItem,
     PostCard,
-    PostImage,
-    PostSection,
     ScriptArtifacts,
-    ScriptBlock,
     Task,
 )
 from chorus.repo.task import TaskRepository
@@ -67,12 +64,12 @@ def test_artifacts_load_many():
     )
     repo.upsert(
         "t2", "script",
-        ScriptArtifacts(blocks=[ScriptBlock(kind="paragraph", text="hi")]),
+        ScriptArtifacts(markdown="hi"),
     )
     many = repo.load_many(["t1", "t2", "t3"])
     assert set(many.keys()) == {"t1", "t2"}
     assert isinstance(many["t2"].artifacts, ScriptArtifacts)
-    assert many["t2"].artifacts.blocks[0].text == "hi"
+    assert many["t2"].artifacts.markdown == "hi"
 
 
 def test_roundtrip_idea():
@@ -95,10 +92,7 @@ def test_roundtrip_script():
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(engine)
-    script = ScriptArtifacts(blocks=[
-        ScriptBlock(kind="heading", text="标题"),
-        ScriptBlock(kind="paragraph", text="正文"),
-    ])
+    script = ScriptArtifacts(markdown="# 标题\n\n正文")
     repo.upsert("ts", "script", script)
     got = repo.load("ts")
     assert got.artifacts == script
@@ -130,15 +124,8 @@ def test_roundtrip_postcard():
     ))
     repo = TaskArtifactsRepository(engine)
     card = PostCard(
-        title="夏日晚风",
-        sections=[
-            PostSection(kind="heading", text="一"),
-            PostSection(kind="image", image=PostImage(url="http://x/a.jpg", caption="封")),
-            PostSection(kind="list", text="- 项"),
-        ],
-        cover=PostImage(url="http://x/cover.jpg"),
-        tags=["#夏", "#晚风"],
-        summary="摘要",
+        markdown="# 夏日晚风\n\n一段正文\n\n![封](http://x/a.jpg)",
+        meta={"preview_ref": "a/b", "stylesheet_ref": "a/c", "title": "夏日晚风"},
     )
     repo.upsert("tf", "finalize", card)
     got = repo.load("tf")

@@ -21,7 +21,7 @@ const needSelect = computed(() => props.task.agent_type === 'idea')
 const scriptChars = computed(() => {
   const explicit = props.task.progress?.composing_chars || props.task.artifacts?.char_count
   if (explicit) return explicit
-  return (artifacts.value.blocks || []).reduce((sum, block) => sum + String(block.text || '').length, 0)
+  return (artifacts.value.markdown || '').length
 })
 
 const meta = computed(() => ({
@@ -133,7 +133,7 @@ async function onRetry() {
         </button>
       </div>
 
-      <ScriptProof v-else-if="task.agent_type === 'script'" :blocks="artifacts.blocks || []" />
+      <ScriptProof v-else-if="task.agent_type === 'script'" :markdown="artifacts.markdown || ''" />
 
       <div v-else-if="task.agent_type === 'image'" class="images">
         <figure v-for="img in artifacts.images || []" :key="img.url">

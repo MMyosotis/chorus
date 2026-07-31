@@ -38,17 +38,18 @@ test('planArtifacts 选题无选中落首条', () => {
 test('planArtifacts 文案优先用 char_count', () => {
   const rows = planArtifacts([{
     id: 'b', status: 'finished', agent_type: 'script',
-    artifacts: { char_count: 320, blocks: [{ text: '短' }, { text: '文' }, { text: '案' }] },
+    artifacts: { char_count: 320, markdown: '## 一\n\n## 二\n\n## 三' },
   }])
   expect(rows[0]).toMatchObject({ kind: 'script', charCount: 320, blockCount: 3 })
 })
 
-test('planArtifacts 文案无 char_count 按段累计', () => {
+test('planArtifacts 文案无 char_count 取 markdown 长度', () => {
+  const markdown = '## 小节\n\n正文段落'
   const rows = planArtifacts([{
     id: 'b', status: 'finished', agent_type: 'script',
-    artifacts: { blocks: [{ text: '一二三' }, { text: '四五六七' }] },
+    artifacts: { markdown },
   }])
-  expect(rows[0]).toMatchObject({ kind: 'script', charCount: 7, blockCount: 2 })
+  expect(rows[0]).toMatchObject({ kind: 'script', charCount: markdown.length, blockCount: 1 })
 })
 
 test('planArtifacts 配图取图片列表', () => {
@@ -60,13 +61,12 @@ test('planArtifacts 配图取图片列表', () => {
   expect(rows[0].images).toHaveLength(2)
 })
 
-test('planArtifacts 定稿取封面与标题', () => {
+test('planArtifacts 定稿取标题', () => {
   const rows = planArtifacts([{
     id: 'd', status: 'finished', agent_type: 'finalize',
-    artifacts: { title: '终稿', cover: { url: 'cover' }, meta: { preview_ref: 'ref' } },
+    artifacts: { markdown: '# 终稿\n\n正文', meta: { title: '终稿' } },
   }])
-  expect(rows[0]).toMatchObject({ kind: 'finalize', title: '终稿', previewRef: 'ref' })
-  expect(rows[0].cover).toEqual({ url: 'cover' })
+  expect(rows[0]).toMatchObject({ kind: 'finalize', title: '终稿' })
 })
 
 test('planArtifacts 按角色顺序输出', () => {
@@ -74,7 +74,7 @@ test('planArtifacts 按角色顺序输出', () => {
     { id: 'd', status: 'finished', agent_type: 'finalize', artifacts: {} },
     { id: 'a', status: 'finished', agent_type: 'idea', artifacts: { candidates: [{ index: 0, title: 'T' }] } },
     { id: 'c', status: 'finished', agent_type: 'image', artifacts: { images: [] } },
-    { id: 'b', status: 'finished', agent_type: 'script', artifacts: { char_count: 1, blocks: [{}] } },
+    { id: 'b', status: 'finished', agent_type: 'script', artifacts: { char_count: 1, markdown: '## x' } },
   ])
   expect(rows.map((row) => row.kind)).toEqual(['idea', 'script', 'image', 'finalize'])
 })

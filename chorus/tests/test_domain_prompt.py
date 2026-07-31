@@ -83,7 +83,7 @@ def test_image_prompt_caps_retry():
     assert "字面含 Error 时才视为失败" in p
     assert "不要因为多张图返回相同 url 就判定为故障" in p
     assert "按产出协议写失败块" in p
-    assert "### 图 1\nurl：图片url" in p
+    assert "![图注](图片url)" in p
 
 
 def test_subagent_prompt_has_abandon_exit():

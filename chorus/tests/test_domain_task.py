@@ -14,8 +14,6 @@ from chorus.domain.task import (
     CANCELLABLE_STATUSES,
     LEGAL_TRANSITIONS,
     PostCard,
-    PostImage,
-    PostSection,
     TERMINAL_STATUSES,
     Task,
     TaskContent,
@@ -32,7 +30,6 @@ from chorus.domain.task import (
     IdeaArtifacts,
     IdeaCandidate,
     ScriptArtifacts,
-    ScriptBlock,
     TaskArtifacts,
 )
 from chorus.domain.task.errors import AbandonError
@@ -50,25 +47,12 @@ def _mk(status, deps=None, **kw):
 
 def test_postcard_contract():
     card = PostCard(
-        title="夏日晚风",
-        cover=PostImage(url="http://x/a.jpg"),
-        sections=[
-            PostSection(kind="heading", text="开篇"),
-            PostSection(kind="paragraph", text="一段文字"),
-            PostSection(kind="image", image=PostImage(url="http://x/b.jpg", caption="图注")),
-            PostSection(kind="list", text="点一\n点二"),
-        ],
-        tags=["#夏天", "#随笔"],
-        summary="一句摘要",
+        markdown="# 夏日晚风\n\n一段文字\n\n![图注](http://x/b.jpg)",
+        meta={"preview_ref": "a/b", "stylesheet_ref": "a/c", "title": "夏日晚风"},
     )
-    assert card.sections[2].image.url == "http://x/b.jpg"
-    assert card.tags == ["#夏天", "#随笔"]
-
-
-def test_postcard_rejects_unknown_kind():
-    from pydantic import ValidationError as PydValidationError
-    with pytest.raises(PydValidationError):
-        PostSection(kind="caption", text="x")  # type: ignore[arg-type]
+    assert card.markdown.startswith("# 夏日晚风")
+    assert card.meta["preview_ref"] == "a/b"
+    assert card.meta["title"] == "夏日晚风"
 
 
 def test_legal_transitions_table():
@@ -229,11 +213,14 @@ def test_parse_output_idea_ok():
 
 
 def test_parse_output_finalize_postcard():
-    content = ("<!-- preview_ref: web-blog/preview/desktop.html -->\n"
-               "<!-- stylesheet_ref: web-blog/preview/desktop.css -->\n\n"
-               "# 夏日晚风\n\n一段正文\n\n#标签：#夏天")
+    content = ("---\n"
+               "preview_ref: web-blog/preview/desktop.html\n"
+               "stylesheet_ref: web-blog/preview/desktop.css\n"
+               "summary: 摘要\ntags: [夏天]\n"
+               "---\n\n# 夏日晚风\n\n一段正文")
     artifacts = AGENT_PROFILES["finalize"].parse_output(content)
-    assert artifacts.title == "夏日晚风"
+    assert artifacts.meta["title"] == "夏日晚风"
+    assert artifacts.meta["preview_ref"] == "web-blog/preview/desktop.html"
 
 
 def test_parse_output_abandon_block_raises():
@@ -243,6 +230,15 @@ def test_parse_output_abandon_block_raises():
         with pytest.raises(AbandonError) as exc:
             AGENT_PROFILES[agent_type].parse_output(body)
         assert exc.value.reason == "配图服务持续返回 Error，换写法仍无效"
+
+
+def test_parse_output_abandon_same_line_reason():
+    """# 失败：说明 同行写法也命中失败块，标题含「失败」前缀不误判。"""
+    with pytest.raises(AbandonError) as exc:
+        AGENT_PROFILES["script"].parse_output("# 失败：工具持续返回 Error")
+    assert exc.value.reason == "工具持续返回 Error"
+    artifacts = AGENT_PROFILES["script"].parse_output("# 失败者的逆袭\n\n正文。")
+    assert artifacts.markdown.startswith("# 失败者的逆袭")
 
 
 def test_parse_output_normal_not_misread_as_abandon():
@@ -258,29 +254,6 @@ def _task(tid, deps=None, created_at=0.0):
         status="pending", dependencies=deps or [],
         created_at=created_at, updated_at=0.0,
     )
-
-
-def test_artifact_display_title():
-    """产物模型自带展示标题属性：选题取选中候选、文案取首小标题、汇总取成品标题。"""
-    idea = IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="夏日晚风", angle="a", reason="r")], selected=0)
-    assert idea.display_title == "夏日晚风"
-    idea_none = IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="首案", angle="", reason="")], selected=None)
-    assert idea_none.display_title == "首案"
-    script = ScriptArtifacts(blocks=[ScriptBlock(kind="heading", text="开篇"), ScriptBlock(kind="paragraph", text="x")])
-    assert script.display_title == "开篇"
-    script_plain = ScriptArtifacts(blocks=[ScriptBlock(kind="paragraph", text="x")])
-    assert script_plain.display_title is None
-    post = PostCard(title="夏日晚风", sections=[])
-    assert post.display_title == "夏日晚风"
-
-
-def test_graph_node_exposes_title():
-    """校样清单标题随产物派生透进任务图节点并序列化。"""
-    task = _mk(TaskStatus.FINISHED, id="fin", agent_type="finalize")
-    art = TaskArtifacts(task_id="fin", artifacts=PostCard(title="夏日晚风", sections=[]))
-    graph = build_task_graph("p", [task], {"fin": art}, {}, {}, False)
-    assert graph.nodes[0].title == "夏日晚风"
-    assert dump_task_graph(graph)["tasks"][0]["title"] == "夏日晚风"
 
 
 def test_topological_order_linear_chain():

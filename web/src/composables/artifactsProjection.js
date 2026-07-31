@@ -12,11 +12,12 @@ function pickIdeaTitle(artifacts) {
 }
 
 function scriptStats(artifacts) {
-  const blocks = artifacts && Array.isArray(artifacts.blocks) ? artifacts.blocks : []
+  const markdown = artifacts && typeof artifacts.markdown === 'string' ? artifacts.markdown : ''
   const charCount = artifacts && Number.isFinite(artifacts.char_count)
     ? artifacts.char_count
-    : blocks.reduce((sum, block) => sum + (block.text ? block.text.length : 0), 0)
-  return { charCount, blockCount: blocks.length }
+    : markdown.length
+  const blockCount = (markdown.match(/^##\s/gm) || []).length
+  return { charCount, blockCount }
 }
 
 function imageList(artifacts) {
@@ -24,12 +25,8 @@ function imageList(artifacts) {
 }
 
 function finalizeSummary(artifacts) {
-  const data = artifacts || {}
-  return {
-    cover: data.cover || null,
-    title: data.title || '',
-    previewRef: (data.meta && data.meta.preview_ref) || null,
-  }
+  const meta = artifacts && artifacts.meta ? artifacts.meta : {}
+  return { title: meta.title || '' }
 }
 
 export function planArtifacts(tasks) {

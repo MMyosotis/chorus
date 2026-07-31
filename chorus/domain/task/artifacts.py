@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from functools import singledispatch
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -39,27 +39,12 @@ class IdeaArtifacts:
             return self.candidates[self.selected]
         return self.candidates[0] if self.candidates else None
 
-    @property
-    def display_title(self) -> Optional[str]:
-        cand = self.selected_candidate()
-        return cand.title if cand else None
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class ScriptBlock:
-    kind: Literal["heading", "paragraph", "list", "quote"]
-    text: str
-
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class ScriptArtifacts:
-    """文案官产物：正文块序列。"""
+    """文案官产物：原始 markdown 正文。"""
 
-    blocks: list[ScriptBlock]
-
-    @property
-    def display_title(self) -> Optional[str]:
-        return next((b.text for b in self.blocks if b.kind == "heading"), None)
+    markdown: str
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
@@ -74,53 +59,13 @@ class ImageArtifacts:
 
     images: list[ImageItem]
 
-    @property
-    def display_title(self) -> Optional[str]:
-        return None
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class PostImage:
-    url: str
-    caption: str = ""
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class PostTable:
-    headers: list[str]
-    rows: list[list[str]]
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class PostSection:
-    kind: Literal["paragraph", "heading", "list", "quote", "image", "table", "divider"]
-    text: str = ""
-    image: Optional[PostImage] = None
-    table: Optional[PostTable] = None
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class PostCardMeta:
-    """汇总成品使用的预览资源引用。"""
-
-    preview_ref: str = ""
-    stylesheet_ref: str = ""
-
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class PostCard:
-    """成品卡片：博文结构树，前端按节点类型渲染。"""
+    """成品卡片：标准 markdown 正文 + 剥离的资源引用元数据。"""
 
-    title: str
-    sections: list[PostSection]
-    cover: Optional[PostImage] = None
-    tags: list[str] = Field(default_factory=list)
-    summary: str = ""
-    meta: PostCardMeta = Field(default_factory=PostCardMeta)
-
-    @property
-    def display_title(self) -> Optional[str]:
-        return self.title
+    markdown: str
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 @singledispatch

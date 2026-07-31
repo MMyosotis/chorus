@@ -102,7 +102,16 @@ const scriptBlocks = [
   { kind: 'quote', text: '没有网红打卡的喧嚣，却有着独属于自己的节奏。' },
   { kind: 'paragraph', text: '离开时，城市仍然很快。但那一个小时像被单独装订起来。' },
 ]
-const scriptTask = { id: 'audit-script', agent_type: 'script', status: 'finished', title: '最终文案 VERSION 01', artifacts: { char_count: 936, blocks: scriptBlocks } }
+const scriptMarkdown = [
+  '# 城市里，藏着一杯慢下来的时间',
+  '## 不是每一家咖啡馆，都急着被看见',
+  scriptBlocks[2].text,
+  '## 一杯手冲，把下午还给自己',
+  scriptBlocks[4].text,
+  `> ${scriptBlocks[5].text}`,
+  scriptBlocks[6].text,
+].join('\n\n')
+const scriptTask = { id: 'audit-script', agent_type: 'script', status: 'finished', title: '最终文案 VERSION 01', artifacts: { char_count: 936, markdown: scriptMarkdown } }
 
 const images = [
   { url: art('OLD STREET', '#8f7861', '#3e4d47'), caption: '老街远景，人物刚进入画面' },
@@ -110,20 +119,25 @@ const images = [
   { url: art('WINDOW', '#506a69', '#c9bda6'), caption: '窗边独坐，侧面自然光' },
 ]
 const imageTask = { id: 'audit-image', agent_type: 'image', status: 'finished', title: '三帧视觉叙事方案', artifacts: { images } }
+const finalMarkdown = [
+  '---',
+  'preview_ref: web-blog/preview/desktop.html',
+  'stylesheet_ref: web-blog/preview/desktop.css',
+  'summary: 最终成品已统一标题、正文、图片顺序与发布信息。',
+  'tags: [上海咖啡馆, 一个人也很好, 城市漫游, 松弛感]',
+  '---',
+  '',
+  scriptMarkdown,
+  `![${images[0].caption}](${images[0].url})`,
+].join('\n\n')
 const finalTask = {
   id: 'audit-finalize', agent_type: 'finalize', status: 'finished', title: '小红书图文交付主稿',
   artifacts: {
-    cover: images[0], title: '城市里，藏着一杯慢下来的时间',
-    sections: [
-      { kind: 'paragraph', text: scriptBlocks[2].text },
-      { kind: 'paragraph', text: scriptBlocks[4].text },
-      { kind: 'quote', text: '真正让人想再来的，也许不是某一种风味，而是这里允许你暂时不回应世界。' },
-    ],
-    tags: ['#上海咖啡馆', '#一个人也很好', '#城市漫游', '#松弛感'],
-    summary: '最终成品已统一标题、正文、图片顺序与发布信息。',
+    markdown: finalMarkdown,
     meta: {
       preview_ref: 'web-blog/preview/desktop.html',
       stylesheet_ref: 'web-blog/preview/desktop.css',
+      title: '城市里，藏着一杯慢下来的时间',
     },
   },
 }
