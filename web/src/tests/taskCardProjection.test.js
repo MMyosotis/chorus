@@ -24,9 +24,9 @@ test('planTaskCards 失败归恢复卡', () => {
   expect(plan[0]).toMatchObject({ kind: 'recovery', id: 'recovery:t2' })
 })
 
-test('planTaskCards 定稿成品归成品卡', () => {
+test('planTaskCards 已交付定稿归确认卡', () => {
   const plan = planTaskCards({ tasks: [{ id: 't3', status: 'finished', agent_type: 'finalize' }] })
-  expect(plan[0]).toMatchObject({ kind: 'postcard', id: 'postcard:t3' })
+  expect(plan[0]).toMatchObject({ kind: 'confirmed', id: 'confirmed:t3' })
 })
 
 test('planTaskCards 运行中归运行卡', () => {
@@ -46,9 +46,9 @@ test('planTaskCards 已完成非定稿各自成卡', () => {
   expect(plan[0].task.id).toBe('a')
 })
 
-test('planTaskCards 定稿成品不进确认卡', () => {
+test('planTaskCards 定稿成品使用与其他阶段一致的确认卡', () => {
   const plan = planTaskCards({ tasks: [{ id: 'f', status: 'finished', agent_type: 'finalize' }] })
-  expect(plan.find((card) => card.kind === 'confirmed')).toBeUndefined()
+  expect(plan.find((card) => card.kind === 'confirmed')).toMatchObject({ id: 'confirmed:f' })
 })
 
 test('planTaskCards 混合任务按顺序投影', () => {
@@ -60,7 +60,7 @@ test('planTaskCards 混合任务按顺序投影', () => {
       { id: 'd', status: 'finished', agent_type: 'finalize' },
     ],
   })
-  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'running', 'hil', 'postcard'])
+  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'confirmed', 'running', 'hil'])
 })
 
 test('planIntentCard 无留档返回空', () => {

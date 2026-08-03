@@ -5,7 +5,7 @@ export function planTaskCards(graph) {
   const tasks = (graph && graph.tasks) || []
   const plan = []
   for (const task of tasks) {
-    if (task.status === 'finished' && task.agent_type !== 'finalize') {
+    if (task.status === 'finished') {
       plan.push({ kind: 'confirmed', task, id: 'confirmed:' + task.id, role: 'assistant', anchorMessageId: task.message_id })
     }
   }
@@ -18,8 +18,6 @@ export function planTaskCards(graph) {
       plan.push({ kind: 'hil', task, id: 'hil:' + task.id, role: 'assistant', anchorMessageId: task.message_id })
     } else if (task.status === 'failed') {
       plan.push({ kind: 'recovery', task, id: 'recovery:' + task.id, role: 'assistant', anchorMessageId: task.message_id })
-    } else if (task.agent_type === 'finalize' && task.status === 'finished') {
-      plan.push({ kind: 'postcard', task, id: 'postcard:' + task.id, role: 'assistant', anchorMessageId: task.message_id })
     }
   }
   return plan

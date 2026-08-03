@@ -238,6 +238,17 @@ async function onRetry() {
   border: 0;
 }
 
+.review-finalize .review-content {
+  border: 1px solid transparent;
+  border-radius: var(--ch-radius-list);
+  transition: border-color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.review-finalize .review-content:has(.artifact-card:hover),
+.review-finalize .review-content:has(.artifact-card:focus-visible) {
+  border-color: var(--ch-accent);
+}
+
 .candidates {
   display: grid;
   gap: var(--ch-space-3);

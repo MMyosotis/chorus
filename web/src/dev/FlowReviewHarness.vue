@@ -49,7 +49,7 @@ const stageCardSelector = {
   intent: '.intent-confirm',
   run: '.running-panel',
   review: '.hil-card',
-  complete: '.artifact-wrap:not(.review)',
+  complete: '.confirmed-card',
   recovery: '.recovery-card',
 }
 
@@ -315,13 +315,12 @@ const messages = computed(() => {
     planNote,
     { id: 'audit-intent', kind: 'intent-confirm', role: 'assistant', state: intentState.value },
   ]
-  const confirmed = current.value.type === 'complete' ? taskTemplates.slice(0, 3) : current.value.type === 'recovery' ? taskTemplates.slice(0, 2) : taskTemplates.slice(0, Math.max(0, current.value.phase - 1))
+  const confirmed = current.value.type === 'complete' ? taskTemplates : current.value.type === 'recovery' ? taskTemplates.slice(0, 2) : taskTemplates.slice(0, Math.max(0, current.value.phase - 1))
   for (const task of confirmed) {
     items.push({ id: `audit-confirmed-${task.id}`, kind: 'confirmed', role: 'assistant', task })
   }
   if (current.value.type === 'run') items.push({ id: `audit-${current.value.id}`, kind: 'running', role: 'assistant', task: activeTask() })
   if (current.value.type === 'review') items.push({ id: `audit-${current.value.id}`, kind: 'hil', role: 'assistant', task: activeTask() })
-  if (current.value.type === 'complete') items.push({ id: 'audit-complete', kind: 'postcard', role: 'assistant', task: finalTask })
   if (current.value.type === 'recovery') items.push({ id: 'audit-recovery', kind: 'recovery', role: 'assistant', task: { ...imageTask, status: 'failed', error: '第 2 张图生成超时；已完成的题旨、选题、完整文案和第 1 张图片均已保留。' } })
   return items
 })
