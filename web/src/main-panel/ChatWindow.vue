@@ -251,11 +251,11 @@ watch(
     <Transition name="preview-modal">
       <div v-if="previewTask" class="preview-overlay" @click.self="previewTask = null">
         <div class="preview-frame">
-          <button class="preview-close" type="button" aria-label="关闭预览" @click="previewTask = null">✕</button>
           <PlatformPreviewShell
             :card="previewTask.artifacts || {}"
             :preview-ref="previewTask.artifacts?.meta?.preview_ref"
             :stylesheet-ref="previewTask.artifacts?.meta?.stylesheet_ref"
+            @close="previewTask = null"
           />
         </div>
       </div>
@@ -373,8 +373,6 @@ watch(
 
 .preview-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--ch-overlay); overflow: hidden; }
 .preview-frame { position: relative; width: min(100%, 880px); height: min(680px, calc(100dvh - 40px)); overflow: hidden; background: var(--ch-surface); border-radius: var(--ch-radius-card); box-shadow: var(--ch-shadow-lg); }
-.preview-close { position: absolute; z-index: 1; top: 10px; right: 10px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--ch-surface) 84%, transparent); color: var(--ch-text-muted); font-size: 18px; line-height: 1; cursor: pointer; }
-.preview-close:hover { color: var(--ch-text); }
 .preview-modal-enter-active, .preview-modal-leave-active { transition: opacity .2s; }
 .preview-modal-enter-from, .preview-modal-leave-to { opacity: 0; }
 @media (max-width: 780px) {

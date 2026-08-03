@@ -64,7 +64,7 @@ test('planArtifacts 配图取图片列表', () => {
 test('planArtifacts 定稿取标题', () => {
   const rows = planArtifacts([{
     id: 'd', status: 'finished', agent_type: 'finalize',
-    artifacts: { markdown: '# 终稿\n\n正文', meta: { title: '终稿' } },
+    artifacts: { markdown: '---\ntitle: 终稿\n---\n\n正文', meta: { title: '终稿' } },
   }])
   expect(rows[0]).toMatchObject({ kind: 'finalize', title: '终稿' })
 })

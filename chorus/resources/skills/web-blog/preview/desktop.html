@@ -3,20 +3,20 @@
     <header class="browser-chrome">
       <div class="browser-dots" aria-hidden="true"><i></i><i></i><i></i></div>
       <div class="browser-address">blog.example.com / analysis / article</div>
-      <div class="browser-actions" aria-hidden="true"><span></span><span></span></div>
+      <div class="browser-actions"><button class="browser-close" type="button" data-preview-close aria-label="关闭预览">×</button></div>
     </header>
 
     <nav class="site-nav" aria-label="博客导航">
-      <div class="site-links"><span>首页</span><span class="is-active">研究</span><span>产品</span><span>资源</span><span>关于</span></div>
+      <div class="site-links"><span>首页</span><span class="is-active">文章</span><span>分类</span><span>标签</span><span>关于</span></div>
       <span class="site-search" aria-hidden="true"><i></i>搜索研究与洞察</span>
     </nav>
 
     <div class="browser-scroll">
       <main class="article-shell">
         <header class="article-head">
-          <p class="article-kicker">行业分析</p>
+          <p class="article-kicker">精选文章</p>
           {{#title}}<h1 class="pc-title">{{{title}}}</h1>{{/title}}
-          <div class="article-meta"><span class="author-avatar">主</span><span>研究团队</span><b>·</b><span>约 6 分钟阅读</span><b>·</b><span>2024-05-16</span><span class="article-share">⌯&nbsp; 分享</span></div>
+          <div class="article-meta"><span class="author-avatar">主</span><span>内容作者</span><b>·</b><span>约 6 分钟阅读</span><b>·</b><span>2024-05-16</span><span class="article-share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" /></svg>分享</span></div>
         </header>
 
         <div class="article-main">
@@ -27,7 +27,11 @@
           </section>{{/cover_url}}
 
           <div class="pc-sections">{{{body}}}</div>
-          <footer class="article-footer"><span>♧&nbsp; 赞同　256</span><span>▢&nbsp; 评论　18</span><span>☆&nbsp; 收藏　341</span></footer>
+          <footer class="article-footer">
+            <span class="article-footer-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.6c0 5.4-8.8 10.4-8.8 10.4s-8.8-5-8.8-10.4A4.6 4.6 0 0 1 12 6.5a4.6 4.6 0 0 1 8.8 2.1Z" /></svg>赞同 256</span>
+            <span class="article-footer-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.8 7.5 8.3 8.3 0 0 1-3.5-.8L4 20l1.3-4.1A7.2 7.2 0 0 1 4 11.5 7.5 7.5 0 0 1 12 4a7.5 7.5 0 0 1 8 7.5Z" /></svg>评论 18</span>
+            <span class="article-footer-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5A1.5 1.5 0 0 1 7.5 3h9A1.5 1.5 0 0 1 18 4.5V21l-6-3.8L6 21V4.5Z" /></svg>收藏 341</span>
+          </footer>
         </div>
       </main>
     </div>

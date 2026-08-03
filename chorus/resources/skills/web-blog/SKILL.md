@@ -26,3 +26,5 @@ description: 网页博客（web-blog）平台创作包。当创作意图的 plat
 - `preview/desktop.css`
 
 预览文件由前端读取。子 Agent 不读它们的内容，汇总官只按 `references/finalize.md` 把资源引用写入成品 front matter。
+
+预览模板自行提供带 `data-preview-close` 属性的关闭按钮；外层预览宿主统一接收该动作并关闭弹窗。

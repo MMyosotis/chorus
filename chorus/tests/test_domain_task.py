@@ -47,10 +47,10 @@ def _mk(status, deps=None, **kw):
 
 def test_postcard_contract():
     card = PostCard(
-        markdown="# 夏日晚风\n\n一段文字\n\n![图注](http://x/b.jpg)",
+        markdown="---\ntitle: 夏日晚风\n---\n\n一段文字\n\n![图注](http://x/b.jpg)",
         meta={"preview_ref": "a/b", "stylesheet_ref": "a/c", "title": "夏日晚风"},
     )
-    assert card.markdown.startswith("# 夏日晚风")
+    assert card.markdown.startswith("---\ntitle: 夏日晚风")
     assert card.meta["preview_ref"] == "a/b"
     assert card.meta["title"] == "夏日晚风"
 
@@ -214,10 +214,11 @@ def test_parse_output_idea_ok():
 
 def test_parse_output_finalize_postcard():
     content = ("---\n"
+               "title: 夏日晚风\n"
                "preview_ref: web-blog/preview/desktop.html\n"
                "stylesheet_ref: web-blog/preview/desktop.css\n"
                "summary: 摘要\ntags: [夏天]\n"
-               "---\n\n# 夏日晚风\n\n一段正文")
+               "---\n\n一段正文")
     artifacts = AGENT_PROFILES["finalize"].parse_output(content)
     assert artifacts.meta["title"] == "夏日晚风"
     assert artifacts.meta["preview_ref"] == "web-blog/preview/desktop.html"
@@ -237,8 +238,8 @@ def test_parse_output_abandon_same_line_reason():
     with pytest.raises(AbandonError) as exc:
         AGENT_PROFILES["script"].parse_output("# 失败：工具持续返回 Error")
     assert exc.value.reason == "工具持续返回 Error"
-    artifacts = AGENT_PROFILES["script"].parse_output("# 失败者的逆袭\n\n正文。")
-    assert artifacts.markdown.startswith("# 失败者的逆袭")
+    artifacts = AGENT_PROFILES["script"].parse_output("---\ntitle: 失败者的逆袭\n---\n\n正文。")
+    assert artifacts.markdown.startswith("---\ntitle: 失败者的逆袭")
 
 
 def test_parse_output_normal_not_misread_as_abandon():

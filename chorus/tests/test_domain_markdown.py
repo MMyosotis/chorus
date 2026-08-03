@@ -12,17 +12,17 @@ from chorus.domain.task.progress import UnitCounter
 
 
 def test_parse_script_md_returns_markdown():
-    body = "# 阳台上的光\n\n阳台上的光，是慢慢挪过来的。\n\n- 粗陶杯\n- 粗砂糖\n\n> 秋天不是用来赶的。"
+    body = "---\ntitle: 阳台上的光\n---\n\n阳台上的光，是慢慢挪过来的。\n\n- 粗陶杯\n- 粗砂糖\n\n> 秋天不是用来赶的。"
     out = parse_script_md(body)
     assert out["markdown"] == body
 
 
-def test_parse_script_md_requires_single_h1():
-    """无 # 大标题或多个 # 大标题都抛错让模型自纠。"""
+def test_parse_script_md_requires_front_matter_title_and_rejects_h1():
+    """标题必须在 front matter，正文不能重复为一级标题。"""
     with pytest.raises(ValidationError):
         parse_script_md("## 小标题\n\n正文")
     with pytest.raises(ValidationError):
-        parse_script_md("# 一\n\n正文\n\n# 二")
+        parse_script_md("---\ntitle: 一\n---\n\n# 一\n\n正文")
 
 
 def test_parse_script_md_empty_body_raises():
@@ -59,14 +59,15 @@ def test_parse_image_md_empty_raises():
 
 
 def test_parse_postcard_md_strips_refs_to_meta():
-    """front matter 抽资源引用入 meta、剩 summary/tags 留在正文，标题取首个 #。"""
+    """front matter 抽资源引用入 meta，标题保留在 front matter。"""
     body = ("---\n"
+            "title: 秋日阳台\n"
             "preview_ref: web-blog/preview/desktop.html\n"
             "stylesheet_ref: web-blog/preview/desktop.css\n"
             "summary: 一句话摘要\n"
             "tags: [秋日, 阳台]\n"
             "---\n\n"
-            "# 秋日阳台\n\n## 关于这杯\n\n阳台上的光。\n\n"
+            "## 关于这杯\n\n阳台上的光。\n\n"
             "> 秋天不是用来赶的。\n\n![俯拍](http://x/2.png)")
     out = parse_postcard_md(body)
     assert out["meta"]["preview_ref"] == "web-blog/preview/desktop.html"
@@ -76,14 +77,14 @@ def test_parse_postcard_md_strips_refs_to_meta():
     assert "stylesheet_ref" not in out["markdown"]
     assert "summary: 一句话摘要" in out["markdown"]
     assert "tags: [秋日, 阳台]" in out["markdown"]
-    assert "# 秋日阳台" in out["markdown"]
+    assert "title: 秋日阳台" in out["markdown"]
     assert "![俯拍](http://x/2.png)" in out["markdown"]
 
 
 def test_parse_postcard_md_image_with_alt():
     """![caption](url) 原样保留在 markdown 正文里。"""
-    body = ("---\npreview_ref: a/b\nstylesheet_ref: a/c\nsummary: s\ntags: [x]\n---\n\n"
-            "# t\n\n![俯拍](http://x/3.png)")
+    body = ("---\ntitle: t\npreview_ref: a/b\nstylesheet_ref: a/c\nsummary: s\ntags: [x]\n---\n\n"
+            "![俯拍](http://x/3.png)")
     out = parse_postcard_md(body)
     assert out["meta"]["title"] == "t"
     assert "![俯拍](http://x/3.png)" in out["markdown"]
@@ -91,7 +92,16 @@ def test_parse_postcard_md_image_with_alt():
 
 def test_parse_postcard_md_requires_refs():
     """front matter 缺资源引用字段抛校验错。"""
-    body = "---\nsummary: s\ntags: [x]\n---\n\n# 标题\n\n正文。"
+    body = "---\ntitle: 标题\nsummary: s\ntags: [x]\n---\n\n正文。"
+    with pytest.raises(ValidationError):
+        parse_postcard_md(body)
+
+
+def test_parse_postcard_md_requires_front_matter_title_and_rejects_h1():
+    body = "---\npreview_ref: a/b\nstylesheet_ref: a/c\n---\n\n正文。"
+    with pytest.raises(ValidationError):
+        parse_postcard_md(body)
+    body = "---\ntitle: 标题\npreview_ref: a/b\nstylesheet_ref: a/c\n---\n\n# 标题\n\n正文。"
     with pytest.raises(ValidationError):
         parse_postcard_md(body)
 

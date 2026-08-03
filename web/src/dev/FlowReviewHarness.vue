@@ -3,7 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ChatWindow from '../main-panel/ChatWindow.vue'
 import InputBar from '../main-panel/InputBar.vue'
 import ManuscriptHeader from '../main-panel/ManuscriptHeader.vue'
+import PlatformPreviewShell from '../main-panel/PlatformPreviewShell.vue'
 import TeamPanel from '../team-panel/TeamPanel.vue'
+import { listSkills } from '../api.js'
 
 const stages = [
   { id: 'conversation', label: '00 前期对话', type: 'conversation', phase: 0 },
@@ -18,6 +20,7 @@ const stages = [
   { id: 'finalize-run', label: '08 整合 · 执行', type: 'run', phase: 4 },
   { id: 'finalize-review', label: '09 整合 · 校样', type: 'review', phase: 4 },
   { id: 'complete', label: '10 完成交付', type: 'complete', phase: 5 },
+  { id: 'platform-preview', label: '11 平台 · 渲染预览', type: 'platform-preview', phase: 0 },
   { id: 'recovery', label: '异常 · 配图恢复', type: 'recovery', phase: 3 },
   { id: 'option', label: '工具 · 选项征询', type: 'option', phase: 0 },
 ]
@@ -25,7 +28,55 @@ const stages = [
 const currentIndex = ref(0)
 const current = computed(() => stages[currentIndex.value])
 const reviewProgressStep = ref(0)
+const previewSkills = ref([])
+const selectedPreviewSkill = ref('web-blog')
+const previewModalOpen = ref(false)
 let reviewProgressTimer
+
+const fallbackPreviewSkills = [
+  { name: 'web-blog', description: '浏览器式网页博客阅读预览', has_preview: true },
+  { name: 'xiaohongshu', description: '小红书网页端左右分栏详情预览', has_preview: true },
+]
+
+const selectedPreview = computed(() =>
+  previewSkills.value.find((skill) => skill.name === selectedPreviewSkill.value) || previewSkills.value[0] || null
+)
+
+const previewCard = computed(() => {
+  const name = selectedPreview.value?.name || 'web-blog'
+  const markdown = name === 'xiaohongshu'
+    ? `${finalMarkdown}\n\n![${images[1].caption}](${images[1].url})`
+    : finalMarkdown
+  return {
+    markdown,
+    meta: {
+      preview_ref: `${name}/preview/desktop.html`,
+      stylesheet_ref: `${name}/preview/desktop.css`,
+      title: '城市里，藏着一杯慢下来的时间',
+    },
+  }
+})
+
+function previewSkillLabel(skill) {
+  return { 'web-blog': '网页博客', xiaohongshu: '小红书' }[skill.name] || skill.name
+}
+
+function openSkillPreview(name) {
+  selectedPreviewSkill.value = name
+  previewModalOpen.value = true
+}
+
+async function loadPreviewSkills() {
+  try {
+    const skills = (await listSkills()).filter((skill) => skill.has_preview)
+    previewSkills.value = skills.length ? skills : fallbackPreviewSkills
+  } catch {
+    previewSkills.value = fallbackPreviewSkills
+  }
+  if (!previewSkills.value.some((skill) => skill.name === selectedPreviewSkill.value)) {
+    selectedPreviewSkill.value = previewSkills.value[0]?.name || ''
+  }
+}
 
 function setStage(index) {
   currentIndex.value = Math.max(0, Math.min(stages.length - 1, Number(index)))
@@ -40,6 +91,7 @@ onMounted(() => {
       reviewProgressStep.value = (reviewProgressStep.value + 1) % 4
     }
   }, 900)
+  void loadPreviewSkills()
 })
 
 onUnmounted(() => window.clearInterval(reviewProgressTimer))
@@ -112,8 +164,7 @@ const scriptBlocks = [
   { kind: 'quote', text: '没有网红打卡的喧嚣，却有着独属于自己的节奏。' },
   { kind: 'paragraph', text: '离开时，城市仍然很快。但那一个小时像被单独装订起来。' },
 ]
-const scriptMarkdown = [
-  '# 城市里，藏着一杯慢下来的时间',
+const scriptBody = [
   '## 不是每一家咖啡馆，都急着被看见',
   scriptBlocks[2].text,
   '## 一杯手冲，把下午还给自己',
@@ -121,6 +172,13 @@ const scriptMarkdown = [
   `> ${scriptBlocks[5].text}`,
   scriptBlocks[6].text,
 ].join('\n\n')
+const scriptMarkdown = [
+  '---',
+  'title: 城市里，藏着一杯慢下来的时间',
+  '---',
+  '',
+  scriptBody,
+].join('\n')
 const scriptTask = { id: 'audit-script', agent_type: 'script', status: 'finished', title: '最终文案 VERSION 01', artifacts: { char_count: 936, markdown: scriptMarkdown } }
 
 const images = [
@@ -131,13 +189,13 @@ const images = [
 const imageTask = { id: 'audit-image', agent_type: 'image', status: 'finished', title: '三帧视觉叙事方案', artifacts: { images } }
 const finalMarkdown = [
   '---',
+  'title: 城市里，藏着一杯慢下来的时间',
   'preview_ref: web-blog/preview/desktop.html',
   'stylesheet_ref: web-blog/preview/desktop.css',
   'summary: 最终成品已统一标题、正文、图片顺序与发布信息。',
   'tags: [上海咖啡馆, 一个人也很好, 城市漫游, 松弛感]',
   '---',
-  '',
-  scriptMarkdown,
+  scriptBody,
   `![${images[0].caption}](${images[0].url})`,
 ].join('\n\n')
 const finalTask = {
@@ -158,6 +216,7 @@ const stageKicker = computed(() => {
   if (['conversation', 'thinking'].includes(current.value.type)) return 'CONVERSATION'
   if (current.value.type === 'intent') return 'STORY COMMISSION'
   if (current.value.type === 'complete') return 'FINAL COPY'
+  if (current.value.type === 'platform-preview') return 'PLATFORM PREVIEW'
   if (current.value.type === 'recovery') return '视觉编辑 · RECOVERY'
   if (current.value.type === 'option') return 'OPTION PROMPT · DEV'
   return `${roleNames[current.value.phase - 1]} · ${current.value.type === 'review' ? 'PROOF' : 'WORKING'}`
@@ -343,7 +402,28 @@ const messages = computed(() => {
     </aside>
 
     <main class="audit-main">
-      <article class="audit-paper manuscript-paper">
+      <article v-if="current.type === 'platform-preview'" class="audit-paper platform-preview-paper">
+        <header class="platform-preview-head">
+          <p>PLATFORM PREVIEW · DEV</p>
+          <h1>Skill 渲染浏览</h1>
+          <span>选择任一带有 `preview/desktop.html` 与 `preview/desktop.css` 的 Skill，直接检查其成品外壳。</span>
+        </header>
+        <nav class="platform-preview-tabs" aria-label="平台渲染样式">
+          <button
+            v-for="skill in previewSkills"
+            :key="skill.name"
+            type="button"
+            :class="{ selected: skill.name === selectedPreviewSkill }"
+            @click="openSkillPreview(skill.name)"
+          >
+            <b>{{ previewSkillLabel(skill) }}</b><small>{{ skill.name }}</small>
+          </button>
+        </nav>
+        <p v-if="selectedPreview?.description" class="platform-preview-description">当前选择：{{ previewSkillLabel(selectedPreview) }}。点击上方卡片以弹窗打开预览。</p>
+        <p v-else class="platform-preview-empty">当前没有包含桌面预览资源的 Skill。</p>
+      </article>
+
+      <article v-else class="audit-paper manuscript-paper">
         <ChatWindow :messages="messages" :streaming="current.type === 'thinking'" :session-id="'ui-flow-review'" :session-updated-at="1784088240" :intent-state="intentState">
           <template #scroll-header>
             <ManuscriptHeader :kicker="stageKicker" title="城市小众咖啡馆探店" />
@@ -358,6 +438,19 @@ const messages = computed(() => {
           :option-prompt="activeOptionPrompt"
         />
       </article>
+
+      <Transition name="skill-preview-modal">
+        <div v-if="previewModalOpen && selectedPreview" class="skill-preview-overlay" @click.self="previewModalOpen = false">
+          <div class="skill-preview-frame">
+            <PlatformPreviewShell
+              :card="previewCard"
+              :preview-ref="previewCard.meta.preview_ref"
+              :stylesheet-ref="previewCard.meta.stylesheet_ref"
+              @close="previewModalOpen = false"
+            />
+          </div>
+        </div>
+      </Transition>
     </main>
 
     <TeamPanel :graph="graph" :intent-state="intentState" />
@@ -371,10 +464,15 @@ const messages = computed(() => {
 .audit-mast { display: grid; gap: var(--ch-space-2); margin-bottom: var(--ch-space-4); }.audit-mast strong { font: 700 24px/1.25 var(--ch-font-sans); letter-spacing: .08em; }.audit-mast small { color: var(--ch-text-muted); font: 600 12px/1.2 var(--ch-font-sans); letter-spacing: .16em; }
 .audit-nav label { margin-bottom: var(--ch-space-2); color: var(--ch-accent); font: 600 12px/1.2 var(--ch-font-sans); letter-spacing: .08em; }
 .audit-nav select { width: 100%; height: 40px; padding: 0 var(--ch-space-2); border: 1px solid var(--ch-border-strong); border-radius: var(--ch-radius-btn); background: var(--ch-surface); color: var(--ch-text); font: 500 12px/1 var(--ch-font-sans); }
-.audit-steps { flex: 1; min-height: 0; margin-top: var(--ch-space-4); overflow-y: auto; border-top: 1px solid var(--ch-border-strong); }.audit-steps button { width: 100%; min-height: 40px; display: grid; grid-template-columns: 24px 1fr; align-items: center; padding: 0 var(--ch-space-1); border: 0; border-bottom: 1px dashed var(--ch-border); background: transparent; color: var(--ch-text-secondary); text-align: left; font: 500 12px/1.3 var(--ch-font-sans); cursor: pointer; transition: color .18s ease, background-color .18s ease; }.audit-steps button span { color: var(--ch-text-muted); font-variant-numeric: tabular-nums; }.audit-steps button.current { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: 600; }.audit-steps button.current span { color: var(--ch-accent-soft-text); }
+.audit-steps { flex: 1; min-height: 0; margin-top: var(--ch-space-4); overflow-y: auto; scrollbar-width: none; border-top: 1px solid var(--ch-border-strong); }.audit-steps::-webkit-scrollbar { display: none; }.audit-steps button { width: 100%; min-height: 40px; display: grid; grid-template-columns: 24px 1fr; align-items: center; padding: 0 var(--ch-space-1); border: 0; border-bottom: 1px dashed var(--ch-border); background: transparent; color: var(--ch-text-secondary); text-align: left; font: 500 12px/1.3 var(--ch-font-sans); cursor: pointer; transition: color .18s ease, background-color .18s ease; }.audit-steps button span { color: var(--ch-text-muted); font-variant-numeric: tabular-nums; }.audit-steps button.current { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: 600; }.audit-steps button.current span { color: var(--ch-accent-soft-text); }
 .audit-pager { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ch-space-2); margin-top: var(--ch-space-3); }.audit-pager button { min-width: 0; min-height: 32px; padding: 0 var(--ch-space-2); border: 1px solid var(--ch-border-strong); border-radius: var(--ch-radius-btn); background: transparent; color: var(--ch-text-secondary); font: 600 12px/1 var(--ch-font-sans); cursor: pointer; }.audit-pager button:disabled { opacity: .3; cursor: default; }
 .audit-main { flex: 1; min-width: 0; padding: var(--ch-space-4); overflow: visible; }
 .audit-paper { position: relative; }
+.platform-preview-paper { min-height: calc(100dvh - 48px); padding: 36px; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-card); background: var(--ch-surface); }
+.platform-preview-head { display: grid; gap: 8px; max-width: 720px; }.platform-preview-head p { margin: 0; color: var(--ch-accent); font: 700 12px/1.2 var(--ch-font-sans); letter-spacing: .12em; }.platform-preview-head h1 { margin: 0; color: var(--ch-text); font: 700 28px/1.25 var(--ch-font-sans); }.platform-preview-head span { color: var(--ch-text-secondary); font: 14px/1.7 var(--ch-font-sans); }
+.platform-preview-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 28px 0 14px; }.platform-preview-tabs button { min-width: 140px; display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--ch-border-strong); border-radius: 10px; background: var(--ch-canvas); color: var(--ch-text-secondary); text-align: left; cursor: pointer; }.platform-preview-tabs button.selected { border-color: var(--ch-accent); background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }.platform-preview-tabs b { font: 700 14px/1.2 var(--ch-font-sans); }.platform-preview-tabs small { opacity: .72; font: 500 11px/1.2 var(--ch-font-mono); }
+.platform-preview-description { margin: 0 0 18px; color: var(--ch-text-muted); font: 13px/1.6 var(--ch-font-sans); }.platform-preview-empty { padding: 28px; color: var(--ch-text-muted); text-align: center; }
+.skill-preview-overlay { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; overflow: hidden; padding: 0; background: rgba(28, 30, 35, .52); }.skill-preview-frame { position: relative; width: 900px; height: calc(100% - 2 * 24px); max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; isolation: isolate; overflow: hidden; border-radius: 28px; background: var(--ch-surface); box-shadow: 0 24px 64px rgba(0, 0, 0, .26); }.skill-preview-modal-enter-active, .skill-preview-modal-leave-active { transition: opacity .18s ease; }.skill-preview-modal-enter-from, .skill-preview-modal-leave-to { opacity: 0; }
 .audit-paper :deep(.chat-window) { flex: 0 0 auto; overflow: visible; scrollbar-gutter: auto; }
 .audit-paper :deep(.input-bar) {
   position: fixed;
@@ -407,6 +505,7 @@ const messages = computed(() => {
   .audit-nav{display:none}
   .audit-main{padding:0}
   .audit-paper{width:100%}
+  .platform-preview-paper { min-height: 100dvh; padding: 24px 16px; border: 0; border-radius: 0; }.platform-preview-tabs { flex-wrap: nowrap; overflow-x: auto; }.platform-preview-tabs button { min-width: 132px; }.skill-preview-overlay { padding: 16px; }.skill-preview-frame { width: 100%; height: 100%; max-height: 100%; border-radius: 16px; }
   .audit-paper :deep(.input-zone.has-hil-stage){
     right: 16px;
     bottom: 16px;

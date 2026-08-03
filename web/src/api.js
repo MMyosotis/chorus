@@ -278,6 +278,13 @@ export async function cancelPipeline(sessionId) {
 
 const SKILLS_BASE = '/api/skills'
 
+export async function listSkills() {
+  const res = await fetch(SKILLS_BASE)
+  if (!res.ok) throw new Error(`listSkills failed: ${res.status}`)
+  const data = await res.json()
+  return data.skills || []
+}
+
 export async function getSkillFile(name, path) {
   const res = await fetch(`${SKILLS_BASE}/${encodeURIComponent(name)}/files/${path}`)
   if (!res.ok) {

@@ -127,21 +127,26 @@ def _join_front_matter(remaining: list[str], rest: str) -> str:
     return rest
 
 
-def _first_h1_text(tokens: list[Token]) -> str:
-    """取首个一级标题的文本。"""
-    for token in tokens:
-        if token["type"] == "heading" and token["attrs"]["level"] == 1:
-            return _render_inline(token.get("children", []))
-    return ""
+def _require_front_matter_title(front_lines: list[str], *, label: str) -> str:
+    """校验 front matter 中唯一的非空标题字段。"""
+    titles = [line[len("title:"):].strip() for line in front_lines if line.startswith("title:")]
+    if len(titles) != 1 or not titles[0]:
+        raise ValidationError(f"{label}标题格式错误", "front matter 必须有且仅有一个非空 title 字段")
+    return titles[0]
+
+
+def _reject_h1(tokens: list[Token], *, label: str) -> None:
+    """标题固定由 front matter 承载，正文不再允许一级标题。"""
+    if any(token["type"] == "heading" and token["attrs"]["level"] == 1 for token in tokens):
+        raise ValidationError(f"{label}标题格式错误", "标题写入 front matter 的 title 字段，正文不要使用 # 大标题")
 
 
 @_abandon_aware
 def parse_script_md(body: str) -> dict[str, Any]:
     """解析文案官的标准 markdown 正文。"""
-    tokens = _parse_markdown(body)
-    h1_count = sum(1 for token in tokens if token["type"] == "heading" and token["attrs"]["level"] == 1)
-    if h1_count != 1:
-        raise ValidationError("文案标题格式错误", "正文必须有且仅有一个 # 大标题")
+    front_lines, rest = _split_front_matter(body)
+    _require_front_matter_title(front_lines, label="文案")
+    _reject_h1(_parse_markdown(rest), label="文案")
     return {"markdown": body}
 
 
@@ -173,14 +178,10 @@ def parse_postcard_md(body: str) -> dict[str, Any]:
     if not preview or not stylesheet:
         raise ValidationError("资源引用缺失", "front matter 必须含 preview_ref 与 stylesheet_ref")
 
+    title = _require_front_matter_title(front_lines, label="成品")
     remaining = [line for line in front_lines if not line.startswith(("preview_ref:", "stylesheet_ref:"))]
     markdown = _join_front_matter(remaining, rest)
-    tokens = _parse_markdown(markdown)
-    h1_count = sum(1 for token in tokens if token["type"] == "heading" and token["attrs"]["level"] == 1)
-    if h1_count != 1:
-        raise ValidationError("成品标题格式错误", "正文必须有且仅有一个 # 大标题")
-
-    title = _first_h1_text(tokens)
+    _reject_h1(_parse_markdown(rest), label="成品")
     return {
         "markdown": markdown,
         "meta": {"preview_ref": preview, "stylesheet_ref": stylesheet, "title": title},

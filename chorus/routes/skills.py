@@ -17,6 +17,23 @@ from chorus.routes.providers import provide_skill_loader
 router = APIRouter(prefix="/api/skills")
 
 
+@router.get("")
+def list_skills(
+    skill_loader: SkillLoader = Depends(provide_skill_loader),
+) -> dict[str, list[dict[str, object]]]:
+    """列出技能包及其可读取文件，供开发期预览浏览器发现渲染外壳。"""
+    skills = []
+    for summary in skill_loader.list_summaries():
+        files = skill_loader.list_files(summary.name) or []
+        skills.append({
+            "name": summary.name,
+            "description": summary.description,
+            "files": files,
+            "has_preview": {"preview/desktop.html", "preview/desktop.css"}.issubset(files),
+        })
+    return {"skills": skills}
+
+
 @router.get("/{name}/files/{path:path}")
 def get_skill_file(
     name: str, path: str,

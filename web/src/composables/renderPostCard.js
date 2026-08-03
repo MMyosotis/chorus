@@ -1,5 +1,5 @@
 // PostCard 成品 markdown 渲染单一来源。
-// 标准 markdown -> rc-* class HTML,首个 # 大标题在平台外壳槽位单独呈现,正文跳过首 H1。
+// 标题固定来自 front matter，正文按标准 markdown 渲染为 rc-* class HTML。
 import { Marked } from 'marked'
 import DOMPurify from 'dompurify'
 
@@ -94,7 +94,8 @@ export function parseFrontMatter(markdown) {
   return parseFrontMatterArray(front)
 }
 
-function stripFirstH1(markdown) {
+function stripLegacyFirstH1(markdown) {
+  // 兼容历史卡片；新产物校验已禁止正文使用一级标题。
   const source = String(markdown || '')
   const lines = source.split('\n')
   let h1Line = -1
@@ -108,17 +109,37 @@ function stripFirstH1(markdown) {
   return lines.slice(0, h1Line).concat(lines.slice(end)).join('\n').replace(/^\n+/, '')
 }
 
-const imageRegex = /!\[[^\]]*\]\(([^)]+)\)/
+export function imageUrls(card) {
+  const markdown = card && typeof card.markdown === 'string' ? card.markdown : ''
+  return markdown.split('\n').flatMap((line) => {
+    const match = line.match(/!\[[^\]]*\]\((.*)\)/)
+    return match?.[1]?.trim() ? [match[1].trim()] : []
+  })
+}
 
 export function firstImageUrl(card) {
+  return imageUrls(card)[0] || ''
+}
+
+export function plainTextPostContent(card) {
   const markdown = card && typeof card.markdown === 'string' ? card.markdown : ''
-  const match = markdown.match(imageRegex)
-  return match ? match[1] : ''
+  const { body } = stripFrontMatter(markdown)
+  return stripLegacyFirstH1(body)
+    .replace(/<img\b[^>]*>/gi, '')
+    .replace(/^\s*!\[[^\]]*\]\([^\n]*\)\s*$/gm, '')
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*(?:[-+*]|\d+\.)\s+/gm, '')
+    .replace(/(\*\*|__|~~|`)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 export function firstParagraphText(markdown) {
   const { body } = stripFrontMatter(markdown)
-  const stripped = stripFirstH1(body)
+  const stripped = stripLegacyFirstH1(body)
   for (const block of markedInstance.Lexer.lex(stripped)) {
     if (block.type === 'paragraph' && block.tokens) {
       const text = block.tokens.map((token) => token.text || '').join('')
@@ -132,9 +153,9 @@ export function renderPostCardHTML(card, { format = 'markdown' } = {}) {
   const markdown = card && typeof card.markdown === 'string' ? card.markdown : ''
   if (format === 'plain_text') {
     const { body } = stripFrontMatter(markdown)
-    return escapeHtml(stripFirstH1(body)).replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')
+    return escapeHtml(stripLegacyFirstH1(body)).replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>')
   }
   const { body } = stripFrontMatter(markdown)
-  const stripped = stripFirstH1(body)
+  const stripped = stripLegacyFirstH1(body)
   return DOMPurify.sanitize(markedInstance.parse(stripped))
 }

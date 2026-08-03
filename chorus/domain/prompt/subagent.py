@@ -39,19 +39,23 @@ _SHAPES = {
         "- 理由：实际推荐理由"
     ),
     "script": (
-        "# 大标题\n\n## 小节\n\n段落正文。\n\n- 要点1\n- 要点2\n\n> 引文"
+        "---\n"
+        "title: 文章标题\n"
+        "---\n\n"
+        "## 小节\n\n段落正文。\n\n- 要点1\n- 要点2\n\n> 引文"
     ),
     "image": (
         "![图注](图片url)"
     ),
     "postcard": (
         "---\n"
+        "title: 博文标题\n"
         "preview_ref: 已加载技能名/包内预览路径\n"
         "stylesheet_ref: 已加载技能名/包内样式路径\n"
         "summary: 一句话博文摘要\n"
         "tags: [话题1, 话题2]\n"
         "---\n\n"
-        "# 博文标题\n\n## 小节\n\n段落。\n\n> 引文\n\n![图注](图url)"
+        "## 小节\n\n段落。\n\n> 引文\n\n![图注](图url)"
     ),
 }
 
@@ -62,8 +66,8 @@ _ROLE_RULES = {
         "列表项只能是「视角：」和「理由：」，不加序号、导语或总结。"
     ),
     "script": (
-        "产出标准 markdown 正文，有且仅有一个 # 大标题作为文章标题。"
-        "其余可用 ## 小标题、普通段落、单层 - 无序列表、单段 > 引用与图片。"
+        "产出以 YAML front matter 开头，其中必须有且仅有一个非空 title 字段。"
+        "正文不要使用 # 大标题；其余可用 ## 小标题、普通段落、单层 - 无序列表、单段 > 引用与图片。"
         "不使用有序或嵌套列表，不同结构块之间空一行。"
     ),
     "image": (
@@ -76,10 +80,10 @@ _ROLE_RULES = {
     "postcard": (
         "你是唯一成品出口：把 idea、script 和 image 产物装配为成品 markdown，"
         "不另起主题、不改写事实、不扩写正文；具体取舍与排列遵循平台 Skill。"
-        "产出以 YAML front matter 开头，依次含 preview_ref、stylesheet_ref、summary、tags 四个字段。"
+        "产出以 YAML front matter 开头，依次含 title、preview_ref、stylesheet_ref、summary、tags 五个字段。"
         "preview_ref 与 stylesheet_ref 引用已加载平台 Skill 给出的精确资源路径，格式为「技能名/包内路径」，不要自行改写。"
         "summary 写一句话博文摘要，tags 写话题标签数组。"
-        "front matter 后是正文，有且仅有一个 # 大标题作为博文标题，其余可用 ## 小标题、段落、单层 - 无序列表、单段 > 引用与图片。"
+        "标题只能写在 front matter 的 title 字段；front matter 后是正文，不要使用 # 大标题，其余可用 ## 小标题、段落、单层 - 无序列表、单段 > 引用与图片。"
         "图片用 ![图注](url)，url 从上游配图产物取，不要凭空编造。"
         "不同结构块之间空一行。"
     ),

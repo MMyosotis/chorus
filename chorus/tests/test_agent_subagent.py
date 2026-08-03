@@ -161,10 +161,11 @@ def test_subagent_finalize_awaiting_confirm():
     engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, "finalize", "running")
     content = ("---\n"
+               "title: 夏日晚风\n"
                "preview_ref: web-blog/preview/desktop.html\n"
                "stylesheet_ref: web-blog/preview/desktop.css\n"
                "summary: 摘要\ntags: [夏天]\n"
-               "---\n\n# 夏日晚风\n\n一段")
+               "---\n\n一段")
     client = FakeClient([FakeStream([({"content": content}, "stop")])])
     sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")

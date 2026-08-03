@@ -1,0 +1,50 @@
+<section class="xhs-page">
+  <article class="xhs-detail" aria-label="小红书网页端图文笔记预览">
+    <button class="xhs-close" type="button" data-preview-close aria-label="关闭预览">×</button>
+    <section class="xhs-gallery" data-preview-gallery aria-label="笔记图片">
+      {{#gallery_images}}<img class="xhs-cover{{state}}" data-preview-gallery-image src="{{url}}" alt="第 {{number}} 张笔记图片" loading="lazy">{{/gallery_images}}
+      {{#has_no_gallery_images}}<div class="xhs-cover xhs-cover-empty is-active" data-preview-gallery-image>图文笔记封面</div>{{/has_no_gallery_images}}
+      <span class="xhs-count" data-preview-gallery-count>1 / {{gallery_count}}</span>
+      <button class="xhs-arrow xhs-arrow-left" type="button" data-preview-gallery-step="-1" aria-label="上一张"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6" /></svg></button>
+      <button class="xhs-arrow xhs-arrow-right" type="button" data-preview-gallery-step="1" aria-label="下一张"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6" /></svg></button>
+      <div class="xhs-dots">{{#gallery_images}}<button class="xhs-dot{{state}}" type="button" data-preview-gallery-index="{{index}}" aria-label="查看第 {{number}} 张图片"></button>{{/gallery_images}}</div>
+    </section>
+
+    <section class="xhs-panel-frame">
+      <section class="xhs-panel">
+      <header class="xhs-author-row">
+        <span class="xhs-avatar" aria-label="默认头像"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="13" r="7.2" fill="#C3CBD6" /><path d="M4 40C4 29.5 11.2 22 20 22s16 7.5 16 18" fill="#B1BBC8" /></svg></span>
+        <span class="xhs-more">{{author}}</span>
+        <button class="xhs-follow" type="button">关注</button>
+      </header>
+
+      <div class="xhs-note-scroll">
+        <article class="xhs-note-copy">
+          {{#title}}<h1 class="xhs-title">{{{title}}}</h1>{{/title}}
+          <p class="xhs-desc">{{plain_body}}</p>
+          <p class="xhs-meta">编辑于刚刚　·　Chorus</p>
+        </article>
+
+        <section class="xhs-comments" aria-label="评论预览">
+          <div class="xhs-rule"></div>
+          <p class="xhs-comment-count">评论区</p>
+          <article class="xhs-comment">
+            <span class="xhs-comment-avatar">C</span>
+            <div><strong>Chorus 读者</strong><p>内容已生成，欢迎在这里留下你的想法。</p><small>刚刚　♡ 赞　回复</small></div>
+            <span class="xhs-comment-more">···</span>
+          </article>
+        </section>
+      </div>
+
+      </section>
+
+      <footer class="xhs-actions">
+        <span class="xhs-input"><i class="xhs-input-avatar" aria-hidden="true"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#F4F5F7" /><circle cx="20" cy="13" r="7.2" fill="#C3CBD6" /><path d="M4 40C4 29.5 11.2 22 20 22s16 7.5 16 18" fill="#B1BBC8" /></svg></i>评论</span>
+        <span class="xhs-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 8.6c0 5.4-8.8 10.4-8.8 10.4s-8.8-5-8.8-10.4A4.6 4.6 0 0 1 12 6.5a4.6 4.6 0 0 1 8.8 2.1Z" /></svg>赞</span>
+        <span class="xhs-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" /></svg>收藏</span>
+        <span class="xhs-action"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-7.8 7.5 8.3 8.3 0 0 1-3.5-.8L4 20l1.3-4.1A7.2 7.2 0 0 1 4 11.5 7.5 7.5 0 0 1 12 4a7.5 7.5 0 0 1 8 7.5Z" /></svg>评论</span>
+        <span class="xhs-action xhs-share"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5" /></svg></span>
+      </footer>
+    </section>
+  </article>
+</section>

@@ -92,7 +92,7 @@ def test_roundtrip_script():
         created_at=0.0, updated_at=0.0,
     ))
     repo = TaskArtifactsRepository(engine)
-    script = ScriptArtifacts(markdown="# 标题\n\n正文")
+    script = ScriptArtifacts(markdown="---\ntitle: 标题\n---\n\n正文")
     repo.upsert("ts", "script", script)
     got = repo.load("ts")
     assert got.artifacts == script
@@ -124,7 +124,7 @@ def test_roundtrip_postcard():
     ))
     repo = TaskArtifactsRepository(engine)
     card = PostCard(
-        markdown="# 夏日晚风\n\n一段正文\n\n![封](http://x/a.jpg)",
+        markdown="---\ntitle: 夏日晚风\n---\n\n一段正文\n\n![封](http://x/a.jpg)",
         meta={"preview_ref": "a/b", "stylesheet_ref": "a/c", "title": "夏日晚风"},
     )
     repo.upsert("tf", "finalize", card)
