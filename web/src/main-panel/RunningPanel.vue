@@ -38,13 +38,10 @@ const chars = computed(() => prog.value.composing_chars || 0)
 const units = computed(() => prog.value.composing_units || 0)
 const unitLabel = computed(() => prog.value.composing_label || '')
 const hasOutput = computed(() => chars.value > 0 || units.value > 0)
-const unitText = computed(() => (units.value ? toCN(units.value) + unitLabel.value : ''))
+const unitCountText = computed(() => (units.value ? String(units.value) : ''))
 const charsText = computed(() => (chars.value ? toCN(chars.value) : ''))
 const verb = computed(() => (agentType.value === 'image' ? '画了' : '写下'))
-const recordLeft = computed(() => {
-  if (!hasOutput.value) return ''
-  return unitText.value ? `${verb.value}${unitText.value}` : verb.value
-})
+const recordLeft = computed(() => (hasOutput.value ? verb.value : ''))
 </script>
 
 <template>
@@ -89,7 +86,9 @@ const recordLeft = computed(() => {
             </span>
           </div>
           <div class="record">
-            <template v-if="hasOutput">{{ recordLeft }}<span v-if="chars"> · <span class="num">{{ charsText }}</span>字</span></template>
+            <template v-if="hasOutput">
+              {{ recordLeft }}<template v-if="units"><span class="record-num-stage unit-num"><Transition name="record-num" appear><span :key="unitCountText" class="num">{{ unitCountText }}</span></Transition></span>{{ unitLabel }}</template><template v-if="chars"><span class="record-divider">·</span><span class="record-num-stage char-num"><Transition name="record-num" appear><span :key="charsText" class="num">{{ charsText }}</span></Transition></span>字</template>
+            </template>
             <span v-else class="record-empty">正在准备内容</span>
           </div>
         </div>
@@ -180,6 +179,7 @@ const recordLeft = computed(() => {
   flex: 0 0 auto;
   margin-left: auto;
 }
+.running-status > i { animation: none; }
 .running-copy { min-width: 0; padding: 0; }
 .running-meta {
   display: flex;
@@ -189,7 +189,7 @@ const recordLeft = computed(() => {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--ch-border);
-  font: 500 12px/1.5 var(--ch-font-sans);
+  font: 500 14px/1.5 var(--ch-font-sans);
 }
 .activity {
   min-width: 0;
@@ -210,6 +210,13 @@ const recordLeft = computed(() => {
 }
 .act-prefix {
   display: inline-block;
+  color: transparent;
+  font-weight: 500;
+  background: linear-gradient(100deg, var(--ch-text-muted) 14%, color-mix(in srgb, var(--ch-text-secondary) 60%, var(--ch-text-muted)) 34%, color-mix(in srgb, var(--ch-text-muted) 55%, var(--ch-surface)) 50%, color-mix(in srgb, var(--ch-text-secondary) 60%, var(--ch-text-muted)) 66%, var(--ch-text-muted) 86%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: status-shimmer 1.8s linear infinite;
 }
 .label-swap-enter-from { transform: translateY(8px); opacity: 0; }
 .label-swap-enter-active { transition: transform .2s ease, opacity .18s ease; }
@@ -228,16 +235,50 @@ const recordLeft = computed(() => {
   align-items: center;
   justify-content: flex-end;
   font-family: var(--ch-font-sans);
-  font-size: 12px;
+  font-size: 14px;
   color: var(--ch-text-muted);
   letter-spacing: 0;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 .record::before { content: none; }
+.record-divider {
+  margin: 0 8px;
+  color: var(--ch-text-faint);
+}
 .record .num {
+  display: inline-block;
   color: var(--ch-accent);
   font-weight: 600;
+  line-height: 1;
+  will-change: transform, opacity;
+}
+.record-num-stage {
+  position: relative;
+  display: inline-grid;
+  grid-template-areas: "stack";
+  height: 1em;
+  overflow: hidden;
+  line-height: 1;
+  vertical-align: baseline;
+}
+.record-num-stage > .num { grid-area: stack; }
+.record .unit-num { margin: 0 4px; }
+.record .char-num { margin-right: 4px; }
+.record-num-enter-active { transition: opacity .14s linear, transform .22s cubic-bezier(.2, .8, .2, 1); }
+.record-num-leave-active {
+  position: absolute;
+  inset: 0;
+  transition: opacity .12s linear, transform .18s cubic-bezier(.4, 0, 1, 1);
+}
+.record-num-enter-from {
+  opacity: 0;
+  transform: translateY(105%);
+}
+.record-num-leave-to {
+  opacity: 0;
+  transform: translateY(-105%);
 }
 .record-empty {
   color: var(--ch-text-faint);
@@ -260,10 +301,17 @@ const recordLeft = computed(() => {
   .running-sparkle::before {
     animation: none;
   }
+  .act-prefix { animation: none; }
+  .record-num-enter-active,
+  .record-num-leave-active { transition: none; }
   .sparkle-main,
   .sparkle-small {
     opacity: 1;
     transform: none;
   }
+}
+
+@keyframes status-shimmer {
+  to { background-position: -200% 0; }
 }
 </style>

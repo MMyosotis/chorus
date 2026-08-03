@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ChatWindow from '../main-panel/ChatWindow.vue'
 import InputBar from '../main-panel/InputBar.vue'
 import ManuscriptHeader from '../main-panel/ManuscriptHeader.vue'
@@ -24,6 +24,8 @@ const stages = [
 
 const currentIndex = ref(0)
 const current = computed(() => stages[currentIndex.value])
+const reviewProgressStep = ref(0)
+let reviewProgressTimer
 
 function setStage(index) {
   currentIndex.value = Math.max(0, Math.min(stages.length - 1, Number(index)))
@@ -33,7 +35,14 @@ onMounted(() => {
   const id = location.hash.slice(1)
   const index = stages.findIndex((stage) => stage.id === id)
   if (index >= 0) currentIndex.value = index
+  reviewProgressTimer = window.setInterval(() => {
+    if (current.value.type === 'run') {
+      reviewProgressStep.value = (reviewProgressStep.value + 1) % 4
+    }
+  }, 900)
 })
+
+onUnmounted(() => window.clearInterval(reviewProgressTimer))
 
 const stageCardSelector = {
   thinking: '.status-card.thinking',
@@ -45,6 +54,7 @@ const stageCardSelector = {
 }
 
 watch(current, async (stage) => {
+  reviewProgressStep.value = 0
   history.replaceState(null, '', `${location.pathname}${location.search}#${stage.id}`)
   await nextTick()
   requestAnimationFrame(() => {
@@ -153,10 +163,34 @@ const stageKicker = computed(() => {
   return `${roleNames[current.value.phase - 1]} · ${current.value.type === 'review' ? 'PROOF' : 'WORKING'}`
 })
 const runningCopy = [
-  ['正在比较城市情绪、空间体验与平台传播角度', '正在形成候选方向', 0, 3, '个候选'],
-  ['正在把已确认选题写成完整小红书稿件', '正在润色第二段', 824, 0, ''],
-  ['正在根据定稿规划并生成三张连续叙事配图', '正在生成 FIG. 02', 0, 1, '张完成'],
-  ['正在统一标题、正文、配图顺序与发布信息', '正在检查图文节奏', 0, 76, '%'],
+  {
+    aside: '正在比较城市情绪、空间体验与平台传播角度',
+    activityKind: 'thinking',
+    activityLine: '正在梳理选题',
+    label: '个候选',
+    snapshots: [[0, 1], [56, 1], [184, 2], [296, 3]],
+  },
+  {
+    aside: '正在把已确认选题写成完整小红书稿件',
+    activityKind: 'thinking',
+    activityLine: '正在构思文案',
+    label: '段',
+    snapshots: [[224, 1], [496, 1], [824, 2], [1108, 3]],
+  },
+  {
+    aside: '正在根据定稿规划并生成三张连续叙事配图',
+    activityKind: 'drawing',
+    activityLine: '正在生成图片',
+    label: '张',
+    snapshots: [[0, 1], [0, 2], [0, 3], [0, 2]],
+  },
+  {
+    aside: '正在统一标题、正文、配图顺序与发布信息',
+    activityKind: 'thinking',
+    activityLine: '正在梳理结构',
+    label: '节',
+    snapshots: [[186, 1], [514, 1], [876, 2], [1200, 3]],
+  },
 ]
 
 const graph = computed(() => {
@@ -185,8 +219,9 @@ function activeTask() {
   const base = taskTemplates[phase - 1]
   if (!base) return null
   if (current.value.type === 'run') {
-    const [aside, activity, chars, units, label] = runningCopy[phase - 1]
-    return { ...base, status: 'running', progress: { aside, activity_kind: phase === 3 ? 'drawing' : 'thinking', activity_line: activity, composing_chars: chars, composing_units: units, composing_label: label } }
+    const { aside, activityKind, activityLine, label, snapshots } = runningCopy[phase - 1]
+    const [chars, units] = snapshots[reviewProgressStep.value]
+    return { ...base, status: 'running', progress: { aside, activity_kind: activityKind, activity_line: activityLine, composing_chars: chars, composing_units: units, composing_label: label } }
   }
   if (current.value.type === 'review') return { ...base, status: 'awaiting_confirm' }
   return base
