@@ -56,7 +56,6 @@ def test_format_hints_renders_names_and_descriptions():
     loader = SkillLoader(skills_dir=tmp)
     out = loader.format_hints()
     assert "## 可用技能" in out
-    assert "load_skill" in out
     assert "**infographic**: 做信息图" in out
     assert "**writer**: 写文案" in out
 

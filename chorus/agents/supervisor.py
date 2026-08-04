@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from typing import Iterator, Optional
 
+from chorus.agents.chat_model import ChatModelProvider
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
+from chorus.config import TOOL_WHITELISTS
 from chorus.domain.events import (
     ArchivedEvent,
     BusyEvent,
@@ -18,25 +20,31 @@ from chorus.domain.events import (
     SseEvent,
     SuspendEvent,
 )
+from chorus.domain.intent import intent_state_block
+from chorus.domain.log import get_logger
 from chorus.domain.message import ToolCallSpec
 from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, build_system_prompt
 from chorus.domain.skill import SkillLoader
-from chorus.domain.log import get_logger
 from chorus.domain.stream import consume_stream
-from chorus.config import TOOL_WHITELISTS
 from chorus.hooks import HookRegistry
-from chorus.agents.chat_model import ChatModelProvider
-from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
+from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
-from chorus.tools import ToolCall, ToolDispatch
+from chorus.tools import ToolDispatch
 from chorus.tools.framework import Suspend
-
 
 _SUPERVISOR_MAX_STEPS = 20
 
 _logger = get_logger("supervisor")
+
+
+def _prepend_user_block(msgs: list[dict], block: str) -> None:
+    """把块拼到最后一条用户消息正文前，临时注入不入库。"""
+    for i in range(len(msgs) - 1, -1, -1):
+        if msgs[i]["role"] == "user":
+            msgs[i]["content"] = block + "\n\n" + msgs[i]["content"]
+            return
 
 
 class SupervisorLoopStrategy:
@@ -63,14 +71,19 @@ class SupervisorLoopStrategy:
     def _prompt_context(self) -> PromptContext:
         return PromptContext(
             base=SYSTEM_PROMPT,
-            intent_state=self._intent_state.get(self.session_id),
             tool_names=self._tool_names,
             skill_loader=self._skill_loader,
         )
 
     def provider_messages(self):
         prompt = build_system_prompt(self._prompt_context())
-        return self._message.build_provider_messages(self.session_id, prompt)
+        msgs = self._message.build_provider_messages(self.session_id, prompt)
+        _prepend_user_block(msgs, self._intent_block())
+        return msgs
+
+    def _intent_block(self) -> str:
+        """每轮取最新意图快照建块注入，含 empty 状态。"""
+        return intent_state_block(self._intent_state.get(self.session_id))
 
     def consume(self, stream):
         return consume_stream(stream)
@@ -81,7 +94,7 @@ class SupervisorLoopStrategy:
     def after_dispatch(self, call, dispatch):
         pass
 
-    def after_tools(self, ctx, result, pairs):
+    def after_tools(self, ctx, pairs):
         """成对落库，据是否命中挂起决定续跑或关流。"""
         suspend = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
         content = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None

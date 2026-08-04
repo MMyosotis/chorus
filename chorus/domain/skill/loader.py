@@ -61,7 +61,7 @@ class SkillLoader:
         summaries = self.list_summaries()
         if not summaries:
             return ""
-        lines = ["## 可用技能（使用 load_skill 工具获取完整内容）"]
+        lines = ["## 可用技能"]
         for skill in summaries:
             lines.append(f"- **{skill.name}**: {skill.description}")
         return "\n".join(lines)

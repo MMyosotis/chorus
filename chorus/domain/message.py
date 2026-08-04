@@ -91,7 +91,7 @@ class MessageView(BaseModel):
 
 
 def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> list[dict]:
-    """构建发给模型的消息序列：系统提示在前，历史消息按传入顺序透传。"""
+    """构建发给模型的消息序列：系统提示在前，历史消息按序透传。"""
     result: list[dict] = [{"role": "system", "content": system_prompt}]
     result.extend(message.to_provider_dict() for message in messages)
     return result

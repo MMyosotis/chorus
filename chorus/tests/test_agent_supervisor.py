@@ -7,7 +7,8 @@ import types
 from pathlib import Path
 
 from chorus.agents.loop import AgentLoop
-from chorus.agents.supervisor import SupervisorService
+from chorus.agents.supervisor import SupervisorService, SupervisorLoopStrategy
+from chorus.domain.intent import IntentStateUpdate
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
@@ -343,6 +344,35 @@ def test_update_intent_state_ready_to_confirm_finishes():
     assert msgs[2].role == "tool"
     assert msgs[2].tool_call_id == "c1"
     assert "等待用户拍板" in msgs[2].content
+
+
+def test_provider_messages_injects_intent_block_before_last_user():
+    """意图快照注入到最后一条用户消息正文前，临时拼接不入库。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    _, intent_state = _build_supervisor(
+        engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, FakeClient([])
+    )
+    s = session_svc.create("test")
+    msg_svc.append_user_message(s.id, "帮我写博文")
+    intent_state.update_from_tool(
+        s.id,
+        IntentStateUpdate(
+            topic="职场穿搭", platform="小红书",
+            intent_status="capturing", image_count=2, progress_percent=40,
+        ),
+    )
+    skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
+    strategy = SupervisorLoopStrategy(
+        s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
+    )
+    msgs = strategy.provider_messages()
+    user_dicts = [m for m in msgs if m["role"] == "user"]
+    assert user_dicts[-1]["content"].startswith("<current_intent_state>")
+    assert "职场穿搭" in user_dicts[-1]["content"]
+    assert "帮我写博文" in user_dicts[-1]["content"]
+    # 临时拼接不入库，原始 user 消息正文保持不变
+    stored = msg_svc.list_messages(s.id)
+    assert stored[0].content == "帮我写博文"
 
 
 def main():

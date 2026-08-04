@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Literal, Optional
 
@@ -93,3 +94,10 @@ class IntentConfirmation(IntentSnapshot):
     status: ConfirmationStatus = "open"
     answer: Optional[IntentConfirmationAnswer] = None
     created_at: float = Field(default_factory=time.time)
+
+
+def intent_state_block(state: IntentState) -> str:
+    """序列化意图快照为标签块，供 user 回合携带，每轮现拼不入库。"""
+    payload = state.model_dump(mode="json", exclude={"session_id", "version", "updated_at"})
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    return f"<current_intent_state>\n{body}\n</current_intent_state>"
