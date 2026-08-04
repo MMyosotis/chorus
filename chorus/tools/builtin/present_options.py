@@ -1,11 +1,11 @@
-"""选项征询工具：向用户出选择题，挂起等用户作答后续跑 loop。"""
+"""选项征询工具：一次提出一组选择题，整组作答后才续跑 loop。"""
 
 from __future__ import annotations
 
 from typing import Optional
 
 from chorus.domain.events import OptionPromptEvent
-from chorus.domain.option import OptionAnswer, OptionItem
+from chorus.domain.option import OptionAnswer, OptionQuestion
 from chorus.services.option import OptionPromptService
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
@@ -15,37 +15,45 @@ _CUSTOM_SIGNAL = "__custom__"
 class PresentOptionsTool(Tool):
     name = "present_options"
     description = (
-        "当你需要向用户征询选择时调用：给出问题和若干选项，"
-        "用户选择后结果会作为工具结果回传给你继续。"
+        "当你需要向用户征询一个或多个选择时调用。将同一轮可独立回答的问题放进 questions，"
+        "用户会依次完成所有题目，整组答案会一次性作为工具结果回传给你继续。"
     )
     parameters = {
         "type": "object",
         "properties": {
-            "question": {
-                "type": "string",
-                "description": "要问用户的问题，一句话标题",
-            },
-            "options": {
+            "questions": {
                 "type": "array",
-                "minItems": 3,
-                "maxItems": 4,
-                "description": "候选选项，3 到 4 个",
+                "minItems": 1,
+                "description": "同一轮可独立回答的选择题，不要每题单独调用工具",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "label": {"type": "string", "description": "选项标题"},
-                        "description": {"type": "string", "description": "选项的简短解释"},
+                        "question": {"type": "string"},
+                        "options": {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 4,
+                            "description": "候选选项",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "label": {"type": "string", "description": "选项标题"},
+                                    "description": {"type": "string", "description": "选项的简短解释"},
+                                },
+                                "required": ["label", "description"],
+                            },
+                        },
+                        "allow_custom": {
+                            "type": "boolean",
+                            "description": "是否允许用户自由输入",
+                            "default": True,
+                        },
                     },
-                    "required": ["label", "description"],
+                    "required": ["question", "options"],
                 },
             },
-            "allow_custom": {
-                "type": "boolean",
-                "description": "是否允许用户自由输入而非选给定项，默认 true",
-                "default": True,
-            },
         },
-        "required": ["question", "options", "allow_custom"],
+        "required": ["questions"],
     }
     running_label = "征询用户选择"
 
@@ -53,49 +61,74 @@ class PresentOptionsTool(Tool):
         self._options = option_service
 
     def display(self, arguments: dict) -> str:
-        question = (arguments.get("question") or "").strip()
-        return f"征询：{question[:36]}"
+        questions = arguments.get("questions") or []
+        return f"征询选择（{len(questions)} 项）"
+
+    def _build_question(self, raw: dict) -> OptionQuestion:
+        items = [
+            {"signal": str(idx), "label": item["label"], "description": item["description"]}
+            for idx, item in enumerate(raw["options"])
+        ]
+        return OptionQuestion.model_validate({
+            "question": raw["question"],
+            "options": items,
+            "allow_custom": raw.get("allow_custom", True),
+        })
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         try:
-            question = arguments["question"]
-            raw_options = arguments["options"]
-            allow_custom = arguments.get("allow_custom", True)
-            items = [
-                OptionItem(signal=str(idx), label=opt["label"], description=opt["description"])
-                for idx, opt in enumerate(raw_options)
-            ]
-        except (KeyError, TypeError, IndexError) as e:
+            raw_questions = arguments["questions"]
+            questions = [self._build_question(raw) for raw in raw_questions]
+        except (KeyError, TypeError, ValueError) as e:
             return ToolRunResult(Reply(f"present_options 参数缺失或格式错: {e}"))
 
         prompt = self._options.create(
             session_id=ctx.session_id,
-            question=question,
-            options=items,
-            allow_custom=allow_custom,
+            questions=questions,
             message_id=ctx.message_id,
         )
         event = OptionPromptEvent(
             prompt_id=prompt.prompt_id,
             message_id=prompt.message_id,
-            question=prompt.question,
-            options=[item.model_dump() for item in prompt.options],
-            allow_custom=prompt.allow_custom,
+            questions=[question.model_dump() for question in prompt.questions],
         )
         return ToolRunResult(
-            Suspend(f"已向用户征询选择：{prompt.question}（{len(items)} 个选项），等待用户作答。"),
+            Suspend(f"已向用户征询选择（{len(questions)} 项），等待用户完成作答。"),
             events=(event,),
         )
 
-    def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
-        prompt = self._options.get_open(session_id)
-        if signal == _CUSTOM_SIGNAL:
-            custom_text = ((payload or {}).get("custom_text") or "").strip()
-            self._options.mark_answered(
-                session_id,
-                OptionAnswer(signal=signal, label="补充你的想法", custom_text=custom_text),
+    def _resolve_question(
+        self, question: OptionQuestion, submitted: dict,
+    ) -> tuple[OptionAnswer, str]:
+        submitted_signal = submitted.get("signal")
+        if submitted_signal == _CUSTOM_SIGNAL:
+            custom_text = (submitted.get("custom_text") or "").strip()
+            answer = OptionAnswer(
+                signal=submitted_signal,
+                label="补充你的想法",
+                custom_text=custom_text,
             )
-            return f"用户自由补充：{custom_text or '（空）'}"
-        label = next((option.label for option in prompt.options if option.signal == signal))
-        self._options.mark_answered(session_id, OptionAnswer(signal=signal, label=label))
-        return f"用户选择了：{label}"
+            receipt = f"{question.question}：{custom_text}"
+        else:
+            label = next(
+                option.label for option in question.options if option.signal == submitted_signal
+            )
+            answer = OptionAnswer(signal=submitted_signal, label=label)
+            receipt = f"{question.question}：{label}"
+        return answer, receipt
+
+    def resolve_external(
+        self, session_id: str, signal: str, payload: Optional[dict] = None,
+    ) -> str:
+        answers = (payload or {})["answers"]
+        prompt = self._options.get_open(session_id)
+
+        resolved = []
+        receipts = []
+        for question, submitted in zip(prompt.questions, answers):
+            answer, receipt = self._resolve_question(question, submitted)
+            resolved.append(answer)
+            receipts.append(receipt)
+
+        self._options.mark_answered(session_id, resolved)
+        return "用户已完成本组选择：" + "；".join(receipts)

@@ -96,9 +96,7 @@ class OptionPromptEvent(_EventBase):
     type: Literal["option_prompt"] = "option_prompt"
     prompt_id: str
     message_id: Optional[str] = None
-    question: str
-    options: list[dict]
-    allow_custom: bool
+    questions: list[dict]
 
 
 SseEvent = Annotated[

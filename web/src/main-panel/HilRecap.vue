@@ -7,8 +7,14 @@ const props = defineProps({
 })
 
 const isOption = computed(() => !!props.optionPrompt)
-const optionAnswer = computed(() => props.optionPrompt?.answer || {})
-const optionLabel = computed(() => optionAnswer.value.label || '已补充选择')
+const optionAnswers = computed(() => {
+  const prompt = props.optionPrompt
+  return prompt?.answers || []
+})
+const optionLabel = computed(() => {
+  const labels = optionAnswers.value.map((answer) => answer.custom_text || answer.label).filter(Boolean)
+  return labels.length ? labels.join('、') : '已补充选择'
+})
 const intentTitle = computed(() => props.intentState?.topic || '已确认创作意图')
 </script>
 

@@ -8,18 +8,23 @@ const props = defineProps({
 })
 const emit = defineEmits(['choose'])
 const locking = ref(false)
-const selectedSignal = ref(null)
-const customText = ref('')
+const currentIndex = ref(0)
+const selections = ref([])
+const customTexts = ref([])
 const customInput = ref(null)
 const error = ref('')
 const archived = computed(() => props.prompt.status === 'answered')
-const selectedValue = computed(() => props.prompt.answer?.signal || selectedSignal.value)
-const customSelected = computed(() => selectedValue.value === '__custom__')
-const archivedCustomText = computed(() => props.prompt.answer?.custom_text || '已补充自定义想法')
+const questions = computed(() => props.prompt.questions || [])
+const currentQuestion = computed(() => questions.value[currentIndex.value] || null)
+const currentSignal = computed(() => selections.value[currentIndex.value] || null)
+const customSelected = computed(() => currentSignal.value === '__custom__')
+const isLastQuestion = computed(() => currentIndex.value === questions.value.length - 1)
 
 function selectOption(signal) {
-  if (locking.value || archived.value) return
-  selectedSignal.value = signal
+  if (locking.value) return
+  const next = [...selections.value]
+  next[currentIndex.value] = signal
+  selections.value = next
   error.value = ''
 
   if (signal === '__custom__') {
@@ -27,55 +32,75 @@ function selectOption(signal) {
   }
 }
 
-function reconsider() {
-  if (locking.value || archived.value) return
-  selectedSignal.value = null
-  customText.value = ''
+function validateCurrentQuestion() {
+  const question = currentQuestion.value
+  const signal = selections.value[currentIndex.value]
+  if (signal == null) {
+    error.value = '请先选择一个选项'
+    return false
+  }
+  if (signal === '__custom__' && !customTexts.value[currentIndex.value]?.trim()) {
+    error.value = '请补充你的想法'
+    nextTick(() => customInput.value?.focus())
+    return false
+  }
+  return true
+}
+
+function nextQuestion() {
+  if (locking.value) return
+  if (!validateCurrentQuestion()) return
+  currentIndex.value += 1
   error.value = ''
 }
 
-function confirmChoice() {
-  if (locking.value || archived.value) return
-  if (selectedSignal.value == null) {
-    error.value = '请先选择一个选项'
-    return
-  }
-  if (customSelected.value && !customText.value.trim()) {
-    error.value = '请补充你的想法'
-    nextTick(() => customInput.value?.focus())
-    return
-  }
-  locking.value = true
-  const payload = { signal: selectedSignal.value }
-  if (customSelected.value) payload.custom_text = customText.value.trim()
-  emit('choose', payload)
+function previousQuestion() {
+  if (locking.value || currentIndex.value === 0) return
+  currentIndex.value -= 1
+  error.value = ''
 }
 
-defineExpose({ confirmChoice, reconsider })
+function confirmChoices() {
+  if (locking.value || !validateCurrentQuestion()) return
+  locking.value = true
+  emit('choose', {
+    answers: questions.value.map((question, index) => {
+      const signal = selections.value[index]
+      return {
+        signal,
+        ...(signal === '__custom__' ? { custom_text: customTexts.value[index].trim() } : {}),
+      }
+    }),
+  })
+}
+
+defineExpose({ confirmChoices })
 </script>
 
 <template>
-  <section class="option-card" :class="{ archived, compact }">
+  <section v-if="!archived" class="option-card" :class="{ compact }">
     <header class="card-head">
       <div class="head-copy">
-        <h2>{{ prompt.question }}</h2>
-        <p>{{ archived ? '已确认本次选择' : '选择一个方向，或补充你的想法' }}</p>
+        <h2>补充创作偏好</h2>
+        <p>请依次完成 {{ questions.length }} 个选择</p>
       </div>
-      <span class="status ch-status-pill" :class="archived ? 'is-complete' : 'is-awaiting'">
-        <i aria-hidden="true"></i>{{ archived ? '已确认' : '待确认' }}
+      <span class="status ch-status-pill is-awaiting">
+        <i aria-hidden="true"></i>待确认
       </span>
     </header>
 
-    <div class="options" role="radiogroup" aria-label="可选方向">
+    <div v-if="currentQuestion" class="options" role="radiogroup" :aria-label="currentQuestion.question">
+      <p class="question-progress">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</p>
+      <h3 class="question-title">{{ currentQuestion.question }}</h3>
       <button
-        v-for="opt in prompt.options"
+        v-for="opt in currentQuestion.options"
         :key="opt.signal"
         class="option-item"
-        :class="{ selected: selectedValue === opt.signal }"
+        :class="{ selected: currentSignal === opt.signal }"
         type="button"
         role="radio"
-        :aria-checked="selectedValue === opt.signal"
-        :disabled="locking || archived"
+        :aria-checked="currentSignal === opt.signal"
+        :disabled="locking"
         @click="selectOption(opt.signal)"
       >
         <span class="option-copy">
@@ -83,35 +108,33 @@ defineExpose({ confirmChoice, reconsider })
           <p>{{ opt.description }}</p>
         </span>
         <span class="option-selection" aria-hidden="true">
-          <span v-if="selectedValue === opt.signal" class="selection-label">已选择</span>
-          <span class="option-check" :class="{ selected: selectedValue === opt.signal }">
-            <svg v-if="selectedValue === opt.signal" viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
+          <span v-if="currentSignal === opt.signal" class="selection-label">已选择</span>
+          <span class="option-check" :class="{ selected: currentSignal === opt.signal }">
+            <svg v-if="currentSignal === opt.signal" viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
           </span>
         </span>
       </button>
 
       <button
-        v-if="prompt.allow_custom && !customSelected"
+        v-if="currentQuestion.allow_custom && !customSelected"
         class="option-item custom-option"
         type="button"
         role="radio"
         :aria-checked="false"
-        :disabled="locking || archived"
+        :disabled="locking"
         @click="selectOption('__custom__')"
       >
         <span class="option-copy">
           <strong>补充你的想法</strong>
           <p>写下你希望突出呈现的角度或内容。</p>
         </span>
-        <span class="custom-chevron" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-        </span>
+        <span class="option-check" aria-hidden="true"></span>
       </button>
 
       <div
-        v-else-if="prompt.allow_custom"
+        v-else-if="currentQuestion.allow_custom"
         class="option-item custom-option selected"
-        :class="{ disabled: locking || archived }"
+        :class="{ disabled: locking }"
         role="radio"
         :aria-checked="true"
       >
@@ -119,16 +142,14 @@ defineExpose({ confirmChoice, reconsider })
           <span class="option-copy">
             <strong>补充你的想法</strong>
             <span class="custom-editor-value">
-              <span v-if="archived" class="custom-answer">{{ archivedCustomText }}</span>
               <input
-                v-else
                 ref="customInput"
-                v-model="customText"
+                v-model="customTexts[currentIndex]"
                 class="custom-input"
                 type="text"
                 placeholder="写下你希望突出呈现的角度或内容"
-                :disabled="locking || archived"
-                @keydown.enter="confirmChoice"
+                :disabled="locking"
+                @keydown.enter="isLastQuestion ? confirmChoices() : nextQuestion()"
               />
             </span>
           </span>
@@ -141,18 +162,18 @@ defineExpose({ confirmChoice, reconsider })
       </div>
     </div>
 
-    <footer v-if="!archived && !hideActions" class="actions">
+    <footer v-if="!hideActions" class="actions">
       <p v-if="error" class="action-error" role="alert">{{ error }}</p>
       <div>
-        <button class="secondary" type="button" @click="reconsider">
-          重新考虑
+        <button v-if="currentIndex > 0" class="secondary" type="button" :disabled="locking" @click="previousQuestion">
+          上一题
         </button>
         <button
           class="primary"
           type="button"
-          @click="confirmChoice"
+          @click="isLastQuestion ? confirmChoices() : nextQuestion()"
         >
-          {{ locking ? '正在确认' : '确认选项' }}
+          {{ locking ? '正在确认' : (isLastQuestion ? '提交全部选择' : '下一题') }}
           <svg v-if="!locking" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
         </button>
       </div>
@@ -206,6 +227,21 @@ defineExpose({ confirmChoice, reconsider })
 .options {
   display: grid;
   gap: var(--ch-space-3);
+}
+
+.question-progress {
+  margin: 0;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-xs);
+  font-weight: 600;
+}
+
+.question-title {
+  margin: 0 0 8px;
+  color: var(--ch-text);
+  font-size: var(--ch-text-md);
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .option-item {
@@ -331,7 +367,6 @@ defineExpose({ confirmChoice, reconsider })
 }
 
 .option-check svg,
-.custom-chevron svg,
 .primary svg {
   width: 15px;
   height: 15px;
@@ -346,14 +381,6 @@ defineExpose({ confirmChoice, reconsider })
   width: 13px;
   height: 13px;
   stroke-width: 2.4;
-}
-
-.custom-chevron {
-  width: 64px;
-  display: grid;
-  place-items: center end;
-  color: var(--ch-text-muted);
-  transition: transform var(--ch-duration-fast) var(--ch-ease-out);
 }
 
 .custom-input {

@@ -22,12 +22,13 @@ const stages = [
   { id: 'complete', label: '10 完成交付', type: 'complete', phase: 5 },
   { id: 'platform-preview', label: '11 平台 · 渲染预览', type: 'platform-preview', phase: 0 },
   { id: 'recovery', label: '异常 · 配图恢复', type: 'recovery', phase: 3 },
-  { id: 'option', label: '工具 · 选项征询', type: 'option', phase: 0 },
+  { id: 'option', label: '工具 · 批量选项', type: 'option', phase: 0 },
 ]
 
 const currentIndex = ref(0)
 const current = computed(() => stages[currentIndex.value])
 const reviewProgressStep = ref(0)
+const reviewOptionAnswers = ref(null)
 const previewSkills = ref([])
 const selectedPreviewSkill = ref('web-blog')
 const previewModalOpen = ref(false)
@@ -79,7 +80,9 @@ async function loadPreviewSkills() {
 }
 
 function setStage(index) {
-  currentIndex.value = Math.max(0, Math.min(stages.length - 1, Number(index)))
+  const nextIndex = Math.max(0, Math.min(stages.length - 1, Number(index)))
+  if (stages[nextIndex]?.type === 'option') reviewOptionAnswers.value = null
+  currentIndex.value = nextIndex
 }
 
 onMounted(() => {
@@ -329,27 +332,42 @@ const optionScenarios = [
   },
 ]
 
+const batchOptionPrompt = {
+  questions: optionScenarios.map((scenario) => ({
+    question: scenario.prompt.question,
+    options: scenario.prompt.options,
+    allow_custom: scenario.prompt.allow_custom,
+  })),
+}
+
 const activeOptionPrompt = computed(() => {
-  if (current.value.type !== 'option') return null
+  if (current.value.type !== 'option' || reviewOptionAnswers.value) return null
   return {
-    ...optionScenarios[0].prompt,
+    ...batchOptionPrompt,
     prompt_id: 'audit-option-active',
     status: 'open',
   }
 })
 
+function onReviewOptionChoose(payload) {
+  reviewOptionAnswers.value = payload.answers.map((submitted, index) => {
+    const question = batchOptionPrompt.questions[index]
+    const selected = question?.options.find((option) => option.signal === submitted.signal)
+    return {
+      ...submitted,
+      label: selected?.label || '补充你的想法',
+    }
+  })
+}
+
 function optionMessages() {
-  const items = []
-  for (const scenario of optionScenarios) {
-    items.push({ id: `audit-option-intro-${scenario.prompt.options.length}`, role: 'assistant', content: `**${scenario.headline}**\n\n${scenario.intro}`, thinking: { state: 'idle' }, tools: { state: 'idle', items: [] } })
-    items.push({
-      id: `audit-option-card-${scenario.headline}`,
-      kind: 'option',
-      role: 'assistant',
-      prompt: scenario.prompt,
-    })
-  }
-  return items
+  return [{
+    id: 'audit-option-intro',
+    role: 'assistant',
+    content: '**批量选择工具**\n\n本次工具调用一次提出 3 个可独立回答的问题。请在下方卡片中逐题作答；完成最后一题并提交后，才会恢复 LLM。',
+    thinking: { state: 'idle' },
+    tools: { state: 'idle', items: [] },
+  }]
 }
 
 const messages = computed(() => {
@@ -436,6 +454,7 @@ const messages = computed(() => {
           :awaiting-option="current.type === 'option'"
           :intent-confirmation="current.type === 'intent' ? intentState : null"
           :option-prompt="activeOptionPrompt"
+          @option-choose="onReviewOptionChoose"
         />
       </article>
 

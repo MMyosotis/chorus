@@ -92,7 +92,7 @@ test('planOptionCard 无提问返回空', () => {
 })
 
 test('planOptionCard 有提问返回选项卡', () => {
-  const prompt = { message_id: 'm1', question: '选哪个方向', options: [], allow_custom: true }
+  const prompt = { message_id: 'm1', questions: [] }
   const card = planOptionCard(prompt)
   expect(card).toMatchObject({ kind: 'option', id: 'option:open', role: 'assistant', anchorMessageId: 'm1' })
   expect(card.prompt).toBe(prompt)
@@ -100,8 +100,8 @@ test('planOptionCard 有提问返回选项卡', () => {
 
 test('planOptionCards 已回答的选项保留为留档卡', () => {
   const prompts = [
-    { prompt_id: 'p1', status: 'answered', question: '选哪个方向', options: [], allow_custom: true },
-    { prompt_id: 'p2', status: 'open', question: '下一步', options: [], allow_custom: true },
+    { prompt_id: 'p1', status: 'answered', questions: [] },
+    { prompt_id: 'p2', status: 'open', questions: [] },
   ]
   expect(planOptionCards(prompts)).toMatchObject([
     { kind: 'option', id: 'option:p1', prompt: prompts[0] },

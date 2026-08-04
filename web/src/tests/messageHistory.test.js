@@ -38,12 +38,15 @@ test('normalizeAssistant 选项征询轮有正文也保留续写标记', () => {
     tools: [{
       name: 'present_options',
       arguments: {
-        question: '选择一个方向',
-        options: [
-          { label: '故事', description: '叙事感更强' },
-          { label: '攻略', description: '实用信息为主' },
-          { label: '评论', description: '表达明确观点' },
-        ],
+        questions: [{
+          question: '选择一个方向',
+          options: [
+            { label: '故事', description: '叙事感更强' },
+            { label: '攻略', description: '实用信息为主' },
+            { label: '评论', description: '表达明确观点' },
+          ],
+          allow_custom: true,
+        }],
       },
     }],
   })
@@ -112,12 +115,15 @@ test('mergeAssistantHistory 选项卡后的续写合并回选项卡宿主', () =
       tools: [{
         name: 'present_options',
         arguments: {
-          question: '选择方向',
-          options: [
-            { label: '生活感悟', description: '记录日常体验' },
-            { label: '城市观察', description: '关注城市情绪' },
-            { label: '探店攻略', description: '提供实用信息' },
-          ],
+          questions: [{
+            question: '选择方向',
+            options: [
+              { label: '生活感悟', description: '记录日常体验' },
+              { label: '城市观察', description: '关注城市情绪' },
+              { label: '探店攻略', description: '提供实用信息' },
+            ],
+            allow_custom: true,
+          }],
         },
       }],
     },
@@ -133,12 +139,15 @@ test('mergeAssistantHistory 选项卡后的续写合并回选项卡宿主', () =
       tools: [{
         name: 'present_options',
         arguments: {
-          question: '选择平台',
-          options: [
-            { label: '小红书', description: '适合图文种草' },
-            { label: '公众号', description: '适合长文阅读' },
-            { label: '微博', description: '适合热点讨论' },
-          ],
+          questions: [{
+            question: '选择平台',
+            options: [
+              { label: '小红书', description: '适合图文种草' },
+              { label: '公众号', description: '适合长文阅读' },
+              { label: '微博', description: '适合热点讨论' },
+            ],
+            allow_custom: true,
+          }],
         },
       }],
     },

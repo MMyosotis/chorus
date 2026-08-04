@@ -59,7 +59,7 @@ class OptionPromptRepository(BaseRepository):
         return [_to_domain(row) for row in rows]
 
     @write
-    def update_answered(self, db, session_id: str, answer: OptionAnswer) -> None:
+    def update_answered(self, db, session_id: str, answers: list[OptionAnswer]) -> None:
         record = db.scalars(
             select(OptionPromptRecord)
             .where(
@@ -70,6 +70,6 @@ class OptionPromptRepository(BaseRepository):
             .limit(1)
         ).first()
         prompt = dict(record.prompt)
-        prompt["answer"] = answer.model_dump(mode="json", exclude_none=True)
+        prompt["answers"] = [answer.model_dump(mode="json", exclude_none=True) for answer in answers]
         record.prompt = prompt
         record.status = "answered"

@@ -24,16 +24,17 @@ function waitsForOptionSelection(toolItems) {
   return toolItems.some((item) => {
     if (item.name !== 'present_options') return false
     const args = item.arguments || {}
-    return (
-      typeof args.question === 'string' &&
-      args.question.trim() !== '' &&
-      Array.isArray(args.options) &&
-      args.options.length >= 3 &&
-      args.options.every((option) =>
-        typeof option?.label === 'string' && option.label.trim() !== '' &&
-        typeof option?.description === 'string' && option.description.trim() !== ''
+    const validBatch = Array.isArray(args.questions) &&
+      args.questions.length >= 1 &&
+      args.questions.every((question) =>
+        typeof question?.question === 'string' && question.question.trim() !== '' &&
+        Array.isArray(question.options) && question.options.length >= 3 &&
+        question.options.every((option) =>
+          typeof option?.label === 'string' && option.label.trim() !== '' &&
+          typeof option?.description === 'string' && option.description.trim() !== ''
+        )
       )
-    )
+    return validBatch
   })
 }
 

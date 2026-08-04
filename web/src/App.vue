@@ -465,9 +465,7 @@ function createStreamHandler(sessionId) {
       const prompt = {
         prompt_id: payload.prompt_id,
         message_id: payload.message_id,
-        question: payload.question,
-        options: payload.options,
-        allow_custom: payload.allow_custom,
+        questions: payload.questions,
         status: 'open',
       }
       if (openIdx >= 0) prompts.splice(openIdx, 1, prompt)
@@ -632,13 +630,16 @@ async function onOptionChoose(payload) {
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
   const prompt = activeOptionPrompt.value
   if (prompt) {
-    const selected = prompt.options.find((option) => option.signal === payload.signal)
     prompt.status = 'answered'
-    prompt.answer = {
-      signal: payload.signal,
-      label: selected?.label || '补充你的想法',
-      ...(payload.custom_text ? { custom_text: payload.custom_text } : {}),
-    }
+    prompt.answers = payload.answers.map((submitted, index) => {
+      const question = prompt.questions[index]
+      const selected = question?.options.find((option) => option.signal === submitted.signal)
+      return {
+        signal: submitted.signal,
+        label: selected?.label || '补充你的想法',
+        ...(submitted.custom_text ? { custom_text: submitted.custom_text } : {}),
+      }
+    })
   }
   await runAssistantStream(sessionId, (onEvent) => chooseOption(sessionId, payload, onEvent))
 }

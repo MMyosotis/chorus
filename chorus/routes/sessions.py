@@ -161,9 +161,13 @@ def resume_session(
     return sse_stream(_resume_with_tool(session_id, "create_plan", "finish", intent, supervisor, tools))
 
 
-class OptionChooseRequest(BaseModel):
+class OptionChooseAnswerRequest(BaseModel):
     signal: str
     custom_text: Optional[str] = None
+
+
+class OptionChooseRequest(BaseModel):
+    answers: list[OptionChooseAnswerRequest]
 
 
 def _resume_option(
@@ -172,9 +176,10 @@ def _resume_option(
     supervisor: SupervisorService,
     tools: ToolDispatch,
 ) -> Iterator[str]:
-    payload = {"custom_text": req.custom_text} if req.custom_text else None
     result_text = tools.get_tool("present_options").resolve_external(
-        session_id, req.signal, payload,
+        session_id,
+        "submit",
+        {"answers": [answer.model_dump(exclude_none=True) for answer in req.answers]},
     )
     for event in supervisor.resume(session_id, "present_options", result_text):
         yield sse(event)
@@ -223,11 +228,9 @@ def _option_prompt_to_dict(prompt: OptionPrompt) -> dict:
     return {
         "prompt_id": prompt.prompt_id,
         "message_id": prompt.message_id,
-        "question": prompt.question,
-        "options": [item.model_dump() for item in prompt.options],
-        "allow_custom": prompt.allow_custom,
+        "questions": [question.model_dump() for question in prompt.questions],
         "status": prompt.status,
-        "answer": prompt.answer.model_dump(exclude_none=True) if prompt.answer else None,
+        "answers": [answer.model_dump(exclude_none=True) for answer in prompt.answers],
         "created_at": prompt.created_at,
     }
 

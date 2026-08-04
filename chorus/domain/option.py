@@ -1,4 +1,4 @@
-"""会话级选项征询：主 Agent 向用户出的选择题，用户作答后续跑 loop。"""
+"""会话级选项征询：一个工具调用可向用户提出一组选择题。"""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ class OptionItem(BaseModel):
     description: str
 
 
-class OptionPromptDef(BaseModel):
-    """提问定义：创建时一次写入，落 prompt 列 JSON。"""
+class OptionQuestion(BaseModel):
+    """问题组中的一个选择题；答案按问题数组顺序回填。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -30,8 +30,16 @@ class OptionPromptDef(BaseModel):
     allow_custom: bool = True
 
 
+class OptionPromptDef(BaseModel):
+    """提问定义：多个选择题整体作为一次挂起写入。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    questions: list[OptionQuestion]
+
+
 class OptionAnswer(BaseModel):
-    """用户对一张选项卡的确认结果，随卡片一同留档。"""
+    """用户对问题组中一道题的确认结果。"""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -48,5 +56,5 @@ class OptionPrompt(OptionPromptDef):
     # 触发选项征询的助手消息，前端据此将卡原位挂回对话。
     message_id: Optional[str] = None
     status: OptionStatus = "open"
-    answer: Optional[OptionAnswer] = None
+    answers: list[OptionAnswer] = Field(default_factory=list)
     created_at: float = Field(default_factory=time.time)

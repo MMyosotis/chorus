@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from chorus.domain.option import OptionItem, OptionPrompt
+from chorus.domain.option import OptionItem, OptionPrompt, OptionQuestion
 from chorus.routes.providers import (
     provide_option_service,
     provide_session_service,
@@ -52,9 +52,10 @@ def _open_prompt(pid="p1"):
         prompt_id=pid,
         session_id="s1",
         message_id="m-option",
-        question="选哪个",
-        options=[OptionItem(signal="0", label="A", description="d")],
-        allow_custom=True,
+        questions=[OptionQuestion(
+            question="选哪个",
+            options=[OptionItem(signal="0", label="A", description="d")],
+        )],
         created_at=1.0,
         status="open",
     )
@@ -81,7 +82,7 @@ def test_get_options_includes_answered_archive():
 def test_choose_option_session_not_found():
     r = _client(FakeSessionService(set()), FakeOptionService()).post(
         "/api/sessions/unknown/option:choose",
-        json={"signal": "0"},
+        json={"answers": [{"signal": "0"}]},
     )
     assert r.status_code == 404
 
@@ -89,7 +90,7 @@ def test_choose_option_session_not_found():
 def test_choose_option_no_open_returns_409():
     r = _client(FakeSessionService({"s1"}), FakeOptionService(None)).post(
         "/api/sessions/s1/option:choose",
-        json={"signal": "0"},
+        json={"answers": [{"signal": "0"}]},
     )
     assert r.status_code == 409
 
