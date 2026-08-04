@@ -94,7 +94,7 @@ class SupervisorLoopStrategy:
     def after_dispatch(self, call, dispatch):
         pass
 
-    def after_tools(self, ctx, pairs):
+    def after_tools(self, ctx, result, pairs):
         """成对落库，据是否命中挂起决定续跑或关流。"""
         suspend = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
         content = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
