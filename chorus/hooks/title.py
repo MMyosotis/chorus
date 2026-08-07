@@ -9,7 +9,7 @@ from typing import Iterable
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import SseEvent, TitleUpdateEvent
-from chorus.domain.message import AssistantMessage, UserMessage
+from chorus.domain.message import first_user_text
 from chorus.domain.title import TitleGenerationService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
@@ -30,22 +30,13 @@ class TitlePostProcessor:
         # 已定名则短路，不调模型不遍历历史
         if self._session.is_title_set(ctx.session_id):
             return None
-        first_user, first_assistant = self._first_pair(ctx.session_id)
-        title = self._title.generate(first_user, first_assistant)
+        user_text = self._first_user(ctx.session_id)
+        title = self._title.generate(user_text)
         if not title:
             return None
         if not self._session.set_title(ctx.session_id, title):
             return None
         return [TitleUpdateEvent(id=ctx.session_id, title=title)]
 
-    def _first_pair(self, session_id: str) -> tuple[str, str]:
-        first_user = ""
-        first_assistant = ""
-        for message in self._message.list_messages(session_id):
-            if isinstance(message, UserMessage) and not first_user:
-                first_user = message.content
-            elif isinstance(message, AssistantMessage) and (message.content or "").strip() and not first_assistant:
-                first_assistant = message.content or ""
-            if first_user and first_assistant:
-                break
-        return first_user, first_assistant
+    def _first_user(self, session_id: str) -> str:
+        return first_user_text(self._message.list_messages(session_id))

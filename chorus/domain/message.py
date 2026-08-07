@@ -30,6 +30,12 @@ class UserMessage(_MessageBase):
     def to_provider_dict(self) -> dict:
         return {"role": "user", "content": self.content}
 
+    def to_view(self, trace: Optional[MessageTrace]) -> Optional[MessageView]:
+        return MessageView(id=self.id, role="user", content=self.content)
+
+    def to_history_line(self) -> str:
+        return f"用户：{self.content}"
+
 
 class ToolCallSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -61,6 +67,20 @@ class AssistantMessage(_MessageBase):
             entry["tool_calls"] = [call.to_provider_dict() for call in self.tool_calls]
         return entry
 
+    def to_view(self, trace: Optional[MessageTrace]) -> Optional[MessageView]:
+        return MessageView(
+            id=self.id, role="assistant", content=self.content or "",
+            thinking=trace.thinking if trace else [],
+            tools=trace.tools if trace else [],
+        )
+
+    def to_history_line(self) -> str:
+        text = self.content or ""
+        if self.tool_calls:
+            names = "、".join(call.name for call in self.tool_calls)
+            text = f"{text}（调用工具：{names}）" if text else f"（调用工具：{names}）"
+        return f"助手：{text}"
+
 
 class ToolMessage(_MessageBase):
     role: Literal["tool"] = "tool"
@@ -70,6 +90,12 @@ class ToolMessage(_MessageBase):
 
     def to_provider_dict(self) -> dict:
         return {"role": "tool", "tool_call_id": self.tool_call_id, "content": self.content}
+
+    def to_view(self, trace: Optional[MessageTrace]) -> Optional[MessageView]:
+        return None
+
+    def to_history_line(self) -> str:
+        return f"工具[{self.name}]：{self.content}"
 
 
 Message = Annotated[
@@ -97,25 +123,20 @@ def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> 
     return result
 
 
-def build_history_view(
-    messages: Iterable[Message],
-    traces: dict[str, MessageTrace],
-) -> list[MessageView]:
+def build_history_view(messages: Iterable[Message], traces: dict[str, MessageTrace]) -> list[MessageView]:
     """前端视图：滤掉工具消息，助手消息挂回思考与工具摘要。
 
     轨迹由调用方预取注入，避免逐条查询。缺失轨迹退化为空。
     """
-    result: list[MessageView] = []
+    views: list[MessageView] = []
     for msg in messages:
-        if isinstance(msg, UserMessage):
-            result.append(MessageView(id=msg.id, role="user", content=msg.content))
-        elif isinstance(msg, AssistantMessage):
-            trace = traces.get(msg.id)
-            result.append(MessageView(
-                id=msg.id,
-                role="assistant",
-                content=msg.content or "",
-                thinking=trace.thinking if trace else [],
-                tools=trace.tools if trace else [],
-            ))
-    return result
+        view = msg.to_view(traces.get(msg.id))
+        if view is not None:
+            views.append(view)
+    return views
+
+
+def first_user_text(messages: Iterable[Message]) -> str:
+    """返回首条消息文本，供标题生成取材；会话由用户发起，首条即用户输入。"""
+    first = next(iter(messages), None)
+    return (first.content or "") if first else ""

@@ -14,6 +14,8 @@ from chorus.repo.task import TaskRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.task_progress import TaskProgressRepository
 
+_LOG_DIR = Path(tempfile.gettempdir()) / "chorus-test-logs"
+
 
 def _setup():
     tmp = tempfile.mkdtemp()
@@ -38,7 +40,7 @@ def test_dispatch_pending_with_finished_deps():
     ran = []
     sched = TaskScheduler(task_repo, lambda tid: ran.append(tid) or None,
                           _fake_session(), content_repo, progress_repo,
-                          interval=0.01, zombie_timeout=999)
+                          interval=0.01, zombie_timeout=999, log_dir=_LOG_DIR)
     sched._tick()
     time.sleep(0.05)  # 等 worker 线程跑完
     assert ran == ["t1"]
@@ -52,7 +54,7 @@ def test_blocked_by_unfinished_dep():
     _mk(task_repo, "t1", status="pending", deps=["dep"])
     ran = []
     sched = TaskScheduler(task_repo, lambda tid: ran.append(tid), _fake_session(),
-                          content_repo, progress_repo, interval=0.01, zombie_timeout=999)
+                          content_repo, progress_repo, interval=0.01, zombie_timeout=999, log_dir=_LOG_DIR)
     sched._tick()
     assert ran == []
     assert task_repo.get("t1").status == TaskStatus.PENDING
@@ -63,7 +65,7 @@ def test_zombie_reclaim():
     engine, task_repo, content_repo, progress_repo = _setup()
     _mk(task_repo, "t1", status="running", updated_at=0.0)  # 很久以前的心跳
     sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
-                          content_repo, progress_repo, interval=0.01, zombie_timeout=1)
+                          content_repo, progress_repo, interval=0.01, zombie_timeout=1, log_dir=_LOG_DIR)
     sched._reclaim_zombies()
     assert task_repo.get("t1").status == TaskStatus.FAILED
     assert content_repo.load("t1").error == "运行超时未响应"
@@ -73,7 +75,7 @@ def test_tick_guarded_swallows_single_tick_exception():
     """单轮 _tick 抛异常时 _tick_guarded 吞掉，不外抛（防打死调度线程）。"""
     _, task_repo, content_repo, progress_repo = _setup()
     sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
-                          content_repo, progress_repo, interval=0.01, zombie_timeout=999)
+                          content_repo, progress_repo, interval=0.01, zombie_timeout=999, log_dir=_LOG_DIR)
 
     def boom():
         raise RuntimeError("boom")

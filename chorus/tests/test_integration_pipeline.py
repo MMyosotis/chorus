@@ -157,6 +157,7 @@ def _build_assembly():
         task_repo, subagent.run, session_svc,
         content_repo, TaskProgressRepository(engine),
         interval=0.01, zombie_timeout=999,
+        log_dir=Path(tempfile.mkdtemp()) / "logs",
     )
     return supervisor, subagent, task_service, scheduler, task_repo, session_svc, engine, intent_state
 

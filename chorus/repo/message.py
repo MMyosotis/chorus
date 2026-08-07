@@ -56,24 +56,24 @@ def _to_domain(r: MessageRecord) -> Message:
 
 
 def _from_domain(msg: Message) -> MessageRecord:
-    if isinstance(msg, UserMessage):
+    if msg.role == "user":
         return MessageRecord(
             id=msg.id, session_id=msg.session_id, role="user",
             content=msg.content, created_at=msg.created_at,
         )
-    if isinstance(msg, AssistantMessage):
+    if msg.role == "assistant":
         return MessageRecord(
             id=msg.id, session_id=msg.session_id, role="assistant",
             content=msg.content, tool_calls_json=_dump_tool_calls(msg.tool_calls),
             created_at=msg.created_at,
         )
-    if isinstance(msg, ToolMessage):
+    if msg.role == "tool":
         return MessageRecord(
             id=msg.id, session_id=msg.session_id, role="tool",
             tool_call_id=msg.tool_call_id, tool_name=msg.name,
             content=msg.content, created_at=msg.created_at,
         )
-    raise TypeError(f"unsupported message type: {type(msg)}")
+    raise TypeError(f"unsupported message role: {msg.role}")
 
 
 class MessageRepository(BaseRepository):

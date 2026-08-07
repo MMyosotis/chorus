@@ -33,7 +33,7 @@ class TaskScheduler:
         interval: float = _SCHEDULER_INTERVAL,
         zombie_timeout: int = _ZOMBIE_TIMEOUT,
         *,
-        log_dir: Optional[Path] = None,
+        log_dir: Path,
         log_retention_days: int = 0,
         log_cleanup_interval: int = 0,
     ):
@@ -86,7 +86,7 @@ class TaskScheduler:
 
     def _maybe_cleanup_logs(self) -> None:
         """按清理间隔删除过期日志，失败不阻断。"""
-        if self._log_dir is None or self._log_cleanup_interval <= 0:
+        if self._log_cleanup_interval <= 0:
             return
         now = time.time()
         if now - self._last_log_cleanup < self._log_cleanup_interval:

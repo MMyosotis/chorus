@@ -77,7 +77,7 @@ class MessageService:
         """前端视图：滤掉工具消息，助手消息挂回思考与工具摘要，轨迹批量预取。"""
         msgs = self._msg_repo.list_by_session(session_id)
         traces = self._trace.batch_aggregate(
-            [message.id for message in msgs if isinstance(message, AssistantMessage)]
+            [message.id for message in msgs if message.role == "assistant"]
         )
         return build_history_view(msgs, traces)
 

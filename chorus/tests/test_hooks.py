@@ -121,27 +121,25 @@ def test_trace_tool_result_payload_from_result_object():
 
 
 class _StubTitleService:
-    """替身 TitleGenerationService：只实现 generate(first_user, first_assistant)。"""
+    """替身 TitleGenerationService：只实现 generate(user_text)。"""
 
     def __init__(self, title):
         self._title = title
         self.calls = []
 
-    def generate(self, first_user, first_assistant):
-        self.calls.append((first_user, first_assistant))
+    def generate(self, user_text):
+        self.calls.append(user_text)
         return self._title
 
 
-def _seed_first_pair(msg_svc, sid):
+def _seed_user_message(msg_svc, sid):
     msg_svc.append_user_message(sid, "帮我写夏日博文")
-    msg_svc.append_assistant_message(
-        sid, message_id="m1", content="好的，这是一篇关于夏日的文字。", tool_calls=[])
 
 
 def test_title_on_stop_yields_update_when_unset():
     msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
-    _seed_first_pair(msg_svc, s.id)
+    _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService("夏日晚风")
     ctx = AgentContext(session_id=s.id)
 
@@ -157,14 +155,14 @@ def test_title_on_stop_yields_update_when_unset():
     got = session_svc.get(s.id)
     assert got.title == "夏日晚风"
     assert got.title_generated is True
-    assert stub.calls == [("帮我写夏日博文", "好的，这是一篇关于夏日的文字。")]
+    assert stub.calls == ["帮我写夏日博文"]
 
 
 def test_title_skips_when_already_set():
     msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
     session_svc.rename(s.id, "用户起的名")             # 标记为已生成
-    _seed_first_pair(msg_svc, s.id)
+    _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService("不该用")
     ctx = AgentContext(session_id=s.id)
 
@@ -178,7 +176,7 @@ def test_title_skips_when_already_set():
 def test_title_skips_when_generate_returns_none():
     msg_svc, trace_svc, session_svc = _setup()
     s = session_svc.create("新对话")
-    _seed_first_pair(msg_svc, s.id)
+    _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService(None)
     ctx = AgentContext(session_id=s.id)
 

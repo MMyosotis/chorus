@@ -9,6 +9,8 @@ from typing import Optional
 
 from openai import OpenAI
 
+from chorus.domain.bypass import call_once
+
 _GENERATED_MAX_LEN = 30
 STORED_TITLE_MAX_LEN = 60
 
@@ -40,22 +42,16 @@ class TitleGenerationService:
         self._client = client
         self._model = model_id
 
-    def generate(self, first_user: str, first_assistant: str) -> Optional[str]:
-        if not first_user or not first_assistant:
+    def generate(self, user_text: str) -> Optional[str]:
+        if not user_text:
             return None
         prompt = (
-            "请基于以下对话生成一个 5–12 字的中文标题，仅返回标题文本，不要标点和引号。\n\n"
-            f"用户：{first_user[:200]}\n助手：{first_assistant[:200]}"
+            "请基于以下用户消息生成一个 5–12 字的中文标题，仅返回标题文本，不要标点和引号。\n\n"
+            f"用户：{user_text[:200]}"
         )
         try:
             # 推理模型先吐推理段再作答，预算须覆盖推理段
-            resp = self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=512,
-                stream=False,
-            )
-            raw = (resp.choices[0].message.content or "").strip()
+            raw = call_once(self._client, self._model, prompt, 512)
         except Exception:
             return None
         return clean_generated_title(raw)
