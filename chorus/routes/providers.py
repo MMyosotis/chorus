@@ -6,6 +6,7 @@ from fastapi import Request
 
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
+from chorus.services.memory import MemoryService
 from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
@@ -34,6 +35,10 @@ def provide_option_service(request: Request) -> OptionPromptService:
 
 def provide_settings_service(request: Request) -> SettingsService:
     return request.app.state.settings_service
+
+
+def provide_memory_service(request: Request) -> MemoryService:
+    return request.app.state.memory_service
 
 
 from chorus.agents.scheduler import TaskScheduler

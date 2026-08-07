@@ -10,7 +10,7 @@ from typing import Optional
 
 from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
 from chorus.agents.runtime import AgentContext
-from chorus.domain.prompt import PromptContext, build_system_prompt, subagent_base
+from chorus.domain.prompt import PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks, subagent_base
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import get_logger
 from chorus.domain.stream import StreamResult, silent_consume
@@ -27,6 +27,7 @@ from chorus.domain.task.progress import UnitCounter
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
+from chorus.services.memory import MemoryService
 from chorus.repo.task_content import TaskContentRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
@@ -95,7 +96,8 @@ class SubagentLoopStrategy:
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, owner_id, profile, invoke,
-                 task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names, tool_dispatch):
+                 task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names, tool_dispatch,
+                 memory_digest, recalled_memories):
         self.task = task
         self.owner_id = owner_id
         self.profile = profile
@@ -108,6 +110,8 @@ class SubagentLoopStrategy:
         self._tool_names = tool_names
         self._tool_dispatch = tool_dispatch
         self._produced_units = 0
+        self._memory_digest = memory_digest
+        self._recalled_memories = recalled_memories
 
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
@@ -126,8 +130,11 @@ class SubagentLoopStrategy:
             base=subagent_base(self.task.agent_type),
             tool_names=self._tool_names,
             skill_loader=self._skill_loader,
+            memory_digest=self._memory_digest,
         )
-        return [{"role": "system", "content": build_system_prompt(ctx)}] + self.history
+        msgs = [{"role": "system", "content": build_system_prompt(ctx)}] + self.history
+        inject_user_blocks(msgs, UserMessageContext(recalled_memories=self._recalled_memories))
+        return msgs
 
     def consume(self, stream):
         marker = _UNIT_MARKER.get(self.task.agent_type)
@@ -193,6 +200,7 @@ class SubAgentService:
         loop: AgentLoop,
         aside_generator: AsideGenerator,
         skill_loader: SkillLoader,
+        memory_service: MemoryService,
     ):
         self._message = message_service
         self._task_repo = task_repo
@@ -204,6 +212,7 @@ class SubAgentService:
         self._loop = loop
         self._aside = aside_generator
         self._skill = skill_loader
+        self._memory = memory_service
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
@@ -226,6 +235,7 @@ class SubAgentService:
         self._progress.set_composing_label(task.id, AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
+        digest, recalled = self._prepare_memory(task, invoke)
         ctx = AgentContext(
             session_id=task.session_id,
             source="subagent",
@@ -245,9 +255,14 @@ class SubAgentService:
             skill_loader=self._skill,
             tool_names=TOOL_WHITELISTS[task.agent_type],
             tool_dispatch=self._tools,
+            memory_digest=digest, recalled_memories=recalled,
         )
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))
+
+    def _prepare_memory(self, task, invoke) -> tuple:
+        """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
+        return self._memory.build_digest(task.agent_type), self._memory.recall(task.agent_type, invoke)
 
     def _guarded_fail(self, task, error: str, owner_id: Optional[float]) -> None:
         """租约校验后再失败，供入口外层与策略错误回调共享。"""

@@ -41,3 +41,9 @@ class SettingsService:
 
     def set_web_search(self, enabled: bool) -> None:
         self._repo.set("web_search", "true" if enabled else "false")
+
+    def get_memory_enabled(self) -> bool:
+        return self._repo.get("memory_enabled", "true") == "true"
+
+    def set_memory_enabled(self, enabled: bool) -> None:
+        self._repo.set("memory_enabled", "true" if enabled else "false")

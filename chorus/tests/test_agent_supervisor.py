@@ -9,6 +9,7 @@ from pathlib import Path
 from chorus.agents.loop import AgentLoop
 from chorus.agents.supervisor import SupervisorService, SupervisorLoopStrategy
 from chorus.domain.intent import IntentStateUpdate
+from chorus.domain.memory import CreatorMemory, MemoryDigest
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
@@ -27,7 +28,7 @@ from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import stub_chat_model_provider
+from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool, LoadSkillTool, UpdateIntentStateTool
 
@@ -76,7 +77,7 @@ def _setup():
     session_svc = SessionService(SessionRepository(engine))
     trace_svc = TraceService(trace_repo)
     msg_svc = MessageService(msg_repo, trace_svc)
-    task_svc = TaskService(task_repo, art_repo, progress_repo, content_repo, session_svc)
+    task_svc = TaskService(task_repo, art_repo, progress_repo, content_repo, session_svc, stub_memory_service())
     return engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo
 
 
@@ -100,6 +101,7 @@ def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_s
     sup = SupervisorService(
         session_svc, msg_svc, hooks, entry,
         task_svc, tool_dispatcher, loop, intent_state, skill_loader,
+        stub_memory_service(),
     )
     return sup, intent_state
 
@@ -364,6 +366,7 @@ def test_provider_messages_injects_intent_block_before_last_user():
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
+        memory_digest=MemoryDigest(), recalled_memories=[],
     )
     msgs = strategy.provider_messages()
     user_dicts = [m for m in msgs if m["role"] == "user"]
@@ -373,6 +376,43 @@ def test_provider_messages_injects_intent_block_before_last_user():
     # 临时拼接不入库，原始 user 消息正文保持不变
     stored = msg_svc.list_messages(s.id)
     assert stored[0].content == "帮我写博文"
+
+
+def test_provider_messages_injects_recall_before_intent_block():
+    """召回记忆块注入最后一条用户消息前，排在意图块之前（背景在前）。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    _, intent_state = _build_supervisor(
+        engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, FakeClient([])
+    )
+    s = session_svc.create("test")
+    msg_svc.append_user_message(s.id, "帮我写博文")
+    intent_state.update_from_tool(
+        s.id,
+        IntentStateUpdate(
+            topic="职场穿搭", platform="小红书",
+            intent_status="capturing", image_count=2, progress_percent=40,
+        ),
+    )
+    recalled = [
+        CreatorMemory(
+            id="m1", description="身份：程序员", content="深圳后端",
+            platform=[], visible_to=[], kind="reference",
+            created_at=0.0, updated_at=0.0,
+        )
+    ]
+    skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
+    strategy = SupervisorLoopStrategy(
+        s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
+        memory_digest=MemoryDigest(), recalled_memories=recalled,
+    )
+    msgs = strategy.provider_messages()
+    user_dicts = [m for m in msgs if m["role"] == "user"]
+    content = user_dicts[-1]["content"]
+    assert content.startswith("<recalled_memories>")
+    assert content.index("<recalled_memories>") < content.index("<current_intent_state>")
+    assert "身份：程序员" in content
+    assert "职场穿搭" in content
+    assert "帮我写博文" in content
 
 
 def main():

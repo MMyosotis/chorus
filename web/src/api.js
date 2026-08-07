@@ -294,3 +294,38 @@ export async function getSkillFile(name, path) {
   }
   return res.text()
 }
+
+const MEMORY_BASE = '/api/memory'
+
+export async function listMemories() {
+  const res = await fetch(MEMORY_BASE)
+  if (!res.ok) throw new Error(`listMemories failed: ${res.status}`)
+  const data = await res.json()
+  return data.memories || []
+}
+
+export async function createMemory(body) {
+  const res = await fetch(MEMORY_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`createMemory failed: ${res.status}`)
+  return res.json()
+}
+
+export async function updateMemory(id, body) {
+  const res = await fetch(`${MEMORY_BASE}/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`updateMemory failed: ${res.status}`)
+  return res.json()
+}
+
+export async function deleteMemory(id) {
+  const res = await fetch(`${MEMORY_BASE}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`deleteMemory failed: ${res.status}`)
+  return res.json()
+}

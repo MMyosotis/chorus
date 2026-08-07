@@ -10,6 +10,7 @@ from pathlib import Path
 
 from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService
+from chorus.domain.memory import CreatorMemory, MemoryDigest
 from chorus.domain.session import Session
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import Task, TaskContent, TaskStatus
@@ -24,7 +25,7 @@ from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import stub_chat_model_provider
+from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
 from chorus.tools import Tool, ToolDispatch
 
 
@@ -128,6 +129,7 @@ def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_rep
         msg_svc, task_repo, art_repo, TaskProgressRepository(engine),
         content_repo, tool_dispatcher,
         _provider, loop, aside, SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        stub_memory_service(),
     )
 
 
@@ -287,6 +289,62 @@ def test_subagent_finalize_drift_no_orphan():
     msgs = msg_svc.list_messages("s1")
     assert not any("DONE_MARKER_I2" in (getattr(m, "content", "") or "") for m in msgs)
     assert len(client._pairs) == 0  # 脚本已消费
+
+
+def test_subagent_provider_messages_injects_recall():
+    """召回记忆块注入子 agent 首条用户消息（invoke）前。"""
+    from chorus.agents.subagent import SubagentLoopStrategy
+    from chorus.domain.task import AGENT_PROFILES
+    from chorus.repo.task_progress import TaskProgressRepository
+
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    task = _mk_task(task_repo, content_repo, "idea", "running")
+    recalled = [
+        CreatorMemory(
+            id="m1", description="身份：程序员", content="深圳后端",
+            platform=[], visible_to=[], kind="reference",
+            created_at=0.0, updated_at=0.0,
+        )
+    ]
+    strategy = SubagentLoopStrategy(
+        task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
+        task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
+        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        tool_names=(), tool_dispatch=None,
+        memory_digest=MemoryDigest(), recalled_memories=recalled,
+    )
+    msgs = strategy.provider_messages()
+    user_msgs = [m for m in msgs if m["role"] == "user"]
+    assert user_msgs[0]["content"].startswith("<recalled_memories>")
+    assert "身份：程序员" in user_msgs[0]["content"]
+    assert "骨架：主题=测试" in user_msgs[0]["content"]
+
+
+def test_subagent_provider_messages_injects_digest_into_system():
+    """记忆摘要进子 agent 系统提示词。"""
+    from chorus.agents.subagent import SubagentLoopStrategy
+    from chorus.domain.memory.models import MemoryDigestEntry
+    from chorus.domain.task import AGENT_PROFILES
+    from chorus.repo.task_progress import TaskProgressRepository
+
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    task = _mk_task(task_repo, content_repo, "idea", "running")
+    digest = MemoryDigest(entries=[
+        MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance")
+    ])
+    strategy = SubagentLoopStrategy(
+        task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
+        task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
+        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        tool_names=(), tool_dispatch=None,
+        memory_digest=digest, recalled_memories=[],
+    )
+    msgs = strategy.provider_messages()
+    system = msgs[0]["content"]
+    assert "## 创作者档案" in system
+    assert "身份：程序员" in system
 
 
 def main():

@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import MemoryPanel from './main-panel/MemoryPanel.vue'
 import { getModelLists, getOptions, getTestMode, setOptions, setTestMode } from './api.js'
 
 const emit = defineEmits(['collapse'])
@@ -12,6 +13,8 @@ const imageModels = ref([])
 const chatModel = ref('')
 const imageModel = ref('')
 const webSearch = ref(true)
+const memoryEnabled = ref(true)
+const showMemory = ref(false)
 const modelsLoading = ref(false)
 const modelsError = ref('')
 const saving = ref(false)
@@ -35,6 +38,7 @@ async function loadModels() {
     chatModel.value = opts.chat_model
     imageModel.value = opts.image_model
     webSearch.value = !!opts.web_search
+    memoryEnabled.value = opts.memory_enabled !== false
   } catch (e) {
     modelsError.value = e.message || '加载模型选项失败'
   } finally {
@@ -51,6 +55,7 @@ async function persistOptions(patch) {
     chatModel.value = opts.chat_model
     imageModel.value = opts.image_model
     webSearch.value = !!opts.web_search
+    memoryEnabled.value = opts.memory_enabled !== false
   } catch (e) {
     modelsError.value = e.message || '保存失败'
   } finally {
@@ -71,6 +76,11 @@ function onImageModel(event) {
 function onWebSearch(event) {
   webSearch.value = event.target.checked
   persistOptions({ web_search: event.target.checked })
+}
+
+function onMemory(event) {
+  memoryEnabled.value = event.target.checked
+  persistOptions({ memory_enabled: event.target.checked })
 }
 
 async function toggleTestMode() {
@@ -128,6 +138,17 @@ onMounted(() => {
             <span class="slider"></span>
           </label>
         </div>
+        <div class="setting-row">
+          <div class="setting-label">
+            <strong>创作者记忆</strong>
+            <small>记住偏好与风格，跨会话复用。关闭后召回与提取全停。</small>
+          </div>
+          <label class="switch">
+            <input type="checkbox" :checked="memoryEnabled" :disabled="saving" @change="onMemory" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <button type="button" class="manage-memory-btn" @click="showMemory = true">管理记忆</button>
       </template>
 
       <div class="setting-row">
@@ -142,6 +163,8 @@ onMounted(() => {
       </div>
       <div v-if="testModeError" class="error-hint">{{ testModeError }}</div>
     </div>
+
+    <MemoryPanel v-if="showMemory" @close="showMemory = false" />
   </section>
 </template>
 
@@ -251,6 +274,23 @@ onMounted(() => {
 .group-title:first-child {
   padding-top: 0;
   border-top: 0;
+}
+
+.manage-memory-btn {
+  margin-top: var(--ch-space-2);
+  padding: var(--ch-space-2) var(--ch-space-3);
+  border: 1px solid var(--ch-border-strong);
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-surface);
+  color: var(--ch-accent);
+  font-size: var(--ch-text-sm);
+  font-weight: var(--ch-font-medium);
+  cursor: pointer;
+}
+
+.manage-memory-btn:hover {
+  border-color: var(--ch-accent);
+  background: var(--ch-accent-soft);
 }
 
 .opt-select {

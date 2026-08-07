@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from chorus.hooks.memory import MemoryExtractor
 from chorus.hooks.registry import EVENTS, HookFn, HookRegistry
 from chorus.hooks.title import TitlePostProcessor
 from chorus.hooks.trace import TraceEmitter
@@ -13,6 +14,7 @@ __all__ = [
     "HookRegistry",
     "HookFn",
     "EVENTS",
+    "MemoryExtractor",
     "TraceEmitter",
     "TitlePostProcessor",
 ]

@@ -50,12 +50,14 @@ class OptionsView(BaseModel):
     chat_model: str
     image_model: str
     web_search: bool
+    memory_enabled: bool
 
 
 class OptionsPatch(BaseModel):
     chat_model: Optional[str] = None
     image_model: Optional[str] = None
     web_search: Optional[bool] = None
+    memory_enabled: Optional[bool] = None
 
 
 @settings_router.get("/models", response_model=ModelListsView)
@@ -72,6 +74,7 @@ def get_options(settings: SettingsService = Depends(provide_settings_service)):
         chat_model=settings.get_chat_model(),
         image_model=settings.get_image_model(),
         web_search=settings.get_web_search(),
+        memory_enabled=settings.get_memory_enabled(),
     )
 
 
@@ -86,8 +89,11 @@ def patch_options(
         settings.set_image_model(req.image_model)
     if req.web_search is not None:
         settings.set_web_search(req.web_search)
+    if req.memory_enabled is not None:
+        settings.set_memory_enabled(req.memory_enabled)
     return OptionsView(
         chat_model=settings.get_chat_model(),
         image_model=settings.get_image_model(),
         web_search=settings.get_web_search(),
+        memory_enabled=settings.get_memory_enabled(),
     )

@@ -8,6 +8,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
+from chorus.domain.memory import MemoryDigest
+from chorus.domain.memory.models import MemoryDigestEntry
 from chorus.domain.prompt import (
     SYSTEM_PROMPT,
     PromptContext,
@@ -15,6 +17,10 @@ from chorus.domain.prompt import (
     subagent_base,
 )
 from chorus.domain.skill import SkillLoader
+
+
+_empty_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
+_empty_digest = MemoryDigest()
 
 
 def test_subagent_prompts():
@@ -42,7 +48,7 @@ def test_subagent_prompt_guides_list_before_load():
 
 
 def test_supervisor_prompt_has_profiles():
-    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT))
+    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT, skill_loader=_empty_loader, memory_digest=_empty_digest))
     assert "create_plan" in p
     assert "finalize" in p
     assert "选题官" in p
@@ -51,7 +57,7 @@ def test_supervisor_prompt_has_profiles():
 def test_skill_section_absent_without_load_skill():
     loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     p = build_system_prompt(PromptContext(
-        base=SYSTEM_PROMPT, tool_names=("update_intent_state",), skill_loader=loader,
+        base=SYSTEM_PROMPT, tool_names=("update_intent_state",), skill_loader=loader, memory_digest=_empty_digest,
     ))
     assert "可用技能" not in p
 
@@ -66,7 +72,7 @@ def test_skill_section_present_with_load_skill():
     )
     loader = SkillLoader(skills_dir=tmp)
     p = build_system_prompt(PromptContext(
-        base=SYSTEM_PROMPT, tool_names=("generate_image", "load_skill"), skill_loader=loader,
+        base=SYSTEM_PROMPT, tool_names=("generate_image", "load_skill"), skill_loader=loader, memory_digest=_empty_digest,
     ))
     assert "可用技能" in p
     assert "infographic" in p
@@ -99,6 +105,20 @@ def test_postcard_prompt_guides_image_url():
     p = subagent_base("finalize")
     assert "![图注](url)" in p
     assert "从上游配图产物取" in p
+
+
+def test_memory_block_absent_without_digest():
+    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT, skill_loader=_empty_loader, memory_digest=_empty_digest))
+    assert "## 创作者档案" not in p
+
+
+def test_memory_block_present_with_digest():
+    entry = MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance")
+    digest = MemoryDigest(entries=[entry])
+    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT, skill_loader=_empty_loader, memory_digest=digest))
+    assert "## 创作者档案" in p
+    assert "身份：程序员" in p
+    assert "小红书" in p
 
 
 def main():

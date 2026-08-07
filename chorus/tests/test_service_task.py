@@ -20,10 +20,10 @@ from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
-from chorus.tests._helpers import fresh_engine, seed_session
+from chorus.tests._helpers import fresh_engine, seed_session, stub_memory_service
 
 
-def _setup():
+def _setup(memory_service=stub_memory_service()):
     tmp = tempfile.mkdtemp()
     engine = build_engine(Path(tmp) / "t.db")
     SessionRepository(engine).insert(Session(id="s1", title="t", title_generated=False, created_at=0.0, updated_at=0.0))
@@ -33,6 +33,7 @@ def _setup():
     session_svc = SessionService(SessionRepository(engine))
     svc = TaskService(
         task_repo, TaskArtifactsRepository(engine), progress_repo, content_repo, session_svc,
+        memory_service=memory_service,
     )
     return svc, task_repo, content_repo
 
@@ -154,7 +155,7 @@ def test_get_graph_includes_progress_and_timestamps():
     task_repo = TaskRepository(engine)
     art_repo = TaskArtifactsRepository(engine)
     content_repo = TaskContentRepository(engine)
-    svc = TaskService(task_repo, art_repo, TaskProgressRepository(engine), content_repo, _SS(_SR(engine)))
+    svc = TaskService(task_repo, art_repo, TaskProgressRepository(engine), content_repo, _SS(_SR(engine)), stub_memory_service())
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="image",
         status="running", dependencies=[],
@@ -184,7 +185,7 @@ def test_get_graph_error_from_content():
     task_repo = TaskRepository(engine)
     art_repo = TaskArtifactsRepository(engine)
     content_repo = TaskContentRepository(engine)
-    svc = TaskService(task_repo, art_repo, TaskProgressRepository(engine), content_repo, _SS(_SR(engine)))
+    svc = TaskService(task_repo, art_repo, TaskProgressRepository(engine), content_repo, _SS(_SR(engine)), stub_memory_service())
     task_repo.insert(Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type="idea",
         status="running", dependencies=[], created_at=0.0, updated_at=1.0,
@@ -192,6 +193,63 @@ def test_get_graph_error_from_content():
     content_repo.insert(TaskContent(task_id="t1", invoke_message="x", error="boom"))
     graph = svc.get_graph("s1")
     assert graph.nodes[0].error == "boom"
+
+
+class _FakeMemory:
+    """替身 MemoryService：记录 HIL 触发的记忆写入调用。"""
+
+    def __init__(self):
+        self.selections = []
+        self.publications = []
+        self.corrections = []
+
+    def record_selection(self, task_id, agent_type):
+        self.selections.append(task_id)
+
+    def record_publication(self, task_id, agent_type):
+        self.publications.append(task_id)
+
+    def record_correction(self, task_id, agent_type, feedback):
+        self.corrections.append((task_id, feedback))
+
+
+def test_confirm_idea_records_selection():
+    fake = _FakeMemory()
+    svc, task_repo, content_repo = _setup(memory_service=fake)
+    _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
+    TaskArtifactsRepository(_engine_of(task_repo)).upsert(
+        "t1", "idea",
+        IdeaArtifacts(candidates=[IdeaCandidate(index=0, title="t", angle="a", reason="r")]),
+    )
+    svc.confirm("t1", selected=0)
+    assert fake.selections == ["t1"]
+    assert fake.publications == []
+
+
+def test_confirm_finalize_records_publication():
+    fake = _FakeMemory()
+    svc, task_repo, content_repo = _setup(memory_service=fake)
+    _mk(task_repo, content_repo, "t1", "finalize", "awaiting_confirm")
+    svc.confirm("t1", selected=None)
+    assert fake.publications == ["t1"]
+    assert fake.selections == []
+
+
+def test_confirm_script_records_nothing():
+    fake = _FakeMemory()
+    svc, task_repo, content_repo = _setup(memory_service=fake)
+    _mk(task_repo, content_repo, "t1", "script", "awaiting_confirm")
+    svc.confirm("t1", selected=None)
+    assert fake.selections == []
+    assert fake.publications == []
+
+
+def test_retry_records_correction():
+    fake = _FakeMemory()
+    svc, task_repo, content_repo = _setup(memory_service=fake)
+    _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
+    svc.retry("t1", feedback="标题不够吸引")
+    assert fake.corrections == [("t1", "标题不够吸引")]
 
 
 def main():

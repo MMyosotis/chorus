@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import tempfile
+import types
 from pathlib import Path
 
 from sqlalchemy import Engine
 
+from chorus.domain.memory import MemoryDigest
 from chorus.domain.session import Session
 from chorus.repo.engine import build_engine
 from chorus.repo.session import SessionRepository
@@ -40,3 +42,16 @@ def stub_chat_model_provider(client, model_id: str = "fake"):
             return entry
 
     return _Stub()
+
+
+def stub_memory_service():
+    """记忆服务空 stub：所有方法恒返空/空操作，供不关心记忆的测试注入。"""
+    return types.SimpleNamespace(
+        build_digest=lambda agent_type: MemoryDigest(),
+        recall=lambda agent_type, task_hint: [],
+        extract=lambda session_id: None,
+        consolidate=lambda: None,
+        record_selection=lambda task_id, agent_type: None,
+        record_publication=lambda task_id, agent_type: None,
+        record_correction=lambda task_id, agent_type, feedback: None,
+    )

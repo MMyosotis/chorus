@@ -32,7 +32,7 @@ from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import stub_chat_model_provider
+from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool
 
@@ -124,6 +124,7 @@ def _build_assembly():
 
     task_service = TaskService(
         task_repo, art_repo, TaskProgressRepository(engine), content_repo, session_svc,
+        stub_memory_service(),
     )
 
     # supervisor：一次建图工具调用流
@@ -137,6 +138,7 @@ def _build_assembly():
         session_svc, msg_svc, hooks,
         stub_chat_model_provider(sup_client), task_service, tool_dispatcher, agent_loop,
         intent_state, skill_loader,
+        stub_memory_service(),
     )
 
     # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
@@ -151,6 +153,7 @@ def _build_assembly():
         stub_chat_model_provider(sub_client), agent_loop,
         types.SimpleNamespace(generate=lambda agent_type, invoke: ""),
         skill_loader,
+        stub_memory_service(),
     )
 
     scheduler = TaskScheduler(

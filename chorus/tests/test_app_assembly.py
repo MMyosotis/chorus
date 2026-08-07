@@ -17,7 +17,8 @@ def test_create_app_assembles_all_services():
     with patch.object(app_module, "DATA_DIR", tmp):
         app = app_module.create_app()
     for attr in ("session_service", "message_service", "task_service",
-                 "supervisor_service", "intent_state_service", "scheduler"):
+                 "supervisor_service", "intent_state_service", "scheduler",
+                 "memory_service"):
         assert getattr(app.state, attr) is not None, f"app.state.{attr} 未装配"
 
 

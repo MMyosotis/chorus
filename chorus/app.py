@@ -26,8 +26,10 @@ from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import setup_logging
 from chorus.domain.title import TitleGenerationService
+from chorus.domain.memory import MemoryLLMService
 from chorus.domain.task.aside import AsideGenerator
-from chorus.hooks import HookRegistry, TitlePostProcessor, TraceEmitter
+from chorus.hooks import HookRegistry, MemoryExtractor, TitlePostProcessor, TraceEmitter
+from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
@@ -42,11 +44,13 @@ from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
+from chorus.routes.memory import router as memory_router
 from chorus.routes.sessions import router as sessions_router
 from chorus.routes.settings import router as debug_router
 from chorus.routes.settings import settings_router
 from chorus.routes.skills import router as skills_router
 from chorus.routes.task import router as task_router
+from chorus.services.memory import MemoryService
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
 from chorus.services.option import OptionPromptService
@@ -85,6 +89,12 @@ def create_app() -> FastAPI:
     title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
     aside_generator = AsideGenerator(title_entry.client, title_entry.model_id)
 
+    memory_repo = CreatorMemoryRepository(engine)
+    memory_llm = MemoryLLMService(title_entry.client, title_entry.model_id)
+    memory_service = MemoryService(
+        memory_repo, memory_llm, settings_service, msg_repo, task_artifacts_repo,
+    )
+
     tool_dispatcher = build_tool_dispatch(
         settings_service, task_repo, task_content_repo, skill_loader, intent_state_service, option_service,
     )
@@ -96,23 +106,27 @@ def create_app() -> FastAPI:
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     hooks.register("Stop", TitlePostProcessor(session_service, message_service, title_service).on_stop, source="supervisor")
+    hooks.register("Stop", MemoryExtractor(memory_service).on_stop, source="supervisor")
 
     agent_loop = AgentLoop(hooks, tool_dispatcher)
 
     task_service = TaskService(
         task_repo, task_artifacts_repo,
         task_progress_repo, task_content_repo, session_service,
+        memory_service=memory_service,
     )
     supervisor_service = SupervisorService(
         session_service, message_service, hooks,
         chat_models, task_service,
         tool_dispatcher, agent_loop, intent_state_service, skill_loader,
+        memory_service=memory_service,
     )
     subagent_service = SubAgentService(
         message_service, task_repo, task_artifacts_repo,
         task_progress_repo, task_content_repo,
         tool_dispatcher, chat_models,
         agent_loop, aside_generator, skill_loader,
+        memory_service=memory_service,
     )
     scheduler = TaskScheduler(
         task_repo, subagent_service.run, session_service,
@@ -137,6 +151,7 @@ def create_app() -> FastAPI:
     app.state.settings_service = settings_service
     app.state.tool_dispatch = tool_dispatcher
     app.state.skill_loader = skill_loader
+    app.state.memory_service = memory_service
 
     app.add_middleware(
         CORSMiddleware,
@@ -150,6 +165,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(debug_router)
     app.include_router(skills_router)
+    app.include_router(memory_router)
     return app
 
 

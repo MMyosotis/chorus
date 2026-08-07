@@ -20,14 +20,14 @@ from chorus.domain.events import (
     SseEvent,
     SuspendEvent,
 )
-from chorus.domain.intent import intent_state_block
 from chorus.domain.log import get_logger
 from chorus.domain.message import ToolCallSpec
-from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, build_system_prompt
+from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
 from chorus.hooks import HookRegistry
 from chorus.services.intent_state import IntentStateService
+from chorus.services.memory import MemoryService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
@@ -39,21 +39,14 @@ _SUPERVISOR_MAX_STEPS = 20
 _logger = get_logger("supervisor")
 
 
-def _prepend_user_block(msgs: list[dict], block: str) -> None:
-    """把块拼到最后一条用户消息正文前，临时注入不入库。"""
-    for i in range(len(msgs) - 1, -1, -1):
-        if msgs[i]["role"] == "user":
-            msgs[i]["content"] = block + "\n\n" + msgs[i]["content"]
-            return
-
-
 class SupervisorLoopStrategy:
     """supervisor 的回合自动机差异面：SSE 流式消费、成对落库、收尾钩子与意图状态注入。"""
 
     max_steps = _SUPERVISOR_MAX_STEPS
 
     def __init__(self, session_id, message_service, session_service, hooks,
-                 intent_state: IntentStateService, skill_loader, tool_names: tuple):
+                 intent_state: IntentStateService, skill_loader, tool_names: tuple,
+                 memory_digest, recalled_memories):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
@@ -61,6 +54,8 @@ class SupervisorLoopStrategy:
         self._intent_state = intent_state
         self._skill_loader = skill_loader
         self._tool_names = tool_names
+        self._memory_digest = memory_digest
+        self._recalled_memories = recalled_memories
 
     def before_turn(self):
         return True
@@ -73,17 +68,20 @@ class SupervisorLoopStrategy:
             base=SYSTEM_PROMPT,
             tool_names=self._tool_names,
             skill_loader=self._skill_loader,
+            memory_digest=self._memory_digest,
         )
 
     def provider_messages(self):
         prompt = build_system_prompt(self._prompt_context())
         msgs = self._message.build_provider_messages(self.session_id, prompt)
-        _prepend_user_block(msgs, self._intent_block())
+        inject_user_blocks(msgs, self._user_context())
         return msgs
 
-    def _intent_block(self) -> str:
-        """每轮取最新意图快照建块注入，含 empty 状态。"""
-        return intent_state_block(self._intent_state.get(self.session_id))
+    def _user_context(self) -> UserMessageContext:
+        return UserMessageContext(
+            intent_state=self._intent_state.get(self.session_id),
+            recalled_memories=self._recalled_memories,
+        )
 
     def consume(self, stream):
         return consume_stream(stream)
@@ -170,6 +168,7 @@ class SupervisorService:
         loop: AgentLoop,
         intent_state: IntentStateService,
         skill_loader: SkillLoader,
+        memory_service: MemoryService,
     ):
         self._session = session_service
         self._message = message_service
@@ -180,6 +179,7 @@ class SupervisorService:
         self._loop = loop
         self._intent_state = intent_state
         self._skill = skill_loader
+        self._memory = memory_service
 
     def stream(
         self, session_id: str, user_message: str,
@@ -218,6 +218,7 @@ class SupervisorService:
         """共用续跑内核：取模型、构造上下文与策略、跑 loop。"""
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
+        digest, recalled = self._prepare_memory(user_message)
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
@@ -227,6 +228,11 @@ class SupervisorService:
             intent_state=self._intent_state,
             skill_loader=self._skill,
             tool_names=TOOL_WHITELISTS["supervisor"],
+            memory_digest=digest, recalled_memories=recalled,
         )
 
         yield from self._loop.run(ctx, entry=entry, strategy=strategy)
+
+    def _prepare_memory(self, user_message) -> tuple:
+        """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
+        return self._memory.build_digest("supervisor"), self._memory.recall("supervisor", user_message or "")

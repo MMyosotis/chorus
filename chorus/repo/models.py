@@ -179,3 +179,16 @@ class IntentConfirmationRecord(Base):
     snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+class CreatorMemoryRecord(Base):
+    __tablename__ = "creator_memories"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False, server_default="reference")
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    platform: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    visible_to: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[float] = mapped_column(Float, nullable=False)
+    updated_at: Mapped[float] = mapped_column(Float, nullable=False)

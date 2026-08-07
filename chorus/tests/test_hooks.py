@@ -9,9 +9,11 @@ import types
 
 from chorus.agents import AgentContext
 from chorus.agents.supervisor import SupervisorLoopStrategy
+from chorus.domain.memory import MemoryDigest
+from chorus.domain.skill import SkillLoader
 from chorus.domain.events import TitleUpdateEvent
 from chorus.domain.trace import TracePhase
-from chorus.hooks import TitlePostProcessor, TraceEmitter
+from chorus.hooks import MemoryExtractor, TitlePostProcessor, TraceEmitter
 from chorus.repo.message import MessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.trace import TraceRepository
@@ -43,7 +45,7 @@ class _StubDispatcher:
 def test_supervisor_on_error_appends_error_message():
     msg_svc, trace_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
-    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, None, ())
+    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryDigest(), [])
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")
@@ -185,6 +187,26 @@ def test_title_skips_when_generate_returns_none():
     assert result is None
     assert session_svc.get(s.id).title == "新对话"
     assert session_svc.get(s.id).title_generated is False
+
+
+class _FakeMemoryExtract:
+    """替身 MemoryService：只记录 extract 收到的会话 id。"""
+
+    def __init__(self):
+        self.extracted = []
+
+    def extract(self, session_id):
+        self.extracted.append(session_id)
+
+
+def test_memory_extractor_on_stop_calls_extract():
+    fake = _FakeMemoryExtract()
+    ctx = AgentContext(session_id="s1")
+
+    result = MemoryExtractor(fake).on_stop(ctx)
+
+    assert result is None                       # 观测型 hook 不产事件
+    assert fake.extracted == ["s1"]
 
 
 def main():
