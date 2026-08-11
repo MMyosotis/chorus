@@ -1,13 +1,10 @@
 """创作者记忆编排服务：摘要目录、召回、提取、整理与人工确认三钩点。"""
 from __future__ import annotations
 
-import time
-import uuid
-
 from chorus.domain.log import get_logger
 from chorus.domain.memory.llm import MemoryLLMService
-from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft
-from chorus.domain.memory.predicates import visible_to_agent
+from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft, draft_to_memory
+from chorus.domain.memory.predicates import memories_to_digest_entries, visible_to_agent
 from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -48,8 +45,6 @@ class MemoryService:
         except Exception:
             _logger.warning("记忆召回失败，跳过", exc_info=True)
             return []
-        if not ids:
-            return []
         return self._repo.get_many(ids)
 
     def extract(self, session_id: str) -> None:
@@ -77,7 +72,7 @@ class MemoryService:
             return
         if not drafts:
             return
-        memories = [self._draft_to_memory(draft) for draft in drafts]
+        memories = [draft_to_memory(draft) for draft in drafts]
         self._repo.replace_all(memories)
 
     def record_selection(self, task_id: str, agent_type: str) -> None:
@@ -131,17 +126,14 @@ class MemoryService:
         platform: list[str], visible_to: list[str], kind: str = "reference",
     ) -> CreatorMemory:
         """手动新增：用户明确给出，默认参考记忆。"""
-        now = time.time()
-        memory = CreatorMemory(
-            id=uuid.uuid4().hex,
+        draft = MemoryDraft(
             kind=kind,
             description=description,
             content=content,
             platform=list(platform),
             visible_to=list(visible_to),
-            created_at=now,
-            updated_at=now,
         )
+        memory = draft_to_memory(draft)
         self._repo.upsert(memory)
         return memory
 
@@ -150,7 +142,7 @@ class MemoryService:
         description: str, content: str,
         platform: list[str], visible_to: list[str], kind: str,
     ) -> CreatorMemory | None:
-        """全量覆盖：替换该记忆全部字段并更新时间戳；不存在返 None。"""
+        """全量覆盖：替换该记忆全部字段；记忆不存在则跳过。"""
         existing = self._repo.get(memory_id)
         if existing is None:
             return None
@@ -160,7 +152,6 @@ class MemoryService:
             "platform": list(platform),
             "visible_to": list(visible_to),
             "kind": kind,
-            "updated_at": time.time(),
         })
         self._repo.upsert(updated)
         return updated
@@ -170,36 +161,7 @@ class MemoryService:
         self._repo.delete(memory_id)
 
     def _visible_entries(self, agent_type: str) -> list[MemoryDigestEntry]:
-        all_memories = self._repo.list_all()
-        return [
-            MemoryDigestEntry(
-                id=memory.id,
-                description=memory.description,
-                platform=list(memory.platform),
-                kind=memory.kind,
-            )
-            for memory in all_memories
-            if visible_to_agent(memory, agent_type)
-        ]
-
-    def _draft_to_memory(self, draft: MemoryDraft) -> CreatorMemory:
-        now = time.time()
-        created_at = now
-        if draft.created_at:
-            try:
-                created_at = time.mktime(time.strptime(draft.created_at, "%Y-%m-%d %H:%M"))
-            except (ValueError, TypeError):
-                pass
-        return CreatorMemory(
-            id=uuid.uuid4().hex,
-            kind=draft.kind,
-            description=draft.description,
-            content=draft.content,
-            platform=draft.platform,
-            visible_to=draft.visible_to,
-            created_at=created_at,
-            updated_at=now,
-        )
+        return memories_to_digest_entries(self._repo.list_all(), agent_type)
 
     def _store_draft(self, draft: MemoryDraft) -> None:
-        self._repo.upsert(self._draft_to_memory(draft))
+        self._repo.upsert(draft_to_memory(draft))

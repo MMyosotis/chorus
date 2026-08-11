@@ -19,7 +19,6 @@ class MemoryView(BaseModel):
     platform: list[str]
     visible_to: list[str]
     created_at: float
-    updated_at: float
 
 
 class CreateRequest(BaseModel):

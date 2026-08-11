@@ -191,4 +191,3 @@ class CreatorMemoryRecord(Base):
     platform: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     visible_to: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
-    updated_at: Mapped[float] = mapped_column(Float, nullable=False)

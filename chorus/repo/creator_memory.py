@@ -18,7 +18,6 @@ _SET_COLS = (
     "platform",
     "visible_to",
     "created_at",
-    "updated_at",
 )
 
 

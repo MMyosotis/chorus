@@ -51,7 +51,7 @@ def _make_memory(**overrides):
     defaults = dict(
         id="m1", description="测试记忆", content="正文",
         platform=[], visible_to=[], kind="reference",
-        created_at=0.0, updated_at=0.0,
+        created_at=0.0,
     )
     defaults.update(overrides)
     return CreatorMemory(**defaults)

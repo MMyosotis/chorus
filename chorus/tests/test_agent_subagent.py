@@ -303,7 +303,7 @@ def test_subagent_provider_messages_injects_recall():
         CreatorMemory(
             id="m1", description="身份：程序员", content="深圳后端",
             platform=[], visible_to=[], kind="reference",
-            created_at=0.0, updated_at=0.0,
+            created_at=0.0,
         )
     ]
     strategy = SubagentLoopStrategy(

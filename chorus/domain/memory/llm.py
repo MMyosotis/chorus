@@ -17,7 +17,7 @@ _MAX_RECALL = 5
 
 
 class MemoryLLMService:
-    """非流式一次调用，产草稿(extract/merge)或选标识(recall)，失败抛异常交编排层。"""
+    """非流式一次调用，产草稿（提取与合并）或选标识（召回），失败抛异常交编排层。"""
 
     def __init__(self, client: OpenAI, model_id: str):
         self._client = client

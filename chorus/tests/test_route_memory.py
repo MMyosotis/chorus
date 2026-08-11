@@ -16,7 +16,7 @@ def _mk(memory_id="m1", description="d", kind="performance"):
     return CreatorMemory(
         id=memory_id, description=description, content="c",
         platform=["xhs"], visible_to=["supervisor"], kind=kind,
-        created_at=1.0, updated_at=2.0,
+        created_at=1.0,
     )
 
 

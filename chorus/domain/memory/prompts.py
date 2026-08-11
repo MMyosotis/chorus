@@ -32,7 +32,7 @@ def build_recall_prompt(digest: MemoryDigest, task_hint: str) -> str:
 
 
 def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) -> str:
-    """对话历史 + 已有目录，要求提取新 reference 记忆，由模型判定可见角色。"""
+    """对话历史 + 已有目录，要求提取新的参考记忆，由模型判定可见角色。"""
     history_text = _history_to_text(history)
     existing_lines = [f"- {mem.description}" for mem in existing]
     existing_text = "\n".join(existing_lines) if existing_lines else "（暂无）"
@@ -53,7 +53,7 @@ def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) 
 
 
 def build_consolidate_prompt(memories: list[CreatorMemory]) -> str:
-    """全部记忆要求合并去重、删过时矛盾，并把验证过的晋升为 performance。"""
+    """全部记忆要求合并去重、删过时矛盾，并把验证过的晋升为已验证。"""
     lines: list[str] = []
     for mem in memories:
         platform = "/".join(mem.platform) if mem.platform else "通用"
@@ -81,7 +81,7 @@ def build_consolidate_prompt(memories: list[CreatorMemory]) -> str:
 
 
 def parse_json_array(raw: str) -> list[Any]:
-    """从响应文本提取 JSON 数组，容忍 markdown 代码块包裹；失败抛 ValueError。"""
+    """从响应文本提取 JSON 数组，容忍 markdown 代码块包裹；失败抛异常。"""
     start = raw.find("[")
     end = raw.rfind("]")
     if not (0 <= start <= end):

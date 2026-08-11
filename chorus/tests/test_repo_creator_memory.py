@@ -15,7 +15,6 @@ def _make_memory(memory_id: str, **overrides) -> CreatorMemory:
         visible_to=[],
         kind="reference",
         created_at=1000.0,
-        updated_at=1000.0,
     )
     defaults.update(overrides)
     return CreatorMemory(**defaults)

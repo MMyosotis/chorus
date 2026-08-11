@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from chorus.domain.memory.llm import MemoryLLMService
-from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft
-from chorus.domain.memory.predicates import visible_to_agent
+from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft, draft_to_memory
+from chorus.domain.memory.predicates import memories_to_digest_entries, visible_to_agent
 from chorus.domain.memory.prompts import (
     build_consolidate_prompt,
     build_extract_prompt,
@@ -13,6 +13,7 @@ from chorus.domain.memory.render import render_digest_block, render_recall_block
 
 __all__ = [
     "CreatorMemory",
+    "draft_to_memory",
     "MemoryDigest",
     "MemoryDigestEntry",
     "MemoryDraft",
@@ -22,5 +23,6 @@ __all__ = [
     "build_recall_prompt",
     "render_digest_block",
     "render_recall_block",
+    "memories_to_digest_entries",
     "visible_to_agent",
 ]
