@@ -9,7 +9,7 @@ import time
 import types
 
 from chorus.domain.memory import CreatorMemory
-from chorus.domain.memory.service import MemoryLLMService
+from chorus.domain.memory.llm import MemoryLLMService
 from chorus.domain.message import AssistantMessage, UserMessage
 from chorus.domain.task import Task
 from chorus.domain.task.artifacts import IdeaArtifacts, IdeaCandidate, PostCard

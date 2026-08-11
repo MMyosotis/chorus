@@ -5,7 +5,7 @@ import time
 import uuid
 
 from chorus.domain.log import get_logger
-from chorus.domain.memory.service import MemoryLLMService
+from chorus.domain.memory.llm import MemoryLLMService
 from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft
 from chorus.domain.memory.predicates import visible_to_agent
 from chorus.repo.creator_memory import CreatorMemoryRepository
