@@ -9,7 +9,7 @@ import types
 
 from chorus.agents import AgentContext
 from chorus.agents.supervisor import SupervisorLoopStrategy
-from chorus.domain.memory import MemoryDigest
+from chorus.domain.memory import MemoryRecall
 from chorus.domain.skill import SkillLoader
 from chorus.domain.events import TitleUpdateEvent
 from chorus.domain.trace import TracePhase
@@ -45,7 +45,7 @@ class _StubDispatcher:
 def test_supervisor_on_error_appends_error_message():
     msg_svc, trace_svc, _ = _setup()
     msg_svc.append_user_message("s1", "hi")
-    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryDigest(), [])
+    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryRecall())
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")

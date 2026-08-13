@@ -41,6 +41,15 @@ class MemoryDigest(BaseModel):
         return not self.entries
 
 
+class MemoryRecall(BaseModel):
+    """一次记忆召回的两面:摘要进系统段,命中条目注入用户回合。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    digest: MemoryDigest = Field(default_factory=MemoryDigest)
+    items: list[CreatorMemory] = Field(default_factory=list)
+
+
 class MemoryDraft(BaseModel):
     """LLM 产出的记忆草稿：整理时带时间戳保留原时间，提取时无时间戳由编排层补全。"""
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Generator, Iterable, Iterator, Optional, Protocol
+from typing import Generator, Iterable, Iterator, Optional
 
 import uuid6
 
@@ -37,22 +37,40 @@ class LoopAction:
     events: Iterable[SseEvent] = ()
 
 
-class LoopStrategy(Protocol):
-    """agent loop 的业务差异面，内核据此驱动回合自动机，按固定顺序调用各阶段回调。"""
+class LoopStrategy:
+    """agent loop 的业务差异面:纯钩子有默认实现,业务方法策略必实现。"""
 
-    max_steps: Optional[int]
+    max_steps: Optional[int] = None
 
-    def before_turn(self) -> bool: ...
-    def message_start(self, ctx: AgentContext) -> Iterable[SseEvent]: ...
-    def provider_messages(self) -> list[dict]: ...
-    def consume(self, stream) -> Generator[SseEvent, None, StreamResult]: ...
-    def before_dispatch(self, call: ToolCall) -> None: ...
-    def after_dispatch(self, call: ToolCall, dispatch: object) -> None: ...
-    def after_tools(self, ctx: AgentContext, result: StreamResult,
-                    pairs: list) -> LoopAction: ...
-    def after_text(self, ctx: AgentContext, result: StreamResult) -> LoopAction: ...
-    def on_exhausted(self) -> LoopAction: ...
-    def on_error(self, ctx: AgentContext, error: BaseException) -> LoopAction: ...
+    def before_turn(self) -> bool:
+        return True
+
+    def message_start(self, ctx: AgentContext) -> Iterable[SseEvent]:
+        return []
+
+    def provider_messages(self) -> list[dict]:
+        raise NotImplementedError
+
+    def consume(self, stream) -> Generator[SseEvent, None, StreamResult]:
+        raise NotImplementedError
+
+    def before_dispatch(self, call: ToolCall) -> None:
+        pass
+
+    def after_dispatch(self, call: ToolCall, dispatch: object) -> None:
+        pass
+
+    def after_tools(self, ctx: AgentContext, result: StreamResult, pairs: list) -> LoopAction:
+        raise NotImplementedError
+
+    def after_text(self, ctx: AgentContext, result: StreamResult) -> LoopAction:
+        raise NotImplementedError
+
+    def on_exhausted(self) -> LoopAction:
+        raise NotImplementedError
+
+    def on_error(self, ctx: AgentContext, error: BaseException) -> LoopAction:
+        raise NotImplementedError
 
 
 class AgentLoop:

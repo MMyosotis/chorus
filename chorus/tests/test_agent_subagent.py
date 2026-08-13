@@ -10,7 +10,7 @@ from pathlib import Path
 
 from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService
-from chorus.domain.memory import CreatorMemory, MemoryDigest
+from chorus.domain.memory import CreatorMemory, MemoryDigest, MemoryRecall
 from chorus.domain.session import Session
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import Task, TaskContent, TaskStatus
@@ -24,6 +24,7 @@ from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
+from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
 from chorus.tools import Tool, ToolDispatch
@@ -125,11 +126,13 @@ def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_rep
     loop = AgentLoop(hooks, tool_dispatcher)
     if aside is None:
         aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
+    progress_repo = TaskProgressRepository(engine)
     return SubAgentService(
-        msg_svc, task_repo, art_repo, TaskProgressRepository(engine),
+        msg_svc, task_repo, art_repo, progress_repo,
         content_repo, tool_dispatcher,
         _provider, loop, aside, SkillLoader(skills_dir=Path("/nonexistent-skills")),
         stub_memory_service(),
+        lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
     )
 
 
@@ -309,10 +312,10 @@ def test_subagent_provider_messages_injects_recall():
     strategy = SubagentLoopStrategy(
         task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
-        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
         tool_names=(), tool_dispatch=None,
-        memory_digest=MemoryDigest(), recalled_memories=recalled,
+        memory=MemoryRecall(items=recalled),
     )
     msgs = strategy.provider_messages()
     user_msgs = [m for m in msgs if m["role"] == "user"]
@@ -336,10 +339,10 @@ def test_subagent_provider_messages_injects_digest_into_system():
     strategy = SubagentLoopStrategy(
         task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
-        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
         tool_names=(), tool_dispatch=None,
-        memory_digest=digest, recalled_memories=[],
+        memory=MemoryRecall(digest=digest),
     )
     msgs = strategy.provider_messages()
     system = msgs[0]["content"]

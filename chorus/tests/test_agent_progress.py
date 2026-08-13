@@ -11,7 +11,7 @@ from sqlalchemy import text
 
 from chorus.agents.loop import AgentLoop
 from chorus.agents.subagent import SubAgentService, SubagentLoopStrategy, _MAX_STEPS
-from chorus.domain.memory import MemoryDigest
+from chorus.domain.memory import MemoryRecall
 from chorus.domain.session import Session
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import AGENT_PROFILES, Task, TaskContent, TaskStatus
@@ -25,6 +25,7 @@ from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
+from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolCall, ToolDispatch
@@ -107,6 +108,7 @@ def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, conte
         disp, stub_chat_model_provider(client), loop, aside,
         SkillLoader(skills_dir=Path("/nonexistent-skills")),
         stub_memory_service(),
+        lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
     )
 
 
@@ -270,10 +272,10 @@ def test_image_after_dispatch_counts_units():
         task=task_repo.get("t1"), owner_id=100.0,
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
-        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
         tool_names=("generate_image",), tool_dispatch=ToolDispatch([], _stub_settings()),
-        memory_digest=MemoryDigest(), recalled_memories=[],
+        memory=MemoryRecall(),
     )
     call = ToolCall(id="c1", name="generate_image", arguments={"prompt": "窗边咖啡"})
     strategy.after_dispatch(call, DispatchResult(Reply("http://x"), 10, units_produced=1))
@@ -292,10 +294,10 @@ def test_tool_without_units_not_counted():
         task=task_repo.get("t1"), owner_id=100.0,
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
-        finalize=lambda *args: None, guarded_fail=lambda *args: None,
+        lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
         tool_names=("generate_image",), tool_dispatch=ToolDispatch([], _stub_settings()),
-        memory_digest=MemoryDigest(), recalled_memories=[],
+        memory=MemoryRecall(),
     )
     call = ToolCall(id="c1", name="baidu_search", arguments={"query": "咖啡"})
     progress_repo.set_composing_units("t1", 0)

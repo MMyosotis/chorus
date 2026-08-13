@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from chorus.domain.log import get_logger
 from chorus.domain.memory.llm import MemoryLLMService
-from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft, draft_to_memory
+from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft, MemoryRecall, draft_to_memory
 from chorus.domain.memory.predicates import memories_to_digest_entries, visible_to_agent
 from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.message import MessageRepository
@@ -31,21 +31,17 @@ class MemoryService:
         self._message_repo = message_repo
         self._artifacts_repo = task_artifacts_repo
 
-    def build_digest(self, agent_type: str) -> MemoryDigest:
+    def recall_for(self, agent_type: str, task_hint: str) -> MemoryRecall:
+        """召回一次:摘要进系统段、命中条目进用户回合,开关关闭全短路。"""
         if not self._settings.get_memory_enabled():
-            return MemoryDigest()
-        return MemoryDigest(entries=self._visible_entries(agent_type))
-
-    def recall(self, agent_type: str, task_hint: str) -> list[CreatorMemory]:
-        if not self._settings.get_memory_enabled():
-            return []
+            return MemoryRecall()
         digest = MemoryDigest(entries=self._visible_entries(agent_type))
         try:
             ids = self._llm.select(digest, task_hint)
         except Exception:
             _logger.warning("记忆召回失败，跳过", exc_info=True)
-            return []
-        return self._repo.get_many(ids)
+            return MemoryRecall(digest=digest)
+        return MemoryRecall(digest=digest, items=self._repo.get_many(ids))
 
     def extract(self, session_id: str) -> None:
         if not self._settings.get_memory_enabled():

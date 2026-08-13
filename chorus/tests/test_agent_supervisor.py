@@ -9,7 +9,7 @@ from pathlib import Path
 from chorus.agents.loop import AgentLoop
 from chorus.agents.supervisor import SupervisorService, SupervisorLoopStrategy
 from chorus.domain.intent import IntentStateUpdate
-from chorus.domain.memory import CreatorMemory, MemoryDigest
+from chorus.domain.memory import CreatorMemory, MemoryRecall
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
@@ -366,7 +366,7 @@ def test_provider_messages_injects_intent_block_before_last_user():
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
-        memory_digest=MemoryDigest(), recalled_memories=[],
+        memory=MemoryRecall(),
     )
     msgs = strategy.provider_messages()
     user_dicts = [m for m in msgs if m["role"] == "user"]
@@ -403,7 +403,7 @@ def test_provider_messages_injects_recall_before_intent_block():
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
-        memory_digest=MemoryDigest(), recalled_memories=recalled,
+        memory=MemoryRecall(items=recalled),
     )
     msgs = strategy.provider_messages()
     user_dicts = [m for m in msgs if m["role"] == "user"]

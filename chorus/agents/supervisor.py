@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Iterator, Optional
 
 from chorus.agents.chat_model import ChatModelProvider
-from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
+from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal, LoopStrategy
 from chorus.agents.runtime import AgentContext
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.events import (
@@ -21,6 +21,7 @@ from chorus.domain.events import (
     SuspendEvent,
 )
 from chorus.domain.log import get_logger
+from chorus.domain.memory import MemoryRecall
 from chorus.domain.message import ToolCallSpec
 from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks
 from chorus.domain.skill import SkillLoader
@@ -39,14 +40,14 @@ _SUPERVISOR_MAX_STEPS = 20
 _logger = get_logger("supervisor")
 
 
-class SupervisorLoopStrategy:
+class SupervisorLoopStrategy(LoopStrategy):
     """supervisor 的回合自动机差异面：SSE 流式消费、成对落库、收尾钩子与意图状态注入。"""
 
     max_steps = _SUPERVISOR_MAX_STEPS
 
     def __init__(self, session_id, message_service, session_service, hooks,
                  intent_state: IntentStateService, skill_loader, tool_names: tuple,
-                 memory_digest, recalled_memories):
+                 memory: MemoryRecall):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
@@ -54,43 +55,27 @@ class SupervisorLoopStrategy:
         self._intent_state = intent_state
         self._skill_loader = skill_loader
         self._tool_names = tool_names
-        self._memory_digest = memory_digest
-        self._recalled_memories = recalled_memories
-
-    def before_turn(self):
-        return True
+        self._recall = memory
 
     def message_start(self, ctx):
         return [MessageStartEvent(id=ctx.turn.message_id)]
 
-    def _prompt_context(self) -> PromptContext:
-        return PromptContext(
+    def provider_messages(self):
+        prompt = build_system_prompt(PromptContext(
             base=SYSTEM_PROMPT,
             tool_names=self._tool_names,
             skill_loader=self._skill_loader,
-            memory_digest=self._memory_digest,
-        )
-
-    def provider_messages(self):
-        prompt = build_system_prompt(self._prompt_context())
+            memory_digest=self._recall.digest,
+        ))
         msgs = self._message.build_provider_messages(self.session_id, prompt)
-        inject_user_blocks(msgs, self._user_context())
-        return msgs
-
-    def _user_context(self) -> UserMessageContext:
-        return UserMessageContext(
+        inject_user_blocks(msgs, UserMessageContext(
             intent_state=self._intent_state.get(self.session_id),
-            recalled_memories=self._recalled_memories,
-        )
+            recalled_memories=self._recall.items,
+        ))
+        return msgs
 
     def consume(self, stream):
         return consume_stream(stream)
-
-    def before_dispatch(self, call):
-        pass
-
-    def after_dispatch(self, call, dispatch):
-        pass
 
     def after_tools(self, ctx, result, pairs):
         """成对落库，据是否命中挂起决定续跑或关流。"""
@@ -218,7 +203,7 @@ class SupervisorService:
         """共用续跑内核：取模型、构造上下文与策略、跑 loop。"""
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
-        digest, recalled = self._prepare_memory(user_message)
+        memory = self._prepare_memory(user_message)
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
@@ -228,11 +213,11 @@ class SupervisorService:
             intent_state=self._intent_state,
             skill_loader=self._skill,
             tool_names=TOOL_WHITELISTS["supervisor"],
-            memory_digest=digest, recalled_memories=recalled,
+            memory=memory,
         )
 
         yield from self._loop.run(ctx, entry=entry, strategy=strategy)
 
-    def _prepare_memory(self, user_message) -> tuple:
+    def _prepare_memory(self, user_message) -> MemoryRecall:
         """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
-        return self._memory.build_digest("supervisor"), self._memory.recall("supervisor", user_message or "")
+        return self._memory.recall_for("supervisor", user_message or "")

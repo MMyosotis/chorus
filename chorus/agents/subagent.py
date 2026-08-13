@@ -5,14 +5,15 @@
 from __future__ import annotations
 
 import dataclasses
-from time import perf_counter
 from typing import Optional
 
-from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
+from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal, LoopStrategy
+from chorus.agents.progress_sink import ProgressSink
 from chorus.agents.runtime import AgentContext
 from chorus.domain.prompt import PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks, subagent_base
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import get_logger
+from chorus.domain.memory import MemoryRecall
 from chorus.domain.stream import StreamResult, silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
@@ -23,11 +24,11 @@ from chorus.domain.task import (
     downstream_view,
 )
 from chorus.domain.task.aside import AsideGenerator
-from chorus.domain.task.progress import UnitCounter
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.services.memory import MemoryService
+from chorus.services.task_lease import LeaseGuard
 from chorus.repo.task_content import TaskContentRepository
 from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
@@ -39,55 +40,7 @@ _UNIT_MARKER = {"idea": "### ", "script": "## ", "finalize": "## "}
 _logger = get_logger("subagent")
 
 
-class _MarkdownUnits:
-    """正文角色的结构单元计数:数标题标记。"""
-
-    def __init__(self, marker: str):
-        self._counter = UnitCounter(marker)
-
-    def feed(self, text: str) -> None:
-        self._counter.feed(text)
-
-    def flush(self, repo: TaskProgressRepository, task_id: str, chars: int) -> None:
-        repo.set_composing(task_id, chars, self._counter.count)
-
-
-class _CharsOnlyUnits:
-    """不数结构单元的角色计数:仅写字数。"""
-
-    def feed(self, text: str) -> None:
-        pass
-
-    def flush(self, repo: TaskProgressRepository, task_id: str, chars: int) -> None:
-        repo.set_composing_chars(task_id, chars)
-
-
-class ProgressSink:
-    """逐字累计正文量与结构单元,节流覆盖写进度快照。"""
-
-    def __init__(self, task_id: str, repo: TaskProgressRepository, units):
-        self._task_id = task_id
-        self._repo = repo
-        self._units = units
-        self._chars = 0
-        self._last_flush_at = perf_counter()
-        self._last_flush_chars = 0
-
-    def feed(self, content: str) -> None:
-        was_empty = self._chars == 0
-        self._chars += len(content)
-        self._units.feed(content)
-        if was_empty:
-            self._repo.set_activity(self._task_id, "composing")
-        now = perf_counter()
-        if self._chars - self._last_flush_chars < 16 and now - self._last_flush_at < 0.5:
-            return
-        self._units.flush(self._repo, self._task_id, self._chars)
-        self._last_flush_chars = self._chars
-        self._last_flush_at = now
-
-
-class SubagentLoopStrategy:
+class SubagentLoopStrategy(LoopStrategy):
     """subagent 的回合自动机差异面：内存历史、静默消费、进度写入与租约终态校验。
 
     每轮顶部做僵死回收早退（状态复查与心跳），四个终态写入点拦截陈旧工作线程。
@@ -96,22 +49,20 @@ class SubagentLoopStrategy:
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, owner_id, profile, invoke,
-                 task_repo, progress_repo, finalize, guarded_fail, skill_loader, tool_names, tool_dispatch,
-                 memory_digest, recalled_memories):
+                 task_repo, progress_repo, lease, skill_loader, tool_names, tool_dispatch,
+                 memory: MemoryRecall):
         self.task = task
         self.owner_id = owner_id
         self.profile = profile
         self.history = [{"role": "user", "content": invoke}]
         self._task_repo = task_repo
         self._progress_repo = progress_repo
-        self._finalize = finalize
-        self._guarded_fail = guarded_fail
+        self._lease = lease
         self._skill_loader = skill_loader
         self._tool_names = tool_names
         self._tool_dispatch = tool_dispatch
         self._produced_units = 0
-        self._memory_digest = memory_digest
-        self._recalled_memories = recalled_memories
+        self._recall = memory
 
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
@@ -122,24 +73,20 @@ class SubagentLoopStrategy:
         self._progress_repo.set_activity(self.task.id, "thinking")
         return True
 
-    def message_start(self, ctx):
-        return []
-
     def provider_messages(self):
         ctx = PromptContext(
             base=subagent_base(self.task.agent_type),
             tool_names=self._tool_names,
             skill_loader=self._skill_loader,
-            memory_digest=self._memory_digest,
+            memory_digest=self._recall.digest,
         )
         msgs = [{"role": "system", "content": build_system_prompt(ctx)}] + self.history
-        inject_user_blocks(msgs, UserMessageContext(recalled_memories=self._recalled_memories))
+        inject_user_blocks(msgs, UserMessageContext(recalled_memories=self._recall.items))
         return msgs
 
     def consume(self, stream):
         marker = _UNIT_MARKER.get(self.task.agent_type)
-        units = _MarkdownUnits(marker) if marker else _CharsOnlyUnits()
-        sink = ProgressSink(self.task.id, self._progress_repo, units)
+        sink = ProgressSink(self.task.id, self._progress_repo, marker)
         return silent_consume(stream, on_token=sink.feed)
 
     def before_dispatch(self, call):
@@ -165,7 +112,7 @@ class SubagentLoopStrategy:
             artifacts = self.profile.parse_output(content)
         except AbandonError as e:
             # 模型主动声明放弃：翻失败并写说明，不落降级产物
-            self._guarded_fail(self.task, e.reason, self.owner_id)
+            self._lease.fail(self.task, e.reason, self.owner_id)
             return LoopAction(LoopSignal.FINISH, [])
         except ValidationError as e:
             # 纠错提示喂回模型继续自纠，撞上限才判失败
@@ -175,15 +122,15 @@ class SubagentLoopStrategy:
             self.history.append({"role": "user", "content": f"{e.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"})
             return LoopAction(LoopSignal.CONTINUE, [])
 
-        self._finalize(self.task, artifacts, self.owner_id)
+        self._lease.finalize(self.task, artifacts, self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
     def on_exhausted(self):
-        self._guarded_fail(self.task, f"超过最大 ReAct 步数 {_MAX_STEPS}", self.owner_id)
+        self._lease.fail(self.task, f"超过最大 ReAct 步数 {_MAX_STEPS}", self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
     def on_error(self, ctx, error):
-        self._guarded_fail(self.task, str(error), self.owner_id)
+        self._lease.fail(self.task, str(error), self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
 
@@ -201,6 +148,7 @@ class SubAgentService:
         aside_generator: AsideGenerator,
         skill_loader: SkillLoader,
         memory_service: MemoryService,
+        lease: LeaseGuard,
     ):
         self._message = message_service
         self._task_repo = task_repo
@@ -213,6 +161,7 @@ class SubAgentService:
         self._aside = aside_generator
         self._skill = skill_loader
         self._memory = memory_service
+        self._lease = lease
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
@@ -222,11 +171,11 @@ class SubAgentService:
             self._run_loop(task, content, task.owner_id)
         except Exception as e:
             _logger.exception("subagent failed", extra={"task_id": task_id})
-            self._guarded_fail(task, str(e), task.owner_id)
+            self._lease.fail(task, str(e), task.owner_id)
 
     def _run_loop(self, task, content, owner_id: Optional[float]) -> None:
         # 入口租约校验，被回收重抢则放弃
-        if not self._lease_valid(task.id, owner_id):
+        if not self._lease.valid(task.id, owner_id):
             _logger.info("entry lease invalid, abort", extra={"task_id": task.id})
             return
 
@@ -235,7 +184,7 @@ class SubAgentService:
         self._progress.set_composing_label(task.id, AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
-        digest, recalled = self._prepare_memory(task, invoke)
+        memory = self._prepare_memory(task, invoke)
         ctx = AgentContext(
             session_id=task.session_id,
             source="subagent",
@@ -250,38 +199,18 @@ class SubAgentService:
             invoke=invoke,
             task_repo=self._task_repo,
             progress_repo=self._progress,
-            finalize=self._finalize,
-            guarded_fail=self._guarded_fail,
+            lease=self._lease,
             skill_loader=self._skill,
             tool_names=TOOL_WHITELISTS[task.agent_type],
             tool_dispatch=self._tools,
-            memory_digest=digest, recalled_memories=recalled,
+            memory=memory,
         )
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))
 
-    def _prepare_memory(self, task, invoke) -> tuple:
+    def _prepare_memory(self, task, invoke) -> MemoryRecall:
         """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
-        return self._memory.build_digest(task.agent_type), self._memory.recall(task.agent_type, invoke)
-
-    def _guarded_fail(self, task, error: str, owner_id: Optional[float]) -> None:
-        """租约校验后再失败，供入口外层与策略错误回调共享。"""
-        if self._lease_valid(task.id, owner_id):
-            self._fail(task, error)
-        else:
-            _logger.warning("lease invalid, drop fail write", extra={"task_id": task.id, "error": error})
-
-    def _fail(self, task, error: str) -> None:
-        """翻转为失败并写错误信息。"""
-        self._task_repo.transition(task.id, TaskStatus.FAILED)
-        self._content_repo.set_error(task.id, error)
-        self._progress.set_signal(task.id, "这步失败了")
-        _logger.info("task failed", extra={"task_id": task.id, "error": error})
-
-    def _lease_valid(self, task_id: str, owner_id: Optional[float]) -> bool:
-        """租约校验：任务仍运行且归属标识未变（未被回收重抢）。"""
-        latest = self._task_repo.get(task_id)
-        return latest is not None and latest.status == TaskStatus.RUNNING and latest.owner_id == owner_id
+        return self._memory.recall_for(task.agent_type, invoke)
 
     def _build_invoke(self, task, content) -> str:
         prior = self._artifacts_repo.load(task.id)
@@ -294,17 +223,6 @@ class SubAgentService:
             deps_outputs,
             dataclasses.asdict(prior.artifacts) if prior else None,
         )
-
-    def _finalize(self, task, artifacts, owner_id: Optional[float]) -> None:
-        """先翻转状态再落产物。"""
-        if not self._lease_valid(task.id, owner_id):
-            _logger.warning("lease invalid, drop finalize", extra={"task_id": task.id})
-            return
-
-        # 一律转待复核（成品亦然）：先翻状态再落产物，避免孤儿产物
-        self._task_repo.transition(task.id, TaskStatus.AWAITING_CONFIRM)
-        self._artifacts_repo.upsert(task.id, task.agent_type, artifacts=artifacts)
-        _logger.info("task awaiting confirm", extra={"task_id": task.id})
 
 
 def _assistant_view(result: StreamResult) -> dict:

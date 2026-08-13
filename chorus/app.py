@@ -57,6 +57,7 @@ from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
+from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
 from chorus.startup import run_startup
 from chorus.tools import build_tool_dispatch
@@ -121,12 +122,14 @@ def create_app() -> FastAPI:
         tool_dispatcher, agent_loop, intent_state_service, skill_loader,
         memory_service=memory_service,
     )
+    lease_guard = LeaseGuard(task_repo, task_artifacts_repo, task_content_repo, task_progress_repo)
     subagent_service = SubAgentService(
         message_service, task_repo, task_artifacts_repo,
         task_progress_repo, task_content_repo,
         tool_dispatcher, chat_models,
         agent_loop, aside_generator, skill_loader,
         memory_service=memory_service,
+        lease=lease_guard,
     )
     scheduler = TaskScheduler(
         task_repo, subagent_service.run, session_service,

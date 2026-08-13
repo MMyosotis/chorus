@@ -8,7 +8,7 @@ import json
 import time
 import types
 
-from chorus.domain.memory import CreatorMemory
+from chorus.domain.memory import CreatorMemory, MemoryRecall
 from chorus.domain.memory.llm import MemoryLLMService
 from chorus.domain.message import AssistantMessage, UserMessage
 from chorus.domain.task import Task
@@ -80,50 +80,51 @@ def _seed_task(task_repo, task_id="t1", agent_type="idea"):
     ))
 
 
-def test_build_digest_disabled_returns_empty():
+def test_recall_for_disabled_returns_empty_digest():
     _, _, _, _, settings_svc, memory_svc = _setup(FakeClient([]))
     settings_svc.set_memory_enabled(False)
-    digest = memory_svc.build_digest("supervisor")
-    assert digest.is_empty
+    recall = memory_svc.recall_for("supervisor", "hint")
+    assert recall.digest.is_empty
+    assert recall.items == []
 
 
-def test_build_digest_filters_by_visibility():
+def test_recall_for_filters_by_visibility():
     memory_repo, _, _, _, _, memory_svc = _setup(FakeClient([]))
     memory_repo.upsert(_make_memory(id="m1", description="通用", visible_to=[]))
     memory_repo.upsert(_make_memory(id="m2", description="仅文案", visible_to=["script"]))
-    supervisor_digest = memory_svc.build_digest("supervisor")
-    assert len(supervisor_digest.entries) == 2
-    idea_digest = memory_svc.build_digest("idea")
-    assert len(idea_digest.entries) == 1
-    assert idea_digest.entries[0].id == "m1"
-    script_digest = memory_svc.build_digest("script")
-    assert len(script_digest.entries) == 2
+    supervisor_recall = memory_svc.recall_for("supervisor", "hint")
+    assert len(supervisor_recall.digest.entries) == 2
+    idea_recall = memory_svc.recall_for("idea", "hint")
+    assert len(idea_recall.digest.entries) == 1
+    assert idea_recall.digest.entries[0].id == "m1"
+    script_recall = memory_svc.recall_for("script", "hint")
+    assert len(script_recall.digest.entries) == 2
 
 
-def test_recall_disabled_returns_empty():
+def test_recall_for_disabled_returns_empty_items():
     memory_repo, _, _, _, settings_svc, memory_svc = _setup(FakeClient([]))
     memory_repo.upsert(_make_memory(id="m1"))
     settings_svc.set_memory_enabled(False)
-    result = memory_svc.recall("supervisor", "hint")
-    assert result == []
+    recall = memory_svc.recall_for("supervisor", "hint")
+    assert recall.items == []
 
 
-def test_recall_returns_selected_memories():
+def test_recall_for_returns_selected_memories():
     memory_repo, _, _, _, _, memory_svc = _setup(
         FakeClient([FakeResponse('["m1", "m3"]')])
     )
     for memory_id in ("m1", "m2", "m3"):
         memory_repo.upsert(_make_memory(id=memory_id, description=f"记忆{memory_id}"))
-    result = memory_svc.recall("supervisor", "test hint")
-    assert len(result) == 2
-    assert {memory.id for memory in result} == {"m1", "m3"}
+    recall = memory_svc.recall_for("supervisor", "test hint")
+    assert len(recall.items) == 2
+    assert {memory.id for memory in recall.items} == {"m1", "m3"}
 
 
-def test_recall_llm_failure_returns_empty():
+def test_recall_for_llm_failure_returns_empty_items():
     memory_repo, _, _, _, _, memory_svc = _setup(ErrorClient())
     memory_repo.upsert(_make_memory(id="m1"))
-    result = memory_svc.recall("supervisor", "hint")
-    assert result == []
+    recall = memory_svc.recall_for("supervisor", "hint")
+    assert recall.items == []
 
 
 def test_extract_upserts_drafts_and_skips_consolidate():

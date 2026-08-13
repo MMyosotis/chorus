@@ -31,6 +31,7 @@ from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
+from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
 from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolDispatch
@@ -146,14 +147,16 @@ def _build_assembly():
         FakeStream([({"content": _idea_content()}, "stop")]),
         FakeStream([({"content": _finalize_content()}, "stop")]),
     ])
+    progress_repo = TaskProgressRepository(engine)
     subagent = SubAgentService(
         msg_svc, task_repo, art_repo,
-        TaskProgressRepository(engine), content_repo,
+        progress_repo, content_repo,
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
         types.SimpleNamespace(generate=lambda agent_type, invoke: ""),
         skill_loader,
         stub_memory_service(),
+        lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
     )
 
     scheduler = TaskScheduler(
