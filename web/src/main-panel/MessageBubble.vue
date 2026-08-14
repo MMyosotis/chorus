@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { Check, Copy, ThumbsDown, ThumbsUp } from '@lucide/vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import HilRecap from './HilRecap.vue'
@@ -197,14 +198,14 @@ function closePreview() {
 
       <div v-if="showActions" class="msg-actions">
         <button class="act-btn" :class="{ on: copied }" type="button" :aria-label="copied ? '已复制' : '复制'" @click="copyContent">
-          <svg v-if="!copied" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <Copy v-if="!copied" aria-hidden="true" />
+          <Check v-else aria-hidden="true" />
         </button>
         <button class="act-btn" :class="{ on: feedback === 'like' }" type="button" aria-label="点赞" @click="toggleFeedback('like')">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H7a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></svg>
+          <ThumbsUp aria-hidden="true" />
         </button>
         <button class="act-btn" :class="{ on: feedback === 'dislike' }" type="button" aria-label="点踩" @click="toggleFeedback('dislike')">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H17a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z"/></svg>
+          <ThumbsDown aria-hidden="true" />
         </button>
       </div>
     </div>

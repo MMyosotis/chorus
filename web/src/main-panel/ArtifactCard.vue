@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { Eye } from '@lucide/vue'
 import { firstImageUrl, firstParagraphText } from '../composables/renderPostCard.js'
 
 const props = defineProps({
@@ -44,7 +45,7 @@ const isFinished = computed(() => props.task.status === 'finished')
         <span v-if="firstParagraph" class="ac-excerpt">{{ firstParagraph }}</span>
         <span class="ac-preview-link">
           打开完整预览
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" /></svg>
+          <Eye aria-hidden="true" />
         </span>
       </span>
     </button>

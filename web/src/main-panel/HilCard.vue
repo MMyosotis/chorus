@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { Check, ChevronRight } from '@lucide/vue'
 import { confirmTask, retryTask } from '../api.js'
 import ArtifactCard from './ArtifactCard.vue'
 import ScriptProof from './ScriptProof.vue'
@@ -127,7 +128,7 @@ async function onRetry() {
           >
             <span class="candidate-state">已选择</span>
             <span class="candidate-check" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
+              <Check />
             </span>
           </span>
         </button>
@@ -182,7 +183,7 @@ async function onRetry() {
         </button>
         <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
           {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
-          <svg v-if="!busy" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+          <ChevronRight v-if="!busy" aria-hidden="true" />
         </button>
       </div>
     </footer>

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
+import { Check, ChevronRight } from '@lucide/vue'
 
 const props = defineProps({
   prompt: { type: Object, required: true },
@@ -110,7 +111,7 @@ defineExpose({ confirmChoices })
         <span class="option-selection" aria-hidden="true">
           <span v-if="currentSignal === opt.signal" class="selection-label">已选择</span>
           <span class="option-check" :class="{ selected: currentSignal === opt.signal }">
-            <svg v-if="currentSignal === opt.signal" viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg>
+            <Check v-if="currentSignal === opt.signal" />
           </span>
         </span>
       </button>
@@ -156,7 +157,7 @@ defineExpose({ confirmChoices })
           <!-- 预留与普通选项一致的选择位，保证两种状态的文字列精确对齐。 -->
           <span class="option-selection custom-selection-spacer" aria-hidden="true">
             <span>已选择</span>
-            <span class="option-check selected"><svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-8" /></svg></span>
+            <span class="option-check selected"><Check /></span>
           </span>
         </div>
       </div>
@@ -174,7 +175,7 @@ defineExpose({ confirmChoices })
           @click="isLastQuestion ? confirmChoices() : nextQuestion()"
         >
           {{ locking ? '正在确认' : (isLastQuestion ? '提交全部选择' : '下一题') }}
-          <svg v-if="!locking" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+          <ChevronRight v-if="!locking" aria-hidden="true" />
         </button>
       </div>
     </footer>

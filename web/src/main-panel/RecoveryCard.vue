@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { ChevronRight } from '@lucide/vue'
 import { retryTask, cancelPipeline } from '../api.js'
 import { ROLE_FULL } from '../team-panel/roleMeta.js'
 
@@ -69,7 +70,7 @@ async function onCancel() {
       <button class="cancel" :disabled="busy" @click="onCancel">放弃创作</button>
       <button class="primary" :disabled="busy" @click="onRetry">
         {{ busy ? '正在处理' : '重新执行当前阶段' }}
-        <svg v-if="!busy" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+        <ChevronRight v-if="!busy" aria-hidden="true" />
       </button>
     </footer>
     <div v-if="error" class="error" role="alert">{{ error }}</div>

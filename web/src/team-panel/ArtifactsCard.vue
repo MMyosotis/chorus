@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { Archive, ChevronRight, FileCode2, Image, Lightbulb } from '@lucide/vue'
 import { planArtifacts } from '../composables/artifactsProjection.js'
 import { ROLE_LABELS } from './roleMeta.js'
 
@@ -29,20 +30,10 @@ function focusTask(row) { emit('focus-task', row.task) }
           @click="focusTask(row)"
         >
           <span class="artifact-icon" aria-hidden="true">
-            <svg v-if="row.kind === 'idea'" viewBox="0 0 24 24">
-              <path d="M9 18h6M10 22h4M8.4 14.6A7 7 0 1 1 15.6 14.6C14.6 15.4 14 16.1 14 17h-4c0-.9-.6-1.6-1.6-2.4Z" />
-            </svg>
-            <svg v-else-if="row.kind === 'script'" viewBox="0 0 24 24">
-              <path d="M6 3h8l4 4v14H6zM14 3v5h4M9 13h6M9 17h6" />
-            </svg>
-            <svg v-else-if="row.kind === 'image'" viewBox="0 0 24 24">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <circle cx="8.5" cy="9" r="1.5" />
-              <path d="m4 17 5-5 3 3 2-2 6 6" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24">
-              <path d="M4 7h16v13H4zM3 4h18v3H3zM9 11h6" />
-            </svg>
+            <Lightbulb v-if="row.kind === 'idea'" />
+            <FileCode2 v-else-if="row.kind === 'script'" />
+            <Image v-else-if="row.kind === 'image'" />
+            <Archive v-else />
           </span>
           <div class="artifact-body">
             <span class="artifact-role">{{ ROLE_LABELS[row.kind] }}</span>
@@ -64,7 +55,7 @@ function focusTask(row) { emit('focus-task', row.task) }
             </template>
           </div>
           <span class="artifact-arrow" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" /></svg>
+            <ChevronRight />
           </span>
         </button>
       </li>

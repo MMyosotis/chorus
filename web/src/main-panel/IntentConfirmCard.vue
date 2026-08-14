@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue'
+import { ChevronRight, FileText, Heart, Image, Monitor } from '@lucide/vue'
 
 const props = defineProps({
   state: { type: Object, default: null },
@@ -68,10 +69,10 @@ defineExpose({
     <div class="meta" aria-label="创作规格">
       <div v-for="item in meta" :key="item.label" class="meta-item">
         <span class="meta-icon" aria-hidden="true">
-          <svg v-if="item.icon === 'platform'" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H4z" /><path d="M8 20h8M12 16v4" /></svg>
-          <svg v-else-if="item.icon === 'format'" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h5M9 13h6M9 17h6" /></svg>
-          <svg v-else-if="item.icon === 'style'" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.5S4 16 4 9.5A4.5 4.5 0 0 1 12 6a4.5 4.5 0 0 1 8 3.5c0 6.5-8 11-8 11Z" /></svg>
-          <svg v-else viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8" cy="9" r="1.5" /><path d="m21 16-5-5L5 20" /></svg>
+          <Monitor v-if="item.icon === 'platform'" />
+          <FileText v-else-if="item.icon === 'format'" />
+          <Heart v-else-if="item.icon === 'style'" />
+          <Image v-else />
         </span>
         <span class="meta-copy">
           <span class="meta-label">{{ item.label }}</span>
@@ -100,7 +101,7 @@ defineExpose({
       </button>
       <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
         确认并开始创作
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+        <ChevronRight aria-hidden="true" />
       </button>
     </footer>
   </section>

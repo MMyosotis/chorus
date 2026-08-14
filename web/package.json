@@ -12,6 +12,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@lucide/vue": "^1.31.0",
     "dompurify": "^3.2.0",
     "marked": "^15.0.0",
     "vue": "^3.5.0"
