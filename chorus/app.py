@@ -85,13 +85,13 @@ def create_app() -> FastAPI:
     option_service = OptionPromptService(option_repo, session_service)
 
     chat_models = ChatModelProvider(settings_service)
-    # 标题生成固定用默认模型，不随用户当前设置变动
-    title_entry = chat_models.title_entry()
-    title_service = TitleGenerationService(title_entry.client, title_entry.model_id)
-    aside_generator = AsideGenerator(title_entry.client, title_entry.model_id)
+    # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理,不随用户当前对话设置变动
+    bypass_entry = chat_models.bypass_entry()
+    title_service = TitleGenerationService(bypass_entry.client, bypass_entry.model_id)
+    aside_generator = AsideGenerator(bypass_entry.client, bypass_entry.model_id)
 
     memory_repo = CreatorMemoryRepository(engine)
-    memory_llm = MemoryLLMService(title_entry.client, title_entry.model_id)
+    memory_llm = MemoryLLMService(bypass_entry.client, bypass_entry.model_id)
     memory_service = MemoryService(
         memory_repo, memory_llm, settings_service, msg_repo, task_artifacts_repo,
     )

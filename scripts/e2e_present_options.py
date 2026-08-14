@@ -57,7 +57,7 @@ def _fake_provider(client):
         def get_entry(self):
             return entry
 
-        def title_entry(self):
+        def bypass_entry(self):
             return entry
 
     return _Stub()

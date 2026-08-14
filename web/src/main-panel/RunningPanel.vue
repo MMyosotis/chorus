@@ -15,7 +15,7 @@ function toCN(n) {
 const agentType = computed(() => props.task.agent_type)
 const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
 const prog = computed(() => props.task.progress || {})
-const aside = computed(() => prog.value.aside || '正在创作')
+const asideText = computed(() => prog.value.aside || '正在创作')
 
 const activityKind = computed(() => prog.value.activity_kind || '')
 const activityDetail = computed(() => prog.value.activity_detail || '')
@@ -72,7 +72,7 @@ const recordLeft = computed(() => (hasOutput.value ? verb.value : ''))
             />
           </svg>
         </span>
-        <h2>{{ aside }}</h2>
+        <h2>{{ asideText }}</h2>
         <span class="running-status ch-status-pill is-running"><i aria-hidden="true"></i>进行中</span>
       </header>
       <div class="running-copy">

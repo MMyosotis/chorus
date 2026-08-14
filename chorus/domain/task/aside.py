@@ -1,7 +1,9 @@
-"""运行期意图旁白:读任务说明调小模型生成一句进行态描述,失败兜默认文案。"""
+"""运行期 agent 旁白:读任务说明调小模型生成一句进行态描述,失败兜默认文案。"""
 from __future__ import annotations
 
 from openai import OpenAI
+
+from chorus.domain.bypass import call_once
 
 _ASIDE_MAX_LEN = 30
 _ROLE_HINT = {
@@ -19,13 +21,13 @@ _DEFAULT_ASIDE = {
 
 
 class AsideGenerator:
+    """基于任务说明生成一句任务级进行态描述,失败兜默认文案。"""
 
     def __init__(self, client: OpenAI, model_id: str):
         self._client = client
         self._model = model_id
 
     def generate(self, agent_type: str, invoke: str) -> str:
-        """基于任务说明生成一句任务级意图旁白,失败兜默认文案。"""
         fallback = _DEFAULT_ASIDE.get(agent_type, "我正在准备中")
         role = _ROLE_HINT.get(agent_type, agent_type)
         prompt = (
@@ -34,14 +36,7 @@ class AsideGenerator:
             f"{invoke[:500]}"
         )
         try:
-            # 推理模型先吐推理段再作答，预算须覆盖推理段
-            resp = self._client.chat.completions.create(
-                model=self._model,
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=512,
-                stream=False,
-            )
-            raw = (resp.choices[0].message.content or "").strip().strip("\"'`")
+            raw = call_once(self._client, self._model, prompt, 512)
         except Exception:
             return fallback
         return raw[:_ASIDE_MAX_LEN] if raw else fallback

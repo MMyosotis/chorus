@@ -158,7 +158,7 @@ class SubAgentService:
         self._tools = tool_dispatcher
         self._models = chat_model_provider
         self._loop = loop
-        self._aside = aside_generator
+        self._aside_gen = aside_generator
         self._skill = skill_loader
         self._memory = memory_service
         self._lease = lease
@@ -180,7 +180,7 @@ class SubAgentService:
             return
 
         invoke = self._build_invoke(task, content)
-        self._progress.set_aside(task.id, self._aside.generate(task.agent_type, invoke))
+        self._progress.set_aside(task.id, self._aside_gen.generate(task.agent_type, invoke))
         self._progress.set_composing_label(task.id, AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])

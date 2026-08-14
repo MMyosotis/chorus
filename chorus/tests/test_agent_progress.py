@@ -92,7 +92,7 @@ def _stub_settings():
     return _S()
 
 
-def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=None):
+def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside_gen=None):
     hooks = HookRegistry()
     disp = ToolDispatch([], _stub_settings())
     trace = TraceEmitter(trace_svc, disp)
@@ -101,11 +101,11 @@ def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, conte
     hooks.register("PreToolUse", trace.on_tool_call)
     hooks.register("PostToolUse", trace.on_tool_result)
     loop = AgentLoop(hooks, disp)
-    if aside is None:
-        aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
+    if aside_gen is None:
+        aside_gen = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo, content_repo,
-        disp, stub_chat_model_provider(client), loop, aside,
+        disp, stub_chat_model_provider(client), loop, aside_gen,
         SkillLoader(skills_dir=Path("/nonexistent-skills")),
         stub_memory_service(),
         lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
@@ -321,9 +321,9 @@ def test_progress_aside_written_on_entry():
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
     body = _idea_md()
-    aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "打算用光线串起一杯咖啡的时间")
+    aside_gen = types.SimpleNamespace(generate=lambda agent_type, invoke: "打算用光线串起一杯咖啡的时间")
     client = FakeClient([FakeStream([({"content": body}, "stop")])])
-    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside=aside)
+    sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside_gen=aside_gen)
     sub.run("t1")
     assert progress_repo.load("t1").aside == "打算用光线串起一杯咖啡的时间"
 

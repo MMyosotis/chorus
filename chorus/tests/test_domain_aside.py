@@ -1,4 +1,4 @@
-"""意图旁白生成:读 invoke 调小模型,失败兜默认文案。"""
+"""agent 旁白生成:读 invoke 调小模型,失败兜默认文案。"""
 from unittest.mock import MagicMock
 from chorus.domain.task.aside import AsideGenerator
 

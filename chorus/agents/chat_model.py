@@ -10,7 +10,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from chorus.config import CHAT_MODELS, TITLE_MODEL
+from chorus.config import CHAT_MODELS, BYPASS_MODEL
 from chorus.services.settings import SettingsService
 
 
@@ -42,5 +42,5 @@ class ChatModelProvider:
     def get_entry(self) -> ChatModelEntry:
         return self.build_entry(self._settings.get_chat_model())
 
-    def title_entry(self) -> ChatModelEntry:
-        return self.build_entry(TITLE_MODEL)
+    def bypass_entry(self) -> ChatModelEntry:
+        return self.build_entry(BYPASS_MODEL)

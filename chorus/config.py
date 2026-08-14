@@ -30,7 +30,7 @@ CHAT_MODELS = [
         "api_key_env": "MINIMAX_API_KEY",
     }
 ]
-TITLE_MODEL = "DeepSeek V4 Flash"
+BYPASS_MODEL = "DeepSeek V4 Flash"
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 

@@ -112,7 +112,7 @@ def _stub_settings():
     return _S()
 
 
-def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client, aside=None):
+def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, fake_client, status_gen=None):
     from chorus.repo.task_progress import TaskProgressRepository
     hooks = HookRegistry()
     tool_dispatcher = ToolDispatch([FakeTool()], _stub_settings())
@@ -124,13 +124,13 @@ def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_rep
 
     _provider = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher)
-    if aside is None:
-        aside = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
+    if status_gen is None:
+        status_gen = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
     progress_repo = TaskProgressRepository(engine)
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo,
         content_repo, tool_dispatcher,
-        _provider, loop, aside, SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        _provider, loop, status_gen, SkillLoader(skills_dir=Path("/nonexistent-skills")),
         stub_memory_service(),
         lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
     )
