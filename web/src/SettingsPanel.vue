@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import MemoryPanel from './main-panel/MemoryPanel.vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { ChevronDown, PanelLeft } from '@lucide/vue'
 import { getModelLists, getOptions, getTestMode, setOptions, setTestMode } from './api.js'
 
 const emit = defineEmits(['collapse'])
@@ -14,10 +14,10 @@ const chatModel = ref('')
 const imageModel = ref('')
 const webSearch = ref(true)
 const memoryEnabled = ref(true)
-const showMemory = ref(false)
 const modelsLoading = ref(false)
 const modelsError = ref('')
 const saving = ref(false)
+const openModelMenu = ref(null)
 
 async function refreshTestMode() {
   try {
@@ -63,14 +63,29 @@ async function persistOptions(patch) {
   }
 }
 
-function onChatModel(event) {
-  chatModel.value = event.target.value
-  persistOptions({ chat_model: event.target.value })
+function toggleModelMenu(kind) {
+  if (saving.value) return
+  openModelMenu.value = openModelMenu.value === kind ? null : kind
 }
 
-function onImageModel(event) {
-  imageModel.value = event.target.value
-  persistOptions({ image_model: event.target.value })
+function chooseModel(kind, modelId) {
+  if (saving.value) return
+  openModelMenu.value = null
+  if (kind === 'chat') {
+    chatModel.value = modelId
+    persistOptions({ chat_model: modelId })
+  } else {
+    imageModel.value = modelId
+    persistOptions({ image_model: modelId })
+  }
+}
+
+function closeModelMenuOnOutsideClick(event) {
+  if (!event.target.closest('.model-select')) openModelMenu.value = null
+}
+
+function closeModelMenuOnEscape(event) {
+  if (event.key === 'Escape') openModelMenu.value = null
 }
 
 function onWebSearch(event) {
@@ -98,6 +113,13 @@ async function toggleTestMode() {
 onMounted(() => {
   loadModels()
   refreshTestMode()
+  document.addEventListener('click', closeModelMenuOnOutsideClick)
+  document.addEventListener('keydown', closeModelMenuOnEscape)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeModelMenuOnOutsideClick)
+  document.removeEventListener('keydown', closeModelMenuOnEscape)
 })
 </script>
 
@@ -106,10 +128,7 @@ onMounted(() => {
     <header class="settings-header">
       <h2>设置</h2>
       <button type="button" class="sidebar-collapse" aria-label="收起侧栏" title="收起侧栏" @click="emit('collapse')">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <rect x="3.5" y="4" width="17" height="16" rx="3" />
-          <path d="M10.5 4v16" />
-        </svg>
+        <PanelLeft aria-hidden="true" />
       </button>
     </header>
 
@@ -118,17 +137,33 @@ onMounted(() => {
       <div v-else-if="modelsError" class="error-hint">{{ modelsError }}</div>
       <template v-else>
         <div class="group-title">模型</div>
-        <label class="setting-row">
-          <div class="setting-label"><strong>对话模型</strong></div>
-          <select class="opt-select" :value="chatModel" :disabled="saving" @change="onChatModel">
-            <option v-for="model in chatModels" :key="model.id" :value="model.id">{{ model.id }}</option>
-          </select>
+        <label class="setting-row model-row">
+          <div class="setting-label"><strong>对话</strong></div>
+          <div class="model-select">
+            <button type="button" class="model-trigger" :aria-expanded="openModelMenu === 'chat'" aria-haspopup="listbox" :disabled="saving" @click="toggleModelMenu('chat')">
+              <span>{{ chatModel }}</span>
+              <ChevronDown aria-hidden="true" />
+            </button>
+            <Transition name="model-menu">
+              <div v-if="openModelMenu === 'chat'" class="model-menu" role="listbox" aria-label="对话模型">
+                <button v-for="model in chatModels" :key="model.id" type="button" role="option" :aria-selected="chatModel === model.id" :class="{ selected: chatModel === model.id }" @click="chooseModel('chat', model.id)"><span>{{ model.id }}</span></button>
+              </div>
+            </Transition>
+          </div>
         </label>
-        <label class="setting-row">
-          <div class="setting-label"><strong>生图模型</strong></div>
-          <select class="opt-select" :value="imageModel" :disabled="saving" @change="onImageModel">
-            <option v-for="model in imageModels" :key="model.id" :value="model.id">{{ model.id }}</option>
-          </select>
+        <label class="setting-row model-row">
+          <div class="setting-label"><strong>生图</strong></div>
+          <div class="model-select">
+            <button type="button" class="model-trigger" :aria-expanded="openModelMenu === 'image'" aria-haspopup="listbox" :disabled="saving" @click="toggleModelMenu('image')">
+              <span>{{ imageModel }}</span>
+              <ChevronDown aria-hidden="true" />
+            </button>
+            <Transition name="model-menu">
+              <div v-if="openModelMenu === 'image'" class="model-menu" role="listbox" aria-label="生图模型">
+                <button v-for="model in imageModels" :key="model.id" type="button" role="option" :aria-selected="imageModel === model.id" :class="{ selected: imageModel === model.id }" @click="chooseModel('image', model.id)"><span>{{ model.id }}</span></button>
+              </div>
+            </Transition>
+          </div>
         </label>
         <div class="group-title">功能</div>
         <div class="setting-row">
@@ -140,21 +175,18 @@ onMounted(() => {
         </div>
         <div class="setting-row">
           <div class="setting-label">
-            <strong>创作者记忆</strong>
-            <small>记住偏好与风格，跨会话复用。关闭后召回与提取全停。</small>
+            <strong>作者记忆</strong>
           </div>
           <label class="switch">
             <input type="checkbox" :checked="memoryEnabled" :disabled="saving" @change="onMemory" />
             <span class="slider"></span>
           </label>
         </div>
-        <button type="button" class="manage-memory-btn" @click="showMemory = true">管理记忆</button>
       </template>
 
       <div class="setting-row">
         <div class="setting-label">
-          <strong>图像测试模式</strong>
-          <small>开启后 generate_image 返回固定 URL，不调用真实 API。</small>
+          <strong>图像测试</strong>
         </div>
         <label class="switch">
           <input type="checkbox" :checked="testModeEnabled" :disabled="testModeLoading" @change="toggleTestMode" />
@@ -164,7 +196,6 @@ onMounted(() => {
       <div v-if="testModeError" class="error-hint">{{ testModeError }}</div>
     </div>
 
-    <MemoryPanel v-if="showMemory" @close="showMemory = false" />
   </section>
 </template>
 
@@ -177,7 +208,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 32px 16px 16px;
+  padding: 24px 16px 16px;
   color: var(--ch-text);
 }
 
@@ -186,14 +217,16 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  padding: 0 0 var(--ch-space-3);
-  border-bottom: 1px solid var(--ch-border);
+  min-height: 28px;
+  margin-bottom: var(--ch-space-4);
+  padding: 0;
 }
 
 .settings-header h2 {
   margin: 0;
-  font-size: var(--ch-text-xl);
-  font-weight: var(--ch-font-semibold);
+  font-size: var(--ch-text-lg);
+  font-weight: var(--ch-font-bold);
+  letter-spacing: .3px;
 }
 
 .sidebar-collapse {
@@ -219,8 +252,9 @@ onMounted(() => {
 }
 
 .sidebar-collapse svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
+  transform: translateX(6px);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -231,7 +265,7 @@ onMounted(() => {
 .settings-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--ch-space-3) 0 0;
+  padding: 0;
 }
 
 .setting-row {
@@ -276,44 +310,49 @@ onMounted(() => {
   border-top: 0;
 }
 
-.manage-memory-btn {
-  margin-top: var(--ch-space-2);
-  padding: var(--ch-space-2) var(--ch-space-3);
+.model-select {
+  position: relative;
+  width: 168px;
+  min-width: 168px;
+}
+
+.model-row .setting-label { flex: 0 0 40px; }
+
+.model-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ch-space-2);
+  padding: 0 var(--ch-space-3);
   border: 1px solid var(--ch-border-strong);
   border-radius: var(--ch-radius-btn);
   background: var(--ch-surface);
-  color: var(--ch-accent);
-  font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-medium);
-  cursor: pointer;
-}
-
-.manage-memory-btn:hover {
-  border-color: var(--ch-accent);
-  background: var(--ch-accent-soft);
-}
-
-.opt-select {
-  max-width: 190px;
-  appearance: none;
-  -webkit-appearance: none;
-  padding: var(--ch-space-2) var(--ch-space-4) var(--ch-space-2) var(--ch-space-2);
-  border: 1px solid var(--ch-border-strong);
-  border-radius: var(--ch-radius-btn);
-  background-color: var(--ch-surface);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
   color: var(--ch-text-secondary);
-  cursor: pointer;
+  font: inherit;
   font-size: var(--ch-text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease);
 }
 
-.opt-select:focus {
-  outline: none;
-  border-color: var(--ch-accent);
-  box-shadow: var(--ch-shadow-focus);
+.model-trigger > span,
+.model-menu button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.model-trigger > span { min-width: 0; flex: 1; }
+.model-trigger:hover { border-color: var(--ch-text-faint); }
+.model-trigger:focus-visible,.model-trigger[aria-expanded='true'] { outline: none; border-color: var(--ch-accent); background: color-mix(in srgb, var(--ch-accent) 3%, var(--ch-surface)); }
+.model-trigger:disabled { cursor: not-allowed; opacity: .5; }
+.model-trigger svg { width: 12px; height: 12px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.3; transition: transform var(--ch-duration-fast) var(--ch-ease); }
+.model-trigger[aria-expanded='true'] svg { color: var(--ch-accent); transform: rotate(180deg); }
+.model-menu { position: absolute; z-index: var(--ch-z-dropdown); top: calc(100% + var(--ch-space-1)); right: 0; left: 0; display: grid; gap: var(--ch-space-1); padding: var(--ch-space-2); border: 1px solid color-mix(in srgb, var(--ch-border-strong) 70%, white); border-radius: var(--ch-radius-list); background: var(--ch-surface); box-shadow: 0 6px 18px color-mix(in srgb, var(--ch-text) 7%, transparent), 0 1px 3px color-mix(in srgb, var(--ch-text) 4%, transparent); }
+.model-menu button { min-width: 0; min-height: 40px; padding: 0 var(--ch-space-2); border: 0; border-radius: var(--ch-radius-btn); background: transparent; color: var(--ch-text-secondary); font: var(--ch-font-medium) var(--ch-text-sm)/1 var(--ch-font-sans); text-align: left; cursor: pointer; }.model-menu button > span { display: block; }.model-menu button.selected { color: var(--ch-accent); }.model-menu button:hover { background: var(--ch-accent-soft); color: var(--ch-accent); }.model-menu-enter-active,.model-menu-leave-active { transition: opacity var(--ch-duration-fast) var(--ch-ease), transform var(--ch-duration-fast) var(--ch-ease); }.model-menu-enter-from,.model-menu-leave-to { opacity: 0; transform: translateY(-4px); }
 
 .switch {
   position: relative;

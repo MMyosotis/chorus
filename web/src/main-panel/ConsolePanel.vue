@@ -1,101 +1,15 @@
 <script setup>
-import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
-import { getTestMode, setTestMode, getModelLists, getOptions, setOptions } from '../api.js'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 
 const props = defineProps({
   activeId: { type: String, default: null },
   traceStore: { type: Object, required: true },
   open: { type: Boolean, default: false },
-  tab: { type: String, default: 'trace' },
 })
-const emit = defineEmits(['update:open', 'update:tab'])
+const emit = defineEmits(['close'])
 
 function close() {
-  emit('update:open', false)
-}
-
-function setTab(next) {
-  emit('update:tab', next)
-}
-
-const testModeEnabled = ref(false)
-const testModeLoading = ref(false)
-const testModeError = ref('')
-
-async function refreshTestMode() {
-  try {
-    testModeEnabled.value = await getTestMode()
-    testModeError.value = ''
-  } catch (e) {
-    testModeError.value = e.message || '请求失败'
-  }
-}
-
-async function toggleTestMode() {
-  testModeLoading.value = true
-  testModeError.value = ''
-  try {
-    testModeEnabled.value = await setTestMode(!testModeEnabled.value)
-  } catch (e) {
-    testModeError.value = e.message || '切换失败'
-  } finally {
-    testModeLoading.value = false
-  }
-}
-
-const chatModels = ref([])
-const imageModels = ref([])
-const chatModel = ref('')
-const imageModel = ref('')
-const webSearch = ref(true)
-const modelsLoading = ref(false)
-const modelsError = ref('')
-const saving = ref(false)
-
-async function loadModels() {
-  modelsLoading.value = true
-  modelsError.value = ''
-  try {
-    const [lists, opts] = await Promise.all([getModelLists(), getOptions()])
-    chatModels.value = lists.chat_models || []
-    imageModels.value = lists.image_models || []
-    chatModel.value = opts.chat_model
-    imageModel.value = opts.image_model
-    webSearch.value = !!opts.web_search
-  } catch (e) {
-    modelsError.value = e.message || '加载模型选项失败'
-  } finally {
-    modelsLoading.value = false
-  }
-}
-
-async function persistOptions(patch) {
-  if (saving.value) return
-  saving.value = true
-  modelsError.value = ''
-  try {
-    const opts = await setOptions(patch)
-    chatModel.value = opts.chat_model
-    imageModel.value = opts.image_model
-    webSearch.value = !!opts.web_search
-  } catch (e) {
-    modelsError.value = e.message || '保存失败'
-  } finally {
-    saving.value = false
-  }
-}
-
-function onChatModel(e) {
-  chatModel.value = e.target.value
-  persistOptions({ chat_model: e.target.value })
-}
-function onImageModel(e) {
-  imageModel.value = e.target.value
-  persistOptions({ image_model: e.target.value })
-}
-function onWebSearch(e) {
-  webSearch.value = e.target.checked
-  persistOptions({ web_search: e.target.checked })
+  emit('close')
 }
 
 const traces = computed(() => props.traceStore.getTraces(props.activeId))
@@ -142,8 +56,6 @@ function stopConsolePoll() {
 watch(() => props.open, (o) => {
   if (o) {
     startConsolePoll()
-    loadModels()
-    refreshTestMode()
   } else {
     stopConsolePoll()
   }
@@ -160,8 +72,6 @@ function clearCurrentTrace() {
   if (!confirm('清空当前会话的 trace？')) return
   props.traceStore.clearTrace(props.activeId)
 }
-
-onMounted(refreshTestMode)
 
 function fmtTs(created_at) {
   if (!created_at) return ''
@@ -220,62 +130,15 @@ function renderMessageContent(m) {
 </script>
 
 <template>
-  <transition name="console-fade">
-    <div v-if="open" class="console-scrim" @click="close"></div>
-  </transition>
-  <transition name="console-slide">
-    <aside v-if="open" class="console-panel" role="dialog" aria-label="控制台">
+  <aside v-if="open" class="console-panel" role="dialog" aria-label="控制台">
       <header class="console-header">
-        <div class="tabs">
-          <button :class="{ active: tab === 'settings' }" @click="setTab('settings')">设置</button>
-          <button :class="{ active: tab === 'trace' }" @click="setTab('trace')">
-            Trace <span v-if="traces.length" class="count">{{ traces.length }}</span>
-          </button>
+        <div class="title">
+          Trace <span v-if="traces.length" class="count">{{ traces.length }}</span>
         </div>
         <button class="close-btn" @click="close" title="关闭">×</button>
       </header>
 
-      <section v-if="tab === 'settings'" class="console-body">
-        <div v-if="modelsLoading" class="hint">加载中...</div>
-        <div v-else-if="modelsError" class="error-hint">{{ modelsError }}</div>
-        <template v-else>
-          <div class="group-title">模型</div>
-          <label class="setting-row">
-            <div class="setting-label"><strong>对话模型</strong></div>
-            <select class="opt-select" :value="chatModel" :disabled="saving" @change="onChatModel">
-              <option v-for="m in chatModels" :key="m.id" :value="m.id">{{ m.id }}</option>
-            </select>
-          </label>
-          <label class="setting-row">
-            <div class="setting-label"><strong>生图模型</strong></div>
-            <select class="opt-select" :value="imageModel" :disabled="saving" @change="onImageModel">
-              <option v-for="m in imageModels" :key="m.id" :value="m.id">{{ m.id }}</option>
-            </select>
-          </label>
-          <div class="group-title">功能</div>
-          <div class="setting-row">
-            <div class="setting-label"><strong>联网搜索</strong></div>
-            <label class="switch">
-              <input type="checkbox" :checked="webSearch" :disabled="saving" @change="onWebSearch" />
-              <span class="slider"></span>
-            </label>
-          </div>
-        </template>
-        <div class="setting-row">
-          <div class="setting-label">
-            <strong>图像测试模式</strong>
-            <small>开启后 generate_image 返回固定 URL，不调用真实 API。</small>
-          </div>
-          <label class="switch">
-            <input type="checkbox" :checked="testModeEnabled" @change="toggleTestMode"
-              :disabled="testModeLoading" />
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div v-if="testModeError" class="error-hint">{{ testModeError }}</div>
-      </section>
-
-      <section v-else class="console-body trace-body">
+      <section class="console-body trace-body">
         <div class="trace-toolbar">
           <span class="hint">当前会话的 LLM 请求/响应、工具调用 trace</span>
           <button class="text-btn" @click="clearCurrentTrace" :disabled="!traces.length">清空</button>
@@ -377,23 +240,14 @@ function renderMessageContent(m) {
         </details>
       </section>
     </aside>
-  </transition>
 </template>
 
 <style scoped>
 .console-panel {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 480px;
-  max-width: 90vw;
+  width: 100%;
+  height: 100%;
   background: var(--ch-surface-glass-strong);
-  backdrop-filter: blur(24px) saturate(170%);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
   border-right: 1px solid var(--ch-border);
-  box-shadow: var(--ch-shadow-panel);
-  z-index: 1001;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -401,40 +255,6 @@ function renderMessageContent(m) {
   color: var(--ch-text);
 }
 
-.console-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: var(--ch-overlay-soft);
-  backdrop-filter: blur(2px);
-}
-
-@media (max-width: 600px) {
-  .console-panel {
-    width: 100vw;
-    max-width: 100vw;
-  }
-}
-
-.console-fade-enter-active,
-.console-fade-leave-active {
-  transition: opacity 0.22s ease;
-}
-
-.console-fade-enter-from,
-.console-fade-leave-to {
-  opacity: 0;
-}
-
-.console-slide-enter-active,
-.console-slide-leave-active {
-  transition: transform 0.22s ease;
-}
-
-.console-slide-enter-from,
-.console-slide-leave-to {
-  transform: translateX(-100%);
-}
 
 .console-header {
   display: flex;
@@ -446,30 +266,13 @@ function renderMessageContent(m) {
   flex-shrink: 0;
 }
 
-.tabs {
+.title {
   display: flex;
-  gap: 4px;
-}
-
-.tabs button {
-  background: transparent;
-  border: 1px solid transparent;
-  padding: 4px 10px;
-  border-radius: var(--ch-radius-btn);
-  cursor: pointer;
-  color: var(--ch-text-muted);
+  align-items: center;
+  gap: var(--ch-space-2);
   font-size: 14px;
-}
-
-.tabs button:hover {
+  font-weight: 600;
   color: var(--ch-text);
-}
-
-.tabs button.active {
-  background: var(--ch-accent-subtle);
-  border-color: transparent;
-  color: var(--ch-text);
-  font-weight: 500;
 }
 
 .count {
@@ -504,75 +307,6 @@ function renderMessageContent(m) {
   padding: var(--ch-space-3);
 }
 
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ch-space-3);
-  padding: var(--ch-space-3) 0;
-}
-
-.setting-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.setting-label strong {
-  font-weight: 500;
-  color: var(--ch-text);
-  font-size: 14px;
-}
-
-.setting-label small {
-  color: var(--ch-text-muted);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.group-title {
-  font-family: var(--ch-font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ch-accent-active);
-  margin: 0 0 var(--ch-space-2);
-  padding-top: var(--ch-space-3);
-  border-top: 1px solid var(--ch-border);
-}
-
-.group-title:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.opt-select {
-  appearance: none;
-  -webkit-appearance: none;
-  align-self: center;
-  padding: var(--ch-space-2) var(--ch-space-4) var(--ch-space-2) var(--ch-space-2);
-  border: 1px solid var(--ch-border-strong);
-  border-radius: var(--ch-radius-btn);
-  font-size: 14px;
-  color: var(--ch-text-secondary);
-  background-color: var(--ch-surface);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  cursor: pointer;
-  transition: border-color 0.18s, box-shadow 0.18s;
-}
-
-.opt-select:hover {
-  border-color: var(--ch-accent);
-}
-
-.opt-select:focus {
-  outline: none;
-  border-color: var(--ch-accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ch-accent) 14%, transparent);
-}
-
 .text-btn {
   background: transparent;
   border: none;
@@ -589,65 +323,6 @@ function renderMessageContent(m) {
 
 .text-btn:hover:not(:disabled) {
   text-decoration: underline;
-}
-
-.error-hint {
-  margin-top: var(--ch-space-2);
-  padding: var(--ch-space-2);
-  background: var(--ch-danger-soft);
-  border: 1px solid color-mix(in srgb, var(--ch-danger) 30%, var(--ch-border));
-  border-radius: var(--ch-radius-btn);
-  color: var(--ch-danger);
-  font-size: 12px;
-}
-
-/* iOS 风格开关 */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 36px;
-  height: 20px;
-  flex-shrink: 0;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  inset: 0;
-  background: var(--ch-border-strong);
-  border-radius: 20px;
-  transition: 0.2s;
-  cursor: pointer;
-}
-
-.slider::before {
-  content: '';
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 2px;
-  bottom: 2px;
-  background: var(--ch-surface);
-  border-radius: 50%;
-  transition: 0.2s;
-}
-
-input:checked + .slider {
-  background: var(--ch-accent);
-}
-
-input:checked + .slider::before {
-  transform: translateX(16px);
-}
-
-input:disabled + .slider {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 .trace-toolbar {

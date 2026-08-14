@@ -1,5 +1,6 @@
 <script setup>
 import { ref, nextTick, computed, watch } from 'vue'
+import { ArrowUp, Clock3, Lightbulb, Mic, Paperclip } from '@lucide/vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
 import OptionCard from './OptionCard.vue'
 
@@ -102,7 +103,7 @@ defineExpose({ focus })
 </script>
 
 <template>
-  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil }">
+  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil, 'is-waiting': disabled && !hasHilStage }">
     <div class="input-stage-shell" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
     <div class="input-stage" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
       <div class="stage-slot input-slot" :aria-hidden="hasHil">
@@ -122,21 +123,17 @@ defineExpose({ focus })
               <div class="input-toolbar">
                 <div class="tool-group">
                   <button class="tool-btn" type="button" aria-label="附件" :disabled="disabled">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20.5 11.5-8.9 8.9a6 6 0 0 1-8.5-8.5l9.6-9.6a4 4 0 0 1 5.7 5.7l-9.6 9.6a2 2 0 1 1-2.8-2.8l8.9-8.9"/></svg>
+                    <Paperclip aria-hidden="true" />
                     <span>附件</span>
                   </button>
-                  <button class="tool-btn" type="button" aria-label="联网搜索" :disabled="disabled">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    <span>联网搜索</span>
-                  </button>
                   <button class="tool-btn" type="button" aria-label="智能推荐" :disabled="disabled">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
+                    <Lightbulb aria-hidden="true" />
                     <span>智能推荐</span>
                   </button>
                 </div>
                 <div class="tool-group right">
                   <button class="icon-btn" type="button" aria-label="语音输入" :disabled="disabled">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                    <Mic aria-hidden="true" />
                   </button>
                   <button
                     class="send-btn"
@@ -144,7 +141,7 @@ defineExpose({ focus })
                     @click="send"
                     aria-label="发送"
                   >
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
+                    <ArrowUp aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -155,7 +152,7 @@ defineExpose({ focus })
             <div class="input-wait-content">
               <p class="input-wait-message" role="status">{{ placeholder }}</p>
               <button class="send-btn is-waiting" type="button" disabled aria-label="正在等待">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6.5v5.8l3.7 2.3"/></svg>
+                <Clock3 aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -185,7 +182,22 @@ defineExpose({ focus })
 </template>
 
 <style scoped>
-.input-zone { flex-shrink: 0; width: calc(100% - 32px); margin: 0 auto; }
+.input-zone {
+  position: relative;
+  isolation: isolate;
+  flex-shrink: 0;
+  width: calc(100% - 32px);
+  z-index: 2;
+  margin: calc(-1 * var(--ch-radius-xl)) auto 0;
+  border-radius: var(--ch-radius-xl);
+  box-shadow: var(--ch-shadow-soft);
+}
+
+.input-zone.is-waiting {
+  border-radius: var(--ch-radius-pill);
+  clip-path: inset(0 round var(--ch-radius-pill));
+  box-shadow: 0 0 24px color-mix(in srgb, var(--ch-text) 6%, transparent);
+}
 
 /* HIL 从底部输入区向上展开；它覆盖对话末端，顶部圆角朝下方打开。 */
 .input-zone.has-hil-stage {
@@ -229,8 +241,9 @@ defineExpose({ focus })
 }
 
 .input-bar.is-disabled {
-  padding: 8px 16px 8px 16px;
+  padding: 16px;
   border-radius: 999px;
+  box-shadow: none;
 }
 
 .input-stage-shell {
@@ -365,7 +378,7 @@ defineExpose({ focus })
 @media (min-width: 781px) {
   .input-zone {
     width: 100%;
-    margin: 0;
+    margin: calc(-1 * var(--ch-radius-xl)) 0 0;
   }
 }
 

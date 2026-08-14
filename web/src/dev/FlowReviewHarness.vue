@@ -493,8 +493,9 @@ const messages = computed(() => {
 .platform-preview-description { margin: 0 0 18px; color: var(--ch-text-muted); font: 13px/1.6 var(--ch-font-sans); }.platform-preview-empty { padding: 28px; color: var(--ch-text-muted); text-align: center; }
 .skill-preview-overlay { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; overflow: hidden; padding: 0; background: rgba(28, 30, 35, .52); }.skill-preview-frame { position: relative; width: 900px; height: calc(100% - 2 * 24px); max-width: 100%; max-height: 100%; min-width: 0; min-height: 0; isolation: isolate; overflow: hidden; border-radius: 28px; background: var(--ch-surface); box-shadow: 0 24px 64px rgba(0, 0, 0, .26); }.skill-preview-modal-enter-active, .skill-preview-modal-leave-active { transition: opacity .18s ease; }.skill-preview-modal-enter-from, .skill-preview-modal-leave-to { opacity: 0; }
 .audit-paper :deep(.chat-window) { flex: 0 0 auto; overflow: visible; scrollbar-gutter: auto; }
-.audit-paper :deep(.input-bar) {
+.audit-paper :deep(.input-zone) {
   position: fixed;
+  z-index: 3;
   left: calc(var(--ch-rail) + (100% - var(--ch-rail) - var(--ch-right-rail)) / 2);
   transform: translateX(-50%);
   width: calc(100% - var(--ch-rail) - var(--ch-right-rail) - 48px);
@@ -511,7 +512,7 @@ const messages = computed(() => {
 @media(min-width:781px) and (max-width:1180px){
   .audit-nav{width:var(--ch-rail);flex-basis:var(--ch-rail)}
   .audit-shell > :deep(.team-panel){display:none}
-  .audit-paper :deep(.input-bar){
+  .audit-paper :deep(.input-zone){
     left:calc((100% + var(--ch-rail)) / 2);
     width:calc(100% - var(--ch-rail) - 48px);
   }

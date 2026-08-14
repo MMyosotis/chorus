@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
+import { BookOpen, Image as ImageIcon, PenLine } from '@lucide/vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
 import ArtifactCard from './ArtifactCard.vue'
@@ -242,9 +243,9 @@ watch(
         <h2>今天想创作什么？</h2>
         <p>描述你的想法，我会和创作团队一起把它变成完整作品。</p>
         <div class="starter-grid">
-          <button type="button"><span class="starter-icon starter-icon-topic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c3.2-.4 5.8.2 8 1.9 2.2-1.7 4.8-2.3 8-1.9v12.3c-3.2-.4-5.8.2-8 1.9-2.2-1.7-4.8-2.3-8-1.9V5.5Z"/><path d="M12 7.4v12.3M6.8 10.2h2.5M14.7 10.2h2.5M6.8 13.3h2.5"/></svg></span><b>策划选题</b><small>从一个想法梳理内容方向</small></button>
-          <button type="button"><span class="starter-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></span><b>创作文案</b><small>生成结构清晰的发布内容</small></button>
-          <button type="button"><span class="starter-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.6"/><path d="M21 15l-5-5L5 21"/></svg></span><b>视觉构思</b><small>探索画面风格与配图方案</small></button>
+          <button type="button"><span class="starter-icon starter-icon-topic"><BookOpen aria-hidden="true" /></span><b>策划选题</b><small>从一个想法梳理内容方向</small></button>
+          <button type="button"><span class="starter-icon"><PenLine aria-hidden="true" /></span><b>创作文案</b><small>生成结构清晰的发布内容</small></button>
+          <button type="button"><span class="starter-icon"><ImageIcon aria-hidden="true" /></span><b>视觉构思</b><small>探索画面风格与配图方案</small></button>
         </div>
       </div>
     </div>
@@ -267,8 +268,10 @@ watch(
 .chat-window {
   flex: 1;
   min-height: 0;
+  width: calc(100% + 2 * var(--ch-space-5));
+  margin-inline: calc(-1 * var(--ch-space-5));
   overflow-y: auto;
-  padding: 0 0 var(--ch-space-5);
+  padding: 0 var(--ch-space-5) var(--ch-space-5);
   background: transparent;
   scrollbar-width: none;
 }
@@ -376,7 +379,7 @@ watch(
 .preview-modal-enter-active, .preview-modal-leave-active { transition: opacity .2s; }
 .preview-modal-enter-from, .preview-modal-leave-to { opacity: 0; }
 @media (max-width: 780px) {
-  .chat-window { padding: 24px 16px 24px; }
+  .chat-window { width: 100%; margin-inline: 0; padding: 24px 16px; }
   .empty-hint { min-height: 480px; padding: 48px 0; }
   .starter-grid { grid-template-columns: 1fr; }
   .starter-grid button { min-height: 96px; padding: 16px; }
