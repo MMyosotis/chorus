@@ -1,69 +1,95 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { listMemories, createMemory, updateMemory, deleteMemory } from '../api.js'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ChevronDown, X } from '@lucide/vue'
+import { createMemory, deleteMemory, updateMemory } from '../api.js'
+import AgentAvatar from '../team-panel/AgentAvatar.vue'
 
-const emit = defineEmits(['close'])
+const props = defineProps({
+  memory: { type: Object, default: null },
+})
+const emit = defineEmits(['close', 'saved', 'deleted'])
 
 const VISIBLE_TO_OPTIONS = [
-  { value: 'supervisor', label: '主编辑' },
-  { value: 'idea', label: '选题官' },
-  { value: 'script', label: '文案官' },
-  { value: 'image', label: '配图官' },
-  { value: 'finalize', label: '汇总官' },
+  { value: 'supervisor', avatar: 'chief', label: '主编辑' },
+  { value: 'idea', avatar: 'idea', label: '选题官' },
+  { value: 'script', avatar: 'script', label: '文案官' },
+  { value: 'image', avatar: 'image', label: '配图官' },
+  { value: 'finalize', avatar: 'finalize', label: '汇总官' },
 ]
-
+const PLATFORM_OPTIONS = ['博客', '小红书']
+const LEGACY_PLATFORM_MAP = { '网页博客': '博客', 'web-blog': '博客' }
 const KIND_OPTIONS = [
   { value: 'reference', label: '参考' },
   { value: 'performance', label: '已验证' },
 ]
 
-const memories = ref([])
-const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
-const draftId = ref(null)
-const editing = ref(false)
 const draft = ref(emptyDraft())
+const openSelect = ref(null)
+const editingExisting = computed(() => !!props.memory?.id)
 
 function emptyDraft() {
-  return { description: '', content: '', platform: '', visible_to: [], kind: 'reference' }
+  return { description: '', content: '', platform: '博客', visible_to: [], kind: 'reference' }
 }
 
-async function load() {
-  loading.value = true
+function normalizePlatform(platforms) {
+  const value = platforms?.[0]
+  if (PLATFORM_OPTIONS.includes(value)) return value
+  return LEGACY_PLATFORM_MAP[value] || '博客'
+}
+
+function syncDraft(memory) {
   error.value = ''
-  try {
-    memories.value = await listMemories()
-  } catch (e) {
-    error.value = e.message || '加载失败'
-  } finally {
-    loading.value = false
-  }
+  draft.value = memory
+    ? {
+        description: memory.description,
+        content: memory.content,
+        platform: normalizePlatform(memory.platform),
+        visible_to: [...memory.visible_to],
+        kind: memory.kind,
+      }
+    : emptyDraft()
 }
 
-function select(memory) {
-  draftId.value = memory.id
-  editing.value = true
-  draft.value = {
-    description: memory.description,
-    content: memory.content,
-    platform: memory.platform.join(', '),
-    visible_to: [...memory.visible_to],
-    kind: memory.kind,
-  }
+watch(() => props.memory, syncDraft, { immediate: true })
+
+function toggleSelect(name) {
+  openSelect.value = openSelect.value === name ? null : name
 }
 
-function startNew() {
-  draftId.value = null
-  editing.value = true
-  draft.value = emptyDraft()
+function chooseSelect(name, value) {
+  draft.value[name] = value
+  openSelect.value = null
 }
+
+function closeSelectOnOutsideClick(event) {
+  if (!event.target.closest('.custom-select')) openSelect.value = null
+}
+
+function closeSelectOnEscape(event) {
+  if (event.key === 'Escape') openSelect.value = null
+}
+
+onMounted(() => {
+  document.addEventListener('click', closeSelectOnOutsideClick)
+  document.addEventListener('keydown', closeSelectOnEscape)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', closeSelectOnOutsideClick)
+  document.removeEventListener('keydown', closeSelectOnEscape)
+})
 
 function toggleVisible(value) {
-  const set = new Set(draft.value.visible_to)
-  if (set.has(value)) set.delete(value)
-  else set.add(value)
-  draft.value.visible_to = [...set]
+  const selected = new Set(draft.value.visible_to)
+  if (selected.has(value)) selected.delete(value)
+  else selected.add(value)
+  draft.value.visible_to = [...selected]
+}
+
+function requestClose() {
+  if (!saving.value) emit('close')
 }
 
 async function save() {
@@ -77,18 +103,15 @@ async function save() {
   const body = {
     description: draft.value.description.trim(),
     content: draft.value.content,
-    platform: draft.value.platform.split(',').map((seg) => seg.trim()).filter(Boolean),
+    platform: [draft.value.platform],
     visible_to: draft.value.visible_to,
     kind: draft.value.kind,
   }
   try {
-    if (draftId.value) {
-      await updateMemory(draftId.value, body)
-    } else {
-      const created = await createMemory(body)
-      draftId.value = created.id
-    }
-    await load()
+    const memory = editingExisting.value
+      ? await updateMemory(props.memory.id, body)
+      : await createMemory(body)
+    emit('saved', memory || { ...body, id: props.memory?.id })
   } catch (e) {
     error.value = e.message || '保存失败'
   } finally {
@@ -97,150 +120,174 @@ async function save() {
 }
 
 async function remove() {
-  if (!draftId.value || saving.value) return
+  if (!props.memory?.id || saving.value) return
   if (!confirm('删除这条记忆？')) return
   saving.value = true
   error.value = ''
   try {
-    await deleteMemory(draftId.value)
-    draftId.value = null
-    editing.value = false
-    draft.value = emptyDraft()
-    await load()
+    await deleteMemory(props.memory.id)
+    emit('deleted')
   } catch (e) {
     error.value = e.message || '删除失败'
   } finally {
     saving.value = false
   }
 }
-
-onMounted(load)
 </script>
 
 <template>
-  <Teleport to="body">
-  <div class="memory-overlay" @click.self="emit('close')">
-    <div class="memory-panel" role="dialog" aria-label="创作者记忆管理">
-      <header class="memory-header">
-        <h2>创作者记忆</h2>
-        <button type="button" class="icon-btn" aria-label="关闭" @click="emit('close')">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-      </header>
-
-      <div class="memory-body">
-        <aside class="memory-list">
-          <button type="button" class="new-btn" @click="startNew">+ 新增记忆</button>
-          <div v-if="loading" class="hint">加载中...</div>
-          <div v-else-if="!memories.length" class="hint">暂无记忆</div>
-          <ul v-else>
-            <li
-              v-for="memory in memories"
-              :key="memory.id"
-              :class="{ active: memory.id === draftId }"
-              @click="select(memory)"
-            >
-              <div class="item-desc">{{ memory.description }}</div>
-              <div class="item-meta">
-                <span
-                  v-for="platform in memory.platform"
-                  :key="platform"
-                  class="tag tag-platform"
-                >{{ platform }}</span>
-                <span class="tag" :class="memory.kind === 'performance' ? 'tag-performance' : 'tag-reference'">
-                  {{ memory.kind === 'performance' ? '已验证' : '参考' }}
-                </span>
-              </div>
-            </li>
-          </ul>
-        </aside>
-
-        <section class="memory-editor">
-          <div v-if="!editing" class="editor-placeholder">
-            选择左侧条目编辑，或点击「新增记忆」
+  <aside class="memory-panel" aria-label="记忆详情">
+    <div class="memory-body">
+      <div class="memory-surface">
+        <header class="memory-header">
+          <div>
+            <h2>{{ editingExisting ? '编辑记忆' : '添加记忆' }}</h2>
           </div>
-          <template v-else>
-            <label class="field">
-              <span class="field-label">描述</span>
-              <input v-model="draft.description" type="text" class="text-input" placeholder="一句话概括这条记忆" />
-            </label>
-            <label class="field">
-              <span class="field-label">正文</span>
-              <textarea v-model="draft.content" rows="6" class="text-area" placeholder="详细内容"></textarea>
-            </label>
-            <label class="field">
-              <span class="field-label">平台（逗号分隔，留空表示通用）</span>
-              <input v-model="draft.platform" type="text" class="text-input" placeholder="如 xiaohongshu, web-blog" />
-            </label>
-            <div class="field">
-              <span class="field-label">可见角色</span>
-              <div class="checkbox-row">
-                <label v-for="opt in VISIBLE_TO_OPTIONS" :key="opt.value" class="checkbox">
-                  <input
-                    type="checkbox"
-                    :checked="draft.visible_to.includes(opt.value)"
-                    @change="toggleVisible(opt.value)"
-                  />
+          <button type="button" class="icon-btn" aria-label="关闭详情" title="关闭详情" @click="requestClose">
+            <X aria-hidden="true" />
+          </button>
+        </header>
+
+        <div class="memory-editor">
+          <label class="field">
+            <span class="field-label">描述</span>
+            <input v-model="draft.description" type="text" class="text-input" placeholder="一句话概括这条记忆" />
+          </label>
+          <label class="field">
+            <span class="field-label">正文</span>
+            <textarea v-model="draft.content" rows="5" class="text-area" placeholder="详细内容"></textarea>
+          </label>
+
+          <div class="field-row settings-row">
+              <label class="field">
+                <span class="field-label">平台</span>
+                <div class="custom-select">
+                  <button
+                    type="button"
+                    class="select-trigger"
+                    :aria-expanded="openSelect === 'platform'"
+                    aria-haspopup="listbox"
+                    @click="toggleSelect('platform')"
+                  >
+                    <span>{{ draft.platform }}</span>
+                    <ChevronDown aria-hidden="true" />
+                  </button>
+                  <Transition name="select-menu">
+                    <div v-if="openSelect === 'platform'" class="select-menu" role="listbox" aria-label="平台">
+                      <button
+                        v-for="platform in PLATFORM_OPTIONS"
+                        :key="platform"
+                        type="button"
+                        role="option"
+                        :aria-selected="draft.platform === platform"
+                        :class="{ selected: draft.platform === platform }"
+                        @click="chooseSelect('platform', platform)"
+                      >{{ platform }}</button>
+                    </div>
+                  </Transition>
+                </div>
+              </label>
+              <label class="field">
+                <span class="field-label">类型</span>
+                <div class="custom-select">
+                  <button
+                    type="button"
+                    class="select-trigger"
+                    :aria-expanded="openSelect === 'kind'"
+                    aria-haspopup="listbox"
+                    @click="toggleSelect('kind')"
+                  >
+                    <span>{{ KIND_OPTIONS.find((opt) => opt.value === draft.kind)?.label }}</span>
+                    <ChevronDown aria-hidden="true" />
+                  </button>
+                  <Transition name="select-menu">
+                    <div v-if="openSelect === 'kind'" class="select-menu" role="listbox" aria-label="类型">
+                      <button
+                        v-for="opt in KIND_OPTIONS"
+                        :key="opt.value"
+                        type="button"
+                        role="option"
+                        :aria-selected="draft.kind === opt.value"
+                        :class="{ selected: draft.kind === opt.value }"
+                        @click="chooseSelect('kind', opt.value)"
+                      >{{ opt.label }}</button>
+                    </div>
+                  </Transition>
+                </div>
+              </label>
+          </div>
+          <div class="field role-field">
+            <span class="field-label">可见角色</span>
+            <div class="role-picker" role="group" aria-label="可见角色">
+                <button
+                  v-for="opt in VISIBLE_TO_OPTIONS"
+                  :key="opt.value"
+                  type="button"
+                  class="role-option"
+                  :class="{ selected: draft.visible_to.includes(opt.value) }"
+                  :aria-pressed="draft.visible_to.includes(opt.value)"
+                  @click="toggleVisible(opt.value)"
+                >
+                  <AgentAvatar :agent-type="opt.avatar" :inactive="!draft.visible_to.includes(opt.value)" :size="40" />
                   <span>{{ opt.label }}</span>
-                </label>
-              </div>
+                </button>
             </div>
-            <label class="field">
-              <span class="field-label">类型</span>
-              <select v-model="draft.kind" class="text-input">
-                <option v-for="opt in KIND_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-            </label>
-            <div v-if="error" class="error-hint">{{ error }}</div>
-            <div class="editor-actions">
-              <button type="button" class="danger-btn" :disabled="saving || !draftId" @click="remove">删除</button>
-              <button type="button" class="primary-btn" :disabled="saving" @click="save">保存</button>
-            </div>
-          </template>
-        </section>
+          </div>
+          <div v-if="error" class="error-hint">{{ error }}</div>
+        </div>
+        <footer class="editor-actions">
+          <button v-if="editingExisting" type="button" class="danger-btn" :disabled="saving" @click="remove">删除</button>
+          <span class="action-spacer"></span>
+          <button type="button" class="secondary-btn" :disabled="saving" @click="requestClose">取消</button>
+          <button type="button" class="primary-btn" :disabled="saving" @click="save">{{ saving ? '保存中…' : '保存' }}</button>
+        </footer>
       </div>
     </div>
-  </div>
-  </Teleport>
+  </aside>
 </template>
 
 <style scoped>
-.memory-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: var(--ch-z-modal);
+.memory-panel {
+  width: var(--ch-memory-editor-rail, var(--ch-session-rail));
+  height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--ch-space-5);
-  background: color-mix(in srgb, var(--ch-text) 40%, transparent);
+  flex: 0 0 var(--ch-memory-editor-rail, var(--ch-session-rail));
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--ch-border);
+  background: var(--ch-surface-glass-soft);
 }
 
-.memory-panel {
-  width: 100%;
-  max-width: 720px;
-  height: 80vh;
+.memory-body,
+.memory-surface {
+  min-height: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--ch-surface);
-  border-radius: var(--ch-radius-panel);
-  box-shadow: var(--ch-shadow-preview);
-  overflow: hidden;
 }
+
+.memory-body {
+  box-sizing: border-box;
+  padding: 24px var(--ch-space-3) var(--ch-space-3);
+}
+
+.memory-surface { overflow: visible; background: var(--ch-surface); }
 
 .memory-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--ch-space-3) var(--ch-space-4);
-  border-bottom: 1px solid var(--ch-border);
+  flex-shrink: 0;
+  min-height: 28px;
+  margin-bottom: var(--ch-space-4);
+  padding: 0;
 }
 
 .memory-header h2 {
   margin: 0;
-  font-size: var(--ch-text-lg);
-  font-weight: var(--ch-font-semibold);
   color: var(--ch-text);
+  font-size: var(--ch-text-lg);
+  font-weight: var(--ch-font-bold);
 }
 
 .icon-btn {
@@ -253,239 +300,110 @@ onMounted(load)
   border: 0;
   border-radius: var(--ch-radius-btn);
   background: transparent;
-  color: var(--ch-text-muted);
+  color: var(--ch-text-faint);
   cursor: pointer;
 }
 
-.icon-btn:hover {
-  background: var(--ch-surface-2);
-  color: var(--ch-text);
-}
-
-.icon-btn svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-
-.memory-body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
-.memory-list {
-  width: 264px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--ch-border);
-  background: var(--ch-surface-2);
-}
-
-.new-btn {
-  margin: var(--ch-space-3);
-  padding: var(--ch-space-2) var(--ch-space-3);
-  border: 1px dashed var(--ch-border-strong);
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-surface);
-  color: var(--ch-accent);
-  font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-medium);
-  cursor: pointer;
-}
-
-.new-btn:hover {
-  border-color: var(--ch-accent);
-  background: var(--ch-accent-soft);
-}
-
-.memory-list ul {
-  flex: 1;
-  margin: 0;
-  padding: 0 var(--ch-space-2) var(--ch-space-3);
-  overflow-y: auto;
-  list-style: none;
-}
-
-.memory-list li {
-  padding: var(--ch-space-2) var(--ch-space-3);
-  border-radius: var(--ch-radius-btn);
-  cursor: pointer;
-  transition: background var(--ch-duration-fast) var(--ch-ease);
-}
-
-.memory-list li:hover {
-  background: var(--ch-surface);
-}
-
-.memory-list li.active {
-  background: var(--ch-accent-soft);
-}
-
-.item-desc {
-  font-size: var(--ch-text-sm);
-  color: var(--ch-text);
-  line-height: 1.5;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.item-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--ch-space-1);
-  margin-top: var(--ch-space-1);
-}
-
-.tag {
-  padding: 2px var(--ch-space-2);
-  border-radius: var(--ch-radius-btn);
-  font-size: var(--ch-text-xs);
-  line-height: 1.5;
-}
-
-.tag-platform {
-  background: var(--ch-surface);
-  border: 1px solid var(--ch-border);
-  color: var(--ch-text-secondary);
-}
-
-.tag-performance {
-  background: var(--ch-accent-soft);
-  color: var(--ch-accent-soft-text);
-}
-
-.tag-reference {
-  background: var(--ch-muted-gradient);
-  color: var(--ch-text-secondary);
-}
-
-.hint {
-  padding: var(--ch-space-3);
-  color: var(--ch-text-muted);
-  font-size: var(--ch-text-sm);
-}
+.icon-btn:hover { background: var(--ch-surface-2); color: var(--ch-text); }
+.icon-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 
 .memory-editor {
+  min-height: 0;
   flex: 1;
-  padding: var(--ch-space-4);
-  overflow-y: auto;
+  padding: 0;
+  overflow: visible;
 }
 
-.editor-placeholder {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ch-text-muted);
-  font-size: var(--ch-text-sm);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ch-space-2);
-  margin-bottom: var(--ch-space-3);
-}
-
-.field-label {
-  font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-medium);
-  color: var(--ch-text-secondary);
-}
+.field { min-width: 0; display: flex; flex-direction: column; gap: var(--ch-space-2); margin: 0 0 var(--ch-space-4); }
+.field-label { color: var(--ch-text-secondary); font-size: var(--ch-text-sm); font-weight: var(--ch-font-medium); }
+.field-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--ch-space-3); }
+.settings-row { margin-top: var(--ch-space-5); }
 
 .text-input,
 .text-area {
+  box-sizing: border-box;
+  width: 100%;
   padding: var(--ch-space-2) var(--ch-space-3);
   border: 1px solid var(--ch-border-strong);
   border-radius: var(--ch-radius-btn);
   background: var(--ch-surface);
   color: var(--ch-text);
+  font: inherit;
   font-size: var(--ch-text-sm);
-  font-family: var(--ch-font-sans);
   line-height: 1.5;
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease);
 }
 
-.text-area {
-  resize: vertical;
-}
+.text-input { height: 44px; }
+.text-area { min-height: 112px; resize: none; }
+.text-input:focus,.text-area:focus { outline: none; border-color: var(--ch-accent); background: color-mix(in srgb, var(--ch-accent) 3%, var(--ch-surface)); }
 
-.text-input:focus,
-.text-area:focus {
-  outline: none;
-  border-color: var(--ch-accent);
-  box-shadow: var(--ch-shadow-focus);
-}
-
-.checkbox-row {
+.custom-select { position: relative; }
+.select-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  height: 44px;
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--ch-space-3);
-}
-
-.checkbox {
-  display: inline-flex;
   align-items: center;
-  gap: var(--ch-space-1);
+  justify-content: space-between;
+  padding: 0 var(--ch-space-3);
+  border: 1px solid var(--ch-border-strong);
+  border-radius: var(--ch-radius-btn);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+  font: inherit;
   font-size: var(--ch-text-sm);
-  color: var(--ch-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease);
+}
+.select-trigger:hover { border-color: var(--ch-text-faint); }
+.select-trigger:focus-visible,
+.select-trigger[aria-expanded='true'] { outline: none; border-color: var(--ch-border-strong); background: var(--ch-surface); }
+.select-trigger svg { width: 12px; height: 12px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.3; transition: transform var(--ch-duration-fast) var(--ch-ease); }
+.select-trigger[aria-expanded='true'] svg { color: var(--ch-accent); transform: rotate(180deg); }
+.select-menu { position: absolute; z-index: var(--ch-z-dropdown); top: calc(100% + var(--ch-space-1)); right: 0; left: 0; display: grid; gap: var(--ch-space-1); padding: var(--ch-space-2); border: 1px solid color-mix(in srgb, var(--ch-border-strong) 70%, white); border-radius: var(--ch-radius-list); background: var(--ch-surface); box-shadow: 0 6px 18px color-mix(in srgb, var(--ch-text) 7%, transparent), 0 1px 3px color-mix(in srgb, var(--ch-text) 4%, transparent); }
+.select-menu button { min-height: 40px; padding: 0 var(--ch-space-2); border: 0; border-radius: var(--ch-radius-btn); background: transparent; color: var(--ch-text-secondary); font: var(--ch-font-medium) var(--ch-text-sm)/1 var(--ch-font-sans); text-align: left; cursor: pointer; }.select-menu button.selected { color: var(--ch-accent); }.select-menu button:hover { background: var(--ch-accent-soft); color: var(--ch-accent); }.select-menu-enter-active,.select-menu-leave-active { transition: opacity var(--ch-duration-fast) var(--ch-ease), transform var(--ch-duration-fast) var(--ch-ease); }.select-menu-enter-from,.select-menu-leave-to { opacity: 0; transform: translateY(-4px); }
+
+.role-field { margin-bottom: 0; }
+.role-picker { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--ch-space-1); }
+.role-option {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: var(--ch-space-1);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ch-text-faint);
+  font: var(--ch-font-medium) var(--ch-text-xs)/1.2 var(--ch-font-sans);
   cursor: pointer;
 }
+
+.role-option:hover { color: var(--ch-text-secondary); }
+.role-option.selected { color: var(--ch-accent); }
+.role-option :deep(.agent-avatar) { transition: box-shadow var(--ch-duration-fast) var(--ch-ease); }
+.role-option.selected :deep(.agent-avatar) { box-shadow: 0 0 0 1px var(--ch-accent); }
 
 .editor-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: var(--ch-space-2);
-  margin-top: var(--ch-space-3);
+  flex-shrink: 0;
+  padding: var(--ch-space-3) 0 0;
+  border-top: 1px solid var(--ch-border);
 }
 
-.primary-btn,
-.danger-btn {
-  padding: var(--ch-space-2) var(--ch-space-4);
-  border: 0;
-  border-radius: var(--ch-radius-btn);
-  font-size: var(--ch-text-sm);
-  font-weight: var(--ch-font-medium);
-  cursor: pointer;
-}
+.action-spacer { flex: 1; }
+.primary-btn,.secondary-btn,.danger-btn { min-height: 40px; padding: 0 var(--ch-space-4); border-radius: var(--ch-radius-btn); font: 600 var(--ch-text-sm)/1 var(--ch-font-sans); cursor: pointer; transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease); }
+.primary-btn { border: 0; background: var(--ch-ink); color: var(--ch-on-ink); }.primary-btn:hover:not(:disabled) { background: var(--ch-ink-hover); }
+.secondary-btn { border: 1px solid var(--ch-border-strong); background: var(--ch-surface); color: var(--ch-text); }.secondary-btn:hover:not(:disabled) { background: var(--ch-surface-2); }
+.danger-btn { border: 1px solid var(--ch-danger); background: transparent; color: var(--ch-danger); }.danger-btn:hover:not(:disabled) { background: var(--ch-danger-soft); }
+.primary-btn:disabled,.secondary-btn:disabled,.danger-btn:disabled { opacity: .5; cursor: not-allowed; }
+.error-hint { margin-top: var(--ch-space-2); padding: var(--ch-space-2) var(--ch-space-3); border-radius: var(--ch-radius-btn); background: var(--ch-danger-soft); color: var(--ch-danger-text); font-size: var(--ch-text-xs); }
 
-.primary-btn {
-  background: var(--ch-accent);
-  color: var(--ch-on-accent);
-}
-
-.primary-btn:hover:not(:disabled) {
-  background: var(--ch-accent-hover);
-}
-
-.danger-btn {
-  background: transparent;
-  color: var(--ch-danger);
-  border: 1px solid var(--ch-danger);
-}
-
-.danger-btn:hover:not(:disabled) {
-  background: var(--ch-danger-soft);
-}
-
-.primary-btn:disabled,
-.danger-btn:disabled {
-  opacity: .5;
-  cursor: not-allowed;
-}
-
-.error-hint {
-  margin-bottom: var(--ch-space-2);
-  padding: var(--ch-space-2) var(--ch-space-3);
-  border-radius: var(--ch-radius-btn);
-  background: var(--ch-danger-soft);
-  color: var(--ch-danger-text);
-  font-size: var(--ch-text-xs);
+@media (max-height: 800px) {
+  .settings-row { margin-top: var(--ch-space-3); }
+  .text-area { min-height: 96px; }
 }
 </style>

@@ -1,9 +1,13 @@
 <script setup>
+import { Box, LayoutTemplate, RotateCcwClock, Settings, Users, Workflow } from '@lucide/vue'
+
 defineProps({
   sidebarOpen: { type: Boolean, default: false },
   settingsOpen: { type: Boolean, default: false },
+  memoryOpen: { type: Boolean, default: false },
+  consoleOpen: { type: Boolean, default: false },
 })
-defineEmits(['toggle-sidebar', 'open-settings'])
+defineEmits(['toggle-sidebar', 'open-settings', 'open-memory', 'open-console'])
 </script>
 
 <template>
@@ -25,20 +29,31 @@ defineEmits(['toggle-sidebar', 'open-settings'])
       <button
         type="button"
         class="dock-item"
-        :class="{ active: sidebarOpen && !settingsOpen }"
+        :class="{ active: sidebarOpen && !settingsOpen && !memoryOpen }"
         aria-label="会话"
-        :aria-pressed="sidebarOpen && !settingsOpen"
+        :aria-pressed="sidebarOpen && !settingsOpen && !memoryOpen"
         @click="$emit('toggle-sidebar')"
       >
-        <svg viewBox="0 0 24 24"><path d="M8 18c-2.8 0-5-2.3-5-5.1V10c0-3.3 2.7-6 6-6h6c3.3 0 6 2.7 6 6v2.9c0 2.8-2.2 5.1-5 5.1h-1.4L12 20l-2.6-2H8Z"></path><circle cx="9" cy="11" r=".8"></circle><circle cx="15" cy="11" r=".8"></circle></svg>
+        <RotateCcwClock aria-hidden="true" />
       </button>
 
-      <button type="button" class="dock-item" aria-label="模版">
-        <svg viewBox="0 0 24 24"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"></path><path d="m4.5 7.8 7.5 4.3 7.5-4.3M12 12.1V21"></path></svg>
+      <button
+        type="button"
+        class="dock-item"
+        :class="{ active: memoryOpen }"
+        aria-label="记忆"
+        :aria-pressed="memoryOpen"
+        @click="$emit('open-memory')"
+      >
+        <Box aria-hidden="true" />
+      </button>
+
+      <button type="button" class="dock-item" aria-label="模板">
+        <LayoutTemplate aria-hidden="true" />
       </button>
 
       <button type="button" class="dock-item" aria-label="团队">
-        <svg viewBox="0 0 24 24"><circle cx="8.3" cy="8" r="3"></circle><circle cx="16.5" cy="9" r="2.4"></circle><path d="M2.8 20c.3-4 2-6 5.5-6s5.3 2 5.6 6M13.7 15.3c3.8-.4 6 1.2 6.5 4.7"></path></svg>
+        <Users aria-hidden="true" />
       </button>
 
     </div>
@@ -49,15 +64,23 @@ defineEmits(['toggle-sidebar', 'open-settings'])
       <button
         type="button"
         class="dock-item"
+        :class="{ active: consoleOpen }"
+        aria-label="Trace 控制台"
+        :aria-pressed="consoleOpen"
+        @click="$emit('open-console')"
+      >
+        <Workflow aria-hidden="true" />
+      </button>
+
+      <button
+        type="button"
+        class="dock-item"
         :class="{ active: settingsOpen }"
         aria-label="设置"
         :aria-pressed="settingsOpen"
         @click="$emit('open-settings')"
       >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 13a7.97 7.97 0 0 0 0-2l2-1.5-2-3.4-2.4.9a8 8 0 0 0-1.7-1L15 3.5H9l-.3 2.5a8 8 0 0 0-1.7 1l-2.4-.9-2 3.4L4.6 11a7.97 7.97 0 0 0 0 2l-2 1.5 2 3.4 2.4-.9a8 8 0 0 0 1.7 1l.3 2.5h6l.3-2.5a8 8 0 0 0 1.7-1l2.4.9 2-3.4-2-1.5Z" />
-        </svg>
+        <Settings aria-hidden="true" />
       </button>
 
       <button type="button" class="dock-item dock-profile" aria-label="账户">

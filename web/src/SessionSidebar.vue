@@ -1,6 +1,9 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { Ellipsis, MessageCircle, MessageCircleMore, PanelLeft, Pencil, Plus, Search, Trash2 } from '@lucide/vue'
 import SettingsPanel from './SettingsPanel.vue'
+import MemoryBrowser from './MemoryBrowser.vue'
+import ConsolePanel from './main-panel/ConsolePanel.vue'
 
 const props = defineProps({
   sessions: { type: Array, required: true },
@@ -9,10 +12,15 @@ const props = defineProps({
   activeWorking: { type: Boolean, default: false },
   activeCompleted: { type: Boolean, default: false },
   settingsOpen: { type: Boolean, default: false },
+  memoryOpen: { type: Boolean, default: false },
+  consoleOpen: { type: Boolean, default: false },
+  traceStore: { type: Object, required: true },
+  memoryRefreshKey: { type: Number, default: 0 },
+  selectedMemoryId: { type: String, default: null },
   expanded: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['select', 'create', 'delete', 'rename', 'collapse'])
+const emit = defineEmits(['select', 'create', 'delete', 'rename', 'collapse', 'memory-edit', 'memory-create'])
 
 const searchText = ref('')
 const editingId = ref(null)
@@ -20,7 +28,7 @@ const editingText = ref('')
 const inputRef = ref(null)
 const openMenuId = ref(null)
 const menuPosition = ref({ top: 0, left: 0 })
-const visiblePane = ref(props.settingsOpen ? 'settings' : 'sessions')
+const visiblePane = ref(props.settingsOpen ? 'settings' : props.memoryOpen ? 'memory' : props.consoleOpen ? 'trace' : 'sessions')
 
 const filteredSessions = computed(() => {
   const keyword = searchText.value.trim().toLocaleLowerCase()
@@ -104,10 +112,10 @@ watch(
 )
 
 watch(
-  () => [props.expanded, props.settingsOpen],
-  ([expanded, settingsOpen]) => {
+  () => [props.expanded, props.settingsOpen, props.memoryOpen, props.consoleOpen],
+  ([expanded, settingsOpen, memoryOpen, consoleOpen]) => {
     // 收起时保留当前栏目，避免设置页先切回会话列表再被收起。
-    if (expanded) visiblePane.value = settingsOpen ? 'settings' : 'sessions'
+    if (expanded) visiblePane.value = settingsOpen ? 'settings' : memoryOpen ? 'memory' : consoleOpen ? 'trace' : 'sessions'
   },
 )
 
@@ -127,38 +135,56 @@ onBeforeUnmount(() => {
     class="sidebar"
     :class="{
       'is-settings-open': settingsOpen,
-      'is-settings-pane': visiblePane === 'settings',
     }"
     aria-label="会话侧栏"
   >
     <Transition name="sidebar-reveal">
       <div v-if="expanded" class="sidebar-stage">
-        <Transition name="sidebar-content" mode="out-in">
-          <SettingsPanel v-if="visiblePane === 'settings'" key="settings" @collapse="emit('collapse')" />
+        <Transition name="sidebar-pane">
+          <section v-if="visiblePane === 'settings'" key="settings" class="sidebar-pane">
+            <SettingsPanel @collapse="emit('collapse')" />
+          </section>
 
-          <div v-else key="sessions" class="sidebar-inner session-browser">
-        <header class="sidebar-header">
-          <h2 class="sidebar-title">稿搭</h2>
-          <button type="button" class="sidebar-collapse" aria-label="收起侧栏" title="收起侧栏" @click="emit('collapse')">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="3.5" y="4" width="17" height="16" rx="3" />
-              <path d="M10.5 4v16" />
-            </svg>
-          </button>
-        </header>
-        <button class="new-chat" type="button" @click="emit('create')">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          <span>新建会话</span>
-        </button>
+          <section v-else-if="visiblePane === 'memory'" key="memory" class="sidebar-pane">
+            <MemoryBrowser
+              :refresh-key="memoryRefreshKey"
+              :selected-id="selectedMemoryId"
+              @collapse="emit('collapse')"
+              @edit="emit('memory-edit', $event)"
+              @create="emit('memory-create')"
+            />
+          </section>
 
-        <label class="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-          <input v-model="searchText" type="search" placeholder="搜索会话" aria-label="搜索会话" />
-        </label>
+          <section v-else-if="visiblePane === 'trace'" key="trace" class="sidebar-pane">
+            <ConsolePanel
+              :open="true"
+              :active-id="activeId"
+              :trace-store="traceStore"
+              @close="emit('collapse')"
+            />
+          </section>
 
-        <div class="section-label">会话列表</div>
+          <section v-else key="sessions" class="sidebar-pane">
+            <div class="sidebar-inner session-browser">
+              <header class="sidebar-header">
+                <h2 class="sidebar-title">稿搭</h2>
+                <button type="button" class="sidebar-collapse" aria-label="收起侧栏" title="收起侧栏" @click="emit('collapse')">
+                  <PanelLeft aria-hidden="true" />
+                </button>
+              </header>
+              <button class="new-chat" type="button" @click="emit('create')">
+                <Plus aria-hidden="true" />
+                <span>新建会话</span>
+              </button>
 
-        <div class="session-list">
+              <label class="search">
+                <Search aria-hidden="true" />
+                <input v-model="searchText" type="search" placeholder="搜索会话" aria-label="搜索会话" />
+              </label>
+
+              <div class="section-label">会话列表</div>
+
+              <div class="session-list">
           <article
             v-for="session in filteredSessions"
             :key="session.id"
@@ -167,17 +193,11 @@ onBeforeUnmount(() => {
             @click="handleSelect(session)"
             @keydown.enter="handleSelect(session)"
           >
-            <svg
+            <component
+              :is="session.id === activeId ? MessageCircleMore : MessageCircle"
               :class="['session-icon', { 'is-working': streamingMap[session.id] || (session.id === activeId && activeWorking) }]"
-              viewBox="0 0 24 24"
               aria-hidden="true"
-            >
-              <path d="M5 18 3.5 21l4-1.5H16a5 5 0 0 0 5-5V9a5 5 0 0 0-5-5H8a5 5 0 0 0-5 5v5a4.9 4.9 0 0 0 2 4Z" />
-              <g v-if="session.id === activeId">
-                <circle cx="9" cy="12" r=".6" />
-                <circle cx="13" cy="12" r=".6" />
-              </g>
-            </svg>
+            />
             <div class="session-content">
               <input
                 v-if="editingId === session.id"
@@ -208,11 +228,7 @@ onBeforeUnmount(() => {
                 aria-haspopup="menu"
                 @click="toggleSessionMenu(session, $event)"
               >
-                <svg class="session-menu-ellipsis" viewBox="0 0 18 6" aria-hidden="true" shape-rendering="geometricPrecision">
-                  <circle cx="3" cy="3" r="1.5" />
-                  <circle cx="9" cy="3" r="1.5" />
-                  <circle cx="15" cy="3" r="1.5" />
-                </svg>
+                <Ellipsis class="session-menu-ellipsis" aria-hidden="true" />
               </button>
               <Teleport to="body">
                 <div
@@ -223,24 +239,17 @@ onBeforeUnmount(() => {
                   @click.stop
                 >
                   <button type="button" role="menuitem" @click="startRename(session, $event)">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M17 3L21 7L8 20H4V16L17 3Z" />
-                    </svg>
+                    <Pencil aria-hidden="true" />
                     <span>重命名</span>
                   </button>
                   <button
                     type="button"
                     role="menuitem"
                     class="is-danger"
-                    :disabled="!!streamingMap[session.id]"
-                    @click="handleDelete(session, $event)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M3 6H5H21" />
-                      <path d="M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" />
-                      <path d="M10 11V17" />
-                      <path d="M14 11V17" />
-                    </svg>
+                  :disabled="!!streamingMap[session.id]"
+                  @click="handleDelete(session, $event)"
+                >
+                    <Trash2 aria-hidden="true" />
                     <span>删除</span>
                   </button>
                 </div>
@@ -250,8 +259,9 @@ onBeforeUnmount(() => {
           <p v-if="filteredSessions.length === 0" class="empty">
             {{ searchText ? '没有匹配的会话' : '暂无会话' }}
           </p>
-        </div>
-          </div>
+              </div>
+            </div>
+          </section>
         </Transition>
       </div>
     </Transition>
@@ -264,8 +274,6 @@ onBeforeUnmount(() => {
   height: 100%;
   flex-shrink: 0;
   overflow: hidden;
-  background: var(--ch-surface-glass-soft);
-  border-right: 1px solid var(--ch-border);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
 }
@@ -292,8 +300,9 @@ onBeforeUnmount(() => {
 }
 
 .sidebar-collapse svg {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
+  transform: translateX(6px);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -308,42 +317,29 @@ onBeforeUnmount(() => {
 }
 
 .sidebar-stage {
+  position: relative;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 /* 桌面端由外层收拢宽度，内容层保留自身宽度。 */
 @media (min-width: 781px) {
   .sidebar-stage {
-    width: var(--ch-session-rail);
+    width: var(--ch-sidebar-width);
+    transition: width var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease);
   }
 
-  .sidebar.is-settings-pane .sidebar-stage {
-    width: min(480px, calc(100vw - var(--ch-nav-rail)));
-  }
 }
 
-.sidebar-reveal-enter-active {
-  will-change: opacity, transform;
-  transition: opacity var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease),
-    transform var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease);
-}
-
+.sidebar-reveal-enter-active,
 .sidebar-reveal-leave-active {
-  will-change: opacity, transform;
-  transition: opacity var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease),
-    transform var(--ch-sidebar-motion-duration) var(--ch-sidebar-motion-ease);
-  pointer-events: none;
+  transition: opacity 160ms var(--ch-sidebar-motion-ease);
 }
 
-.sidebar-reveal-enter-from {
-  opacity: 0;
-  transform: translateX(-28px);
-}
-
+.sidebar-reveal-enter-from,
 .sidebar-reveal-leave-to {
   opacity: 0;
-  transform: translateX(16px);
 }
 
 .sidebar-header {
@@ -362,28 +358,45 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.sidebar-content-enter-active,
-.sidebar-content-leave-active {
+.sidebar-pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  overflow: hidden;
+  background: var(--ch-surface-glass-soft);
+  border-right: 1px solid var(--ch-border);
+}
+
+.sidebar-pane-enter-active {
+  z-index: 2;
   will-change: opacity, transform;
-  transition: opacity 260ms cubic-bezier(.22, .8, .25, 1),
-    transform 260ms cubic-bezier(.22, .8, .25, 1);
+  transition: opacity 220ms ease-out,
+    transform 360ms cubic-bezier(.16, .84, .26, 1);
 }
 
-.sidebar-content-enter-from {
-  opacity: 0;
-  transform: translateX(-12px);
+.sidebar-pane-leave-active {
+  z-index: 1;
+  will-change: opacity, transform;
+  transition: opacity 120ms ease-out,
+    transform 300ms cubic-bezier(.22, .8, .25, 1);
 }
 
-.sidebar-content-leave-to {
+.sidebar-pane-enter-from {
   opacity: 0;
-  transform: translateX(12px);
+  transform: translateX(-22px);
+}
+
+.sidebar-pane-leave-to {
+  opacity: 0;
+  transform: translateX(22px);
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .sidebar-reveal-enter-active,
   .sidebar-reveal-leave-active,
-  .sidebar-content-enter-active,
-  .sidebar-content-leave-active {
+  .sidebar-pane-enter-active,
+  .sidebar-pane-leave-active {
     transition: none;
   }
 }
@@ -403,7 +416,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: var(--ch-space-2);
   flex-shrink: 0;
-  margin-bottom: var(--ch-space-3);
+  margin-bottom: var(--ch-space-5);
   padding: 0 var(--ch-space-3);
   border: 1px solid var(--ch-ink);
   border-radius: var(--ch-radius-bar-btn);
@@ -440,7 +453,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
   margin-bottom: var(--ch-space-4);
   padding: 0 var(--ch-space-3);
-  border: 1px solid var(--ch-border);
+  border: 1px solid color-mix(in srgb, var(--ch-border-strong) 70%, white);
   border-radius: var(--ch-radius-list);
   background: var(--ch-surface);
   color: var(--ch-text-faint);
@@ -454,7 +467,7 @@ onBeforeUnmount(() => {
 
 .search:focus-within {
   border-color: var(--ch-accent);
-  box-shadow: var(--ch-shadow-focus);
+  box-shadow: none;
 }
 
 .search svg {
@@ -488,7 +501,7 @@ onBeforeUnmount(() => {
 }
 
 .section-label {
-  margin: 0 0 var(--ch-space-3);
+  margin: 0 0 var(--ch-space-2);
   color: var(--ch-text-faint);
   font-size: var(--ch-text-xs);
 }
@@ -601,7 +614,6 @@ onBeforeUnmount(() => {
 }
 
 .session-actions button {
-  min-width: 24px;
   min-height: 24px;
   display: inline-flex;
   align-items: center;
@@ -620,11 +632,12 @@ onBeforeUnmount(() => {
 
 .session-menu-trigger .session-menu-ellipsis {
   width: 16px;
-  height: 8px;
+  height: 16px;
   display: block;
   flex: 0 0 16px;
-  fill: currentColor;
-  stroke: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
 .session-actions button:disabled {
@@ -652,7 +665,8 @@ onBeforeUnmount(() => {
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-btn);
   background: var(--ch-surface);
-  box-shadow: var(--ch-shadow-dropdown);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ch-text) 7%, transparent),
+    0 1px 3px color-mix(in srgb, var(--ch-text) 4%, transparent);
 }
 
 .session-menu button {
@@ -703,14 +717,14 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 32px;
   padding: 0 var(--ch-space-2);
-  border: 1px solid var(--ch-accent);
-  border-radius: var(--ch-radius-list);
+  border: 0;
+  border-radius: var(--ch-radius-btn);
   outline: none;
   background: var(--ch-surface);
   color: var(--ch-text);
   font-size: var(--ch-text-sm);
   line-height: var(--ch-leading-tight);
-  box-shadow: var(--ch-shadow-focus);
+  box-shadow: none;
 }
 
 .empty {
@@ -727,8 +741,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-height: 800px) {
-  .sidebar-title { margin-bottom: var(--ch-space-2); }
-  .new-chat { margin-bottom: var(--ch-space-2); }
-  .search { margin-bottom: var(--ch-space-2); }
+  .new-chat { margin-bottom: var(--ch-space-3); }
 }
 </style>

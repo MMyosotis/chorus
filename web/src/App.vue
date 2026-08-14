@@ -26,6 +26,7 @@ import { planTaskCards, planIntentCards, planOptionCards } from './composables/t
 import { replaceAnchoredCards } from './composables/anchoredCards.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import { ROLE_FULL } from './team-panel/roleMeta.js'
+import MemoryPanel from './main-panel/MemoryPanel.vue'
 
 const uiReviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has('ui-review')
 const FlowReviewHarness = uiReviewMode ? defineAsyncComponent(() => import('./dev/FlowReviewHarness.vue')) : null
@@ -45,6 +46,11 @@ const inputBarRef = ref(null)
 const leftRailOpen = ref(true)
 const rightRailOpen = ref(false)
 const settingsOpen = ref(false)
+const memoryOpen = ref(false)
+const memoryEditorOpen = ref(false)
+const activeMemory = ref(null)
+const memoryRefreshKey = ref(0)
+const consoleOpen = ref(false)
 
 const focusedTaskId = ref(null)
 
@@ -57,14 +63,63 @@ function openSettings() {
     collapseSidebar()
     return
   }
+  memoryOpen.value = false
+  memoryEditorOpen.value = false
+  activeMemory.value = null
   rightRailOpen.value = false
   settingsOpen.value = true
   leftRailOpen.value = true
 }
 
+function openMemory() {
+  if (memoryOpen.value) {
+    collapseSidebar()
+    return
+  }
+  settingsOpen.value = false
+  memoryOpen.value = true
+  leftRailOpen.value = true
+}
+
+function openConsole() {
+  if (consoleOpen.value) {
+    collapseSidebar()
+    return
+  }
+  settingsOpen.value = false
+  memoryOpen.value = false
+  memoryEditorOpen.value = false
+  consoleOpen.value = true
+  leftRailOpen.value = true
+}
+
+function editMemory(memory) {
+  activeMemory.value = memory
+  memoryEditorOpen.value = true
+}
+
+function createMemory() {
+  activeMemory.value = null
+  memoryEditorOpen.value = true
+}
+
+function closeMemoryEditor() {
+  memoryEditorOpen.value = false
+  activeMemory.value = null
+}
+
+function refreshMemories(memory) {
+  activeMemory.value = memory || null
+  memoryRefreshKey.value += 1
+}
+
 function toggleSidebar() {
-  if (settingsOpen.value) {
+  if (settingsOpen.value || memoryOpen.value || consoleOpen.value) {
     settingsOpen.value = false
+    memoryOpen.value = false
+    memoryEditorOpen.value = false
+    consoleOpen.value = false
+    activeMemory.value = null
     leftRailOpen.value = true
     return
   }
@@ -77,6 +132,10 @@ function toggleSidebar() {
 
 function collapseSidebar() {
   settingsOpen.value = false
+  memoryOpen.value = false
+  memoryEditorOpen.value = false
+  consoleOpen.value = false
+  activeMemory.value = null
   leftRailOpen.value = false
 }
 
@@ -152,7 +211,9 @@ async function loadMessages(id) {
           activeId.value = sessions.value[0].id
           await loadMessages(activeId.value)
         } else {
-          await onCreate()
+          activeId.value = null
+          focusedTaskId.value = null
+          taskPolling.stop()
         }
         alert('该会话已过期，已自动切换')
       }
@@ -220,7 +281,11 @@ async function selectSession(id) {
   if (selectionToken !== sessionSelectionToken) return
   if (!messagesReady) {
     if (sessions.value.length > 0) await selectSession(sessions.value[0].id)
-    else await onCreate()
+    else {
+      activeId.value = null
+      focusedTaskId.value = null
+      taskPolling.stop()
+    }
     alert('该会话已过期，已自动切换')
     return
   }
@@ -327,8 +392,10 @@ async function onCreate() {
     optionPromptsBySession[meta.id] = []
     activeId.value = meta.id
     loadIntentState(meta.id)
+    return meta.id
   } catch (e) {
     alert(`新建失败: ${e.message}`)
+    return null
   }
 }
 
@@ -351,7 +418,9 @@ async function onDelete(id) {
       activeId.value = sessions.value[0].id
       await Promise.all([loadMessages(activeId.value), loadIntentState(activeId.value), loadIntentConfirmations(activeId.value), loadOptionHistory(activeId.value)])
     } else {
-      await onCreate()
+      activeId.value = null
+      focusedTaskId.value = null
+      taskPolling.stop()
     }
   }
 }
@@ -592,9 +661,9 @@ async function runAssistantStream(sessionId, streamFactory) {
 }
 
 async function onSend(text) {
-  const sessionId = activeId.value
-  if (!sessionId) return
-  if (!text.trim() || streamingBySession[sessionId] || hasActiveTask.value || activeCompleted.value) return
+  if (!text.trim() || hasActiveTask.value || activeCompleted.value) return
+  const sessionId = activeId.value || await onCreate()
+  if (!sessionId || streamingBySession[sessionId]) return
 
   const list = messagesBySession[sessionId] || (messagesBySession[sessionId] = [])
   list.push({ role: 'user', content: text, created_at: Date.now() / 1000 })
@@ -652,9 +721,7 @@ onMounted(async () => {
   } catch {
     sessions.value = []
   }
-  if (sessions.value.length === 0) {
-    await onCreate()
-  } else {
+  if (sessions.value.length > 0) {
     // 复用会话切换完整路径，让刷新后的任务图靠轮询恢复
     await selectSession(sessions.value[0].id)
   }
@@ -664,12 +731,16 @@ onMounted(async () => {
 <template>
   <FlowReviewHarness v-if="uiReviewMode" />
   <template v-else>
-  <div class="app-shell" :class="{ 'sidebar-open': leftRailOpen, 'settings-open': settingsOpen }">
+  <div class="app-shell" :class="{ 'sidebar-open': leftRailOpen, 'settings-open': settingsOpen, 'memory-open': memoryOpen, 'trace-open': consoleOpen }">
     <NavDock
       :sidebar-open="leftRailOpen"
       :settings-open="settingsOpen"
+      :memory-open="memoryOpen"
+      :console-open="consoleOpen"
       @toggle-sidebar="toggleSidebar"
       @open-settings="openSettings"
+      @open-memory="openMemory"
+      @open-console="openConsole"
     />
     <SessionSidebar
       :class="{ 'is-open': leftRailOpen }"
@@ -679,13 +750,32 @@ onMounted(async () => {
       :active-working="hasActiveTask || awaitingConfirm || awaitingOption || streaming"
       :active-completed="activeCompleted"
       :settings-open="settingsOpen"
-      :expanded="leftRailOpen || settingsOpen"
+      :memory-open="memoryOpen"
+      :memory-refresh-key="memoryRefreshKey"
+      :selected-memory-id="activeMemory?.id || null"
+      :console-open="consoleOpen"
+      :trace-store="traceStore"
+      :expanded="leftRailOpen || settingsOpen || memoryOpen || consoleOpen"
       @select="selectSession"
       @create="onCreate"
       @delete="onDelete"
       @rename="onRename"
+      @memory-edit="editMemory"
+      @memory-create="createMemory"
       @collapse="collapseSidebar"
     />
+    <div class="memory-editor-shell" :class="{ 'is-open': memoryEditorOpen }">
+      <Transition name="memory-editor">
+        <MemoryPanel
+          v-if="memoryEditorOpen"
+          :key="activeMemory?.id || 'new-memory'"
+          :memory="activeMemory"
+          @close="closeMemoryEditor"
+          @saved="refreshMemories"
+          @deleted="refreshMemories(null); closeMemoryEditor()"
+        />
+      </Transition>
+    </div>
     <main class="main-panel">
       <nav class="mobile-bar" aria-label="移动端栏目导航">
         <button type="button" @click="leftRailOpen = true">会话</button>
@@ -732,6 +822,7 @@ onMounted(async () => {
       </div>
     </main>
     <TeamPanel
+      v-if="!memoryEditorOpen"
       :class="{ 'is-open': rightRailOpen }"
       :graph="activeGraph"
       :chief-working="streaming"
@@ -748,6 +839,8 @@ onMounted(async () => {
 <style scoped>
 .app-shell {
   --ch-sidebar-width: 0px;
+  --ch-memory-editor-rail: var(--ch-session-rail);
+  --ch-trace-rail: var(--ch-session-rail);
   --ch-sidebar-motion-duration: 320ms;
   --ch-sidebar-motion-ease: cubic-bezier(.2, .72, .25, 1);
   display: flex;
@@ -762,8 +855,8 @@ onMounted(async () => {
   --ch-sidebar-width: var(--ch-session-rail);
 }
 
-.app-shell.settings-open {
-  --ch-sidebar-width: min(480px, calc(100vw - var(--ch-nav-rail)));
+.app-shell.trace-open {
+  --ch-sidebar-width: var(--ch-trace-rail);
 }
 
 .main-panel {
@@ -799,10 +892,15 @@ onMounted(async () => {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 @media (min-width: 781px) {
+  .app-shell {
+    --ch-memory-editor-rail: clamp(320px, 30vw, 400px);
+    --ch-trace-rail: clamp(360px, 32vw, 460px);
+  }
+
   .paper-swap-enter-active,
   .paper-swap-leave-active {
     backface-visibility: hidden;
@@ -830,6 +928,50 @@ onMounted(async () => {
   .paper-swap-leave-to {
     opacity: 0;
   }
+
+  .memory-editor-shell {
+    position: sticky;
+    top: 0;
+    width: 0;
+    height: 100dvh;
+    flex: 0 0 0;
+    overflow: clip;
+    transition: width 360ms cubic-bezier(.16, .84, .26, 1),
+      flex-basis 360ms cubic-bezier(.16, .84, .26, 1);
+  }
+
+  .memory-editor-shell :deep(.memory-panel) {
+    position: absolute;
+    inset: 0;
+  }
+
+  .memory-editor-shell.is-open {
+    width: var(--ch-memory-editor-rail);
+    flex-basis: var(--ch-memory-editor-rail);
+  }
+
+  .memory-editor-enter-active {
+    will-change: opacity, transform;
+    transition: opacity 220ms ease-out,
+      transform 360ms cubic-bezier(.16, .84, .26, 1);
+  }
+
+  .memory-editor-leave-active {
+    will-change: opacity, transform;
+    transition: opacity 120ms ease-out,
+      transform 300ms cubic-bezier(.22, .8, .25, 1);
+  }
+
+  .memory-editor-enter-from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+
+  .memory-editor-leave-to {
+    opacity: 0;
+    transform: translateX(22px);
+    pointer-events: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -842,7 +984,8 @@ onMounted(async () => {
 @media (min-width: 1181px) {
   .app-shell > :deep(.nav-dock),
   .app-shell > :deep(.sidebar),
-  .app-shell > :deep(.team-panel) {
+  .app-shell > :deep(.team-panel),
+  .memory-editor-shell {
     position: sticky;
     top: 0;
     height: 100dvh;
@@ -859,19 +1002,19 @@ onMounted(async () => {
       width var(--ch-duration-normal) var(--ch-ease-out);
   }
 
-  .app-shell.settings-open > :deep(.team-panel) {
+  .app-shell.trace-open > :deep(.team-panel) {
+    flex: 0 0 0;
     width: 0;
-    flex-basis: 0;
-    min-width: 0;
-    overflow: hidden;
     opacity: 0;
-    pointer-events: none;
+    overflow: hidden;
   }
+
 }
 
 @media (min-width: 781px) and (max-width: 1180px) {
   .app-shell > :deep(.nav-dock),
-  .app-shell > :deep(.sidebar) {
+  .app-shell > :deep(.sidebar),
+  .memory-editor-shell {
     position: sticky;
     top: 0;
     height: 100dvh;
@@ -953,7 +1096,10 @@ onMounted(async () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-shell > :deep(.sidebar) {
+  .app-shell > :deep(.sidebar),
+  .memory-editor-shell,
+  .memory-editor-enter-active,
+  .memory-editor-leave-active {
     transition: none;
   }
 }
