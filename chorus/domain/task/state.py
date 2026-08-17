@@ -97,8 +97,7 @@ def _decrement_in_degree(targets: list[str], in_degree: dict[str, int]) -> None:
 def select_display_pipeline(
     active: list[Task], finished: list[Task]
 ) -> list[Task]:
-    """展示用流水线：有进行中则返进行中，否则返已完成（已取消不算）。"""
+    """展示用流水线：有进行中则返进行中，否则返已完成与失败（已取消不算）。"""
     if active:
         return active
-    finished_only = [task for task in finished if task.status == TaskStatus.FINISHED]
-    return finished_only
+    return [task for task in finished if task.status in (TaskStatus.FINISHED, TaskStatus.FAILED)]

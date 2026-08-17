@@ -96,10 +96,10 @@ def test_status_sets():
 
 def test_select_display_pipeline():
     active = [_mk("running", id="a")]
-    finished = [_mk("finished", id="f1"), _mk("cancelled", id="c1")]
-    assert select_display_pipeline(active, finished) == active  # active 优先
-    # 无运行中则返已完成（不含已取消）
-    assert select_display_pipeline([], finished) == [_mk("finished", id="f1")]
+    terminal = [_mk("finished", id="f1"), _mk("failed", id="x1"), _mk("cancelled", id="c1")]
+    assert select_display_pipeline(active, terminal) == active  # active 优先
+    # 无运行中则返已完成与失败（不含已取消）
+    assert select_display_pipeline([], terminal) == [_mk("finished", id="f1"), _mk("failed", id="x1")]
     assert select_display_pipeline([], []) == []
 
 

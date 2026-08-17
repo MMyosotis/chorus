@@ -142,6 +142,16 @@ def test_get_graph_recent_finished():
     assert {t.id for t in graph.nodes} == {"new"}  # 最近 finished pipeline
 
 
+def test_get_graph_includes_failed():
+    """失败任务进展示图，前端据此渲染恢复卡。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "script", "script", status="finished", updated_at=1.0)
+    _mk(task_repo, content_repo, "final", "finalize", status="failed", updated_at=2.0)
+    graph = svc.get_graph("s1")
+    assert graph.active is False
+    assert {t.id for t in graph.nodes} == {"script", "final"}
+
+
 def _engine_of(task_repo):
     return task_repo._engine  # noqa: SLF001 — 测试辅助
 
