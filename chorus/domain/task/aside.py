@@ -4,6 +4,9 @@ from __future__ import annotations
 from openai import OpenAI
 
 from chorus.domain.bypass import call_once
+from chorus.domain.log import get_logger
+
+_logger = get_logger("domain.task.aside")
 
 _ASIDE_MAX_LEN = 30
 _ROLE_HINT = {
@@ -38,5 +41,6 @@ class AsideGenerator:
         try:
             raw = call_once(self._client, self._model, prompt, 512)
         except Exception:
+            _logger.exception("aside generation failed, fallback")
             return fallback
         return raw[:_ASIDE_MAX_LEN] if raw else fallback

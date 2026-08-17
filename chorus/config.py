@@ -13,21 +13,15 @@ load_dotenv(override=True)
 CHAT_MODELS = [
     {
         "model_name": "DeepSeek V4 Flash",
-        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "base_url": "https://api.deepseek.com",
         "model_id": "deepseek-v4-flash",
         "api_key_env": "DEEPSEEK_API_KEY",
     },
     {
         "model_name": "DeepSeek V4 Pro",
-        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "base_url": "https://api.deepseek.com",
         "model_id": "deepseek-v4-pro",
         "api_key_env": "DEEPSEEK_API_KEY",
-    },
-    {
-        "model_name": "MiniMax M3",
-        "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
-        "model_id": "minimax-m3",
-        "api_key_env": "MINIMAX_API_KEY",
     }
 ]
 BYPASS_MODEL = "DeepSeek V4 Flash"
@@ -40,7 +34,7 @@ IMAGE_MODELS = [
         "provider": "ark",
         "options": {
             "base_url": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
-            "api_key_env": "ARK_IMAGE_API_KEY",
+            "api_key_env": "ARK_API_KEY",
             "model_id": "doubao-seedream-4-0-250828",
         },
     },
@@ -49,17 +43,14 @@ IMAGE_MODELS = [
         "provider": "ark",
         "options": {
             "base_url": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
-            "api_key_env": "ARK_IMAGE_API_KEY",
-            "model_id": "doubao-seedream-5-0-litenew",
+            "api_key_env": "ARK_API_KEY",
+            "model_id": "doubao-seedream-5-0-260128",
         },
     },
 ]
 
 BAIDU_SEARCH_API_KEY = os.environ.get("BAIDU_SEARCH_API_KEY", "")
-BAIDU_SEARCH_BASE_URL = os.environ.get(
-    "BAIDU_SEARCH_BASE_URL",
-    "https://qianfan.baidubce.com/v2/ai_search/chat/completions",
-)
+BAIDU_SEARCH_BASE_URL = "https://qianfan.baidubce.com/v2/ai_search/chat/completions"
 
 TOOL_WHITELISTS: dict[str, tuple[str, ...]] = {
     "supervisor": ("update_intent_state", "create_plan", "present_options"),

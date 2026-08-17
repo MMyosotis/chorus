@@ -10,6 +10,9 @@ from typing import Optional
 from openai import OpenAI
 
 from chorus.domain.bypass import call_once
+from chorus.domain.log import get_logger
+
+_logger = get_logger("domain.title")
 
 _GENERATED_MAX_LEN = 30
 STORED_TITLE_MAX_LEN = 60
@@ -50,8 +53,8 @@ class TitleGenerationService:
             f"用户：{user_text[:200]}"
         )
         try:
-            # 推理模型先吐推理段再作答，预算须覆盖推理段
             raw = call_once(self._client, self._model, prompt, 512)
         except Exception:
+            _logger.exception("title generation failed, fallback")
             return None
         return clean_generated_title(raw)
