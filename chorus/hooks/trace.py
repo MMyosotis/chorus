@@ -57,8 +57,8 @@ class TraceEmitter:
             payload=payload,
         )
         return TraceEvent(
-            phase=phase,
-            message_id=ctx.turn.message_id or None, created_at=created_at,
+            phase=phase, message_id=ctx.turn.message_id or None,
+            task_id=ctx.task_id, source=ctx.source, created_at=created_at,
             payload=payload.model_dump(),
         )
 

@@ -54,6 +54,8 @@ class TraceEvent(_EventBase):
     type: Literal["trace"] = "trace"
     phase: TracePhase
     message_id: Optional[str] = None
+    task_id: Optional[str] = None
+    source: str = "supervisor"
     created_at: float
     payload: dict
 
