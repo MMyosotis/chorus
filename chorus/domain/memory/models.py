@@ -53,7 +53,7 @@ class MemoryRecall(BaseModel):
 class MemoryDraft(BaseModel):
     """LLM 产出的记忆草稿：整理时带时间戳保留原时间，提取时无时间戳由编排层补全。"""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     kind: Kind = "reference"
     description: str

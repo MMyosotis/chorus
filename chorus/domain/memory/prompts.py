@@ -5,7 +5,7 @@ import json
 import time
 from typing import Any
 
-from chorus.domain.memory.models import CreatorMemory, MemoryDigest
+from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDraft
 from chorus.domain.message import Message
 
 
@@ -46,9 +46,9 @@ def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) 
         "1. 只提取 reference 类（参考性）记忆：身份/边界/偏好/文风/选题模式/栏目骨架等\n"
         "2. description 要写进平台/栏目/是否当前活跃等召回需要的关键上下文\n"
         "3. 返回 JSON 数组，每条包含 description, content, platform, visible_to\n"
-        "4. platform 为空表示通用；visible_to 为空表示全员可见，"
-        "否则填可见角色（supervisor/idea/script/image/finalize）\n"
-        "5. 仅返回 JSON，不要其他文字"
+        "4. platform 用字符串数组，空数组 [] 表示通用，否则如 [\"小红书\"]\n"
+        "5. visible_to 用字符串数组，空数组 [] 表示全员可见，否则填可见角色（supervisor/idea/script/image/finalize）\n"
+        "6. 仅返回 JSON，不要其他文字"
     )
 
 
@@ -76,7 +76,8 @@ def build_consolidate_prompt(memories: list[CreatorMemory]) -> str:
         "4. 整理到 20 条以内\n"
         "5. 合并多条时取来源里最新的时间；未合并的保留原时间；created_at 原样抄回\n"
         "6. 返回整理后的 JSON 数组，每条包含 description, content, platform, visible_to, kind, created_at\n"
-        "7. kind 只能是 \"performance\" 或 \"reference\"；created_at 格式 YYYY-MM-DD HH:MM；仅返回 JSON，不要其他文字"
+        "7. kind 只能是 \"performance\" 或 \"reference\"；created_at 格式 YYYY-MM-DD HH:MM；"
+        "platform/visible_to 一律用数组，无值时为 []；仅返回 JSON，不要其他文字"
     )
 
 
@@ -87,3 +88,9 @@ def parse_json_array(raw: str) -> list[Any]:
     if not (0 <= start <= end):
         raise ValueError("响应无 JSON 数组括号")
     return json.loads(raw[start : end + 1])
+
+
+def parse_drafts(raw: str) -> list[MemoryDraft]:
+    """从响应解析记忆草稿列表，跳过非对象项。"""
+    items = parse_json_array(raw)
+    return [MemoryDraft(**item) for item in items if isinstance(item, dict)]

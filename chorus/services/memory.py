@@ -39,9 +39,11 @@ class MemoryService:
         try:
             ids = self._llm.select(digest, task_hint)
         except Exception:
-            _logger.warning("记忆召回失败，跳过", exc_info=True)
+            _logger.warning("memory recall failed, skip")
             return MemoryRecall(digest=digest)
-        return MemoryRecall(digest=digest, items=self._repo.get_many(ids))
+        items = self._repo.get_many(ids)
+        _logger.debug("memory recall", extra={"agent": agent_type, "digest": len(digest.entries), "hits": len(items)})
+        return MemoryRecall(digest=digest, items=items)
 
     def extract(self, session_id: str) -> None:
         if not self._settings.get_memory_enabled():
@@ -51,25 +53,29 @@ class MemoryService:
         try:
             drafts = self._llm.extract(history, existing)
         except Exception:
-            _logger.warning("记忆提取失败，跳过", exc_info=True)
+            _logger.warning("memory extract failed, skip")
             drafts = []
         for draft in drafts:
             self._store_draft(draft)
+        _logger.debug("memory extract", extra={"session": session_id, "drafts": len(drafts)})
         self.consolidate()
 
     def consolidate(self) -> None:
         all_memories = self._repo.list_all()
         if len(all_memories) < _CONSOLIDATE_THRESHOLD:
+            _logger.debug("memory consolidate skip, below threshold", extra={"count": len(all_memories)})
             return
         try:
             drafts = self._llm.merge(all_memories)
         except Exception:
-            _logger.warning("记忆整理失败，跳过", exc_info=True)
+            _logger.warning("memory consolidate failed, skip")
             return
         if not drafts:
+            _logger.debug("memory consolidate empty result, skip")
             return
         memories = [draft_to_memory(draft) for draft in drafts]
         self._repo.replace_all(memories)
+        _logger.info("memory consolidate", extra={"before": len(all_memories), "after": len(memories)})
 
     def record_selection(self, task_id: str, agent_type: str) -> None:
         if not self._settings.get_memory_enabled():
@@ -87,6 +93,7 @@ class MemoryService:
             visible_to=[agent_type],
         )
         self._store_draft(draft)
+        _logger.info("memory record selection", extra={"agent": agent_type, "draft": draft.description})
 
     def record_publication(self, task_id: str, agent_type: str) -> None:
         if not self._settings.get_memory_enabled():
@@ -101,6 +108,7 @@ class MemoryService:
             visible_to=[agent_type],
         )
         self._store_draft(draft)
+        _logger.info("memory record publication", extra={"agent": agent_type})
 
     def record_correction(self, task_id: str, agent_type: str, feedback: str) -> None:
         if not self._settings.get_memory_enabled():
@@ -112,6 +120,7 @@ class MemoryService:
             visible_to=[agent_type],
         )
         self._store_draft(draft)
+        _logger.info("memory record correction", extra={"agent": agent_type, "draft": draft.description})
 
     def list_all(self) -> list[CreatorMemory]:
         """手动管理用：不受记忆开关影响，关闭时仍可查看编辑。"""

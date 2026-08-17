@@ -164,6 +164,46 @@ def test_extract_llm_failure_preserves_store():
     assert memories[0].id == "m1"
 
 
+def test_extract_retries_on_malformed_then_succeeds():
+    """格式不对喂回自纠，第二次合法即入库。"""
+    memory_repo, message_repo, _, _, _, memory_svc = _setup(
+        FakeClient([
+            FakeResponse(json.dumps([
+                {"description": "身份：程序员", "content": "用户是程序员",
+                 "platform": "", "visible_to": ""},
+            ])),
+            FakeResponse(json.dumps([
+                {"description": "身份：程序员", "content": "用户是程序员",
+                 "platform": [], "visible_to": []},
+                {"description": "文风：短句", "content": "偏好短句",
+                 "platform": ["小红书"], "visible_to": ["script"]},
+            ])),
+        ])
+    )
+    message_repo.append(UserMessage(id="u1", session_id="s1", created_at=0.0, content="我是程序员"))
+    memory_svc.extract("s1")
+    memories = memory_repo.list_all()
+    assert len(memories) == 2
+    descs = {memory.description for memory in memories}
+    assert "身份：程序员" in descs
+    assert "文风：短句" in descs
+
+
+def test_extract_retries_exhausted_degrades():
+    """自纠 3 次仍败，编排层降级不抛、保留既有记忆。"""
+    memory_repo, message_repo, _, _, _, memory_svc = _setup(
+        FakeClient([
+            FakeResponse("不是JSON"), FakeResponse("也不是"), FakeResponse("还不行"),
+        ])
+    )
+    memory_repo.upsert(_make_memory(id="m1", description="已有记忆"))
+    message_repo.append(UserMessage(id="u1", session_id="s1", created_at=0.0, content="新对话"))
+    memory_svc.extract("s1")
+    memories = memory_repo.list_all()
+    assert len(memories) == 1
+    assert memories[0].id == "m1"
+
+
 def test_consolidate_below_threshold_no_change():
     memory_repo, _, _, _, _, memory_svc = _setup(FakeClient([]))
     for i in range(5):
@@ -208,8 +248,10 @@ def test_consolidate_preserves_timestamp_from_llm():
     assert memories[0].created_at == expected
 
 
-def test_consolidate_empty_result_preserves_store():
-    memory_repo, _, _, _, _, memory_svc = _setup(FakeClient([FakeResponse("不是 JSON")]))
+def test_consolidate_malformed_preserves_store():
+    memory_repo, _, _, _, _, memory_svc = _setup(
+        FakeClient([FakeResponse("不是 JSON"), FakeResponse("也不是"), FakeResponse("还不行")])
+    )
     for i in range(30):
         memory_repo.upsert(_make_memory(id=f"m{i}", description=f"记忆{i}"))
     memory_svc.consolidate()
