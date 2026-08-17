@@ -33,9 +33,11 @@ class FakeResponse:
 class FakeClient:
     def __init__(self, scripts):
         self._scripts = list(scripts)
+        self.calls = []
         self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
+        self.calls.append(kwargs)
         return self._scripts.pop(0)
 
 
@@ -145,6 +147,20 @@ def test_extract_upserts_drafts_and_skips_consolidate():
     assert "身份：程序员" in descs
     assert "文风：短句" in descs
     assert all(memory.kind == "reference" for memory in memories)
+
+
+def test_extract_feeds_only_recent_window():
+    """只喂最近 10 条消息，窗口外的旧消息不再重复暴露给提取。"""
+    client = FakeClient([FakeResponse("[]")])
+    memory_repo, message_repo, _, _, _, memory_svc = _setup(client)
+    for i in range(12):
+        role_cls = UserMessage if i % 2 == 0 else AssistantMessage
+        message_repo.append(role_cls(id=f"m{i}", session_id="s1", created_at=float(i), content=f"第{i}条"))
+    memory_svc.extract("s1")
+    prompt = client.calls[0]["messages"][0]["content"]
+    assert "第2条" in prompt
+    assert "第1条" not in prompt
+    assert memory_repo.list_all() == []
 
 
 def test_extract_disabled_short_circuits():

@@ -44,11 +44,12 @@ def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) 
         f"{existing_text}\n\n"
         "## 要求\n\n"
         "1. 只提取 reference 类（参考性）记忆：身份/边界/偏好/文风/选题模式/栏目骨架等\n"
-        "2. description 要写进平台/栏目/是否当前活跃等召回需要的关键上下文\n"
-        "3. 返回 JSON 数组，每条包含 description, content, platform, visible_to\n"
-        "4. platform 用字符串数组，空数组 [] 表示通用，否则如 [\"小红书\"]\n"
-        "5. visible_to 用字符串数组，空数组 [] 表示全员可见，否则填可见角色（supervisor/idea/script/image/finalize）\n"
-        "6. 仅返回 JSON，不要其他文字"
+        "2. 没有新信息，或新信息已被已有记忆覆盖时，返回空数组 []\n"
+        "3. description 要写进平台/栏目/是否当前活跃等召回需要的关键上下文\n"
+        "4. 返回 JSON 数组，每条包含 description, content, platform, visible_to\n"
+        "5. platform 用字符串数组，空数组 [] 表示通用，否则如 [\"小红书\"]\n"
+        "6. visible_to 用字符串数组，空数组 [] 表示全员可见，否则填可见角色（supervisor/idea/script/image/finalize）\n"
+        "7. 仅返回 JSON，不要其他文字"
     )
 
 

@@ -12,6 +12,7 @@ from chorus.services.settings import SettingsService
 
 _logger = get_logger("service.memory")
 _CONSOLIDATE_THRESHOLD = 30
+_EXTRACT_WINDOW = 10
 
 
 class MemoryService:
@@ -48,7 +49,7 @@ class MemoryService:
     def extract(self, session_id: str) -> None:
         if not self._settings.get_memory_enabled():
             return
-        history = self._message_repo.list_by_session(session_id)
+        history = self._message_repo.list_by_session(session_id)[-_EXTRACT_WINDOW:]
         existing = self._repo.list_all()
         try:
             drafts = self._llm.extract(history, existing)
