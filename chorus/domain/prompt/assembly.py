@@ -40,14 +40,16 @@ def build_system_prompt(ctx: PromptContext) -> str:
 
 
 def inject_user_blocks(msgs: list[dict], uctx: UserMessageContext) -> None:
-    """各段拼到末条用户消息正文前，临时注入不入库。"""
+    """各段拼到末条用户消息正文前，临时注入不入库；替换为拷贝，不动调用方持有的字典。"""
     text = "\n\n".join(block for block in (r(uctx) for r in _USER_SECTIONS) if block)
     if not text:
         return
-    user_msg = next((m for m in reversed(msgs) if m["role"] == "user"), None)
-    if user_msg is None:
+    for index in range(len(msgs) - 1, -1, -1):
+        if msgs[index]["role"] != "user":
+            continue
+        merged = text + "\n\n" + msgs[index]["content"]
+        msgs[index] = {**msgs[index], "content": merged}
         return
-    user_msg["content"] = text + "\n\n" + user_msg["content"]
 
 
 def _skill_section(ctx: PromptContext) -> str:

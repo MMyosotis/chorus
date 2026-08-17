@@ -8,12 +8,14 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from chorus.domain.memory import MemoryDigest
-from chorus.domain.memory.models import MemoryDigestEntry
+from chorus.domain.memory import MemoryDigest, MemoryRecall
+from chorus.domain.memory.models import CreatorMemory, MemoryDigestEntry
 from chorus.domain.prompt import (
     SYSTEM_PROMPT,
     PromptContext,
+    UserMessageContext,
     build_system_prompt,
+    inject_user_blocks,
     subagent_base,
 )
 from chorus.domain.skill import SkillLoader
@@ -119,6 +121,21 @@ def test_memory_block_present_with_digest():
     assert "## 创作者档案" in p
     assert "身份：程序员" in p
     assert "小红书" in p
+
+
+def test_inject_user_blocks_repeat_not_accumulate():
+    """多轮注入不累积、不动调用方持有的字典：跨轮复用历史时标签只出现一次。"""
+    memory = CreatorMemory(
+        id="m1", description="身份", content="正文",
+        platform=[], visible_to=[], kind="reference", created_at=0.0,
+    )
+    history = [{"role": "user", "content": "原始指令"}]
+    uctx = UserMessageContext(recalled_memories=[memory])
+    for _ in range(3):
+        msgs = [{"role": "system", "content": "系统"}] + history
+        inject_user_blocks(msgs, uctx)
+        assert msgs[1]["content"].count("<recalled_memories>") == 1
+    assert history[0]["content"] == "原始指令"
 
 
 def main():
