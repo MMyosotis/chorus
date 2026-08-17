@@ -63,6 +63,7 @@ function openSettings() {
     collapseSidebar()
     return
   }
+  consoleOpen.value = false
   memoryOpen.value = false
   memoryEditorOpen.value = false
   activeMemory.value = null
@@ -77,6 +78,7 @@ function openMemory() {
     return
   }
   settingsOpen.value = false
+  consoleOpen.value = false
   memoryOpen.value = true
   leftRailOpen.value = true
 }
@@ -755,6 +757,7 @@ onMounted(async () => {
       :selected-memory-id="activeMemory?.id || null"
       :console-open="consoleOpen"
       :trace-store="traceStore"
+      :task-graph="activeGraph"
       :expanded="leftRailOpen || settingsOpen || memoryOpen || consoleOpen"
       @select="selectSession"
       @create="onCreate"

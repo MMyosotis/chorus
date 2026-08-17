@@ -15,6 +15,7 @@ const props = defineProps({
   memoryOpen: { type: Boolean, default: false },
   consoleOpen: { type: Boolean, default: false },
   traceStore: { type: Object, required: true },
+  taskGraph: { type: Object, default: null },
   memoryRefreshKey: { type: Number, default: 0 },
   selectedMemoryId: { type: String, default: null },
   expanded: { type: Boolean, default: false },
@@ -160,6 +161,7 @@ onBeforeUnmount(() => {
               :open="true"
               :active-id="activeId"
               :trace-store="traceStore"
+              :task-graph="taskGraph"
               @close="emit('collapse')"
             />
           </section>
