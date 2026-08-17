@@ -97,6 +97,13 @@ def test_parse_postcard_md_requires_refs():
         parse_postcard_md(body)
 
 
+def test_parse_postcard_md_unclosed_front_matter_reports_boundary():
+    """有头无尾报边界未闭合，不混同字段缺失。"""
+    body = "---\ntitle: t\npreview_ref: a/b\nstylesheet_ref: a/c\nsummary: s\n\n正文。"
+    with pytest.raises(ValidationError, match="未闭合"):
+        parse_postcard_md(body)
+
+
 def test_parse_postcard_md_requires_front_matter_title_and_rejects_h1():
     body = "---\npreview_ref: a/b\nstylesheet_ref: a/c\n---\n\n正文。"
     with pytest.raises(ValidationError):

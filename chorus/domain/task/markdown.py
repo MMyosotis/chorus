@@ -101,13 +101,13 @@ def _pair_tokens(tokens: list[Token], correction: str) -> list[tuple[Token, Toke
 
 
 def _split_front_matter(body: str) -> tuple[list[str], str]:
-    """分离 front matter 行与正文，无 front matter 则返回空列表与原文。"""
+    """分离 front matter 行与正文；无 front matter 返空，有头无尾报错。"""
     lines = body.splitlines()
     if not lines or lines[0].strip() != "---":
         return [], body
     end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
     if end is None:
-        return [], body
+        raise ValidationError("front matter 未闭合", "起始的 --- 须在字段后补一行 --- 闭合")
     return lines[1:end], "\n".join(lines[end + 1:]).lstrip("\n")
 
 
