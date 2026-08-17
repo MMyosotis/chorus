@@ -2,13 +2,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional
+from enum import Enum
+from typing import TYPE_CHECKING, Iterable, Optional
 
+from chorus.agents.truncation import TruncationGuard
+from chorus.domain.events import SseEvent
 from chorus.domain.stream import ToolCallAccumulator
 from chorus.domain.trace import ThinkingSegment
 
 if TYPE_CHECKING:
     from chorus.domain.stream import StreamResult
+
+
+class LoopSignal(Enum):
+    CONTINUE = "continue"
+    SUSPEND = "suspend"
+    FINISH = "finish"
+
+
+@dataclass
+class LoopAction:
+    """策略对单轮结局的判定：信号与附带事件。事件只被内核消费一次，推荐返回列表或元组。"""
+
+    signal: LoopSignal
+    events: Iterable[SseEvent] = ()
 
 
 @dataclass
@@ -56,4 +73,5 @@ class AgentContext:
     # 运行级进度，跨轮累加
     step: int = 0
     turn: TurnState = field(default_factory=TurnState)
+    truncation: TruncationGuard = field(default_factory=TruncationGuard)
     outcome: LoopOutcome = field(default_factory=LoopOutcome)

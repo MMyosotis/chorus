@@ -4,13 +4,11 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 from typing import Generator, Iterable, Iterator, Optional
 
 import uuid6
 
-from chorus.agents.runtime import AgentContext
+from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
 from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
 from chorus.domain.log import ctx_fields, get_logger
 from chorus.domain.stream import StreamResult, parse_tool_arguments
@@ -23,24 +21,11 @@ _MODEL_CALL_TIMEOUT = 90
 _MAX_TOKENS = 8192
 
 
-class LoopSignal(Enum):
-    CONTINUE = "continue"
-    SUSPEND = "suspend"
-    FINISH = "finish"
-
-
-@dataclass
-class LoopAction:
-    """策略对单轮结局的判定：信号与附带事件。事件只被内核消费一次，推荐返回列表或元组。"""
-
-    signal: LoopSignal
-    events: Iterable[SseEvent] = ()
-
-
 class LoopStrategy:
     """agent loop 的业务差异面:纯钩子有默认实现,业务方法策略必实现。"""
 
     max_steps: Optional[int] = None
+    max_tokens: int = _MAX_TOKENS
 
     def before_turn(self) -> bool:
         return True
@@ -64,6 +49,9 @@ class LoopStrategy:
         raise NotImplementedError
 
     def after_text(self, ctx: AgentContext, result: StreamResult) -> LoopAction:
+        raise NotImplementedError
+
+    def on_truncation_exhausted(self, ctx: AgentContext) -> LoopAction:
         raise NotImplementedError
 
     def on_exhausted(self) -> LoopAction:
@@ -107,6 +95,11 @@ class AgentLoop:
         result = yield from self._request_model(ctx, entry, strategy)
         yield from self._hooks.trigger("AfterModelResponse", ctx)
 
+        recovery = ctx.truncation.recover(ctx, result, strategy)
+        if recovery is not None:
+            yield from recovery.events
+            return recovery.signal
+
         action = yield from self._decide(ctx, result, strategy)
         yield from action.events
         return action.signal
@@ -118,7 +111,7 @@ class AgentLoop:
         stream = entry.client.chat.completions.create(
             model=entry.model_id, messages=ctx.turn.provider_messages,
             tools=ctx.tool_schemas or None,
-            max_tokens=_MAX_TOKENS, stream=True, timeout=_MODEL_CALL_TIMEOUT,
+            max_tokens=strategy.max_tokens, stream=True, timeout=_MODEL_CALL_TIMEOUT,
         )
         result = yield from strategy.consume(stream)
         ctx.turn.apply_stream(result)

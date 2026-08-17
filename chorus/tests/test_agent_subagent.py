@@ -49,9 +49,11 @@ class FakeStream:
 class FakeClient:
     def __init__(self, scripts):
         self._scripts = list(scripts)
+        self.calls = []
         self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
+        self.calls.append(kwargs)
         return self._scripts.pop(0)
 
 
@@ -348,6 +350,54 @@ def test_subagent_provider_messages_injects_digest_into_system():
     system = msgs[0]["content"]
     assert "## 创作者档案" in system
     assert "身份：程序员" in system
+
+
+def test_subagent_truncation_escalates_and_retries():
+    """输出被截断：首轮放宽输出预算原样重发（不写历史），重试完整产出。"""
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
+    client = FakeClient([
+        FakeStream([({"content": ""}, "length")]),
+        FakeStream([({"content": _idea_content()}, "stop")]),
+    ])
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
+    assert client.calls[0]["max_tokens"] == 8192
+    assert client.calls[1]["max_tokens"] == 64000
+    # 首次重发未写历史：两次请求消息一致
+    assert client.calls[0]["messages"] == client.calls[1]["messages"]
+
+
+def test_subagent_truncation_exhausted_fails():
+    """放宽后仍截断：翻失败，不落产物。"""
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
+    client = FakeClient([FakeStream([({"content": "半截"}, "length")])] * 2)
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.FAILED
+    assert content_repo.load("t1").error
+    assert art_repo.load("t1") is None
+
+
+def test_subagent_empty_correction_keeps_history_valid():
+    """空正文格式自纠：不把空发言写进历史，重试轮请求合法且能成稿。"""
+    engine, msg_svc, trace_svc, task_repo, art_repo, content_repo = _setup()
+    _mk_task(task_repo, content_repo, "idea", "running")
+    client = FakeClient([
+        FakeStream([({"content": ""}, "stop")]),
+        FakeStream([({"content": _idea_content()}, "stop")]),
+    ])
+    sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
+    sub.run("t1")
+    assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
+    retry_msgs = client.calls[1]["messages"]
+    # 历史中不存在既无正文又无工具调用的发言（接口会拒收）
+    assert not [
+        m for m in retry_msgs
+        if m["role"] == "assistant" and not m.get("content") and not m.get("tool_calls")
+    ]
 
 
 def main():

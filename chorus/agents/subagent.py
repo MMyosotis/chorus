@@ -7,9 +7,9 @@ from __future__ import annotations
 import dataclasses
 from typing import Optional
 
-from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal, LoopStrategy
+from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
-from chorus.agents.runtime import AgentContext
+from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
 from chorus.domain.prompt import PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks, subagent_base
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import get_logger
@@ -115,14 +115,19 @@ class SubagentLoopStrategy(LoopStrategy):
             self._lease.fail(self.task, e.reason, self.owner_id)
             return LoopAction(LoopSignal.FINISH, [])
         except ValidationError as e:
-            # 纠错提示喂回模型继续自纠，撞上限才判失败
+            # 纠错提示喂回模型继续自纠，撞上限才判失败；空正文不进历史（接口拒收空发言）
             _logger.debug("format self-correction", extra={"task_id": self.task.id})
             self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
-            self.history.append({"role": "assistant", "content": content or None})
+            if content:
+                self.history.append({"role": "assistant", "content": content})
             self.history.append({"role": "user", "content": f"{e.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"})
             return LoopAction(LoopSignal.CONTINUE, [])
 
         self._lease.finalize(self.task, artifacts, self.owner_id)
+        return LoopAction(LoopSignal.FINISH, [])
+
+    def on_truncation_exhausted(self, ctx):
+        self._lease.fail(self.task, "输出超长被截断，无法成稿", self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
 
     def on_exhausted(self):

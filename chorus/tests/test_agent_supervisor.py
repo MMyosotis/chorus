@@ -134,6 +134,18 @@ def test_only_reply():
     assert [m.role for m in msgs] == ["user", "assistant"]
 
 
+def test_truncation_exhausted_falls_to_placeholder():
+    """放宽后仍截断：不落占位消息，直接收轮结束。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    client = FakeClient([FakeStream([({"content": ""}, "length")])] * 2)
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    s = session_svc.create("test")
+    events = list(sup.stream(s.id, "hi"))
+    assert [e.type for e in events][-1] == "done"
+    msgs = msg_svc.list_messages(s.id)
+    assert [m.role for m in msgs] == ["user"]
+
+
 def test_new_plan():
     """create_plan tool_call → dispatch Suspend → 建图落库 + done；assistant(tool_calls)+tool 成对落库。"""
     engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()

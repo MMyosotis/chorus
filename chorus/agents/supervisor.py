@@ -8,8 +8,8 @@ from __future__ import annotations
 from typing import Iterator, Optional
 
 from chorus.agents.chat_model import ChatModelProvider
-from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal, LoopStrategy
-from chorus.agents.runtime import AgentContext
+from chorus.agents.loop import AgentLoop, LoopStrategy
+from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.events import (
     ArchivedEvent,
@@ -114,16 +114,18 @@ class SupervisorLoopStrategy(LoopStrategy):
 
     def after_text(self, ctx, result):
         """纯文本回复：落库并发完成事件与收尾钩子。"""
-        if result.finish_reason == "length" and not result.text_parts:
-            content = "这轮想得太久没回出来，再发一次试试，或者把要求说细一点。"
-        else:
-            content = "".join(result.text_parts) if result.text_parts else None
+        content = "".join(result.text_parts) if result.text_parts else None
         self._message.append_assistant_message(
             self.session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
         )
         self._session.touch(self.session_id)
 
         # 完成事件先出解禁前端，收尾钩子急切执行
+        stop_events = list(self._hooks.trigger("Stop", ctx))
+        return LoopAction(LoopSignal.FINISH, [DoneEvent(), *stop_events])
+
+    def on_truncation_exhausted(self, ctx):
+        """放宽后仍截断：不落占位消息，直接收轮。"""
         stop_events = list(self._hooks.trigger("Stop", ctx))
         return LoopAction(LoopSignal.FINISH, [DoneEvent(), *stop_events])
 

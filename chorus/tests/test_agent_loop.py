@@ -6,8 +6,8 @@ from __future__ import annotations
 
 import types
 
-from chorus.agents.loop import AgentLoop, LoopAction, LoopSignal
-from chorus.agents.runtime import AgentContext
+from chorus.agents.loop import AgentLoop
+from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
 from chorus.domain.stream import ToolCallAccumulator, silent_consume
 from chorus.hooks import HookRegistry
 from chorus.tools.framework import DispatchResult, Reply
@@ -34,6 +34,7 @@ class _FakeEntry:
         self.model_id = "fake-model"
         self.client = self
         self.calls = 0
+        self.kwargs: list[dict] = []
 
     @property
     def chat(self):
@@ -45,6 +46,7 @@ class _FakeEntry:
 
     def create(self, **kwargs):
         self.calls += 1
+        self.kwargs.append(kwargs)
         return self._script.pop(0)
 
 
@@ -68,6 +70,7 @@ class _SpyStrategy:
                  after_tools_signal=LoopSignal.CONTINUE,
                  after_text_signal=LoopSignal.FINISH):
         self.max_steps = max_steps
+        self.max_tokens = 8192
         self._after_tools_signal = after_tools_signal
         self._after_text_signal = after_text_signal
         self.log: list[str] = []
@@ -95,6 +98,9 @@ class _SpyStrategy:
 
     def after_text(self, ctx, result):
         self.log.append("after_text"); return LoopAction(self._after_text_signal, [])
+
+    def on_truncation_exhausted(self, ctx):
+        self.log.append("on_truncation_exhausted"); return LoopAction(LoopSignal.FINISH, [])
 
     def on_exhausted(self):
         self.log.append("on_exhausted"); return LoopAction(LoopSignal.FINISH, [])
@@ -132,6 +138,36 @@ def test_max_steps_exhausts_after_n_calls():
     list(_loop().run(ctx, entry=entry, strategy=strategy))
     assert entry.calls == 2
     assert strategy.log[-1] == "on_exhausted"
+
+
+def test_kernel_widens_budget_on_truncation():
+    # 被截断：放宽预算原样重发（消息一致、不进策略分流），重试成稿
+    entry = _FakeEntry([
+        [_chunk({"content": ""}, "length")],
+        [_chunk({"content": "done"}, "stop")],
+    ])
+    ctx = AgentContext(session_id="s1")
+    strategy = _SpyStrategy()
+    list(_loop().run(ctx, entry=entry, strategy=strategy))
+    assert entry.calls == 2
+    assert entry.kwargs[0]["max_tokens"] == 8192
+    assert entry.kwargs[1]["max_tokens"] == 64000
+    # 原样重发：两次请求消息一致
+    assert entry.kwargs[0]["messages"] == entry.kwargs[1]["messages"]
+    assert strategy.log.count("after_text") == 1
+    assert strategy.max_tokens == 64000
+
+
+def test_kernel_widens_only_once_then_gives_up():
+    # 放宽后仍截断：不再重发，交策略收尾
+    entry = _FakeEntry([
+        [_chunk({"content": ""}, "length")],
+        [_chunk({"content": ""}, "length")],
+    ])
+    strategy = _SpyStrategy()
+    list(_loop().run(ctx=AgentContext(session_id="s1"), entry=entry, strategy=strategy))
+    assert entry.calls == 2
+    assert strategy.log[-1] == "on_truncation_exhausted"
 
 
 def test_kernel_routes_exception_to_on_error():
