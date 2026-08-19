@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { PanelLeft } from '@lucide/vue'
+import { ChevronDown, PanelLeft } from '@lucide/vue'
 import { ROLE_SHORT } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
@@ -334,7 +334,7 @@ onBeforeUnmount(stopConsolePoll)
             <span class="block-head">
               <span class="block-pill">用户输入</span>
               <time class="block-time">{{ fmtTs(item.created_at) }}</time>
-              <span class="block-caret">⌄</span>
+              <ChevronDown class="block-caret" aria-hidden="true" />
             </span>
             <span class="block-main">{{ item.message.text }}</span>
           </summary>
@@ -360,7 +360,7 @@ onBeforeUnmount(stopConsolePoll)
             <span class="block-head">
               <span class="block-pill">工具结果</span>
               <time class="block-time">{{ fmtTs(item.created_at) }}</time>
-              <span class="block-caret">⌄</span>
+              <ChevronDown class="block-caret" aria-hidden="true" />
             </span>
             <span class="block-main">{{ item.tools.map((tool) => tool.display).filter(Boolean).join(' · ') || `${item.tools.length} 个工具结果` }}</span>
           </summary>
@@ -370,7 +370,7 @@ onBeforeUnmount(stopConsolePoll)
                 <code class="tool-name">{{ tool.name }}</code>
                 <strong v-if="tool.display" class="tool-desc">{{ tool.display }}</strong>
                 <small class="tool-duration">{{ fmtDuration(tool.duration_ms) }}</small>
-                <span class="block-caret">⌄</span>
+                <ChevronDown class="block-caret" aria-hidden="true" />
               </summary>
               <pre>{{ tool.pretty ?? tool.content }}</pre>
             </details>
@@ -382,7 +382,7 @@ onBeforeUnmount(stopConsolePoll)
             <span class="block-head">
               <span class="block-pill">{{ item.role.label }}响应</span>
               <time class="block-time">{{ fmtTs(item.call.created_at) }}</time>
-              <span class="block-caret">⌄</span>
+              <ChevronDown class="block-caret" aria-hidden="true" />
             </span>
             <span class="block-main">{{ callSummary(item.call) }}</span>
           </summary>
@@ -428,7 +428,7 @@ onBeforeUnmount(stopConsolePoll)
                   </details>
                 </div>
                 <details v-if="(item.call.request.payload?.tools || []).length" class="schema-list">
-                  <summary>工具定义 · {{ item.call.request.payload.tools.length }}<span class="block-caret">⌄</span></summary>
+                  <summary>工具定义 · {{ item.call.request.payload.tools.length }}<ChevronDown class="block-caret" aria-hidden="true" /></summary>
                   <div v-for="tool in item.call.request.payload.tools" :key="tool.function?.name" class="schema-row">
                     <code>{{ tool.function?.name }}</code>
                     <span>{{ tool.function?.description }}</span>
@@ -454,7 +454,7 @@ onBeforeUnmount(stopConsolePoll)
                     <summary>
                       <span class="part-tag tag-thinking">思考</span>
                       <small class="part-note">{{ item.call.response.payload.thinking_segments.length }} 段 · {{ fmtSeconds(thinkingTotal(item.call.response.payload.thinking_segments)) }}</small>
-                      <span class="block-caret">⌄</span>
+                      <ChevronDown class="block-caret" aria-hidden="true" />
                     </summary>
                     <div class="part-body">
                       <div v-for="(segment, index) in item.call.response.payload.thinking_segments" :key="index" class="think-seg">
@@ -470,7 +470,7 @@ onBeforeUnmount(stopConsolePoll)
                     <summary>
                       <span class="part-tag tag-content">正文</span>
                       <span class="part-desc">{{ previewText(item.call.response.payload.content, 72) }}</span>
-                      <span class="block-caret">⌄</span>
+                      <ChevronDown class="block-caret" aria-hidden="true" />
                     </summary>
                     <div class="part-body">
                       <p class="part-text">{{ item.call.response.payload.content }}</p>
@@ -481,7 +481,7 @@ onBeforeUnmount(stopConsolePoll)
                       <span class="part-tag tag-tool">工具调用</span>
                       <code class="part-tool-name">{{ tool.name }}</code>
                       <span v-if="tool.display" class="part-desc">{{ tool.display }}</span>
-                      <span class="block-caret">⌄</span>
+                      <ChevronDown class="block-caret" aria-hidden="true" />
                     </summary>
                     <div class="part-body">
                       <pre class="part-code">{{ shortJson(tool.arguments) }}</pre>
@@ -514,7 +514,7 @@ onBeforeUnmount(stopConsolePoll)
 .block-head .block-time { margin-left: auto; }
 .block-pill { display: inline-flex; align-items: center; padding: var(--ch-space-1) var(--ch-space-2); border-radius: 4px; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); line-height: 1.4; white-space: nowrap; }
 .block-time { color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }
-.block-caret { color: var(--ch-text-muted); transition: transform var(--ch-duration-fast) var(--ch-ease); }
+.block-caret { flex-shrink: 0; width: 14px; height: 14px; stroke-width: 1.6; color: var(--ch-text-muted); transition: transform var(--ch-duration-fast) var(--ch-ease); }
 .trace-block:not([open]) .block-caret { transform: rotate(-90deg); }
 .block-main { display: block; overflow: hidden; margin-top: var(--ch-space-2); color: var(--ch-text); font-size: var(--ch-text-sm); font-weight: var(--ch-font-medium); line-height: 1.6; white-space: nowrap; text-overflow: ellipsis; }
 .user-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: var(--ch-space-2) var(--ch-space-3) var(--ch-space-3); }
