@@ -29,9 +29,9 @@ defineEmits(['toggle-sidebar', 'open-settings', 'open-memory', 'open-console'])
       <button
         type="button"
         class="dock-item"
-        :class="{ active: sidebarOpen && !settingsOpen && !memoryOpen }"
+        :class="{ active: sidebarOpen && !settingsOpen && !memoryOpen && !consoleOpen }"
         aria-label="会话"
-        :aria-pressed="sidebarOpen && !settingsOpen && !memoryOpen"
+        :aria-pressed="sidebarOpen && !settingsOpen && !memoryOpen && !consoleOpen"
         @click="$emit('toggle-sidebar')"
       >
         <RotateCcwClock aria-hidden="true" />
