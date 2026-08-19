@@ -32,6 +32,13 @@ export const ROLE_FULL = {
   finalize: '汇总官',
 }
 
+export const ROLE_SHORT = {
+  idea: '选题',
+  script: '文案',
+  image: '配图',
+  finalize: '汇总',
+}
+
 export function stepOf(agentType) {
   return ROLE_ORDER.indexOf(agentType) + 1
 }

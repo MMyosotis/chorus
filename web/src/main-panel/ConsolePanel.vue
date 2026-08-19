@@ -1,7 +1,7 @@
 <script setup>
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { PanelLeft } from '@lucide/vue'
-import { ROLE_FULL } from '../team-panel/roleMeta.js'
+import { ROLE_SHORT } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
   activeId: { type: String, default: null },
@@ -19,11 +19,11 @@ const taskById = computed(() => new Map(
 
 function roleFor(source, taskId) {
   if (source === 'supervisor' || !source) return { key: 'supervisor', label: '主编' }
-  if (source === 'scheduler') return { key: 'scheduler', label: '调度器' }
+  if (source === 'scheduler') return { key: 'scheduler', label: '调度' }
   const task = taskById.value.get(taskId)
   return {
     key: `task:${taskId || '?'}`,
-    label: ROLE_FULL[task?.agent_type] || '子 Agent',
+    label: ROLE_SHORT[task?.agent_type] || '子代理',
   }
 }
 
@@ -56,36 +56,95 @@ const modelCalls = computed(() => {
   return [...byMessage.values()].sort((a, b) => a.created_at - b.created_at)
 })
 
+const toolMetaById = computed(() => {
+  const meta = new Map()
+  for (const call of modelCalls.value) {
+    for (const trace of call.toolResults.values()) {
+      meta.set(trace.payload?.tool_call_id, trace.payload)
+    }
+  }
+  return meta
+})
+
+const agents = computed(() => {
+  const seen = new Map()
+  for (const call of modelCalls.value) {
+    const role = roleFor(call.source, call.task_id)
+    if (!seen.has(role.key)) seen.set(role.key, role)
+  }
+  return [...seen.values()]
+})
+
+const activeAgent = ref('all')
+watch(() => props.activeId, () => { activeAgent.value = 'all' })
+
+const visibleCalls = computed(() => {
+  if (activeAgent.value === 'all') return modelCalls.value
+  return modelCalls.value.filter((call) => roleFor(call.source, call.task_id).key === activeAgent.value)
+})
+
 const timeline = computed(() => {
   const result = []
-  let previousUserKey = null
+  let previous = null
 
-  for (const call of modelCalls.value) {
-    const user = userInputFor(call)
-    if (user && user.key !== previousUserKey) {
-      result.push({ kind: 'user', created_at: call.created_at, message: user })
-      previousUserKey = user.key
-    }
-
-    const role = roleFor(call.source, call.task_id)
-    const previous = result.at(-1)
-    if (previous?.kind === 'role' && previous.role.key === role.key) {
-      previous.calls.push(call)
+  for (const call of visibleCalls.value) {
+    const messages = call.request?.payload?.messages || []
+    if (messages.at(-1)?.role === 'tool' && previous) {
+      const tools = resultTools(previous)
+      if (tools.length) result.push({ kind: 'toolback', created_at: call.created_at, tools })
     } else {
-      result.push({ kind: 'role', created_at: call.created_at, role, calls: [call] })
+      const user = userInputFor(call)
+      if (user) result.push({ kind: 'user', created_at: call.created_at, message: user })
     }
+
+    result.push({ kind: 'loop', created_at: call.created_at, role: roleFor(call.source, call.task_id), call })
+    previous = call
   }
   return result
 })
+
+function resultTools(call) {
+  return toolsFor(call)
+    .filter((tool) => tool.result)
+    .map((tool) => {
+      const content = tool.result.payload?.content
+      return {
+        id: tool.id,
+        name: tool.name,
+        display: tool.display,
+        duration_ms: tool.result.payload?.duration_ms,
+        content,
+        pretty: parseMaybeJson(content),
+      }
+    })
+}
+
+const INJECTION_LABELS = { recalled_memories: '记忆召回', current_intent_state: '意图状态' }
+const INJECTION_PATTERN = /<(recalled_memories|current_intent_state)>[\s\S]*?<\/\1>/g
+
+function parseUserContent(raw) {
+  const injections = []
+  const text = raw.replace(INJECTION_PATTERN, (block) => {
+    const tag = block.slice(1, block.indexOf('>'))
+    const openTag = `<${tag}>`
+    const closeTag = `</${tag}>`
+    const content = block.slice(openTag.length, block.length - closeTag.length).trim()
+    injections.push({ label: INJECTION_LABELS[tag] || tag, content })
+    return ''
+  }).trim()
+  return { text, injections }
+}
 
 function userInputFor(call) {
   const messages = call.request?.payload?.messages || []
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]
     if (message.role !== 'user') continue
-    const content = typeof message.content === 'string' ? message.content : shortJson(message.content)
-    if (!content) return null
-    return { key: `${index}:${content}`, content }
+    const raw = typeof message.content === 'string' ? message.content : shortJson(message.content)
+    if (!raw) return null
+    const parsed = parseUserContent(raw)
+    if (!parsed.text) return null
+    return { key: `${index}:${raw}`, text: parsed.text, injections: parsed.injections }
   }
   return null
 }
@@ -113,6 +172,7 @@ function toolsFor(call) {
   }
   return [...rows.values()].map((tool) => ({
     ...tool,
+    display: tool.name === 'update_intent_state' ? '' : tool.display,
     result: call.toolResults.get(tool.id),
   }))
 }
@@ -124,6 +184,77 @@ function fmtTs(value) {
   const mm = String(date.getMinutes()).padStart(2, '0')
   const ss = String(date.getSeconds()).padStart(2, '0')
   return `${hh}:${mm}:${ss}`
+}
+
+function messageText(message) {
+  return typeof message.content === 'string' ? message.content : shortJson(message.content)
+}
+
+function userParsed(message) {
+  return parseUserContent(messageText(message))
+}
+
+function historyPreview(message) {
+  if (message.role === 'user') return userParsed(message).text
+  if (message.role === 'assistant' && !message.content) {
+    const count = (message.tool_calls || []).length
+    if (count) return `无正文 · ${count} 个工具调用`
+  }
+  if (message.role === 'tool') {
+    const meta = toolMetaById.value.get(message.tool_call_id)
+    if (meta) return `${meta.name} · ${meta.duration_ms} ms`
+  }
+  return messageText(message)
+}
+
+function fmtSeconds(totalMs) {
+  return `${(totalMs / 1000).toFixed(1)}s`
+}
+
+function fmtDuration(durationMs) {
+  if (durationMs == null) return ''
+  return durationMs >= 1000 ? fmtSeconds(durationMs) : `${durationMs} ms`
+}
+
+function parseMaybeJson(content) {
+  if (typeof content !== 'string') return null
+  const trimmed = content.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2)
+  } catch {
+    return null
+  }
+}
+
+function thinkingTotal(segments) {
+  return segments.reduce((sum, segment) => sum + (segment.duration_ms || 0), 0)
+}
+
+function hasAnyOutput(call) {
+  const response = call.response?.payload
+  return Boolean(response?.content)
+    || (response?.tool_calls || []).length > 0
+    || (response?.thinking_segments || []).length > 0
+}
+
+const rawViews = reactive({})
+const contextTabs = reactive({})
+
+function isRawView(key, region) {
+  return Boolean(rawViews[`${key}:${region}`])
+}
+
+function toggleRawView(key, region) {
+  rawViews[`${key}:${region}`] = !rawViews[`${key}:${region}`]
+}
+
+function activeContextTab(key) {
+  return contextTabs[key] ?? null
+}
+
+function selectContextTab(key, index) {
+  contextTabs[key] = activeContextTab(key) === index ? null : index
 }
 
 function previewText(value, max = 96) {
@@ -179,11 +310,6 @@ watch(() => props.activeId, (sessionId) => {
   props.traceStore.loadFromServer(sessionId)
 })
 onBeforeUnmount(stopConsolePoll)
-
-function clearCurrentTrace() {
-  if (!props.activeId || !confirm('清空当前会话的 trace？')) return
-  props.traceStore.clearTrace(props.activeId)
-}
 </script>
 
 <template>
@@ -196,94 +322,175 @@ function clearCurrentTrace() {
     </header>
 
     <section class="trace-body">
-      <div class="trace-toolbar">
-        <span>{{ traces.length }} 条 trace</span>
-        <button class="clear-btn" type="button" :disabled="!traces.length" @click="clearCurrentTrace">清空</button>
+      <div v-if="agents.length" class="context-tabs agent-tabs">
+        <button type="button" :class="{ active: activeAgent === 'all' }" @click="activeAgent = 'all'">全部</button>
+        <button v-for="agent in agents" :key="agent.key" type="button" :class="{ active: activeAgent === agent.key }" @click="activeAgent = agent.key">{{ agent.label }}</button>
       </div>
       <div v-if="!timeline.length" class="empty-hint">暂无执行轨迹。发送一条消息后，这里会展示模型调用过程。</div>
 
-      <template v-for="item in timeline" :key="`${item.kind}:${item.created_at}:${item.role?.key || item.message?.id}`">
-        <article v-if="item.kind === 'user'" class="trace-user-card">
-          <div class="trace-user-label"><span>用户输入</span><time>{{ fmtTs(item.created_at) }}</time></div>
-          <p>{{ item.message.content }}</p>
-        </article>
-
-        <details v-else class="role-chapter" open>
+      <template v-for="(item, itemIndex) in timeline" :key="`${item.kind}:${item.created_at}:${item.role?.key || item.message?.key || itemIndex}`">
+        <details v-if="item.kind === 'user'" class="trace-block type-user">
           <summary>
-            <span class="role-avatar">{{ item.role.label.slice(0, 1) }}</span>
-            <span class="role-heading">
-              <strong>{{ item.role.label }}</strong>
-              <small>{{ item.calls.length }} 次模型调用</small>
+            <span class="block-head">
+              <span class="block-pill">用户输入</span>
+              <time class="block-time">{{ fmtTs(item.created_at) }}</time>
+              <span class="block-caret">⌄</span>
             </span>
-            <span class="chapter-caret">⌄</span>
+            <span class="block-main">{{ item.message.text }}</span>
+          </summary>
+          <div class="user-detail">
+            <p class="block-body-text">{{ item.message.text }}</p>
+            <div v-if="item.message.injections.length" class="context-tabs" role="tablist" aria-label="模型上下文">
+              <button
+                v-for="(injection, index) in item.message.injections"
+                :key="index"
+                type="button"
+                role="tab"
+                :aria-selected="activeContextTab(item.message.key) === index"
+                :class="{ active: activeContextTab(item.message.key) === index }"
+                @click="selectContextTab(item.message.key, index)"
+              >{{ injection.label }}</button>
+            </div>
+            <pre v-if="activeContextTab(item.message.key) !== null" class="context-content">{{ item.message.injections[activeContextTab(item.message.key)].content }}</pre>
+          </div>
+        </details>
+
+        <details v-else-if="item.kind === 'toolback'" class="trace-block type-toolback">
+          <summary>
+            <span class="block-head">
+              <span class="block-pill">工具结果</span>
+              <time class="block-time">{{ fmtTs(item.created_at) }}</time>
+              <span class="block-caret">⌄</span>
+            </span>
+            <span class="block-main">{{ item.tools.map((tool) => tool.display).filter(Boolean).join(' · ') || `${item.tools.length} 个工具结果` }}</span>
+          </summary>
+          <div class="toolback-rows">
+            <details v-for="tool in item.tools" :key="tool.id" class="toolback-row">
+              <summary>
+                <code class="tool-name">{{ tool.name }}</code>
+                <strong v-if="tool.display" class="tool-desc">{{ tool.display }}</strong>
+                <small class="tool-duration">{{ fmtDuration(tool.duration_ms) }}</small>
+                <span class="block-caret">⌄</span>
+              </summary>
+              <pre>{{ tool.pretty ?? tool.content }}</pre>
+            </details>
+          </div>
+        </details>
+
+        <details v-else class="trace-block type-loop">
+          <summary>
+            <span class="block-head">
+              <span class="block-pill">{{ item.role.label }}响应</span>
+              <time class="block-time">{{ fmtTs(item.call.created_at) }}</time>
+              <span class="block-caret">⌄</span>
+            </span>
+            <span class="block-main">{{ callSummary(item.call) }}</span>
           </summary>
 
-          <div class="call-list">
-            <details v-for="call in item.calls" :key="call.key" class="model-call">
-              <summary>
-                <span class="call-time">{{ fmtTs(call.created_at) }}</span>
-                <span class="call-model">{{ call.request.payload?.model || '未指定模型' }}</span>
-                <span class="finish-chip" :class="`finish-${finishReason(call)}`">{{ finishReason(call) }}</span>
-                <span class="call-caret">⌄</span>
-                <span class="call-summary">{{ callSummary(call) }}</span>
-              </summary>
-
-              <div class="call-details">
-                <details class="request-block" open>
-                  <summary>
-                    <span>请求</span>
-                    <small>{{ (call.request.payload?.messages || []).length }} 条消息 · {{ (call.request.payload?.tools || []).length }} 个工具</small>
-                  </summary>
-                  <div class="request-content">
-                    <div v-for="(message, index) in call.request.payload?.messages || []" :key="index" class="request-message">
-                      <span class="message-role">{{ message.role || 'message' }}</span>
-                      <pre>{{ typeof message.content === 'string' ? message.content : shortJson(message.content) }}</pre>
+          <div class="call-details">
+            <section class="region">
+              <header class="region-head">
+                <strong>请求</strong>
+                <small>{{ (item.call.request.payload?.messages || []).length }} 条消息 · {{ (item.call.request.payload?.tools || []).length }} 个工具</small>
+                <button class="raw-toggle" type="button" @click="toggleRawView(item.call.key, 'request')">{{ isRawView(item.call.key, 'request') ? '可视化' : '原始 JSON' }}</button>
+              </header>
+              <pre v-if="isRawView(item.call.key, 'request')" class="raw-json">{{ shortJson(item.call.request.payload) }}</pre>
+              <template v-else>
+                <div class="msg-list">
+                  <details v-for="(message, index) in item.call.request.payload?.messages || []" :key="index" class="msg-row">
+                    <summary>
+                      <span class="msg-role" :class="`role-${message.role || 'message'}`">{{ message.role || 'message' }}</span>
+                      <span class="msg-preview">{{ historyPreview(message) }}</span>
+                    </summary>
+                    <div class="msg-detail">
+                      <template v-if="message.role === 'user' && userParsed(message).injections.length">
+                        <p class="msg-text">{{ userParsed(message).text }}</p>
+                        <div class="context-tabs" role="tablist" aria-label="模型上下文">
+                          <button
+                            v-for="(injection, injectIndex) in userParsed(message).injections"
+                            :key="injectIndex"
+                            type="button"
+                            role="tab"
+                            :aria-selected="activeContextTab(`${item.call.key}:${index}`) === injectIndex"
+                            :class="{ active: activeContextTab(`${item.call.key}:${index}`) === injectIndex }"
+                            @click="selectContextTab(`${item.call.key}:${index}`, injectIndex)"
+                          >{{ injection.label }}</button>
+                        </div>
+                        <pre v-if="activeContextTab(`${item.call.key}:${index}`) !== null" class="context-content">{{ userParsed(message).injections[activeContextTab(`${item.call.key}:${index}`)].content }}</pre>
+                      </template>
+                      <template v-else>
+                        <pre v-if="messageText(message)">{{ messageText(message) }}</pre>
+                        <ul v-if="(message.tool_calls || []).length" class="assistant-tools">
+                          <li v-for="toolCall in message.tool_calls" :key="toolCall.id">{{ toolCall.function?.name }}</li>
+                        </ul>
+                      </template>
                     </div>
-                    <details v-if="(call.request.payload?.tools || []).length" class="tools-schema">
-                      <summary>工具定义（{{ call.request.payload.tools.length }}）</summary>
-                      <pre>{{ shortJson(call.request.payload.tools) }}</pre>
-                    </details>
+                  </details>
+                </div>
+                <details v-if="(item.call.request.payload?.tools || []).length" class="schema-list">
+                  <summary>工具定义 · {{ item.call.request.payload.tools.length }}<span class="block-caret">⌄</span></summary>
+                  <div v-for="tool in item.call.request.payload.tools" :key="tool.function?.name" class="schema-row">
+                    <code>{{ tool.function?.name }}</code>
+                    <span>{{ tool.function?.description }}</span>
                   </div>
                 </details>
+              </template>
+            </section>
 
-                <section class="response-block" :class="{ pending: !call.response }">
-                  <div class="response-head">
-                    <strong>模型返回</strong>
-                    <span class="finish-chip" :class="`finish-${finishReason(call)}`">{{ finishReason(call) }}</span>
-                  </div>
-                  <template v-if="call.response">
-                    <details v-if="(call.response.payload?.thinking_segments || []).length" class="thinking-block">
-                      <summary>思考片段 · {{ call.response.payload.thinking_segments.length }}</summary>
-                      <pre v-for="(segment, index) in call.response.payload.thinking_segments" :key="index">{{ segment.text }}</pre>
-                    </details>
-                    <pre v-if="call.response.payload?.content" class="response-content">{{ call.response.payload.content }}</pre>
-                    <p v-else-if="toolsFor(call).length" class="empty-response">本次未返回文本</p>
-                    <p v-else class="empty-response">无文本输出</p>
-
-                    <div v-if="toolsFor(call).length" class="tool-results">
-                      <span class="tool-results-title">tool_calls · {{ toolsFor(call).length }}</span>
-                      <article v-for="tool in toolsFor(call)" :key="tool.id" class="tool-row">
-                        <div class="tool-row-head">
-                          <strong>{{ tool.display || tool.name }}</strong>
-                          <small>{{ tool.name }}</small>
-                          <span v-if="tool.runningLabel && !tool.result" class="tool-running">{{ tool.runningLabel }}</span>
+            <section class="region">
+              <header class="region-head">
+                <strong>响应</strong>
+                <div class="response-meta">
+                  <span v-if="item.call.request.payload?.model" class="model-chip">{{ item.call.request.payload.model }}</span>
+                  <span class="finish-chip" :class="`finish-${finishReason(item.call)}`">{{ finishReason(item.call) }}</span>
+                </div>
+                <button class="raw-toggle" type="button" :disabled="!item.call.response" @click="toggleRawView(item.call.key, 'response')">{{ isRawView(item.call.key, 'response') ? '可视化' : '原始 JSON' }}</button>
+              </header>
+              <p v-if="!item.call.response" class="pending-hint">模型请求已发出，等待响应…</p>
+              <pre v-else-if="isRawView(item.call.key, 'response')" class="raw-json">{{ shortJson(item.call.response.payload) }}</pre>
+              <template v-else>
+                <div v-if="hasAnyOutput(item.call)" class="part-list">
+                  <details v-if="(item.call.response.payload?.thinking_segments || []).length" class="part-row">
+                    <summary>
+                      <span class="part-tag tag-thinking">思考</span>
+                      <small class="part-note">{{ item.call.response.payload.thinking_segments.length }} 段 · {{ fmtSeconds(thinkingTotal(item.call.response.payload.thinking_segments)) }}</small>
+                      <span class="block-caret">⌄</span>
+                    </summary>
+                    <div class="part-body">
+                      <div v-for="(segment, index) in item.call.response.payload.thinking_segments" :key="index" class="think-seg">
+                        <div class="seg-head">
+                          <small>第 {{ index + 1 }} 段</small>
+                          <time>{{ fmtSeconds(segment.duration_ms || 0) }}</time>
                         </div>
-                        <details class="tool-arguments">
-                          <summary>参数</summary>
-                          <pre>{{ shortJson(tool.arguments) }}</pre>
-                        </details>
-                        <details v-if="tool.result" class="tool-result" open>
-                          <summary>返回结果 <span>{{ tool.result.payload?.duration_ms }} ms</span></summary>
-                          <pre>{{ tool.result.payload?.content }}</pre>
-                        </details>
-                      </article>
+                        <pre>{{ segment.text }}</pre>
+                      </div>
                     </div>
-                    <p v-else class="no-tools">无工具调用</p>
-                  </template>
-                  <p v-else class="empty-response">模型请求已发出，等待响应…</p>
-                </section>
-              </div>
-            </details>
+                  </details>
+                  <details v-if="item.call.response.payload?.content" class="part-row">
+                    <summary>
+                      <span class="part-tag tag-content">正文</span>
+                      <span class="part-desc">{{ previewText(item.call.response.payload.content, 72) }}</span>
+                      <span class="block-caret">⌄</span>
+                    </summary>
+                    <div class="part-body">
+                      <p class="part-text">{{ item.call.response.payload.content }}</p>
+                    </div>
+                  </details>
+                  <details v-for="tool in toolsFor(item.call)" :key="tool.id" class="part-row">
+                    <summary>
+                      <span class="part-tag tag-tool">工具调用</span>
+                      <code class="part-tool-name">{{ tool.name }}</code>
+                      <span v-if="tool.display" class="part-desc">{{ tool.display }}</span>
+                      <span class="block-caret">⌄</span>
+                    </summary>
+                    <div class="part-body">
+                      <pre class="part-code">{{ shortJson(tool.arguments) }}</pre>
+                    </div>
+                  </details>
+                </div>
+                <p v-else class="empty-line">无输出</p>
+              </template>
+            </section>
           </div>
         </details>
       </template>
@@ -293,74 +500,102 @@ function clearCurrentTrace() {
 
 <style scoped>
 .console-panel { display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; background: #fff; color: var(--ch-text); }
-.console-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; min-height: 28px; margin: 0; padding: 24px 16px 0; background: #fff; }
+.console-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; min-height: 28px; margin: 0; padding: var(--ch-space-4) var(--ch-space-3) 0; background: #fff; }
 .sidebar-title { margin: 0; font-size: var(--ch-text-lg); font-weight: var(--ch-font-bold); letter-spacing: .3px; }
 .sidebar-collapse { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--ch-radius-btn); background: transparent; color: var(--ch-text-faint); cursor: pointer; transition: background var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease); }
 .sidebar-collapse:hover { background: var(--ch-surface-2); color: var(--ch-text); }
 .sidebar-collapse :deep(svg) { width: 20px; height: 20px; transform: translateX(6px); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.clear-btn { border: 0; background: transparent; color: var(--ch-accent); font-weight: 600; cursor: pointer; }
-.clear-btn { padding: 8px; font-size: 13px; }
-.clear-btn:disabled { color: var(--ch-text-faint); cursor: not-allowed; }
-.trace-body { flex: 1; overflow-y: auto; padding: 16px 12px 28px; background: #fff; }
-.trace-toolbar { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 12px; color: var(--ch-text-muted); font-size: 12px; }
-.empty-hint { padding: 56px 16px; color: var(--ch-text-muted); text-align: center; line-height: 1.7; }
-.trace-user-card { margin: 0 4px 16px; padding: 14px 16px; border: 1px solid var(--ch-accent-border); border-radius: 14px; background: var(--ch-accent-soft-gradient); }
-.trace-user-label { display: flex; justify-content: space-between; gap: 12px; color: var(--ch-accent-soft-text); font-size: 13px; font-weight: 700; }
-.trace-user-label time { color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: 11px; font-weight: 400; }
-.trace-user-card p { margin: 8px 0 0; color: var(--ch-text); font-size: 14px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
-.role-chapter { margin: 0 4px 16px; border: 1px solid var(--ch-border); border-radius: 16px; background: var(--ch-surface); overflow: hidden; }
-.role-chapter > summary { display: flex; align-items: center; gap: 10px; padding: 14px; cursor: pointer; list-style: none; user-select: none; }
-.role-chapter > summary::-webkit-details-marker, .model-call > summary::-webkit-details-marker, .request-block > summary::-webkit-details-marker, .thinking-block > summary::-webkit-details-marker, .tools-schema > summary::-webkit-details-marker, .tool-arguments > summary::-webkit-details-marker, .tool-result > summary::-webkit-details-marker { display: none; }
-.role-avatar { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 10px; background: var(--ch-accent-soft); color: var(--ch-accent); font-weight: 700; }
-.role-heading { display: grid; gap: 2px; min-width: 0; }
-.role-heading strong { font-size: 16px; }
-.role-heading small { color: var(--ch-text-muted); font-size: 12px; }
-.chapter-caret { margin-left: auto; color: var(--ch-text-muted); font-size: 18px; transition: transform var(--ch-duration-fast) var(--ch-ease); }
-.role-chapter:not([open]) .chapter-caret, .model-call:not([open]) .call-caret { transform: rotate(-90deg); }
-.call-list { padding: 0 10px 10px; }
-.model-call { margin-top: 8px; border: 1px solid var(--ch-border); border-left: 4px solid var(--ch-accent); border-radius: 12px; overflow: hidden; background: var(--ch-surface); }
-.model-call > summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 6px 8px; align-items: center; padding: 12px; cursor: pointer; list-style: none; }
-.call-time { color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: 11px; }
-.call-model { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ch-text-secondary); font-size: 13px; font-weight: 600; }
-.finish-chip { display: inline-flex; align-items: center; min-height: 22px; padding: 2px 7px; border-radius: var(--ch-radius-pill); font-family: var(--ch-font-mono); font-size: 11px; line-height: 1; white-space: nowrap; background: var(--ch-surface-2); color: var(--ch-text-muted); }
-.finish-stop { background: var(--ch-success-soft); color: var(--ch-success-text); }
-.finish-tool_calls { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
+.trace-body { flex: 1; overflow-y: auto; padding: var(--ch-space-3) var(--ch-space-3) var(--ch-space-5); background: #fff; }
+.empty-hint { padding: 56px var(--ch-space-3); color: var(--ch-text-muted); text-align: center; line-height: 1.7; }
+.trace-block > summary::-webkit-details-marker, .toolback-row > summary::-webkit-details-marker, .msg-row > summary::-webkit-details-marker, .inject-fold > summary::-webkit-details-marker, .schema-list > summary::-webkit-details-marker, .part-row > summary::-webkit-details-marker { display: none; }
+.trace-block { margin: 0 0 var(--ch-space-3); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-list); background: var(--ch-surface); overflow: hidden; }
+.trace-block > summary { display: block; padding: var(--ch-space-3); cursor: pointer; list-style: none; }
+.block-head { display: flex; align-items: center; gap: var(--ch-space-2); }
+.block-head .block-time { margin-left: auto; }
+.block-pill { display: inline-flex; align-items: center; padding: var(--ch-space-1) var(--ch-space-2); border-radius: 4px; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); line-height: 1.4; white-space: nowrap; }
+.block-time { color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }
+.block-caret { color: var(--ch-text-muted); transition: transform var(--ch-duration-fast) var(--ch-ease); }
+.trace-block:not([open]) .block-caret { transform: rotate(-90deg); }
+.block-main { display: block; overflow: hidden; margin-top: var(--ch-space-2); color: var(--ch-text); font-size: var(--ch-text-sm); font-weight: var(--ch-font-medium); line-height: 1.6; white-space: nowrap; text-overflow: ellipsis; }
+.user-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: var(--ch-space-2) var(--ch-space-3) var(--ch-space-3); }
+.block-body-text, .msg-text, .part-text { margin: 0; max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.context-tabs { display: flex; gap: var(--ch-space-2); }
+.agent-tabs { flex-wrap: wrap; margin: 0 0 var(--ch-space-3); }
+.context-tabs button { padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; background: var(--ch-surface); color: var(--ch-text-muted); font-size: var(--ch-text-xs); line-height: 1.4; cursor: pointer; }
+.context-tabs button:hover { color: var(--ch-text-secondary); background: var(--ch-surface-2); }
+.context-tabs button.active { border-color: var(--ch-accent-border); background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: var(--ch-font-semibold); }
+.context-content { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.type-user .block-pill { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
+.type-user .block-main { color: var(--ch-text); }
+.trace-block[open] .block-main { display: none; }
+.trace-block[open] > summary { padding-bottom: 0; }
+.type-toolback .block-pill { background: var(--ch-success-soft); color: var(--ch-success-text); }
+.type-loop .block-pill { background: color-mix(in srgb, var(--ch-border) 60%, var(--ch-surface)); color: var(--ch-text-secondary); }
+.finish-chip { display: inline-flex; align-items: center; padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); line-height: 1.4; white-space: nowrap; }
 .finish-length { background: var(--ch-warning-soft); color: var(--ch-warning-text); }
 .finish-请求中 { background: var(--ch-info-soft); color: var(--ch-info-text); }
-.call-caret { color: var(--ch-text-muted); transition: transform var(--ch-duration-fast) var(--ch-ease); }
-.call-summary { grid-column: 1 / -1; overflow: hidden; color: var(--ch-text-muted); font-size: 13px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
-.call-details { padding: 0 12px 12px; }
-.request-block { margin-top: 4px; border: 1px solid var(--ch-border); border-radius: 10px; background: var(--ch-surface); overflow: hidden; }
-.request-block > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; cursor: pointer; list-style: none; font-size: 13px; font-weight: 700; }
-.request-block > summary small { color: var(--ch-text-muted); font-size: 11px; font-weight: 400; }
-.request-content { border-top: 1px solid var(--ch-border); }
-.request-message { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--ch-border); }
-.message-role { align-self: start; padding: 3px 5px; border-radius: 6px; background: var(--ch-surface-2); color: var(--ch-accent-soft-text); font-family: var(--ch-font-mono); font-size: 10px; text-align: center; }
+.call-details { padding: var(--ch-space-2) var(--ch-space-3) var(--ch-space-3); }
+.toolback-rows { margin: var(--ch-space-2) var(--ch-space-3) var(--ch-space-3); overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); }
+.toolback-row { font-size: var(--ch-text-xs); }
+.toolback-row summary { display: flex; align-items: center; gap: var(--ch-space-2); padding: var(--ch-space-2); cursor: pointer; list-style: none; }
+.toolback-row + .toolback-row { border-top: 1px solid var(--ch-border); }
+.toolback-row .block-caret { margin-left: auto; }
+.toolback-row:not([open]) .block-caret { transform: rotate(-90deg); }
+.toolback-row .tool-name { flex-shrink: 0; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.toolback-row .tool-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.toolback-row .tool-duration { flex-shrink: 0; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }
+.toolback-row pre { max-height: 160px; margin: 0 var(--ch-space-2) var(--ch-space-2); overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
 pre { margin: 0; font-family: var(--ch-font-mono); white-space: pre-wrap; word-break: break-word; }
-.request-message pre { max-height: 120px; overflow: auto; color: var(--ch-text-secondary); font-size: 11px; line-height: 1.55; }
-.tools-schema { padding: 9px 12px; color: var(--ch-text-muted); font-size: 12px; }
-.tools-schema summary, .thinking-block summary, .tool-arguments summary, .tool-result summary { cursor: pointer; list-style: none; }
-.tools-schema pre { max-height: 180px; margin-top: 8px; overflow: auto; color: var(--ch-text-secondary); font-size: 11px; }
-.response-block { margin-top: 10px; padding: 12px; border: 1px solid var(--ch-accent-border); border-radius: 12px; background: var(--ch-accent-soft-gradient); }
-.response-block.pending { border-style: dashed; }
-.response-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.response-head strong { color: var(--ch-accent-soft-text); font-size: 14px; }
-.thinking-block { margin-top: 10px; border-radius: 8px; background: color-mix(in srgb, var(--ch-surface) 75%, transparent); color: var(--ch-text-secondary); font-size: 12px; }
-.thinking-block summary { padding: 8px 10px; }
-.thinking-block pre { max-height: 140px; overflow: auto; padding: 0 10px 10px; font-size: 11px; line-height: 1.55; }
-.response-content { max-height: 240px; margin-top: 10px; overflow: auto; color: var(--ch-text); font-size: 12px; line-height: 1.65; }
-.empty-response, .no-tools { margin: 10px 0 0; color: var(--ch-text-muted); font-size: 12px; }
-.tool-results { margin-top: 12px; }
-.tool-results-title { display: block; margin-bottom: 8px; color: var(--ch-accent-soft-text); font-family: var(--ch-font-mono); font-size: 12px; font-weight: 700; }
-.tool-row { margin-top: 8px; padding: 10px; border: 1px solid var(--ch-accent-border); border-radius: 10px; background: var(--ch-surface-glass-strong); }
-.tool-row-head { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-.tool-row-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ch-text); font-size: 13px; }
-.tool-row-head small { overflow: hidden; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.tool-running { margin-left: auto; color: var(--ch-accent-soft-text); font-size: 11px; white-space: nowrap; }
-.tool-arguments { margin-top: 7px; color: var(--ch-text-muted); font-size: 11px; }
-.tool-arguments pre, .tool-result pre { max-height: 160px; margin-top: 6px; overflow: auto; padding: 8px; border-radius: 7px; background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: 11px; line-height: 1.5; }
-.tool-result { margin-top: 7px; padding: 8px; border-radius: 8px; background: var(--ch-success-soft); color: var(--ch-success-text); font-size: 11px; }
-.tool-result summary { display: flex; justify-content: space-between; font-weight: 700; }
-.tool-result pre { background: color-mix(in srgb, var(--ch-surface) 66%, transparent); }
-@media (max-width: 780px) { .console-header { padding: 16px 16px 0; } .trace-body { padding: 12px 8px 24px; } }
+.region + .region { margin-top: var(--ch-space-3); }
+.region > * + * { margin-top: var(--ch-space-2); }
+.region-head { display: flex; align-items: center; gap: var(--ch-space-2); }
+.region-head strong { color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); }
+.region-head small { color: var(--ch-text-muted); font-size: var(--ch-text-xs); white-space: nowrap; }
+.model-chip { display: inline-flex; align-items: center; padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); line-height: 1.4; white-space: nowrap; }
+.response-meta { display: flex; align-items: center; gap: var(--ch-space-2); min-width: 0; }
+.raw-toggle { margin-left: auto; padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; background: transparent; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.4; cursor: pointer; }
+.raw-toggle:disabled { color: var(--ch-text-faint); cursor: not-allowed; }
+.raw-json { max-height: 320px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.msg-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); }
+.msg-row + .msg-row { border-top: 1px solid var(--ch-border); }
+.msg-row summary { display: flex; align-items: center; gap: var(--ch-space-2); padding: var(--ch-space-2); cursor: pointer; list-style: none; }
+.msg-role { flex-shrink: 0; width: 56px; padding: 2px 0; border-radius: 4px; text-align: center; font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); line-height: 1.5; }
+.role-user { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
+.role-assistant { background: var(--ch-surface-2); color: var(--ch-text-secondary); }
+.role-system { background: var(--ch-surface-2); color: var(--ch-text-faint); }
+.role-tool { background: var(--ch-success-soft); color: var(--ch-success-text); }
+.msg-preview { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+.msg-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: 0 var(--ch-space-2) var(--ch-space-2); }
+.msg-detail pre { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.assistant-tools { margin: 0; padding: 0; list-style: none; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.schema-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); background: var(--ch-surface); }
+.schema-list summary { display: flex; align-items: center; padding: var(--ch-space-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); cursor: pointer; list-style: none; }
+.schema-list .block-caret { margin-left: auto; }
+.schema-list:not([open]) .block-caret { transform: rotate(-90deg); }
+.schema-list[open] summary { border-bottom: 1px solid var(--ch-border); }
+.schema-row { display: flex; align-items: center; gap: var(--ch-space-2); min-width: 0; padding: var(--ch-space-2); }
+.schema-row + .schema-row { border-top: 1px solid var(--ch-border); }
+.schema-row code { flex-shrink: 0; padding: 2px var(--ch-space-1); border-radius: 4px; background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.schema-row span { min-width: 0; overflow: hidden; color: var(--ch-text-muted); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+.part-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); }
+.part-row + .part-row { border-top: 1px solid var(--ch-border); }
+.part-row summary { display: flex; align-items: center; gap: var(--ch-space-2); padding: var(--ch-space-2); cursor: pointer; list-style: none; }
+.part-row .block-caret { margin-left: auto; }
+.part-row:not([open]) .block-caret { transform: rotate(-90deg); }
+.part-row[open] .part-desc, .msg-row[open] .msg-preview, .toolback-row[open] .tool-desc { display: none; }
+.part-tag { flex-shrink: 0; width: 56px; padding: 2px 0; border-radius: 4px; text-align: center; font-size: var(--ch-text-xs); line-height: 1.5; }
+.tag-thinking { background: var(--ch-info-soft); color: var(--ch-info-text); }
+.tag-content { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
+.tag-tool { background: var(--ch-success-soft); color: var(--ch-success-text); }
+.part-note { color: var(--ch-text-muted); font-size: var(--ch-text-xs); white-space: nowrap; }
+.part-tool-name { flex-shrink: 0; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.part-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+.part-body { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: 0 var(--ch-space-2) var(--ch-space-2); }
+.part-code { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.think-seg { padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); }
+.seg-head { display: flex; align-items: baseline; justify-content: space-between; color: var(--ch-text-muted); font-size: var(--ch-text-xs); }
+.seg-head time { font-family: var(--ch-font-mono); }
+.think-seg pre { max-height: 144px; margin-top: var(--ch-space-2); overflow: auto; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.pending-hint, .empty-line { margin: 0; color: var(--ch-text-muted); font-size: var(--ch-text-xs); }
+@media (max-width: 780px) { .console-header { padding: var(--ch-space-3) var(--ch-space-3) 0; } .trace-body { padding: var(--ch-space-3) var(--ch-space-2) var(--ch-space-4); } }
 </style>
