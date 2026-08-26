@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Optional
+from typing import Any, Optional, cast
 
 from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
@@ -22,7 +22,7 @@ from chorus.domain.prompt import PromptContext, UserMessageContext, build_system
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
-from chorus.domain.stream import StreamResult, silent_consume
+from chorus.domain.stream import silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
@@ -246,5 +246,5 @@ class SubAgentService:
 
         return content.render_invoke(
             deps_outputs,
-            dataclasses.asdict(prior.artifacts) if prior else None,
+            dataclasses.asdict(cast(Any, prior.artifacts)) if prior else None,
         )

@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, cast
 
 from sqlalchemy import select, update
 
@@ -109,7 +109,7 @@ class MessageRepository(BaseRepository):
             .order_by(MessageRecord.id.desc())
             .limit(1)
         ).first()
-        return to_domain(r) if r else None
+        return cast(Optional[ToolMessage], to_domain(r)) if r else None
 
     @write
     def update_content(self, db, message_id: str, content: str) -> None:

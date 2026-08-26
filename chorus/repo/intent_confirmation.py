@@ -1,7 +1,7 @@
 """意图确认留档表：每次待确认挂起单一行，存意图快照与作答状态。"""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 
@@ -68,7 +68,7 @@ class IntentConfirmationRepository(BaseRepository):
         ).first()
         if record is None:
             return
-        snapshot = dict(record.snapshot)
+        snapshot: dict[str, Any] = dict(record.snapshot)
         snapshot["answer"] = answer.model_dump(mode="json", exclude_none=True)
         record.snapshot = snapshot
         record.status = "answered"

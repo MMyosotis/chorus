@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "uuid6>=2025.0.1",
     "sqlalchemy>=2.0.51",
+    "typing-extensions>=4.15.0",
 ]
 
 [dependency-groups]

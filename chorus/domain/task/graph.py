@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Optional, Union
+from typing import Any, Optional, Union, cast
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydataclass
@@ -83,17 +83,17 @@ def dump_task_graph(graph: TaskGraph) -> dict:
             "agent_type": node.agent_type,
             "status": node.status,
             "updated_at": node.updated_at,
-            "progress": _dump_progress_with_line(node) if node.progress else None,
-            "artifacts": dataclasses.asdict(node.artifacts) if node.artifacts else None,
+            "progress": _dump_progress_with_line(node.progress, node.agent_type) if node.progress else None,
+            "artifacts": dataclasses.asdict(cast(Any, node.artifacts)) if node.artifacts else None,
             "error": node.error,
         } for node in graph.nodes],
     }
 
 
-def _dump_progress_with_line(node: TaskNodeView) -> dict:
+def _dump_progress_with_line(progress: TaskProgress, agent_type: str) -> dict:
     """序列化进度快照，并按角色补活动台词。"""
-    data = dump_progress(node.progress)
-    profile = AGENT_PROFILES.get(node.agent_type)
+    data = dump_progress(progress)
+    profile = AGENT_PROFILES.get(agent_type)
     if profile:
-        data["activity_line"] = profile.activity_line(node.progress.activity_kind)
+        data["activity_line"] = profile.activity_line(progress.activity_kind)
     return data

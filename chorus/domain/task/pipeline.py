@@ -5,6 +5,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Optional
 
 from chorus.domain.intent import Intent
 from chorus.domain.task.errors import ValidationError

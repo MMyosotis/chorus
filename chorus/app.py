@@ -166,6 +166,7 @@ def create_app() -> FastAPI:
     app.state.skill_loader = skill_loader
     app.state.memory_service = memory_service
 
+    # noinspection PyTypeChecker
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173"],

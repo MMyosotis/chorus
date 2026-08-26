@@ -443,7 +443,7 @@ def test_on_error_overflow_requests_retry_once():
         SkillLoader(skills_dir=Path("/nonexistent-skills")), (),
         memory=MemoryRecall(), compact=compact,
     )
-    ctx = AgentContext(session_id=s.id)
+    ctx = AgentContext(session_id=s.id, chat_model="test-model")
     ctx.turn.message_id = "m-overflow"
 
     action = strategy.on_error(ctx, RuntimeError("maximum context length exceeded"))

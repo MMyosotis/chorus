@@ -8,11 +8,11 @@ from chorus.agents import AgentContext
 
 
 def test_agent_context_multiagent_fields():
-    ctx = AgentContext(session_id="s", source="subagent", task_id="t1")
+    ctx = AgentContext(session_id="s", chat_model="test-model", source="subagent", task_id="t1")
     assert ctx.source == "subagent"
     assert ctx.task_id == "t1"
     # 默认 supervisor
-    ctx2 = AgentContext(session_id="s")
+    ctx2 = AgentContext(session_id="s", chat_model="test-model")
     assert ctx2.source == "supervisor"
     assert ctx2.task_id is None
     # reset 不清 source（回合级固定）

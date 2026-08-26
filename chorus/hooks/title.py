@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Optional
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import SseEvent, TitleUpdateEvent
@@ -26,7 +26,7 @@ class TitlePostProcessor:
         self._message = message_service
         self._title = title_service
 
-    def on_stop(self, ctx: AgentContext) -> Iterable[SseEvent]:
+    def on_stop(self, ctx: AgentContext) -> Optional[Iterable[SseEvent]]:
         # 已定名则短路，不调模型不遍历历史
         if self._session.is_title_set(ctx.session_id):
             return None

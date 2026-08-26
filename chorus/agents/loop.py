@@ -13,7 +13,7 @@ from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
 from chorus.domain.log import ctx_fields, get_logger
 from chorus.domain.stream import StreamResult, parse_tool_arguments
 from chorus.hooks import HookRegistry
-from chorus.tools import ToolCall, ToolContext, ToolDispatch
+from chorus.tools import DispatchResult, ToolCall, ToolContext, ToolDispatch
 
 _logger = get_logger("loop")
 
@@ -42,7 +42,7 @@ class LoopStrategy:
     def before_dispatch(self, call: ToolCall) -> None:
         pass
 
-    def after_dispatch(self, call: ToolCall, dispatch: object) -> None:
+    def after_dispatch(self, call: ToolCall, dispatch: DispatchResult) -> None:
         pass
 
     def after_tools(self, ctx: AgentContext, result: StreamResult, pairs: list) -> LoopAction:

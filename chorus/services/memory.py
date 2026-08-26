@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from chorus.domain.log import get_logger
 from chorus.domain.memory.llm import MemoryLLMService
-from chorus.domain.memory.models import CreatorMemory, MemoryDigest, MemoryDigestEntry, MemoryDraft, MemoryRecall, draft_to_memory
-from chorus.domain.memory.predicates import memories_to_digest_entries, visible_to_agent
+from chorus.domain.memory.models import CreatorMemory, Kind, MemoryDigest, MemoryDigestEntry, MemoryDraft, MemoryRecall, draft_to_memory
+from chorus.domain.memory.predicates import memories_to_digest_entries
 from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -129,7 +129,7 @@ class MemoryService:
 
     def create_memory(
         self, description: str, content: str,
-        platform: list[str], visible_to: list[str], kind: str = "reference",
+        platform: list[str], visible_to: list[str], kind: Kind = "reference",
     ) -> CreatorMemory:
         """手动新增：用户明确给出，默认参考记忆。"""
         draft = MemoryDraft(
@@ -146,7 +146,7 @@ class MemoryService:
     def update_memory(
         self, memory_id: str,
         description: str, content: str,
-        platform: list[str], visible_to: list[str], kind: str,
+        platform: list[str], visible_to: list[str], kind: Kind,
     ) -> CreatorMemory | None:
         """全量覆盖：替换该记忆全部字段；记忆不存在则跳过。"""
         existing = self._repo.get(memory_id)

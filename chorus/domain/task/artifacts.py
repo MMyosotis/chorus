@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from functools import singledispatch
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -78,4 +78,4 @@ def downstream_view(artifacts: Any) -> dict:
 def _idea_view(artifacts: IdeaArtifacts) -> dict:
     """选题裁剪到生效选中候选。"""
     cand = artifacts.selected_candidate()
-    return {"candidates": [dataclasses.asdict(cand)]} if cand else {}
+    return {"candidates": [dataclasses.asdict(cast(Any, cand))]} if cand else {}

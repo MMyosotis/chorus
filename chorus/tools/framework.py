@@ -21,20 +21,20 @@ _DISPLAY_MAX_LEN = 200
 WEB_SEARCH_TOOL_NAME = "baidu_search"
 
 
+@dataclass(frozen=True)
 class ToolOutcome:
     """工具执行后的走向信号，循环据类型分流不按工具名。"""
+    content: str
 
 
 @dataclass(frozen=True)
 class Reply(ToolOutcome):
     """回传型：内容作为工具结果回传模型，循环继续。"""
-    content: str
 
 
 @dataclass(frozen=True)
 class Suspend(ToolOutcome):
     """挂起型：循环关流等外部信号 resume 续跑，不回传模型。内容如实记录结果，落库与回传同路径。"""
-    content: str
 
 
 @dataclass(frozen=True)

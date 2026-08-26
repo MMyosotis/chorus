@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Optional
+from typing import Optional
 
 from chorus.domain.task import (
     ACTIVE_STATUSES,

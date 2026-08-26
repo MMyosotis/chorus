@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Optional
 
 from chorus.agents.runtime import AgentContext
 from chorus.domain.events import SseEvent
@@ -15,6 +15,6 @@ class MemoryExtractor:
     def __init__(self, memory_service: MemoryService):
         self._memory = memory_service
 
-    def on_stop(self, ctx: AgentContext) -> Iterable[SseEvent]:
+    def on_stop(self, ctx: AgentContext) -> Optional[Iterable[SseEvent]]:
         self._memory.extract(ctx.session_id)
         return None

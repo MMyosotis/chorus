@@ -122,7 +122,7 @@ def _loop(hooks=None, dispatcher=None):
 def test_kernel_continues_after_tools_then_finishes_on_text():
     # 第一轮请求工具后继续；第二轮纯文本后结束
     entry = _FakeEntry([[_tool_call_chunk()], [_chunk({"content": "done"}, "stop")]])
-    ctx = AgentContext(session_id="s1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
     strategy = _SpyStrategy()
     list(_loop().run(ctx, entry=entry, strategy=strategy))
     assert entry.calls == 2
@@ -133,7 +133,7 @@ def test_kernel_continues_after_tools_then_finishes_on_text():
 def test_max_steps_exhausts_after_n_calls():
     # 每轮工具后继续，撞步数上限走耗尽分支，不多调一次模型
     entry = _FakeEntry([[_tool_call_chunk()], [_tool_call_chunk()]])
-    ctx = AgentContext(session_id="s1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
     strategy = _SpyStrategy(max_steps=2)
     list(_loop().run(ctx, entry=entry, strategy=strategy))
     assert entry.calls == 2
@@ -146,7 +146,7 @@ def test_kernel_widens_budget_on_truncation():
         [_chunk({"content": ""}, "length")],
         [_chunk({"content": "done"}, "stop")],
     ])
-    ctx = AgentContext(session_id="s1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
     strategy = _SpyStrategy()
     list(_loop().run(ctx, entry=entry, strategy=strategy))
     assert entry.calls == 2
@@ -165,7 +165,7 @@ def test_kernel_widens_only_once_then_gives_up():
         [_chunk({"content": ""}, "length")],
     ])
     strategy = _SpyStrategy()
-    list(_loop().run(ctx=AgentContext(session_id="s1"), entry=entry, strategy=strategy))
+    list(_loop().run(ctx=AgentContext(session_id="s1", chat_model="test-model"), entry=entry, strategy=strategy))
     assert entry.calls == 2
     assert strategy.log[-1] == "on_truncation_exhausted"
 
@@ -174,7 +174,7 @@ def test_kernel_routes_exception_to_on_error():
     class _BoomEntry(_FakeEntry):
         def create(self, **kwargs):
             raise RuntimeError("boom")
-    ctx = AgentContext(session_id="s1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
     strategy = _SpyStrategy()
     list(_loop().run(ctx, entry=_BoomEntry([]), strategy=strategy))
     assert strategy.log[-1] == "on_error"
@@ -200,7 +200,7 @@ def test_dispatch_tool_calls_orders_pre_before_dispatch_after_post():
             order.append(f"after:{call.name}")
 
     gen = _loop(hooks=hooks)._dispatch_tool_calls(
-        AgentContext(session_id="s1"), tool_calls, strategy=_DispatchSpy(),
+        AgentContext(session_id="s1", chat_model="test-model"), tool_calls, strategy=_DispatchSpy(),
     )
     pairs = []
     while True:

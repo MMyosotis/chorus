@@ -47,7 +47,7 @@ def test_supervisor_on_error_appends_error_message():
     msg_svc, trace_svc, _, engine = _setup()
     msg_svc.append_user_message("s1", "hi")
     strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryRecall(), build_compact_service(engine))
-    ctx = AgentContext(session_id="s1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")
 
@@ -69,7 +69,7 @@ def test_supervisor_on_error_appends_error_message():
 def test_trace_propagates_subagent_source_and_task_id():
     msg_svc, trace_svc, _, _ = _setup()
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
-    ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     ctx.chat_model = "fake-model"
 
@@ -91,7 +91,7 @@ def test_trace_propagates_subagent_source_and_task_id():
 def test_trace_default_supervisor_when_ctx_unset():
     msg_svc, trace_svc, _, _ = _setup()
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
-    ctx = AgentContext(session_id="s1")               # 默认 source="supervisor", task_id=None
+    ctx = AgentContext(session_id="s1", chat_model="test-model")               # 默认 source="supervisor", task_id=None
     ctx.chat_model = "fake-model"
 
     list(emitter.before_model_request(ctx))
@@ -104,7 +104,7 @@ def test_trace_default_supervisor_when_ctx_unset():
 def test_trace_tool_result_payload_from_result_object():
     msg_svc, trace_svc, _, _ = _setup()
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
-    ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
     call = {"id": "call-1", "name": "search", "arguments": {"q": "x"}}
     result = types.SimpleNamespace(
@@ -144,7 +144,7 @@ def test_title_on_stop_yields_update_when_unset():
     s = session_svc.create("新对话")
     _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService("夏日晚风")
-    ctx = AgentContext(session_id=s.id)
+    ctx = AgentContext(session_id=s.id, chat_model="test-model")
 
     result = TitlePostProcessor(session_svc, msg_svc, stub).on_stop(ctx)
 
@@ -167,7 +167,7 @@ def test_title_skips_when_already_set():
     session_svc.rename(s.id, "用户起的名")             # 标记为已生成
     _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService("不该用")
-    ctx = AgentContext(session_id=s.id)
+    ctx = AgentContext(session_id=s.id, chat_model="test-model")
 
     result = TitlePostProcessor(session_svc, msg_svc, stub).on_stop(ctx)
 
@@ -181,7 +181,7 @@ def test_title_skips_when_generate_returns_none():
     s = session_svc.create("新对话")
     _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService(None)
-    ctx = AgentContext(session_id=s.id)
+    ctx = AgentContext(session_id=s.id, chat_model="test-model")
 
     result = TitlePostProcessor(session_svc, msg_svc, stub).on_stop(ctx)
 
@@ -202,7 +202,7 @@ class _FakeMemoryExtract:
 
 def test_memory_extractor_on_stop_calls_extract():
     fake = _FakeMemoryExtract()
-    ctx = AgentContext(session_id="s1")
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
 
     result = MemoryExtractor(fake).on_stop(ctx)
 

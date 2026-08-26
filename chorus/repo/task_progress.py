@@ -16,41 +16,42 @@ def _to_domain(r: TaskProgressRecord) -> TaskProgress:
     return TaskProgress(**shared_fields(r, TaskProgress))
 
 
-class TaskProgressRepository(BaseRepository):
-    def _upsert(self, db, task_id: str, **values) -> None:
-        db.execute(
-            insert(TaskProgressRecord)
-            .values(task_id=task_id, **values)
-            .on_conflict_do_update(index_elements=["task_id"], set_=values)
-        )
+def _upsert(db, task_id: str, **values) -> None:
+    db.execute(
+        insert(TaskProgressRecord)
+        .values(task_id=task_id, **values)
+        .on_conflict_do_update(index_elements=["task_id"], set_=values)
+    )
 
+
+class TaskProgressRepository(BaseRepository):
     @write
     def set_composing(self, db, task_id: str, chars: int, units: int) -> None:
-        self._upsert(db, task_id, composing_chars=chars, composing_units=units)
+        _upsert(db, task_id, composing_chars=chars, composing_units=units)
 
     @write
     def set_composing_chars(self, db, task_id: str, chars: int) -> None:
-        self._upsert(db, task_id, composing_chars=chars)
+        _upsert(db, task_id, composing_chars=chars)
 
     @write
     def set_composing_units(self, db, task_id: str, units: int) -> None:
-        self._upsert(db, task_id, composing_units=units)
+        _upsert(db, task_id, composing_units=units)
 
     @write
     def set_composing_label(self, db, task_id: str, label: str) -> None:
-        self._upsert(db, task_id, composing_label=label)
+        _upsert(db, task_id, composing_label=label)
 
     @write
     def set_aside(self, db, task_id: str, aside: str) -> None:
-        self._upsert(db, task_id, aside=aside)
+        _upsert(db, task_id, aside=aside)
 
     @write
     def set_signal(self, db, task_id: str, signal: str) -> None:
-        self._upsert(db, task_id, last_signal=signal)
+        _upsert(db, task_id, last_signal=signal)
 
     @write
     def set_activity(self, db, task_id: str, kind: str, detail: str = "") -> None:
-        self._upsert(db, task_id, activity_kind=kind, activity_detail=detail)
+        _upsert(db, task_id, activity_kind=kind, activity_detail=detail)
 
     @read
     def load(self, db, task_id: str) -> Optional[TaskProgress]:

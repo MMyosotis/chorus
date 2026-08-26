@@ -63,9 +63,9 @@ class LoopOutcome:
 class AgentContext:
     # 回合级固定输入
     session_id: str
+    chat_model: str
     user_message: str = ""
     tool_schemas: list[dict] = field(default_factory=list)
-    chat_model: Optional[str] = None
     # 多智能体扩展，钩子据此区分来源
     source: str = "supervisor"
     task_id: Optional[str] = None

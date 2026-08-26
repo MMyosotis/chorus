@@ -1,7 +1,7 @@
 """选项征询表：每条提问单一行，存提问定义与作答状态。"""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 
@@ -69,7 +69,11 @@ class OptionPromptRepository(BaseRepository):
             .order_by(OptionPromptRecord.created_at.desc())
             .limit(1)
         ).first()
-        prompt = dict(record.prompt)
-        prompt["answers"] = [answer.model_dump(mode="json", exclude_none=True) for answer in answers]
+        if record is None:
+            return
+        prompt: dict[str, Any] = dict(record.prompt)
+        prompt["answers"] = [
+            answer.model_dump(mode="json", exclude_none=True) for answer in answers
+        ]
         record.prompt = prompt
         record.status = "answered"

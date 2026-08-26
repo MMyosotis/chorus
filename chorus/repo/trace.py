@@ -42,7 +42,7 @@ def _to_domain(r: TraceRecord) -> TraceEntry:
 
 def _from_domain(e: TraceEntry) -> TraceRecord:
     return TraceRecord(
-        id=e.id, session_id=e.session_id, message_id=e.message_id, task_id=e.task_id,
+        session_id=e.session_id, message_id=e.message_id, task_id=e.task_id,
         source=e.source, phase=e.phase.value, created_at=e.created_at,
         payload_json=e.payload.model_dump(),
     )
