@@ -5,6 +5,7 @@ import { ROLE_FULL } from '../team-panel/roleMeta.js'
 import HilCard from './HilCard.vue'
 
 const props = defineProps({ task: { type: Object, required: true } })
+const emit = defineEmits(['preview-task'])
 
 const agentType = computed(() => props.task.agent_type)
 const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
@@ -16,7 +17,7 @@ const roleLabel = computed(() => ROLE_FULL[agentType.value] || agentType.value)
       <AgentAvatar :agent-type="agentType" status="finished" :size="40" />
       <span class="role">{{ roleLabel }}</span>
     </header>
-    <HilCard :task="task" confirmed />
+    <HilCard :task="task" confirmed @preview-task="emit('preview-task', $event)" />
   </section>
 </template>
 

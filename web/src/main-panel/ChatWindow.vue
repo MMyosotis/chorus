@@ -204,7 +204,7 @@ watch(
             />
           </div>
           <ArtifactCard v-else-if="msg.kind === 'postcard'" :task="msg.task" @preview="openPreview(msg.task)" />
-          <ConfirmedCard v-else-if="msg.kind === 'confirmed'" :task="msg.task" />
+          <ConfirmedCard v-else-if="msg.kind === 'confirmed'" :task="msg.task" @preview-task="openPreview" />
           <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
           <div v-else-if="msg.kind === 'recovery'" class="recovery-panel">
             <header class="task-turn-head">
