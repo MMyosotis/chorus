@@ -42,7 +42,7 @@ from chorus.agents.chat_model import ChatModelProvider
 from chorus.services.message import MessageService
 from chorus.tools import ToolDispatch
 
-_MAX_STEPS = 8
+_MAX_STEPS = 20
 _UNIT_MARKER = {"idea": "### ", "script": "## ", "finalize": "## "}
 
 _logger = get_logger("subagent")
