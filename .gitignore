@@ -18,6 +18,7 @@ web/playwright-report/
 /.claude/
 /.superpowers/
 /.playwright-mcp/
+/.mcp.json
 
 # docs
 /docs
