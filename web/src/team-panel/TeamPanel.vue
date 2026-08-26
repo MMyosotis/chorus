@@ -59,12 +59,15 @@ const tasks = computed(() => props.graph?.tasks || [])
   padding: var(--ch-panel-padding);
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
   border: 1px solid var(--ch-border);
   border-radius: var(--ch-radius-xl);
   background: var(--ch-surface);
   box-shadow: var(--ch-shadow-team);
-  scrollbar-color: var(--ch-border-strong) transparent;
-  scrollbar-width: thin;
+}
+
+.team-surface::-webkit-scrollbar {
+  display: none;
 }
 
 .right-title {
