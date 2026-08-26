@@ -7,6 +7,7 @@ import types
 from pathlib import Path
 
 from chorus.agents.loop import AgentLoop
+from chorus.agents.runtime import AgentContext, LoopSignal
 from chorus.agents.supervisor import SupervisorService, SupervisorLoopStrategy
 from chorus.domain.intent import IntentStateUpdate
 from chorus.domain.memory import CreatorMemory, MemoryRecall
@@ -17,6 +18,7 @@ from chorus.repo.engine import build_engine
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -28,7 +30,7 @@ from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
+from chorus.tests._helpers import build_compact_service, stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool, LoadSkillTool, UpdateIntentStateTool
 
@@ -76,7 +78,7 @@ def _setup():
     content_repo = TaskContentRepository(engine)
     session_svc = SessionService(SessionRepository(engine))
     trace_svc = TraceService(trace_repo)
-    msg_svc = MessageService(msg_repo, trace_svc)
+    msg_svc = MessageService(msg_repo, ProviderMessageRepository(engine), trace_svc, build_compact_service(engine))
     task_svc = TaskService(task_repo, art_repo, progress_repo, content_repo, session_svc, stub_memory_service())
     return engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo
 
@@ -101,7 +103,7 @@ def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_s
     sup = SupervisorService(
         session_svc, msg_svc, hooks, entry,
         task_svc, tool_dispatcher, loop, intent_state, skill_loader,
-        stub_memory_service(),
+        stub_memory_service(), build_compact_service(engine),
     )
     return sup, intent_state
 
@@ -378,7 +380,7 @@ def test_provider_messages_injects_intent_block_before_last_user():
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
-        memory=MemoryRecall(),
+        memory=MemoryRecall(), compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
     user_dicts = [m for m in msgs if m["role"] == "user"]
@@ -415,7 +417,7 @@ def test_provider_messages_injects_recall_before_intent_block():
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
-        memory=MemoryRecall(items=recalled),
+        memory=MemoryRecall(items=recalled), compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
     user_dicts = [m for m in msgs if m["role"] == "user"]
@@ -425,6 +427,35 @@ def test_provider_messages_injects_recall_before_intent_block():
     assert "身份：程序员" in content
     assert "职场穿搭" in content
     assert "帮我写博文" in content
+
+
+def test_on_error_overflow_requests_retry_once():
+    """输入超长先应急压缩并请求重跑，第二次同错不再重试、走报错收尾。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    _, _intent_state = _build_supervisor(
+        engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, FakeClient([])
+    )
+    s = session_svc.create("test")
+    msg_svc.append_user_message(s.id, "超长历史")
+    compact = build_compact_service(engine)
+    strategy = SupervisorLoopStrategy(
+        s.id, msg_svc, session_svc, HookRegistry(), _intent_state,
+        SkillLoader(skills_dir=Path("/nonexistent-skills")), (),
+        memory=MemoryRecall(), compact=compact,
+    )
+    ctx = AgentContext(session_id=s.id)
+    ctx.turn.message_id = "m-overflow"
+
+    action = strategy.on_error(ctx, RuntimeError("maximum context length exceeded"))
+    assert action.signal == LoopSignal.FINISH
+    assert action.events == []
+    assert strategy.retry_requested is True
+
+    strategy.retry_requested = False
+    action = strategy.on_error(ctx, RuntimeError("maximum context length exceeded"))
+    assert action.signal == LoopSignal.FINISH
+    assert strategy.retry_requested is False
+    assert any(getattr(e, "type", None) == "error" for e in action.events)
 
 
 def main():

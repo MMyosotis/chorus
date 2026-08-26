@@ -20,6 +20,7 @@ from chorus.domain.events import (
     SseEvent,
     SuspendEvent,
 )
+from chorus.domain.compact import is_context_overflow
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
 from chorus.domain.message import ToolCallSpec
@@ -29,6 +30,7 @@ from chorus.domain.stream import consume_stream
 from chorus.hooks import HookRegistry
 from chorus.services.intent_state import IntentStateService
 from chorus.services.memory import MemoryService
+from chorus.services.compact import CompactService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
@@ -47,7 +49,7 @@ class SupervisorLoopStrategy(LoopStrategy):
 
     def __init__(self, session_id, message_service, session_service, hooks,
                  intent_state: IntentStateService, skill_loader, tool_names: tuple,
-                 memory: MemoryRecall):
+                 memory: MemoryRecall, compact: CompactService):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
@@ -56,6 +58,9 @@ class SupervisorLoopStrategy(LoopStrategy):
         self._skill_loader = skill_loader
         self._tool_names = tool_names
         self._recall = memory
+        self._compact = compact
+        self._reactive_done = False
+        self.retry_requested = False
 
     def message_start(self, ctx):
         return [MessageStartEvent(id=ctx.turn.message_id)]
@@ -116,7 +121,7 @@ class SupervisorLoopStrategy(LoopStrategy):
         """纯文本回复：落库并发完成事件与收尾钩子。"""
         content = "".join(result.text_parts) if result.text_parts else None
         self._message.append_assistant_message(
-            self.session_id, message_id=ctx.turn.message_id, content=content, tool_calls=[],
+            self.session_id, message_id=ctx.turn.message_id, content=content,
         )
         self._session.touch(self.session_id)
 
@@ -133,11 +138,14 @@ class SupervisorLoopStrategy(LoopStrategy):
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content="主 Agent 未能完成本轮必要动作，请再试一次")])
 
     def on_error(self, ctx, error):
+        # 输入超长先应急压缩并请求重跑一次，其余走占位消息关流
+        if not self._reactive_done and is_context_overflow(error) and self._compact.reactive(ctx.session_id):
+            self._reactive_done = True
+            self.retry_requested = True
+            _logger.warning("reactive compact done, retry loop", extra={"session_id": ctx.session_id})
+            return LoopAction(LoopSignal.FINISH, [])
         try:
-            self._message.append_assistant_message(
-                ctx.session_id, message_id=ctx.turn.message_id,
-                content=f"[Error] {error}", tool_calls=[],
-            )
+            self._message.append_error_placeholder(ctx.session_id, ctx.turn.message_id, error)
         except Exception:
             _logger.exception("failed to persist error placeholder", extra={"session_id": ctx.session_id})
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content=str(error))])
@@ -156,6 +164,7 @@ class SupervisorService:
         intent_state: IntentStateService,
         skill_loader: SkillLoader,
         memory_service: MemoryService,
+        compact_service: CompactService,
     ):
         self._session = session_service
         self._message = message_service
@@ -167,6 +176,7 @@ class SupervisorService:
         self._intent_state = intent_state
         self._skill = skill_loader
         self._memory = memory_service
+        self._compact = compact_service
 
     def stream(
         self, session_id: str, user_message: str,
@@ -216,9 +226,17 @@ class SupervisorService:
             skill_loader=self._skill,
             tool_names=TOOL_WHITELISTS["supervisor"],
             memory=memory,
+            compact=self._compact,
         )
 
+        yield from self._run_with_retry(ctx, entry, strategy)
+
+    def _run_with_retry(self, ctx, entry, strategy) -> Iterator[SseEvent]:
+        """跑一遍 loop；因输入超长做过应急压缩则再跑一次，二次超长正常报错。"""
         yield from self._loop.run(ctx, entry=entry, strategy=strategy)
+        if strategy.retry_requested:
+            strategy.retry_requested = False
+            yield from self._loop.run(ctx, entry=entry, strategy=strategy)
 
     def _prepare_memory(self, user_message) -> MemoryRecall:
         """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""

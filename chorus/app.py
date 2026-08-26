@@ -23,6 +23,7 @@ from chorus.config import (
     LOG_RETENTION_DAYS,
 )
 from chorus.agents.chat_model import ChatModelProvider
+from chorus.domain.compact import SummaryGenerationService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import setup_logging
 from chorus.domain.title import TitleGenerationService
@@ -32,6 +33,7 @@ from chorus.hooks import HookRegistry, MemoryExtractor, TitlePostProcessor, Trac
 from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.option import OptionPromptRepository
@@ -50,6 +52,7 @@ from chorus.routes.settings import router as debug_router
 from chorus.routes.settings import settings_router
 from chorus.routes.skills import router as skills_router
 from chorus.routes.task import router as task_router
+from chorus.services.compact import CompactService
 from chorus.services.memory import MemoryService
 from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
@@ -70,6 +73,7 @@ def create_app() -> FastAPI:
     settings_service = SettingsService(SettingsRepository(engine))
     session_repo = SessionRepository(engine)
     msg_repo = MessageRepository(engine)
+    provider_msg_repo = ProviderMessageRepository(engine)
     intent_repo = IntentStateRepository(engine)
     intent_confirmation_repo = IntentConfirmationRepository(engine)
     trace_repo = TraceRepository(engine)
@@ -79,14 +83,19 @@ def create_app() -> FastAPI:
     task_content_repo = TaskContentRepository(engine)
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
-    message_service = MessageService(msg_repo, trace_service)
+
+    chat_models = ChatModelProvider(settings_service)
+    # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理 / 历史摘要,不随用户当前对话设置变动
+    bypass_entry = chat_models.bypass_entry()
+    compact_service = CompactService(
+        provider_msg_repo,
+        SummaryGenerationService(bypass_entry.client, bypass_entry.model_id),
+    )
+    message_service = MessageService(msg_repo, provider_msg_repo, trace_service, compact_service)
     intent_state_service = IntentStateService(intent_repo, intent_confirmation_repo, session_service)
     option_repo = OptionPromptRepository(engine)
     option_service = OptionPromptService(option_repo, session_service)
 
-    chat_models = ChatModelProvider(settings_service)
-    # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理,不随用户当前对话设置变动
-    bypass_entry = chat_models.bypass_entry()
     title_service = TitleGenerationService(bypass_entry.client, bypass_entry.model_id)
     aside_generator = AsideGenerator(bypass_entry.client, bypass_entry.model_id)
 
@@ -121,6 +130,7 @@ def create_app() -> FastAPI:
         chat_models, task_service,
         tool_dispatcher, agent_loop, intent_state_service, skill_loader,
         memory_service=memory_service,
+        compact_service=compact_service,
     )
     lease_guard = LeaseGuard(task_repo, task_artifacts_repo, task_content_repo, task_progress_repo)
     subagent_service = SubAgentService(

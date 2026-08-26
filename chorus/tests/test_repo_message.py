@@ -4,16 +4,17 @@ from __future__ import annotations
 import uuid6
 
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import fresh_engine, seed_session
+from chorus.tests._helpers import build_compact_service, fresh_engine, seed_session
 
 
 def _setup():
     engine = fresh_engine()
     seed_session(engine)
-    return MessageService(MessageRepository(engine), TraceService(TraceRepository(engine)))
+    return MessageService(MessageRepository(engine), ProviderMessageRepository(engine), TraceService(TraceRepository(engine)), build_compact_service(engine))
 
 
 def test_three_role_roundtrip():

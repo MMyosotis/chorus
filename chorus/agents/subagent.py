@@ -10,6 +10,14 @@ from typing import Optional
 from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
 from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
+from chorus.domain.compact import apply_micro
+from chorus.domain.message import (
+    AssistantMessage,
+    Message,
+    ToolMessage,
+    UserMessage,
+    build_provider_messages,
+)
 from chorus.domain.prompt import PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks, subagent_base
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import get_logger
@@ -54,7 +62,7 @@ class SubagentLoopStrategy(LoopStrategy):
         self.task = task
         self.owner_id = owner_id
         self.profile = profile
-        self.history = [{"role": "user", "content": invoke}]
+        self.history: list[Message] = [UserMessage.transient(task.session_id, content=invoke)]
         self._task_repo = task_repo
         self._progress_repo = progress_repo
         self._lease = lease
@@ -80,7 +88,8 @@ class SubagentLoopStrategy(LoopStrategy):
             skill_loader=self._skill_loader,
             memory_digest=self._recall.digest,
         )
-        msgs = [{"role": "system", "content": build_system_prompt(ctx)}] + self.history
+        # 内存历史已就地换过占位，直接作为模型现场
+        msgs = build_provider_messages(build_system_prompt(ctx), self.history)
         inject_user_blocks(msgs, UserMessageContext(recalled_memories=self._recall.items))
         return msgs
 
@@ -99,11 +108,14 @@ class SubagentLoopStrategy(LoopStrategy):
         self._progress_repo.set_composing_units(self.task.id, self._produced_units)
 
     def after_tools(self, ctx, result, pairs):
-        self.history.append(_assistant_view(result))
+        session_id = self.task.session_id
+        self.history.append(AssistantMessage.from_stream_result(session_id, result))
         self.history.extend(
-            {"role": "tool", "tool_call_id": call.id, "content": dispatch.outcome.content}
+            ToolMessage.transient(session_id, tool_call_id=call.id, name=call.name, content=dispatch.outcome.content)
             for call, dispatch in pairs
         )
+        # 内存历史不进库，微压缩自己走一遍，不经压缩编排服务
+        self.history, _ = apply_micro(self.history)
         return LoopAction(LoopSignal.CONTINUE, [])
 
     def after_text(self, ctx, result):
@@ -111,20 +123,28 @@ class SubagentLoopStrategy(LoopStrategy):
         try:
             artifacts = self.profile.parse_output(content)
         except AbandonError as e:
-            # 模型主动声明放弃：翻失败并写说明，不落降级产物
-            self._lease.fail(self.task, e.reason, self.owner_id)
-            return LoopAction(LoopSignal.FINISH, [])
+            return self._abandon(e)
         except ValidationError as e:
-            # 纠错提示喂回模型继续自纠，撞上限才判失败；空正文不进历史（接口拒收空发言）
-            _logger.debug("format self-correction", extra={"task_id": self.task.id})
-            self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
-            if content:
-                self.history.append({"role": "assistant", "content": content})
-            self.history.append({"role": "user", "content": f"{e.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"})
-            return LoopAction(LoopSignal.CONTINUE, [])
+            return self._format_correction(content, e)
 
         self._lease.finalize(self.task, artifacts, self.owner_id)
         return LoopAction(LoopSignal.FINISH, [])
+
+    def _abandon(self, error: AbandonError) -> LoopAction:
+        """模型主动声明放弃：翻失败并写说明，不落降级产物。"""
+        self._lease.fail(self.task, error.reason, self.owner_id)
+        return LoopAction(LoopSignal.FINISH, [])
+
+    def _format_correction(self, content: str, error: ValidationError) -> LoopAction:
+        """纠错提示喂回模型继续自纠；空正文不进历史（接口拒收空发言）。"""
+        _logger.debug("format self-correction", extra={"task_id": self.task.id})
+        self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
+        if content:
+            self.history.append(AssistantMessage.transient(self.task.session_id, content=content))
+        self.history.append(UserMessage.transient(
+            self.task.session_id,
+            content=f"{error.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"))
+        return LoopAction(LoopSignal.CONTINUE, [])
 
     def on_truncation_exhausted(self, ctx):
         self._lease.fail(self.task, "输出超长被截断，无法成稿", self.owner_id)
@@ -228,15 +248,3 @@ class SubAgentService:
             deps_outputs,
             dataclasses.asdict(prior.artifacts) if prior else None,
         )
-
-
-def _assistant_view(result: StreamResult) -> dict:
-    return {
-        "role": "assistant",
-        "content": "".join(result.text_parts) or None,
-        "tool_calls": [
-            {"id": tc.id, "type": "function",
-             "function": {"name": tc.name, "arguments": tc.arguments}}
-            for _, tc in sorted(result.tool_calls.items())
-        ],
-    }

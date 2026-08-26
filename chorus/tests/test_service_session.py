@@ -10,12 +10,13 @@ import pytest
 
 from chorus.domain.session import Session, SessionSummary
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import fresh_engine
+from chorus.tests._helpers import build_compact_service, fresh_engine
 
 
 def _svc():
@@ -74,13 +75,16 @@ def test_is_title_set_and_set_title():
 def test_delete_cascades_messages():
     engine = fresh_engine()
     svc = SessionService(SessionRepository(engine))
-    msg_svc = MessageService(MessageRepository(engine), TraceService(TraceRepository(engine)))
+    provider_repo = ProviderMessageRepository(engine)
+    msg_svc = MessageService(MessageRepository(engine), provider_repo, TraceService(TraceRepository(engine)), build_compact_service(engine))
     s = svc.create("hi")
     msg_svc.append_user_message(s.id, "hello")
     assert len(msg_svc.list_messages(s.id)) == 1
+    assert len(provider_repo.list_by_session(s.id)) == 1        # 双表双写
     svc.delete(s.id)
     assert not svc.exists(s.id)
     assert msg_svc.list_messages(s.id) == []          # CASCADE 带走 messages
+    assert provider_repo.list_by_session(s.id) == []  # CASCADE 带走现场表
     svc.delete(s.id)                                  # 重复删幂等，不抛
 
 

@@ -21,6 +21,7 @@ from chorus.repo.engine import build_engine
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
@@ -33,7 +34,7 @@ from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
+from chorus.tests._helpers import build_compact_service, stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolDispatch
 from chorus.tools.builtin import CreatePlanTool
 
@@ -108,7 +109,7 @@ def _build_assembly():
 
     session_svc = SessionService(session_repo)
     trace_svc = TraceService(trace_repo)
-    msg_svc = MessageService(msg_repo, trace_svc)
+    msg_svc = MessageService(msg_repo, ProviderMessageRepository(engine), trace_svc, build_compact_service(engine))
 
     # 扁平 hook 注册表：4 个 trace 观测点
     hooks = HookRegistry()
@@ -139,7 +140,7 @@ def _build_assembly():
         session_svc, msg_svc, hooks,
         stub_chat_model_provider(sup_client), task_service, tool_dispatcher, agent_loop,
         intent_state, skill_loader,
-        stub_memory_service(),
+        stub_memory_service(), build_compact_service(engine),
     )
 
     # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。

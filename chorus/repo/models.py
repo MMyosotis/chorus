@@ -50,6 +50,22 @@ class MessageRecord(Base):
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class ProviderMessageRecord(Base):
+    __tablename__ = "provider_messages"
+    __table_args__ = (Index("idx_provider_messages_session_id", "session_id", "id"),)
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        String, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[Optional[str]] = mapped_column(Text)
+    tool_calls_json: Mapped[Optional[list]] = mapped_column(JSON)
+    tool_call_id: Mapped[Optional[str]] = mapped_column(Text)
+    tool_name: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 class TraceRecord(Base):
     __tablename__ = "traces"
     __table_args__ = (

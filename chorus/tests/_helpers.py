@@ -54,3 +54,12 @@ def stub_memory_service():
         record_publication=lambda task_id, agent_type: None,
         record_correction=lambda task_id, agent_type, feedback: None,
     )
+
+
+def build_compact_service(engine: Engine, summary: str = "固定摘要"):
+    """压缩服务真装配 + 摘要 LLM stub，返回固定摘要文本。"""
+    from chorus.repo.provider_message import ProviderMessageRepository
+    from chorus.services.compact import CompactService
+
+    llm = types.SimpleNamespace(summarize=lambda messages: summary)
+    return CompactService(ProviderMessageRepository(engine), llm)

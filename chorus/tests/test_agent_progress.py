@@ -18,6 +18,7 @@ from chorus.domain.task import AGENT_PROFILES, Task, TaskContent, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
@@ -27,7 +28,7 @@ from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import stub_chat_model_provider, stub_memory_service
+from chorus.tests._helpers import build_compact_service, stub_chat_model_provider, stub_memory_service
 from chorus.tools import ToolCall, ToolDispatch
 from chorus.tools.framework import DispatchResult, Reply
 
@@ -81,7 +82,7 @@ def _setup():
     progress_repo = TaskProgressRepository(engine)
     content_repo = TaskContentRepository(engine)
     trace_svc = TraceService(trace_repo)
-    msg_svc = MessageService(msg_repo, trace_svc)
+    msg_svc = MessageService(msg_repo, ProviderMessageRepository(engine), trace_svc, build_compact_service(engine))
     return engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo
 
 

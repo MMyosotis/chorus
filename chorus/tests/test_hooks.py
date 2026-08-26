@@ -15,21 +15,22 @@ from chorus.domain.events import TitleUpdateEvent
 from chorus.domain.trace import TracePhase
 from chorus.hooks import MemoryExtractor, TitlePostProcessor, TraceEmitter
 from chorus.repo.message import MessageRepository
+from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.session import SessionRepository
 from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
-from chorus.tests._helpers import fresh_engine, seed_session
+from chorus.tests._helpers import build_compact_service, fresh_engine, seed_session
 
 
 def _setup():
     engine = fresh_engine()
     seed_session(engine)                                # "s1" 供异常收尾/trace（FK 父行）
     trace_svc = TraceService(TraceRepository(engine))
-    msg_svc = MessageService(MessageRepository(engine), trace_svc)
+    msg_svc = MessageService(MessageRepository(engine), ProviderMessageRepository(engine), trace_svc, build_compact_service(engine))
     session_svc = SessionService(SessionRepository(engine))
-    return msg_svc, trace_svc, session_svc
+    return msg_svc, trace_svc, session_svc, engine
 
 
 class _StubDispatcher:
@@ -43,9 +44,9 @@ class _StubDispatcher:
 
 
 def test_supervisor_on_error_appends_error_message():
-    msg_svc, trace_svc, _ = _setup()
+    msg_svc, trace_svc, _, engine = _setup()
     msg_svc.append_user_message("s1", "hi")
-    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryRecall())
+    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryRecall(), build_compact_service(engine))
     ctx = AgentContext(session_id="s1")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")
@@ -66,7 +67,7 @@ def test_supervisor_on_error_appends_error_message():
 
 
 def test_trace_propagates_subagent_source_and_task_id():
-    msg_svc, trace_svc, _ = _setup()
+    msg_svc, trace_svc, _, _ = _setup()
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
@@ -88,7 +89,7 @@ def test_trace_propagates_subagent_source_and_task_id():
 
 
 def test_trace_default_supervisor_when_ctx_unset():
-    msg_svc, trace_svc, _ = _setup()
+    msg_svc, trace_svc, _, _ = _setup()
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
     ctx = AgentContext(session_id="s1")               # 默认 source="supervisor", task_id=None
     ctx.chat_model = "fake-model"
@@ -101,7 +102,7 @@ def test_trace_default_supervisor_when_ctx_unset():
 
 
 def test_trace_tool_result_payload_from_result_object():
-    msg_svc, trace_svc, _ = _setup()
+    msg_svc, trace_svc, _, _ = _setup()
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
     ctx = AgentContext(session_id="s1", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
@@ -139,7 +140,7 @@ def _seed_user_message(msg_svc, sid):
 
 
 def test_title_on_stop_yields_update_when_unset():
-    msg_svc, trace_svc, session_svc = _setup()
+    msg_svc, trace_svc, session_svc, _ = _setup()
     s = session_svc.create("新对话")
     _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService("夏日晚风")
@@ -161,7 +162,7 @@ def test_title_on_stop_yields_update_when_unset():
 
 
 def test_title_skips_when_already_set():
-    msg_svc, trace_svc, session_svc = _setup()
+    msg_svc, trace_svc, session_svc, _ = _setup()
     s = session_svc.create("新对话")
     session_svc.rename(s.id, "用户起的名")             # 标记为已生成
     _seed_user_message(msg_svc, s.id)
@@ -176,7 +177,7 @@ def test_title_skips_when_already_set():
 
 
 def test_title_skips_when_generate_returns_none():
-    msg_svc, trace_svc, session_svc = _setup()
+    msg_svc, trace_svc, session_svc, _ = _setup()
     s = session_svc.create("新对话")
     _seed_user_message(msg_svc, s.id)
     stub = _StubTitleService(None)
