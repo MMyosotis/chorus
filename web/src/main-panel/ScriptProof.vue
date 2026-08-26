@@ -2,17 +2,26 @@
 import { computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { stripFrontMatter, parseFrontMatter } from '../composables/renderPostCard.js'
 
 const props = defineProps({
   markdown: { type: String, default: '' },
   compact: { type: Boolean, default: false },
 })
 
-const html = computed(() => DOMPurify.sanitize(marked.parse(props.markdown || '')))
+const title = computed(() => parseFrontMatter(props.markdown).title || '')
+
+const bodyHtml = computed(() => {
+  const { body } = stripFrontMatter(props.markdown)
+  return DOMPurify.sanitize(marked.parse(body || ''))
+})
 </script>
 
 <template>
-  <article class="script-proof" :class="{ compact }" v-html="html"></article>
+  <article class="script-proof" :class="{ compact }">
+    <h1 v-if="title">{{ title }}</h1>
+    <div class="script-proof-body" v-html="bodyHtml"></div>
+  </article>
 </template>
 
 <style scoped>
