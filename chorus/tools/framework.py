@@ -8,7 +8,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from time import perf_counter
-from typing import Iterable, Optional
+from typing import Iterable, Literal, Optional
 
 from chorus.domain.log import get_logger
 from chorus.services.settings import SettingsService
@@ -58,6 +58,7 @@ class DispatchResult:
     activity_meta: Optional[dict] = None
     units_produced: int = 0
     events: tuple = ()
+    status: Literal["success", "error"] = "success"
 
 
 @dataclass
@@ -139,7 +140,7 @@ class ToolDispatch:
         if tool is None:
             return DispatchResult(
                 outcome=Reply(f"Error: unknown tool '{call.name}'"),
-                duration_ms=0, activity_meta=None,
+                duration_ms=0, activity_meta=None, status="error",
             )
 
         start = perf_counter()
@@ -150,7 +151,7 @@ class ToolDispatch:
             return DispatchResult(
                 outcome=Reply(f"Error executing tool '{call.name}': {e}"),
                 duration_ms=int((perf_counter() - start) * 1000),
-                activity_meta=None,
+                activity_meta=None, status="error",
             )
         return DispatchResult(
             outcome=raw.outcome,

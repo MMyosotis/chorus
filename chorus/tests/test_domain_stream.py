@@ -8,7 +8,11 @@ from __future__ import annotations
 import types
 
 from chorus.domain.events import ReasoningDoneEvent, ReasoningEvent, TokenEvent
-from chorus.domain.stream import StreamResult, consume_stream, silent_consume
+from chorus.domain.stream import (
+    StreamResult,
+    consume_stream,
+    silent_consume,
+)
 
 
 class _Delta(types.SimpleNamespace):
@@ -18,10 +22,10 @@ class _Delta(types.SimpleNamespace):
         return None
 
 
-def _chunk(delta_kwargs: dict, finish_reason=None):
+def _chunk(delta_kwargs: dict, finish_reason=None, usage=None):
     delta = _Delta(**delta_kwargs)
     choice = types.SimpleNamespace(delta=delta, finish_reason=finish_reason)
-    return types.SimpleNamespace(choices=[choice])
+    return types.SimpleNamespace(choices=[choice], usage=usage)
 
 
 def _run(stream):
@@ -105,6 +109,25 @@ def test_consume_stream_returns_stream_result():
     _events, result = _run([_chunk({"content": "x"}, "stop")])
     assert isinstance(result, StreamResult)
     assert result.finish_reason == "stop"
+
+
+def test_final_chunk_usage_is_collected():
+    usage = types.SimpleNamespace(prompt_tokens=12, completion_tokens=7, total_tokens=19)
+    _events, result = _run([_chunk({"content": "x"}, "stop", usage)])
+    assert result.usage is not None
+    assert result.usage.input_tokens == 12
+    assert result.usage.output_tokens == 7
+    assert result.usage.total_tokens == 19
+
+
+def test_usage_tail_chunk_with_empty_choices_is_collected():
+    # 开启用量回传后，末块 choices 为空数组、只带 usage
+    usage = types.SimpleNamespace(prompt_tokens=12, completion_tokens=7, total_tokens=19)
+    tail = types.SimpleNamespace(choices=[], usage=usage)
+    _events, result = _run([_chunk({"content": "x"}, "stop", None), tail])
+    assert result.usage is not None
+    assert result.usage.input_tokens == 12
+    assert result.usage.total_tokens == 19
 
 
 def test_empty_stream_yields_nothing():

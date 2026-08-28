@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Iterable, Optional, Union
+from typing import Callable, Iterable, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +29,16 @@ class ThinkingSegment(BaseModel):
 
     text: str
     duration_ms: int
+
+
+class ModelUsage(BaseModel):
+    """一次模型调用的 token 用量。"""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
 
 
 class ToolInvocation(BaseModel):
@@ -71,6 +81,11 @@ class ModelResponse(_PayloadBase):
     finish_reason: Optional[str] = None
     tool_calls: list[ToolCallSummary] = Field(default_factory=list)
     thinking_segments: list[ThinkingSegment] = Field(default_factory=list)
+    status: Literal["success", "error"] = "success"
+    duration_ms: Optional[int] = None
+    usage: Optional[ModelUsage] = None
+    cost_cny: Optional[float] = None
+    error: Optional[str] = None
 
 
 class TraceToolCall(_PayloadBase):
@@ -90,6 +105,7 @@ class TraceToolResult(_PayloadBase):
     name: str
     content: str
     duration_ms: int
+    status: Literal["success", "error"] = "success"
 
 
 TracePayload = Union[

@@ -8,7 +8,7 @@ from typing import Generator, Iterable, Iterator, Optional
 
 import uuid6
 
-from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
+from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal, ModelCallRecorder
 from chorus.domain.events import SseEvent, ToolCallEvent, ToolResultEvent
 from chorus.domain.log import ctx_fields, get_logger
 from chorus.domain.stream import StreamResult, parse_tool_arguments
@@ -92,7 +92,11 @@ class AgentLoop:
         ctx.turn.provider_messages = strategy.provider_messages()
 
         yield from self._hooks.trigger("BeforeModelRequest", ctx)
-        result = yield from self._request_model(ctx, entry, strategy)
+        try:
+            result = yield from self._request_model(ctx, entry, strategy)
+        except Exception:
+            yield from self._hooks.trigger("AfterModelResponse", ctx)
+            raise
         yield from self._hooks.trigger("AfterModelResponse", ctx)
 
         recovery = ctx.truncation.recover(ctx, result, strategy)
@@ -108,13 +112,20 @@ class AgentLoop:
         self, ctx: AgentContext, entry, strategy: LoopStrategy,
     ) -> Generator[SseEvent, None, StreamResult]:
         """调模型消费流，结果落进单轮状态。"""
-        stream = entry.client.chat.completions.create(
-            model=entry.model_id, messages=ctx.turn.provider_messages,
-            tools=ctx.tool_schemas or None,
-            max_tokens=strategy.max_tokens, stream=True, timeout=_MODEL_CALL_TIMEOUT,
-        )
-        result = yield from strategy.consume(stream)
-        ctx.turn.apply_stream(result)
+        recorder = ModelCallRecorder()
+        try:
+            stream = entry.client.chat.completions.create(
+                model=entry.model_id, messages=ctx.turn.provider_messages,
+                tools=ctx.tool_schemas or None,
+                max_tokens=strategy.max_tokens, stream=True,
+                stream_options={"include_usage": True}, timeout=_MODEL_CALL_TIMEOUT,
+            )
+            result = yield from strategy.consume(stream)
+        except Exception as error:
+            ctx.turn.model_call = recorder.failure(error)
+            raise
+
+        ctx.turn.apply_stream(result, model_call=recorder.success(result.usage))
         return result
 
     def _decide(

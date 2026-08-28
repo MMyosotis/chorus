@@ -8,11 +8,13 @@ from __future__ import annotations
 import types
 
 from chorus.agents import AgentContext
+from chorus.agents.runtime import ModelCallStats
 from chorus.agents.supervisor import SupervisorLoopStrategy
 from chorus.domain.memory import MemoryRecall
 from chorus.domain.skill import SkillLoader
 from chorus.domain.events import TitleUpdateEvent
-from chorus.domain.trace import TracePhase
+from chorus.agents.chat_model import ModelPricing
+from chorus.domain.trace import ModelUsage, TracePhase
 from chorus.hooks import MemoryExtractor, TitlePostProcessor, TraceEmitter
 from chorus.repo.message import MessageRepository
 from chorus.repo.provider_message import ProviderMessageRepository
@@ -108,7 +110,7 @@ def test_trace_tool_result_payload_from_result_object():
     ctx.turn.message_id = "m1"
     call = {"id": "call-1", "name": "search", "arguments": {"q": "x"}}
     result = types.SimpleNamespace(
-        outcome=types.SimpleNamespace(content="结果"), duration_ms=42,
+        outcome=types.SimpleNamespace(content="结果"), duration_ms=42, status="error",
     )
 
     events = list(emitter.on_tool_result(ctx, call, result))
@@ -120,7 +122,39 @@ def test_trace_tool_result_payload_from_result_object():
     assert ev.payload["name"] == "search"
     assert ev.payload["content"] == "结果"
     assert ev.payload["duration_ms"] == 42
+    assert ev.payload["status"] == "error"
     assert trace_svc.list_traces("s1")[0].source == "subagent"
+
+
+def test_trace_response_includes_usage_and_configured_cost():
+    ctx = AgentContext(
+        session_id="s1", chat_model="test-model",
+        pricing=ModelPricing(input_price=2.0, output_price=3.0),
+    )
+    ctx.turn.model_call = ModelCallStats.success(
+        duration_ms=120,
+        usage=ModelUsage(input_tokens=1_000_000, output_tokens=2_000_000, total_tokens=3_000_000),
+    )
+
+    payload = TraceEmitter._response_payload(ctx)
+
+    assert payload.status == "success"
+    assert payload.duration_ms == 120
+    assert payload.usage == ctx.turn.model_call.usage
+    assert payload.cost_cny == 8.0
+
+
+def test_trace_response_cost_none_when_unpriced():
+    ctx = AgentContext(session_id="s1", chat_model="test-model")
+    ctx.turn.model_call = ModelCallStats.success(
+        duration_ms=50,
+        usage=ModelUsage(input_tokens=10, output_tokens=5, total_tokens=15),
+    )
+
+    payload = TraceEmitter._response_payload(ctx)
+
+    assert payload.cost_cny is None
+    assert payload.error is None
 
 
 class _StubTitleService:

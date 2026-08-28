@@ -39,7 +39,7 @@ class _Delta(types.SimpleNamespace):
 class FakeStream:
     def __init__(self, deltas):
         self._chunks = [
-            types.SimpleNamespace(choices=[types.SimpleNamespace(delta=_Delta(**d), finish_reason=fr)])
+            types.SimpleNamespace(choices=[types.SimpleNamespace(delta=_Delta(**d), finish_reason=fr)], usage=None)
             for d, fr in deltas
         ]
 

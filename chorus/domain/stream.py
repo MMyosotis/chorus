@@ -16,7 +16,7 @@ from chorus.domain.events import (
     SseEvent,
     TokenEvent,
 )
-from chorus.domain.trace import ThinkingSegment
+from chorus.domain.trace import ModelUsage, ThinkingSegment
 
 
 @dataclass
@@ -36,6 +36,7 @@ class StreamResult:
     tool_calls: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
+    usage: Optional[ModelUsage] = None
 
 
 class ThinkingTracker:
@@ -79,14 +80,32 @@ def parse_tool_arguments(raw: str) -> dict:
         return {}
 
 
+def _to_usage(raw) -> Optional[ModelUsage]:
+    """把接口回传的原始用量转成领域用量，未回传则返回 None。"""
+    if raw is None:
+        return None
+    return ModelUsage(
+        input_tokens=raw.prompt_tokens,
+        output_tokens=raw.completion_tokens,
+        total_tokens=raw.total_tokens,
+    )
+
+
 def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
     """逐块累积，发出思考与正文事件，返回累积结果。"""
     accumulated: dict[int, ToolCallAccumulator] = {}
     text_parts: list[str] = []
     finish_reason: Optional[str] = None
     thinking = ThinkingTracker()
+    usage: Optional[ModelUsage] = None
 
     for chunk in stream:
+        usage = _to_usage(chunk.usage)
+
+        # 开启用量回传后，末块只带 usage、choices 为空
+        if not chunk.choices:
+            continue
+
         choice = chunk.choices[0]
         delta = choice.delta
         if choice.finish_reason is not None:
@@ -116,6 +135,7 @@ def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
         tool_calls=accumulated,
         finish_reason=finish_reason,
         thinking_segments=thinking.segments,
+        usage=usage,
     )
 
 

@@ -23,7 +23,7 @@ class _Delta(types.SimpleNamespace):
 def _chunk(delta_kwargs: dict, finish_reason=None):
     delta = _Delta(**delta_kwargs)
     choice = types.SimpleNamespace(delta=delta, finish_reason=finish_reason)
-    return types.SimpleNamespace(choices=[choice])
+    return types.SimpleNamespace(choices=[choice], usage=None)
 
 
 class _FakeEntry:

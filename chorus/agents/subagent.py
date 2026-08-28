@@ -216,6 +216,7 @@ class SubAgentService:
             task_id=task.id,
             chat_model=entry.model_id,
             tool_schemas=schemas,
+            pricing=entry.pricing,
         )
         strategy = SubagentLoopStrategy(
             task=task,

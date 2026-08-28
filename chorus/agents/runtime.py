@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Iterable, Optional
+from time import perf_counter
+from typing import TYPE_CHECKING, Iterable, Literal, Optional
 
+from chorus.agents.chat_model import ModelPricing
 from chorus.agents.truncation import TruncationGuard
 from chorus.domain.events import SseEvent
 from chorus.domain.stream import ToolCallAccumulator
-from chorus.domain.trace import ThinkingSegment
+from chorus.domain.trace import ModelUsage, ThinkingSegment
 
 if TYPE_CHECKING:
     from chorus.domain.stream import StreamResult
@@ -29,6 +31,40 @@ class LoopAction:
 
 
 @dataclass
+class ModelCallStats:
+    """单次模型调用的观测记录：成败、耗时、用量。"""
+
+    status: Literal["success", "error"] = "success"
+    duration_ms: int = 0
+    usage: Optional[ModelUsage] = None
+    error: Optional[str] = None
+
+    @classmethod
+    def success(cls, *, duration_ms: int, usage: Optional[ModelUsage]) -> "ModelCallStats":
+        return cls(duration_ms=duration_ms, usage=usage)
+
+    @classmethod
+    def failure(cls, *, duration_ms: int, error: BaseException) -> "ModelCallStats":
+        return cls(status="error", duration_ms=duration_ms, error=str(error))
+
+
+@dataclass
+class ModelCallRecorder:
+    """模型调用计时器：起表后按成败收口出观测记录。"""
+
+    started_at: float = field(default_factory=perf_counter)
+
+    def success(self, usage: Optional[ModelUsage]) -> ModelCallStats:
+        return ModelCallStats.success(duration_ms=self._elapsed_ms(), usage=usage)
+
+    def failure(self, error: BaseException) -> ModelCallStats:
+        return ModelCallStats.failure(duration_ms=self._elapsed_ms(), error=error)
+
+    def _elapsed_ms(self) -> int:
+        return int((perf_counter() - self.started_at) * 1000)
+
+
+@dataclass
 class TurnState:
     """单轮可变累积状态，每轮开始重置。"""
 
@@ -37,7 +73,8 @@ class TurnState:
     accumulated_tool_calls: dict[int, ToolCallAccumulator] = field(default_factory=dict)
     finish_reason: Optional[str] = None
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
-    provider_messages: Optional[list[dict]] = None
+    provider_messages: list[dict] = field(default_factory=list)
+    model_call: ModelCallStats = field(default_factory=ModelCallStats)
 
     def reset(self, message_id: str = "") -> None:
         self.message_id = message_id
@@ -45,13 +82,15 @@ class TurnState:
         self.accumulated_tool_calls.clear()
         self.finish_reason = None
         self.thinking_segments.clear()
-        self.provider_messages = None
+        self.provider_messages = []
+        self.model_call = ModelCallStats()
 
-    def apply_stream(self, result: "StreamResult") -> None:
+    def apply_stream(self, result: "StreamResult", *, model_call: ModelCallStats) -> None:
         self.text_parts = result.text_parts
         self.accumulated_tool_calls = result.tool_calls
         self.finish_reason = result.finish_reason
         self.thinking_segments = result.thinking_segments
+        self.model_call = model_call
 
 
 @dataclass
@@ -64,6 +103,7 @@ class AgentContext:
     # 回合级固定输入
     session_id: str
     chat_model: str
+    pricing: Optional[ModelPricing] = None
     user_message: str = ""
     tool_schemas: list[dict] = field(default_factory=list)
     # 多智能体扩展，钩子据此区分来源

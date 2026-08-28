@@ -219,6 +219,7 @@ class SupervisorService:
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
+            pricing=entry.pricing,
         )
         strategy = SupervisorLoopStrategy(
             session_id, self._message, self._session, self._hooks,

@@ -28,7 +28,7 @@ class TraceEmitter:
     def before_model_request(self, ctx: AgentContext) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.MODEL_REQUEST, ModelRequest(
             model=ctx.chat_model,
-            messages=ctx.turn.provider_messages or [],
+            messages=ctx.turn.provider_messages,
             tools=ctx.tool_schemas,
         ))]
 
@@ -46,6 +46,7 @@ class TraceEmitter:
         return [self._emit(ctx, TracePhase.TOOL_RESULT, TraceToolResult(
             tool_call_id=call["id"], name=call["name"],
             content=result.outcome.content, duration_ms=result.duration_ms,
+            status=result.status,
         ))]
 
     def _emit(self, ctx: AgentContext, phase: TracePhase, payload: TracePayload) -> SseEvent:
@@ -65,17 +66,21 @@ class TraceEmitter:
 
     @staticmethod
     def _response_payload(ctx: AgentContext) -> ModelResponse:
-        accumulated = ctx.turn.accumulated_tool_calls or {}
+        accumulated = ctx.turn.accumulated_tool_calls
         tool_calls = [
-            ToolCallSummary(
-                tool_call_id=call.id, name=call.name,
-                arguments=parse_tool_arguments(call.arguments),
-            )
+            ToolCallSummary(tool_call_id=call.id, name=call.name, arguments=parse_tool_arguments(call.arguments))
             for _, call in sorted(accumulated.items())
         ]
+        model_call = ctx.turn.model_call
+        pricing = ctx.pricing
         return ModelResponse(
-            content="".join(ctx.turn.text_parts or []),
+            content="".join(ctx.turn.text_parts),
             finish_reason=ctx.turn.finish_reason,
             tool_calls=tool_calls,
-            thinking_segments=list(ctx.turn.thinking_segments or []),
+            thinking_segments=list(ctx.turn.thinking_segments),
+            status=model_call.status,
+            duration_ms=model_call.duration_ms,
+            usage=model_call.usage,
+            cost_cny=pricing.cost_cny(model_call.usage) if pricing else None,
+            error=model_call.error,
         )
