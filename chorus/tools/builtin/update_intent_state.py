@@ -52,8 +52,7 @@ class UpdateIntentStateTool(Tool):
 
     def display(self, arguments: dict) -> str:
         status = arguments.get("intent_status", "unknown")
-        topic = (arguments.get("topic") or "").strip()
-        return f"意图状态：{status} / {topic[:36]}"
+        return f"意图状态：{status}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         try:

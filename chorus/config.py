@@ -67,5 +67,3 @@ LOG_MAX_BYTES = int(os.environ.get("LOG_MAX_BYTES", "5000000"))
 LOG_BACKUP_COUNT = int(os.environ.get("LOG_BACKUP_COUNT", "5"))
 LOG_RETENTION_DAYS = int(os.environ.get("LOG_RETENTION_DAYS", "7"))
 LOG_CLEANUP_INTERVAL = int(os.environ.get("LOG_CLEANUP_INTERVAL", "21600"))
-
-

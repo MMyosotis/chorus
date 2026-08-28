@@ -176,7 +176,7 @@ function displayValue(value) {
 .intent-status.executing i { animation: intentStatusPulse 1.8s ease-in-out infinite; }
 
 .intent-summary {
-  margin-top: var(--ch-space-4);
+  margin-top: var(--ch-space-3);
 }
 
 .intent-topic {
