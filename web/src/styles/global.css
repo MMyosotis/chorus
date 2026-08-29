@@ -60,6 +60,11 @@
   --ch-info-soft: #e0f2fe;
   --ch-info-text: #0369a1;
 
+  /* Timeline dots */
+  --ch-dot-user: #8b5cf6;
+  --ch-dot-toolback: #f97316;
+  --ch-dot-model: #0284c7;
+
   /* Workflow statuses */
   --ch-status-pending-bg: #eef1f5;
   --ch-status-pending-text: #64748b;

@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ChevronDown, PanelLeft } from '@lucide/vue'
-import { ROLE_SHORT } from '../team-panel/roleMeta.js'
+import { ROLE_FULL, ROLE_LABELS, ROLE_SHORT } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
   activeId: { type: String, default: null },
@@ -25,6 +25,13 @@ function roleFor(source, taskId) {
     key: `task:${taskId || '?'}`,
     label: ROLE_SHORT[task?.agent_type] || '子代理',
   }
+}
+
+function agentNameFor(source, taskId) {
+  if (source === 'supervisor' || !source) return ROLE_LABELS.chief
+  if (source === 'scheduler') return '调度器'
+  const task = taskById.value.get(taskId)
+  return task?.display_name || task?.agent_name || ROLE_FULL[task?.agent_type] || '子代理'
 }
 
 const modelCalls = computed(() => {
@@ -121,6 +128,8 @@ const sessionStats = computed(() => {
   let lastEnd = first
   let toolCount = 0
   let costCny = null
+  let inputTokens = 0
+  let outputTokens = 0
   let totalTokens = 0
   for (const call of calls) {
     lastEnd = Math.max(lastEnd, call.created_at, call.response?.created_at || 0)
@@ -130,7 +139,11 @@ const sessionStats = computed(() => {
     }
     const payload = call.response?.payload
     if (payload?.cost_cny != null) costCny = (costCny ?? 0) + payload.cost_cny
-    if (payload?.usage) totalTokens += payload.usage.total_tokens || 0
+    if (payload?.usage) {
+      inputTokens += payload.usage.input_tokens || 0
+      outputTokens += payload.usage.output_tokens || 0
+      totalTokens += payload.usage.total_tokens ?? ((payload.usage.input_tokens || 0) + (payload.usage.output_tokens || 0))
+    }
   }
   return {
     durationMs: (lastEnd - first) * 1000,
@@ -138,6 +151,8 @@ const sessionStats = computed(() => {
     callCount: calls.length,
     toolCount,
     costCny,
+    inputTokens,
+    outputTokens,
     totalTokens,
   }
 })
@@ -158,6 +173,8 @@ const turnGroups = computed(() => {
     group.callCount = group.items.filter((entry) => entry.kind === 'loop').length
     group.toolCount = group.items.filter((entry) => entry.kind === 'toolback').reduce((sum, entry) => sum + entry.tools.length, 0)
     group.durationMs = (group.end - group.start) * 1000
+    const loop = group.items.find((entry) => entry.kind === 'loop')
+    group.agentName = loop ? agentNameFor(loop.call.source, loop.call.task_id) : '—'
   }
   return groups
 })
@@ -261,9 +278,15 @@ function historyPreview(message) {
   }
   if (message.role === 'tool') {
     const meta = toolMetaById.value.get(message.tool_call_id)
-    if (meta) return `${meta.name} · ${meta.duration_ms} ms`
+    if (meta) return meta.name
   }
   return messageText(message)
+}
+
+function messageRoleLabel(role) {
+  if (role === 'system') return 'sys'
+  if (role === 'assistant') return 'ass'
+  return role || 'message'
 }
 
 function fmtSeconds(totalMs) {
@@ -402,15 +425,19 @@ onBeforeUnmount(stopConsolePoll)
           <span class="overview-item"><span class="overview-label">对话轮次</span><span class="overview-value">{{ sessionStats.turnCount }} 轮</span></span>
           <span class="overview-item"><span class="overview-label">模型调用</span><span class="overview-value">{{ sessionStats.callCount }} 次</span></span>
           <span class="overview-item"><span class="overview-label">工具执行</span><span class="overview-value">{{ sessionStats.toolCount }} 次</span></span>
-          <span class="overview-item"><span class="overview-label">费用</span><span class="overview-value">{{ sessionStats.costCny != null ? fmtCost(sessionStats.costCny) : '未配置' }}</span></span>
-          <span class="overview-item"><span class="overview-label">Token</span><span class="overview-value">{{ fmtTokens(sessionStats.totalTokens) }}</span></span>
+          <span class="overview-item"><span class="overview-label">总费用</span><span class="overview-value">{{ sessionStats.costCny != null ? fmtCost(sessionStats.costCny) : '未配置' }}</span></span>
+          <span class="overview-item"><span class="overview-label">输入 Token</span><span class="overview-value">{{ fmtTokens(sessionStats.inputTokens) }}</span></span>
+          <span class="overview-item"><span class="overview-label">输出 Token</span><span class="overview-value">{{ fmtTokens(sessionStats.outputTokens) }}</span></span>
+          <span class="overview-item"><span class="overview-label">Token 总计</span><span class="overview-value">{{ fmtTokens(sessionStats.totalTokens) }}</span></span>
         </div>
       </div>
 
       <details v-for="group in turnGroups" :key="group.turn" class="turn-group" open>
         <summary>
+          <span class="turn-index">{{ group.turn }}</span>
           <span class="turn-title">第 {{ group.turn }} 轮对话</span>
-          <span class="turn-meta">{{ group.callCount }} 模型 / {{ group.toolCount }} 工具 · {{ fmtDuration(group.durationMs) }} · {{ fmtTs(group.start) }}</span>
+          <span class="turn-agent">{{ group.agentName }}</span>
+          <span class="turn-meta">{{ fmtDuration(group.durationMs) }} · {{ fmtTs(group.start) }}</span>
           <ChevronDown class="block-caret" aria-hidden="true" />
         </summary>
         <div class="turn-items">
@@ -425,7 +452,6 @@ onBeforeUnmount(stopConsolePoll)
               </summary>
               <div v-if="item.message.injections.length" class="user-detail">
                 <div class="user-context-head">
-                  <span>上下文 · {{ item.message.injections.length }}</span>
                   <div class="context-tabs user-context-tabs" role="tablist" aria-label="模型上下文">
                     <button
                       v-for="(injection, index) in item.message.injections"
@@ -452,23 +478,26 @@ onBeforeUnmount(stopConsolePoll)
                 <span class="block-main">{{ item.tools.length }} 个工具结果</span>
               </summary>
               <div class="toolback-rows">
-                <details v-for="tool in item.tools" :key="tool.id" class="toolback-row">
-                  <summary>
-                    <code class="tool-name">{{ tool.name }}</code>
-                    <strong v-if="tool.display" class="tool-desc">{{ tool.display }}</strong>
-                    <span class="tool-status" :class="`status-${tool.status}`">{{ tool.status === 'error' ? '失败' : '成功' }}</span>
-                    <small class="tool-duration">{{ fmtDuration(tool.duration_ms) }}</small>
-                    <ChevronDown class="block-caret" aria-hidden="true" />
-                  </summary>
-                  <pre>{{ tool.pretty ?? tool.content }}</pre>
-                </details>
+                <div class="toolback-list">
+                  <details v-for="tool in item.tools" :key="tool.id" class="toolback-row">
+                    <summary>
+                      <code class="tool-name">{{ tool.name }}</code>
+                      <span class="tool-result-meta">
+                        <span class="tool-status" :class="`status-${tool.status}`">{{ tool.status === 'error' ? '失败' : '成功' }}</span>
+                        <small class="tool-duration">{{ fmtDuration(tool.duration_ms) }}</small>
+                      </span>
+                      <ChevronDown class="block-caret" aria-hidden="true" />
+                    </summary>
+                    <pre>{{ tool.pretty ?? tool.content }}</pre>
+                  </details>
+                </div>
               </div>
             </details>
 
-            <details v-else class="trace-block type-loop" :class="`dot-${callStatus(item.call)}`">
+            <details v-else class="trace-block type-loop">
               <summary>
                 <span class="block-head">
-                  <span class="block-pill">{{ item.role.label }}响应</span>
+                  <span class="block-pill">模型输出</span>
                   <span class="call-status" :class="`status-${callStatus(item.call)}`">{{ callStatusLabel(item.call) }}</span>
                   <span v-if="item.call.response?.payload?.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.call.response.payload.duration_ms) }}</span>
                   <ChevronDown class="block-caret" aria-hidden="true" />
@@ -494,7 +523,7 @@ onBeforeUnmount(stopConsolePoll)
                     <div class="msg-list">
                       <details v-for="(message, index) in item.call.request.payload?.messages || []" :key="index" class="msg-row">
                         <summary>
-                          <span class="msg-role" :class="`role-${message.role || 'message'}`">{{ message.role || 'message' }}</span>
+                          <span class="msg-role" :class="`role-${message.role || 'message'}`">{{ messageRoleLabel(message.role) }}</span>
                           <span class="msg-preview">{{ historyPreview(message) }}</span>
                         </summary>
                         <div class="msg-detail">
@@ -512,6 +541,12 @@ onBeforeUnmount(stopConsolePoll)
                               >{{ injection.label }}</button>
                             </div>
                             <pre v-if="activeContextTab(`${item.call.key}:${index}`) !== null" class="context-content">{{ userParsed(message).injections[activeContextTab(`${item.call.key}:${index}`)].content }}</pre>
+                          </template>
+                          <template v-else-if="message.role === 'assistant'">
+                            <pre>{{ message.content == null ? 'null' : messageText(message) }}</pre>
+                            <ul v-if="(message.tool_calls || []).length" class="assistant-tools">
+                              <li v-for="toolCall in message.tool_calls" :key="toolCall.id">{{ toolCall.function?.name }}</li>
+                            </ul>
                           </template>
                           <template v-else>
                             <pre v-if="messageText(message)">{{ messageText(message) }}</pre>
@@ -543,16 +578,12 @@ onBeforeUnmount(stopConsolePoll)
                     <div v-if="hasAnyOutput(item.call)" class="part-list">
                       <details v-if="(item.call.response.payload?.thinking_segments || []).length" class="part-row">
                         <summary>
-                          <span class="part-tag tag-thinking">思考</span>
-                          <small class="part-note">{{ item.call.response.payload.thinking_segments.length }} 段 · {{ fmtSeconds(thinkingTotal(item.call.response.payload.thinking_segments)) }}</small>
+                          <span class="part-tag tag-thinking">think</span>
+                          <span class="part-desc">{{ previewText(item.call.response.payload.thinking_segments.map((segment) => segment.text).join(' '), 72) }}</span>
                           <ChevronDown class="block-caret" aria-hidden="true" />
                         </summary>
                         <div class="part-body">
                           <div v-for="(segment, index) in item.call.response.payload.thinking_segments" :key="index" class="think-seg">
-                            <div class="seg-head">
-                              <small>第 {{ index + 1 }} 段</small>
-                              <time>{{ fmtSeconds(segment.duration_ms || 0) }}</time>
-                            </div>
                             <pre>{{ segment.text }}</pre>
                           </div>
                         </div>
@@ -569,9 +600,8 @@ onBeforeUnmount(stopConsolePoll)
                       </details>
                       <details v-for="tool in toolsFor(item.call)" :key="tool.id" class="part-row">
                         <summary>
-                          <span class="part-tag tag-tool">工具调用</span>
+                          <span class="part-tag tag-call">call</span>
                           <code class="part-tool-name">{{ tool.name }}</code>
-                          <span v-if="tool.display" class="part-desc">{{ tool.display }}</span>
                           <ChevronDown class="block-caret" aria-hidden="true" />
                         </summary>
                         <div class="part-body">
@@ -605,79 +635,90 @@ onBeforeUnmount(stopConsolePoll)
 .trace-block { position: relative; interpolate-size: allow-keywords; margin: 0 0 var(--ch-space-3); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-list); background: var(--ch-surface); overflow: visible; }
 .trace-block::details-content { height: 0; overflow: clip; content-visibility: hidden; transition: height 0.25s ease, content-visibility 0.25s allow-discrete; }
 .trace-block[open]::details-content { height: auto; content-visibility: visible; }
-.trace-block > summary { display: block; padding: var(--ch-space-3); cursor: pointer; list-style: none; }
+.trace-block > summary { position: relative; display: block; padding: var(--ch-space-3); cursor: pointer; list-style: none; }
 .block-head { display: flex; align-items: center; gap: var(--ch-space-2); }
 .block-head .block-time { margin-left: auto; }
 .end-caret { margin-left: auto; }
-.session-overview { margin: 0 0 var(--ch-space-3); padding: var(--ch-space-2) var(--ch-space-3); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-list); }
+.session-overview { margin: 0 0 var(--ch-space-3); padding: var(--ch-space-3); border: 1px solid var(--ch-border); border-radius: var(--ch-radius-list); }
 .overview-title { margin: 0 0 var(--ch-space-2); color: var(--ch-text-secondary); font-size: var(--ch-text-sm); font-weight: var(--ch-font-bold); }
-.overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ch-space-2) var(--ch-space-3); }
+.overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ch-space-1) var(--ch-space-3); }
 .overview-item { display: flex; align-items: baseline; gap: var(--ch-space-2); min-width: 0; }
 .overview-label { flex-shrink: 0; color: var(--ch-text-muted); font-size: var(--ch-text-xs); white-space: nowrap; }
 .overview-value { color: var(--ch-text); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }
-.turn-group { interpolate-size: allow-keywords; margin: 0 0 var(--ch-space-3); }
-.turn-group::details-content { height: 0; overflow: clip; content-visibility: hidden; transition: height 0.25s ease, content-visibility 0.25s allow-discrete; }
-.turn-group[open]::details-content { height: auto; content-visibility: visible; }
-.turn-group > summary { display: flex; align-items: center; gap: var(--ch-space-2); padding: var(--ch-space-2) 0 var(--ch-space-3); cursor: pointer; list-style: none; }
-.turn-title { color: var(--ch-text); font-size: var(--ch-text-sm); font-weight: var(--ch-font-bold); white-space: nowrap; }
-.turn-meta { margin-left: auto; overflow: hidden; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+.turn-group { position: relative; interpolate-size: allow-keywords; margin: 0; }
+.turn-group > summary { position: relative; display: flex; align-items: center; gap: 0; padding: var(--ch-space-2) var(--ch-space-2) var(--ch-space-2) calc(var(--ch-space-4) + 2px); line-height: 24px; cursor: pointer; list-style: none; }
+.turn-index { position: absolute; z-index: 1; top: 50%; left: -6px; display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; background: var(--ch-surface-2); color: var(--ch-text-faint); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); line-height: 1; transform: translateY(-50%); }
+.turn-group[open] .turn-index { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
+.turn-group[open] > summary { margin-bottom: var(--ch-space-2); }
+.turn-group[open] > summary::after { content: ''; position: absolute; top: calc(50% + 12px); right: auto; bottom: calc(-1 * var(--ch-space-2)); left: 6px; width: 1px; background: var(--ch-border-strong); }
+.turn-group[open]:has(+ .turn-group)::after { content: ''; position: absolute; z-index: 0; bottom: -20px; left: 6px; width: 1px; height: 20px; background: var(--ch-border-strong); }
+.turn-group > summary > .block-caret { margin-left: var(--ch-space-2); }
+.turn-title { color: var(--ch-text-secondary); font-size: var(--ch-text-sm); font-weight: var(--ch-font-bold); white-space: nowrap; }
+.turn-agent { flex-shrink: 0; margin-left: auto; color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: var(--ch-font-medium); line-height: 1.4; white-space: nowrap; }
+.turn-meta { display: inline-flex; align-items: center; flex-shrink: 1; min-width: 0; overflow: hidden; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
+.turn-meta::before { content: '·'; flex-shrink: 0; margin: 0 var(--ch-space-2); }
 .turn-group:not([open]) .block-caret { transform: rotate(-90deg); }
-.turn-items { position: relative; padding: 0 0 0 calc(var(--ch-space-4) + var(--ch-space-2)); }
-.turn-items::before { content: ''; position: absolute; left: 7px; top: 1px; bottom: calc(var(--ch-space-3) + 1px); width: 2px; border-radius: 2px; background: color-mix(in srgb, var(--ch-border) 45%, var(--ch-text-faint)); }
-.trace-block::before { content: ''; position: absolute; z-index: 1; left: calc(-1 * (var(--ch-space-4) + var(--ch-space-1) + 1px)); top: calc(var(--ch-space-3) + 2px); width: 10px; height: 10px; border: 2px solid var(--ch-surface); border-radius: 50%; background: var(--ch-text-faint); box-shadow: 0 0 0 2px var(--ch-text-faint); }
-.trace-block.type-user::before { background: var(--ch-accent-soft-text); box-shadow: 0 0 0 2px var(--ch-accent-soft-text); }
-.trace-block.type-toolback::before { background: var(--ch-warning-text); box-shadow: 0 0 0 2px var(--ch-warning-text); }
-.trace-block.type-loop::before { background: var(--ch-info-text); box-shadow: 0 0 0 2px var(--ch-info-text); }
-.trace-block.type-loop.dot-success::before { background: var(--ch-success-text); box-shadow: 0 0 0 2px var(--ch-success-text); }
-.trace-block.type-loop.dot-error::before { background: var(--ch-danger-text); box-shadow: 0 0 0 2px var(--ch-danger-text); }
+.turn-group:not([open]) > .turn-items { display: none; }
+.turn-items { position: relative; padding: 0 0 0 calc(var(--ch-space-4) + 2px); }
+.turn-items::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 1px; background: var(--ch-border-strong); }
+.trace-block > summary::before { content: ''; position: absolute; z-index: 1; left: calc(-1 * var(--ch-space-4)); top: 50%; width: 7px; height: 7px; border-radius: 50%; transform: translateY(-50%); }
+.trace-block.type-user > summary::before { background: var(--ch-dot-user); }
+.trace-block.type-toolback > summary::before { background: var(--ch-dot-toolback); }
+.trace-block.type-loop > summary::before { background: var(--ch-dot-model); }
 .type-loop .block-main { color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: 400; }
 .block-pill { display: inline-flex; align-items: center; padding: var(--ch-space-1) var(--ch-space-2); border-radius: 4px; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); line-height: 1.4; white-space: nowrap; }
 .block-time { display: inline-flex; align-items: center; gap: var(--ch-space-1); color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }
 .block-caret { flex-shrink: 0; width: 14px; height: 14px; stroke-width: 1.6; color: var(--ch-text-muted); transition: transform var(--ch-duration-fast) var(--ch-ease); }
 .trace-block:not([open]) .block-caret { transform: rotate(-90deg); }
-.block-main { display: block; overflow: hidden; margin-top: var(--ch-space-2); color: var(--ch-text); font-size: var(--ch-text-sm); font-weight: var(--ch-font-medium); line-height: 1.6; white-space: nowrap; text-overflow: ellipsis; }
-.call-metrics { display: grid; gap: var(--ch-space-1); min-width: 0; margin-top: var(--ch-space-2); color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); line-height: 1.4; }
+.block-main { display: block; overflow: hidden; margin-top: var(--ch-space-3); color: var(--ch-text); font-size: var(--ch-text-sm); font-weight: var(--ch-font-medium); line-height: 1.6; white-space: nowrap; text-overflow: ellipsis; }
+.call-metrics { display: grid; gap: var(--ch-space-1); min-width: 0; margin-top: var(--ch-space-3); color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); line-height: 1.4; }
 .call-metrics > span { display: inline-flex; align-items: center; white-space: nowrap; }
 .call-model { gap: var(--ch-space-2); }
 .call-usage { flex-wrap: wrap; gap: var(--ch-space-1) var(--ch-space-2); }
 .call-status, .tool-status { display: inline-flex; align-items: center; padding: var(--ch-space-1); border-radius: 3px; font-size: 12px; font-weight: var(--ch-font-semibold); line-height: 1.4; white-space: nowrap; }
-.status-success { background: var(--ch-success-soft); color: var(--ch-success-text); }
-.tool-status.status-success { background: var(--ch-surface-2); color: var(--ch-text-secondary); }
+.status-success { padding: var(--ch-space-1) var(--ch-space-2); background: var(--ch-success-soft); color: var(--ch-success-text); }
+.tool-status { padding: 0; border-radius: 0; background: transparent; font-size: var(--ch-text-xs); font-weight: 400; }
+.tool-status.status-success { background: transparent; color: var(--ch-text-muted); }
+.tool-status.status-error { background: transparent; color: var(--ch-danger-text); }
+.tool-status.status-pending { background: transparent; color: var(--ch-info-text); }
 .status-error { background: var(--ch-danger-soft); color: var(--ch-danger-text); }
 .status-pending { background: var(--ch-info-soft); color: var(--ch-info-text); }
-.user-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); margin: 0 var(--ch-space-3); padding: var(--ch-space-2) 0 var(--ch-space-3); border-top: 1px solid color-mix(in srgb, var(--ch-accent) 18%, var(--ch-surface)); }
-.user-context-head { display: flex; align-items: center; gap: var(--ch-space-2); color: var(--ch-text-faint); font-size: 11px; line-height: 1.4; }
+.user-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); margin: 0 var(--ch-space-3); padding: var(--ch-space-3) 0; border-top: 1px solid var(--ch-border); }
+.user-context-head { display: flex; align-items: center; gap: var(--ch-space-2); color: var(--ch-text-faint); font-size: var(--ch-text-xs); line-height: 1.4; }
 .context-tabs.user-context-tabs { gap: var(--ch-space-2); }
-.context-tabs.user-context-tabs button { padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ch-text-muted); font-size: 11px; }
-.context-tabs.user-context-tabs button:hover, .context-tabs.user-context-tabs button.active { border: 0; background: transparent; color: var(--ch-accent-soft-text); font-weight: var(--ch-font-semibold); }
 .block-body-text, .msg-text, .part-text { margin: 0; max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .context-tabs { display: flex; gap: var(--ch-space-2); }
 .agent-tabs { flex-wrap: wrap; margin: 0 0 var(--ch-space-3); }
 .context-tabs button { padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; background: var(--ch-surface); color: var(--ch-text-muted); font-size: var(--ch-text-xs); line-height: 1.4; cursor: pointer; }
 .context-tabs button:hover { color: var(--ch-text-secondary); background: var(--ch-surface-2); }
-.context-tabs button.active { border-color: var(--ch-accent-border); background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: var(--ch-font-semibold); }
+.context-tabs button.active { border-color: transparent; background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-weight: var(--ch-font-semibold); }
 .context-content { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
-.type-user .block-pill { padding: 0; background: transparent; color: var(--ch-accent-soft-text); }
-.type-user { border-color: color-mix(in srgb, var(--ch-accent) 24%, var(--ch-surface)); background: color-mix(in srgb, var(--ch-accent-soft) 22%, var(--ch-surface)); }
+.user-detail .context-content { background: var(--ch-surface-2); }
+.type-user .block-pill { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
+.type-user { border-color: var(--ch-border); background: var(--ch-surface); }
 .type-user .block-main { color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: 400; }
 .trace-block[open] .block-main { display: none; }
 .type-user[open] .block-main { display: block; }
-.type-toolback { border-color: color-mix(in srgb, var(--ch-warning) 24%, var(--ch-surface)); background: color-mix(in srgb, var(--ch-warning-soft) 18%, var(--ch-surface)); }
+.type-toolback { border-color: var(--ch-border); background: var(--ch-surface); }
 .type-toolback .block-pill { background: var(--ch-warning-soft); color: var(--ch-warning-text); }
 .type-toolback .block-main { color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: 400; }
-.type-loop { border-color: color-mix(in srgb, var(--ch-info) 24%, var(--ch-surface)); }
+.type-toolback[open] .block-main { display: block; }
+.type-loop { border-color: var(--ch-border); }
 .type-loop .block-pill { background: color-mix(in srgb, var(--ch-info-soft) 65%, var(--ch-surface)); color: var(--ch-info-text); }
-.call-details { margin: 0 var(--ch-space-3); padding: var(--ch-space-2) 0 var(--ch-space-3); border-top: 1px solid var(--ch-border); }
-.toolback-rows { margin: 0 var(--ch-space-3) var(--ch-space-3); overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); }
+.call-details { margin: 0 var(--ch-space-3); padding: var(--ch-space-3) 0; border-top: 1px solid var(--ch-border); }
+.toolback-rows { margin: 0 var(--ch-space-3) var(--ch-space-3); padding-top: var(--ch-space-3); border-top: 1px solid var(--ch-border); }
+.toolback-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); }
 .toolback-row { font-size: var(--ch-text-xs); }
 .toolback-row summary { display: flex; align-items: center; gap: var(--ch-space-2); padding: var(--ch-space-2); cursor: pointer; list-style: none; }
 .toolback-row + .toolback-row { border-top: 1px solid var(--ch-border); }
-.toolback-row .block-caret { margin-left: auto; }
+.toolback-row .block-caret { margin-left: var(--ch-space-2); }
 .toolback-row:not([open]) .block-caret { transform: rotate(-90deg); }
 .toolback-row .tool-name { flex-shrink: 0; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
 .toolback-row .tool-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.tool-result-meta { display: inline-flex; align-items: center; margin-left: auto; }
 .toolback-row .tool-status { flex-shrink: 0; }
 .toolback-row .tool-duration { flex-shrink: 0; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }
+.toolback-row .tool-duration::before { content: '·'; margin: 0 var(--ch-space-2); }
 .toolback-row pre { max-height: 160px; margin: 0 var(--ch-space-2) var(--ch-space-2); overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
 pre { margin: 0; font-family: var(--ch-font-mono); white-space: pre-wrap; word-break: break-word; }
 .region + .region { margin-top: var(--ch-space-3); }
@@ -693,14 +734,13 @@ pre { margin: 0; font-family: var(--ch-font-mono); white-space: pre-wrap; word-b
 .msg-row + .msg-row { border-top: 1px solid var(--ch-border); }
 .msg-row summary { display: flex; align-items: center; gap: var(--ch-space-2); padding: var(--ch-space-2); cursor: pointer; list-style: none; }
 .msg-role { flex-shrink: 0; width: 56px; padding: 2px 0; border-radius: 4px; text-align: center; font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); line-height: 1.5; }
-.role-user { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
-.role-assistant { background: var(--ch-surface-2); color: var(--ch-text-secondary); }
-.role-system { background: var(--ch-surface-2); color: var(--ch-text-faint); }
-.role-tool { background: var(--ch-success-soft); color: var(--ch-success-text); }
+.role-user, .role-assistant, .role-system, .role-tool { background: var(--ch-surface-2); color: var(--ch-text-secondary); }
 .msg-preview { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
 .msg-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: 0 var(--ch-space-2) var(--ch-space-2); }
 .msg-detail pre { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
-.assistant-tools { margin: 0; padding: 0; list-style: none; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.msg-detail .msg-text, .msg-detail pre { border-radius: 4px; }
+.assistant-tools { display: flex; flex-wrap: wrap; gap: var(--ch-space-2); margin: 0; padding: 0; list-style: none; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.assistant-tools li { padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; background: var(--ch-surface); }
 .schema-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); background: var(--ch-surface); }
 .schema-list summary { display: flex; align-items: center; padding: var(--ch-space-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); cursor: pointer; list-style: none; }
 .schema-list .block-caret { margin-left: auto; }
@@ -708,7 +748,7 @@ pre { margin: 0; font-family: var(--ch-font-mono); white-space: pre-wrap; word-b
 .schema-list[open] summary { border-bottom: 1px solid var(--ch-border); }
 .schema-row { display: flex; align-items: center; gap: var(--ch-space-2); min-width: 0; padding: var(--ch-space-2); }
 .schema-row + .schema-row { border-top: 1px solid var(--ch-border); }
-.schema-row code { flex-shrink: 0; padding: 2px var(--ch-space-1); border-radius: 4px; background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
+.schema-row code { flex-shrink: 0; padding: 2px var(--ch-space-1); border-radius: 4px; background: var(--ch-surface-2); color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
 .schema-row span { min-width: 0; overflow: hidden; color: var(--ch-text-muted); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
 .part-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); }
 .part-row + .part-row { border-top: 1px solid var(--ch-border); }
@@ -717,18 +757,13 @@ pre { margin: 0; font-family: var(--ch-font-mono); white-space: pre-wrap; word-b
 .part-row:not([open]) .block-caret { transform: rotate(-90deg); }
 .part-row[open] .part-desc, .msg-row[open] .msg-preview, .toolback-row[open] .tool-desc { display: none; }
 .part-tag { flex-shrink: 0; width: 56px; padding: 2px 0; border-radius: 4px; text-align: center; font-size: var(--ch-text-xs); line-height: 1.5; }
-.tag-thinking { background: var(--ch-info-soft); color: var(--ch-info-text); }
-.tag-content { background: var(--ch-accent-soft); color: var(--ch-accent-soft-text); }
-.tag-tool { background: var(--ch-warning-soft); color: var(--ch-warning-text); }
-.part-note { color: var(--ch-text-muted); font-size: var(--ch-text-xs); white-space: nowrap; }
+.tag-thinking, .tag-content, .tag-call { background: var(--ch-surface-2); color: var(--ch-text-secondary); }
 .part-tool-name { flex-shrink: 0; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
 .part-desc { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); white-space: nowrap; text-overflow: ellipsis; }
 .part-body { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: 0 var(--ch-space-2) var(--ch-space-2); }
 .part-code { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
 .think-seg { padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); }
-.seg-head { display: flex; align-items: baseline; justify-content: space-between; color: var(--ch-text-muted); font-size: var(--ch-text-xs); }
-.seg-head time { font-family: var(--ch-font-mono); }
-.think-seg pre { max-height: 144px; margin-top: var(--ch-space-2); overflow: auto; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.think-seg pre { max-height: 144px; margin: 0; overflow: auto; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
 .pending-hint, .empty-line { margin: 0; color: var(--ch-text-muted); font-size: var(--ch-text-xs); }
 @media (max-width: 780px) { .console-header { padding: var(--ch-space-3) var(--ch-space-3) 0; } .trace-body { padding: var(--ch-space-3) var(--ch-space-2) var(--ch-space-4); } }
 </style>
