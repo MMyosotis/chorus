@@ -273,7 +273,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: var(--ch-space-3);
-  padding: var(--ch-space-3) 0;
+  padding: var(--ch-space-2) 0;
 }
 
 .setting-label {
@@ -310,6 +310,8 @@ onBeforeUnmount(() => {
   border-top: 0;
 }
 
+.model-row + .group-title { margin-top: var(--ch-space-2); }
+
 .model-select {
   position: relative;
   width: 168px;
@@ -321,7 +323,7 @@ onBeforeUnmount(() => {
 .model-trigger {
   box-sizing: border-box;
   width: 100%;
-  height: 44px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
