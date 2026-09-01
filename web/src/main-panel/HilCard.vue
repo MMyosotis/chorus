@@ -375,7 +375,8 @@ async function onRetry() {
 
 .images {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  align-items: start;
   gap: var(--ch-space-3);
 }
 
@@ -387,9 +388,7 @@ async function onRetry() {
 .images img {
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1;
   border-radius: var(--ch-radius-list);
-  object-fit: cover;
 }
 
 .images figcaption {
@@ -502,10 +501,6 @@ async function onRetry() {
 @media (max-width: 700px) {
   .hil-card {
     padding: 16px;
-  }
-
-  .images {
-    grid-template-columns: 1fr;
   }
 
   .actions {
