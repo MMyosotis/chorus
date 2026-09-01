@@ -164,8 +164,7 @@ App.vue（三栏 + 多会话状态 + task 轮询编排）
 │   ├── IntentStateCard.vue（意图状态展示）
 │   ├── PipelineTimeline.vue（任务图时间线）
 │   ├── ArtifactsCard.vue（产物汇总，点击聚焦任务）
-│   ├── roleMeta.js（status->徽章/标签映射集中处）
-│   └── styleTags.js（样式标签映射）
+│   └── roleMeta.js（status->徽章/标签映射集中处）
 ├── SettingsPanel.vue（modal：对话/生图模型 + 联网搜索开关）
 ├── api.js（fetch 抽离：sessions CRUD + messages/traces + streamChat + 模型选项 + getTaskGraph/confirmTask/retryTask/cancelPipeline）
 └── composables/

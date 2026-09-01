@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue'
-import { splitStyleTags } from './styleTags.js'
 
 const props = defineProps({ state: { type: Object, default: null } })
 
@@ -28,8 +27,6 @@ const specEntries = computed(() => [
       : null,
   },
 ].filter(({ value }) => value !== null && value !== undefined && String(value).trim() !== ''))
-
-const styleTags = computed(() => splitStyleTags(props.state?.style))
 
 const progress = computed(() => {
   const value = Number(props.state?.progress_percent)
@@ -60,8 +57,8 @@ function displayValue(value) {
       <p v-if="status === 'empty'" class="intent-helper">你的创作方向将在这里自动整理</p>
     </div>
 
-    <div v-if="specEntries.length || styleTags.length" class="tags">
-      <TransitionGroup v-if="specEntries.length" name="intent-tag" tag="div" class="spec-tags">
+    <div v-if="specEntries.length" class="tags">
+      <TransitionGroup name="intent-tag" tag="div" class="spec-tags">
         <span
           v-for="entry in specEntries"
           :key="entry.key"
@@ -69,14 +66,6 @@ function displayValue(value) {
           :class="{ 'tag-count': entry.key === 'image-count' }"
           :title="displayValue(entry.value)"
         >{{ displayValue(entry.value) }}</span>
-      </TransitionGroup>
-      <TransitionGroup v-if="styleTags.length" name="intent-tag" tag="div" class="style-tags">
-        <span
-          v-for="tag in styleTags"
-          :key="tag"
-          class="tag style-tag"
-          :title="tag"
-        >{{ tag }}</span>
       </TransitionGroup>
     </div>
 
@@ -241,17 +230,6 @@ function displayValue(value) {
 
 .tag-count {
   flex: 0 0 auto;
-}
-
-.style-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.style-tag {
-  max-width: 100%;
 }
 
 .intent-progress {
