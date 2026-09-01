@@ -1,13 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue'
-import { ChevronRight, FileText, Heart, Image, Monitor } from '@lucide/vue'
+import { ChevronDown, ChevronRight, ChevronUp, FileText, Heart, Image, Monitor } from '@lucide/vue'
 
 const props = defineProps({
   state: { type: Object, default: null },
   hideActions: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
+  collapsed: { type: Boolean, default: false },
 })
-const emit = defineEmits(['confirm', 'revise'])
+const emit = defineEmits(['confirm', 'revise', 'collapse-change'])
 const locking = ref(false)
 const archived = computed(() => props.state?.status === 'answered')
 
@@ -42,6 +43,10 @@ function decide(type) {
   emit(type)
 }
 
+function toggleCollapsed() {
+  emit('collapse-change', !props.collapsed)
+}
+
 defineExpose({
   confirm: () => decide('confirm'),
   revise: () => decide('revise'),
@@ -49,66 +54,87 @@ defineExpose({
 </script>
 
 <template>
-  <section class="intent-confirm" :class="{ archived, compact }">
-    <header class="card-head">
-      <div class="head-copy">
-        <h2>确认创作意图</h2>
-        <p>确认本次创作的方向与要求</p>
-      </div>
+  <section class="intent-confirm" :class="{ archived, compact, collapsed: props.collapsed }">
+    <div class="card-controls">
       <span class="status ch-status-pill" :class="archived ? 'is-complete' : 'is-awaiting'">
         <i aria-hidden="true"></i>{{ archived ? '已确认' : '待确认' }}
       </span>
-    </header>
-
-    <div class="brief">
-      <div class="section-heading">
-        <span class="section-title">主题方向</span>
-      </div>
-      <h2>{{ title }}</h2>
-    </div>
-    <div class="meta" aria-label="创作规格">
-      <div v-for="item in meta" :key="item.label" class="meta-item">
-        <span class="meta-icon" aria-hidden="true">
-          <Monitor v-if="item.icon === 'platform'" />
-          <FileText v-else-if="item.icon === 'format'" />
-          <Heart v-else-if="item.icon === 'style'" />
-          <Image v-else />
-        </span>
-        <span class="meta-copy">
-          <span class="meta-label">{{ item.label }}</span>
-          <strong>{{ item.value }}</strong>
-        </span>
-      </div>
+      <button
+        class="collapse-toggle"
+        type="button"
+        :aria-label="props.collapsed ? '向上展开确认卡' : '向下收起确认卡'"
+        :title="props.collapsed ? '向上展开确认卡' : '向下收起确认卡'"
+        :aria-expanded="!props.collapsed"
+        @click="toggleCollapsed"
+      >
+        <ChevronUp v-if="props.collapsed" aria-hidden="true" />
+        <ChevronDown v-else aria-hidden="true" />
+      </button>
     </div>
 
-    <section v-if="notes.length" class="focus">
-      <header class="section-heading focus-head">
-        <span class="section-title">补充要求</span>
-        <span class="section-meta">{{ notes.length }} 项</span>
-      </header>
-      <dl class="focus-list">
-        <div v-for="(note, index) in notes" :key="note.label" class="focus-item">
-          <span class="focus-marker" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
-          <dt>{{ note.label }}</dt>
-          <dd>{{ note.value }}</dd>
+    <div class="collapsed-summary" :class="{ visible: props.collapsed }" :aria-hidden="!props.collapsed">
+      <span class="summary-label">主题方向</span>
+      <p class="summary-title">{{ title }}</p>
+    </div>
+
+    <div class="confirm-body" :inert="props.collapsed">
+      <div class="confirm-body-content">
+        <header class="card-head">
+          <h2>确认创作意图</h2>
+          <p>确认本次创作的方向与要求</p>
+        </header>
+        <div class="brief">
+          <div class="section-heading">
+            <span class="section-title">主题方向</span>
+          </div>
+          <h2>{{ title }}</h2>
         </div>
-      </dl>
-    </section>
+        <div class="meta" aria-label="创作规格">
+          <div v-for="item in meta" :key="item.label" class="meta-item">
+            <span class="meta-icon" aria-hidden="true">
+              <Monitor v-if="item.icon === 'platform'" />
+              <FileText v-else-if="item.icon === 'format'" />
+              <Heart v-else-if="item.icon === 'style'" />
+              <Image v-else />
+            </span>
+            <span class="meta-copy">
+              <span class="meta-label">{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+            </span>
+          </div>
+        </div>
 
-    <footer v-if="!archived && !hideActions" class="actions">
-      <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
-        继续调整
-      </button>
-      <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
-        确认并开始创作
-        <ChevronRight aria-hidden="true" />
-      </button>
-    </footer>
+        <section v-if="notes.length" class="focus">
+          <header class="section-heading focus-head">
+            <span class="section-title">补充要求</span>
+            <span class="section-meta">{{ notes.length }} 项</span>
+          </header>
+          <dl class="focus-list">
+            <div v-for="(note, index) in notes" :key="note.label" class="focus-item">
+              <span class="focus-marker" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
+              <dt>{{ note.label }}</dt>
+              <dd>{{ note.value }}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <footer v-if="!archived && !hideActions" class="actions">
+          <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
+            继续调整
+          </button>
+          <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
+            确认并开始创作
+            <ChevronRight aria-hidden="true" />
+          </button>
+        </footer>
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .intent-confirm {
+  --collapsed-reserve: 140px;
   position: relative;
   width: 100%;
   padding: var(--ch-space-4);
@@ -119,17 +145,122 @@ defineExpose({
   box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
+  transition: padding 280ms cubic-bezier(.22, .8, .25, 1);
 }
 
-.card-head {
+.collapse-toggle {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--ch-accent-border);
+  border-radius: 50%;
+  background: var(--ch-surface);
+  color: var(--ch-accent);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease),
+    border-color var(--ch-duration-fast) var(--ch-ease),
+    color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.collapse-toggle:hover {
+  border-color: var(--ch-accent);
+  background: var(--ch-accent-subtle);
+}
+
+.collapse-toggle:focus-visible {
+  outline: 2px solid var(--ch-accent);
+  outline-offset: 2px;
+}
+
+.collapse-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.collapsed-summary {
+  height: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 24px;
+  min-width: 0;
+  overflow: hidden;
+  padding-right: var(--collapsed-reserve);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: height 280ms cubic-bezier(.22, .8, .25, 1), opacity 180ms ease, transform 280ms cubic-bezier(.22, .8, .25, 1);
 }
 
-.head-copy {
+.collapsed-summary.visible {
+  height: 32px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.summary-label {
+  flex: 0 0 auto;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-xs);
+  font-weight: 600;
+}
+
+.summary-title {
+  margin: 0;
   min-width: 0;
+  overflow: hidden;
+  color: var(--ch-text);
+  font-size: var(--ch-text-md);
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirm-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  transition: grid-template-rows 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.confirm-body-content {
+  min-height: 0;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease, transform 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.collapsed .confirm-body {
+  grid-template-rows: 0fr;
+}
+
+.collapsed .confirm-body-content {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.card-controls {
+  position: absolute;
+  top: var(--ch-space-4);
+  right: var(--ch-space-4);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+  transition: top 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.card-head {
+  min-width: 0;
+  padding-right: var(--collapsed-reserve);
+  margin-bottom: 24px;
 }
 
 .card-head h2 {
@@ -145,11 +276,6 @@ defineExpose({
   color: var(--ch-text-muted);
   font-size: var(--ch-text-md);
   line-height: 1.5;
-}
-
-.status {
-  flex: 0 0 auto;
-  margin-left: auto;
 }
 
 .brief {
@@ -392,11 +518,19 @@ defineExpose({
   box-shadow: var(--ch-shadow-soft);
 }
 
-.compact .head-copy h2 {
+.intent-confirm.compact.collapsed {
+  padding: 16px 24px;
+}
+
+.intent-confirm.compact.collapsed .card-controls {
+  top: 16px;
+}
+
+.compact .card-head h2 {
   font-size: var(--ch-text-lg);
 }
 
-.compact .head-copy p {
+.compact .card-head p {
   display: block;
   margin-top: 4px;
   font-size: var(--ch-text-xs);
@@ -446,6 +580,15 @@ defineExpose({
 
   .intent-confirm.compact {
     padding: 16px;
+  }
+
+  .intent-confirm.compact.collapsed {
+    padding: 16px;
+  }
+
+  .card-controls {
+    top: 16px;
+    right: 16px;
   }
 
   .section-meta {

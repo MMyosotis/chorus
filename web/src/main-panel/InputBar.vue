@@ -24,6 +24,7 @@ const hasHil = computed(() => !!(props.intentConfirmation || props.optionPrompt)
 const displayedOptionPrompt = ref(null)
 const displayedIntentConfirmation = ref(null)
 const optionCollapsed = ref(false)
+const intentCollapsed = ref(false)
 let hilReleaseTimer = null
 const isClosingHil = ref(false)
 const hasHilStage = computed(() =>
@@ -39,25 +40,25 @@ watch(
     }
     if (optionPrompt) {
       isClosingHil.value = false
-      resetOptionCollapse()
+      resetHilCollapse()
       displayedOptionPrompt.value = optionPrompt
       displayedIntentConfirmation.value = null
       return
     }
     if (intentConfirmation) {
       isClosingHil.value = false
-      resetOptionCollapse()
+      resetHilCollapse()
       displayedIntentConfirmation.value = intentConfirmation
       displayedOptionPrompt.value = null
       return
     }
     if (!displayedOptionPrompt.value && !displayedIntentConfirmation.value) {
-      resetOptionCollapse()
+      resetHilCollapse()
       isClosingHil.value = false
       return
     }
     // 收起阶段只执行确认卡的退出动画，避免与输入区的进入动画重叠。
-    resetOptionCollapse()
+    resetHilCollapse()
     isClosingHil.value = true
     hilReleaseTimer = setTimeout(() => {
       displayedOptionPrompt.value = null
@@ -69,8 +70,9 @@ watch(
   { immediate: true },
 )
 
-function resetOptionCollapse() {
+function resetHilCollapse() {
   optionCollapsed.value = false
+  intentCollapsed.value = false
 }
 
 const placeholder = computed(() => {
@@ -121,7 +123,7 @@ defineExpose({ focus, prefill })
 </script>
 
 <template>
-  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil, 'is-option-collapsed': optionCollapsed, 'is-waiting': disabled && !hasHilStage }">
+  <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil, 'is-hil-collapsed': optionCollapsed || intentCollapsed, 'is-waiting': disabled && !hasHilStage }">
     <div class="input-stage-shell" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
     <div class="input-stage" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
       <div class="stage-slot input-slot" :aria-hidden="hasHil">
@@ -197,8 +199,10 @@ defineExpose({ focus, prefill })
           v-else
           compact
           :state="displayedIntentConfirmation"
+          :collapsed="intentCollapsed"
           @confirm="emit('intent-confirm')"
           @revise="emit('intent-revise')"
+          @collapse-change="intentCollapsed = $event"
         />
         </section>
       </div>
@@ -244,8 +248,8 @@ defineExpose({ focus, prefill })
   transition: border-color 240ms cubic-bezier(.22, .8, .25, 1), border-radius 240ms cubic-bezier(.22, .8, .25, 1), clip-path 240ms cubic-bezier(.22, .8, .25, 1), box-shadow 240ms cubic-bezier(.22, .8, .25, 1);
 }
 
-/* 收起选择卡后沿用禁用输入栏的胶囊外壳。 */
-.input-zone.has-hil-stage.is-option-collapsed {
+/* 收起补充卡后沿用禁用输入栏的胶囊外壳。 */
+.input-zone.has-hil-stage.is-hil-collapsed {
   clip-path: inset(0 round 36px);
   border-radius: 36px;
   box-shadow: none;
