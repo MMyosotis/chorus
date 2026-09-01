@@ -1,13 +1,14 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
-import { Check, ChevronRight } from '@lucide/vue'
+import { Check, ChevronDown, ChevronRight, ChevronUp } from '@lucide/vue'
 
 const props = defineProps({
   prompt: { type: Object, required: true },
   hideActions: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
+  collapsed: { type: Boolean, default: false },
 })
-const emit = defineEmits(['choose'])
+const emit = defineEmits(['choose', 'collapse-change'])
 const locking = ref(false)
 const currentIndex = ref(0)
 const selections = ref([])
@@ -61,6 +62,10 @@ function previousQuestion() {
   error.value = ''
 }
 
+function toggleCollapsed() {
+  emit('collapse-change', !props.collapsed)
+}
+
 function confirmChoices() {
   if (locking.value || !validateCurrentQuestion()) return
   locking.value = true
@@ -79,105 +84,128 @@ defineExpose({ confirmChoices })
 </script>
 
 <template>
-  <section v-if="!archived" class="option-card" :class="{ compact }">
-    <span class="status ch-status-pill is-awaiting">
-      <i aria-hidden="true"></i>待确认
-    </span>
-
-    <div v-if="currentQuestion" class="options" role="radiogroup" :aria-label="currentQuestion.question">
-      <p class="question-progress">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</p>
-      <h3 class="question-title">{{ currentQuestion.question }}</h3>
+  <section v-if="!archived" class="option-card" :class="{ compact, collapsed: props.collapsed }">
+    <div class="option-controls">
+      <span class="status ch-status-pill is-awaiting">
+        <i aria-hidden="true"></i>待确认
+      </span>
       <button
-        v-for="opt in currentQuestion.options"
-        :key="opt.signal"
-        class="option-item"
-        :class="{ selected: currentSignal === opt.signal }"
+        class="collapse-toggle"
         type="button"
-        role="radio"
-        :aria-checked="currentSignal === opt.signal"
-        :disabled="locking"
-        @click="selectOption(opt.signal)"
+        :aria-label="props.collapsed ? '向上展开选择工具' : '向下收起选择工具'"
+        :title="props.collapsed ? '向上展开选择工具' : '向下收起选择工具'"
+        :aria-expanded="!props.collapsed"
+        @click="toggleCollapsed"
       >
-        <span class="option-copy">
-          <strong>{{ opt.label }}</strong>
-          <p>{{ opt.description }}</p>
-        </span>
-        <span class="option-selection" aria-hidden="true">
-          <span class="selection-label" :class="{ visible: currentSignal === opt.signal }">已选择</span>
-          <span class="option-check" :class="{ selected: currentSignal === opt.signal }">
-            <Check v-if="currentSignal === opt.signal" />
-          </span>
-        </span>
+        <ChevronUp v-if="props.collapsed" aria-hidden="true" />
+        <ChevronDown v-else aria-hidden="true" />
       </button>
-
-      <button
-        v-if="currentQuestion.allow_custom && !customSelected"
-        class="option-item custom-option"
-        type="button"
-        role="radio"
-        :aria-checked="false"
-        :disabled="locking"
-        @click="selectOption('__custom__')"
-      >
-        <span class="option-copy">
-          <strong>补充你的想法</strong>
-          <p>写下你希望突出呈现的角度或内容。</p>
-        </span>
-        <span class="option-check" aria-hidden="true"></span>
-      </button>
-
-      <div
-        v-else-if="currentQuestion.allow_custom"
-        class="option-item custom-option selected"
-        :class="{ disabled: locking }"
-        role="radio"
-        :aria-checked="true"
-      >
-        <div class="custom-option-editor">
-          <span class="option-copy">
-            <strong>补充你的想法</strong>
-            <span class="custom-editor-value">
-              <input
-                ref="customInput"
-                v-model="customTexts[currentIndex]"
-                class="custom-input"
-                type="text"
-                placeholder="写下你希望突出呈现的角度或内容"
-                :disabled="locking"
-                @keydown.enter="isLastQuestion ? confirmChoices() : nextQuestion()"
-              />
-            </span>
-          </span>
-          <!-- 预留与普通选项一致的选择位，保证两种状态的文字列精确对齐。 -->
-          <span class="option-selection custom-selection-spacer" aria-hidden="true">
-            <span>已选择</span>
-            <span class="option-check selected"><Check /></span>
-          </span>
-        </div>
-      </div>
     </div>
 
-    <footer v-if="!hideActions" class="actions">
-      <p v-if="error" class="action-error" role="alert">{{ error }}</p>
-      <div>
-        <button v-if="currentIndex > 0" class="secondary" type="button" :disabled="locking" @click="previousQuestion">
-          上一题
-        </button>
-        <button
-          class="primary"
-          type="button"
-          @click="isLastQuestion ? confirmChoices() : nextQuestion()"
-        >
-          {{ locking ? '正在确认' : (isLastQuestion ? '提交全部选择' : '下一题') }}
-          <ChevronRight v-if="!locking" aria-hidden="true" />
-        </button>
+    <div v-if="currentQuestion" class="collapsed-summary" :class="{ visible: props.collapsed }" :aria-hidden="!props.collapsed">
+      <p class="question-progress">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</p>
+      <p class="collapsed-question-title">{{ currentQuestion.question }}</p>
+    </div>
+
+    <div class="option-body" :inert="props.collapsed">
+      <div class="option-body-content">
+        <div v-if="currentQuestion" class="options" role="radiogroup" :aria-label="currentQuestion.question">
+          <p class="question-progress">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</p>
+          <h3 class="question-title">{{ currentQuestion.question }}</h3>
+          <button
+            v-for="opt in currentQuestion.options"
+            :key="opt.signal"
+            class="option-item"
+            :class="{ selected: currentSignal === opt.signal }"
+            type="button"
+            role="radio"
+            :aria-checked="currentSignal === opt.signal"
+            :disabled="locking"
+            @click="selectOption(opt.signal)"
+          >
+            <span class="option-copy">
+              <strong>{{ opt.label }}</strong>
+              <p>{{ opt.description }}</p>
+            </span>
+            <span class="option-selection" aria-hidden="true">
+              <span class="selection-label" :class="{ visible: currentSignal === opt.signal }">已选择</span>
+              <span class="option-check" :class="{ selected: currentSignal === opt.signal }">
+                <Check v-if="currentSignal === opt.signal" />
+              </span>
+            </span>
+          </button>
+
+          <button
+            v-if="currentQuestion.allow_custom && !customSelected"
+            class="option-item custom-option"
+            type="button"
+            role="radio"
+            :aria-checked="false"
+            :disabled="locking"
+            @click="selectOption('__custom__')"
+          >
+            <span class="option-copy">
+              <strong>补充你的想法</strong>
+              <p>写下你希望突出呈现的角度或内容。</p>
+            </span>
+            <span class="option-check" aria-hidden="true"></span>
+          </button>
+
+          <div
+            v-else-if="currentQuestion.allow_custom"
+            class="option-item custom-option selected"
+            :class="{ disabled: locking }"
+            role="radio"
+            :aria-checked="true"
+          >
+            <div class="custom-option-editor">
+              <span class="option-copy">
+                <strong>补充你的想法</strong>
+                <span class="custom-editor-value">
+                  <input
+                    ref="customInput"
+                    v-model="customTexts[currentIndex]"
+                    class="custom-input"
+                    type="text"
+                    placeholder="写下你希望突出呈现的角度或内容"
+                    :disabled="locking"
+                    @keydown.enter="isLastQuestion ? confirmChoices() : nextQuestion()"
+                  />
+                </span>
+              </span>
+              <!-- 预留与普通选项一致的选择位，保证两种状态的文字列精确对齐。 -->
+              <span class="option-selection custom-selection-spacer" aria-hidden="true">
+                <span>已选择</span>
+                <span class="option-check selected"><Check /></span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <footer v-if="!hideActions" class="actions">
+          <p v-if="error" class="action-error" role="alert">{{ error }}</p>
+          <div>
+            <button v-if="currentIndex > 0" class="secondary" type="button" :disabled="locking" @click="previousQuestion">
+              上一题
+            </button>
+            <button
+              class="primary"
+              type="button"
+              @click="isLastQuestion ? confirmChoices() : nextQuestion()"
+            >
+              {{ locking ? '正在确认' : (isLastQuestion ? '提交全部选择' : '下一题') }}
+              <ChevronRight v-if="!locking" aria-hidden="true" />
+            </button>
+          </div>
+        </footer>
       </div>
-    </footer>
+    </div>
   </section>
 </template>
 
 <style scoped>
 .option-card {
+  --collapsed-reserve: 176px;
   position: relative;
   width: 100%;
   padding: var(--ch-space-4);
@@ -187,6 +215,55 @@ defineExpose({ confirmChoices })
   box-shadow: var(--ch-shadow-soft);
   color: var(--ch-text);
   font-family: var(--ch-font-sans);
+  transition: padding 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.option-controls {
+  position: absolute;
+  top: var(--ch-space-4);
+  right: var(--ch-space-4);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1;
+  transition: top 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.collapse-toggle {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--ch-accent-border);
+  border-radius: 50%;
+  background: var(--ch-surface);
+  color: var(--ch-accent);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease),
+    border-color var(--ch-duration-fast) var(--ch-ease),
+    color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.collapse-toggle:hover {
+  border-color: var(--ch-accent);
+  background: var(--ch-accent-subtle);
+}
+
+.collapse-toggle:focus-visible {
+  outline: 2px solid var(--ch-accent);
+  outline-offset: 2px;
+}
+
+.collapse-toggle svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .question-progress {
@@ -196,15 +273,63 @@ defineExpose({ confirmChoices })
   font-weight: 600;
 }
 
-.status {
-  position: absolute;
-  top: var(--ch-space-4);
-  right: var(--ch-space-4);
-}
-
 .options {
   display: grid;
   gap: var(--ch-space-3);
+}
+
+.option-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  transition: grid-template-rows 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.option-body-content {
+  min-height: 0;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease, transform 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.collapsed .option-body {
+  grid-template-rows: 0fr;
+}
+
+.collapsed .option-body-content {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.collapsed-summary {
+  height: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  padding-right: var(--collapsed-reserve);
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: height 280ms cubic-bezier(.22, .8, .25, 1), opacity 180ms ease, transform 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.collapsed-summary.visible {
+  height: 32px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.collapsed-question-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ch-text);
+  font-size: var(--ch-text-md);
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .question-title {
@@ -453,6 +578,14 @@ defineExpose({ confirmChoices })
   box-shadow: var(--ch-shadow-soft);
 }
 
+.option-card.compact.collapsed {
+  padding: 16px 24px;
+}
+
+.option-card.compact.collapsed .option-controls {
+  top: 16px;
+}
+
 .compact .options {
   gap: 8px;
 }
@@ -513,6 +646,7 @@ defineExpose({ confirmChoices })
 
 @media (max-width: 700px) {
   .option-card {
+    --collapsed-reserve: 160px;
     padding: 16px;
   }
 
@@ -520,7 +654,11 @@ defineExpose({ confirmChoices })
     padding: 16px;
   }
 
-  .status {
+  .option-card.compact.collapsed {
+    padding: 16px;
+  }
+
+  .option-controls {
     top: 16px;
     right: 16px;
   }
