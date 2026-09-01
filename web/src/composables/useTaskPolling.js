@@ -47,6 +47,15 @@ export function useTaskPolling() {
       stopInternal()
       pollingSession.value = null
     },
+
+    // 确认/重跑后立即拉一次图，不等下一轮周期，避免旧状态多亮一个轮询间隔
+    refresh(sessionId) {
+      if (pollingSession.value === sessionId && timer) {
+        tick()
+        return
+      }
+      this.start(sessionId)
+    },
   }
 }
 

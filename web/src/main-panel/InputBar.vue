@@ -153,14 +153,7 @@ defineExpose({ focus, prefill })
                   <button class="icon-btn" type="button" aria-label="语音输入" :disabled="disabled">
                     <Mic aria-hidden="true" />
                   </button>
-                  <button
-                    class="send-btn"
-                    :disabled="disabled || !inputText.trim()"
-                    @click="send"
-                    aria-label="发送"
-                  >
-                    <ArrowUp aria-hidden="true" />
-                  </button>
+                  <span class="action-spacer" aria-hidden="true"></span>
                 </div>
               </div>
             </div>
@@ -169,12 +162,24 @@ defineExpose({ focus, prefill })
           <div class="input-wait" :aria-hidden="!disabled">
             <div class="input-wait-content">
               <p class="input-wait-message" role="status">{{ placeholder }}</p>
-              <button class="send-btn is-waiting" type="button" disabled :aria-label="props.archived ? '已定稿' : '正在等待'">
-                <Check v-if="props.archived" aria-hidden="true" />
-                <Clock3 v-else aria-hidden="true" />
-              </button>
+              <span class="action-spacer is-wait" aria-hidden="true"></span>
             </div>
           </div>
+
+          <button
+            class="send-btn input-action"
+            :class="{ 'is-waiting': disabled }"
+            type="button"
+            :disabled="disabled || !inputText.trim()"
+            :aria-label="disabled ? (archived ? '已定稿' : '正在等待') : '发送'"
+            @click="send"
+          >
+            <span class="action-icon send"><ArrowUp aria-hidden="true" /></span>
+            <span class="action-icon wait">
+              <span class="wait-glyph clock" :class="{ visible: !archived }"><Clock3 aria-hidden="true" /></span>
+              <span class="wait-glyph done" :class="{ visible: archived }"><Check aria-hidden="true" /></span>
+            </span>
+          </button>
         </div>
       </div>
 
@@ -210,14 +215,15 @@ defineExpose({ focus, prefill })
   width: calc(100% - 32px);
   z-index: 2;
   margin: calc(-1 * var(--ch-radius-xl)) auto 0;
-  border-radius: var(--ch-radius-xl);
+  border-radius: var(--zone-radius, var(--ch-radius-xl));
   box-shadow: var(--ch-shadow-soft);
+  transition: border-radius 360ms cubic-bezier(.22, .8, .25, 1), box-shadow 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
+/* 收起为等待胶囊：各层圆角收到半高胶囊并与高度收合同拍 */
 .input-zone.is-waiting {
-  border-radius: var(--ch-radius-pill);
-  clip-path: inset(0 round var(--ch-radius-pill));
-  box-shadow: 0 0 24px color-mix(in srgb, var(--ch-text) 6%, transparent);
+  --zone-radius: 36px;
+  box-shadow: none;
 }
 
 /* HIL 从底部输入区向上展开；它覆盖对话末端，顶部圆角朝下方打开。 */
@@ -272,7 +278,7 @@ defineExpose({ focus, prefill })
 
 .input-bar.is-disabled {
   padding: 16px;
-  border-radius: 999px;
+  border-radius: var(--zone-radius, var(--ch-radius-xl));
   box-shadow: none;
 }
 
@@ -280,9 +286,10 @@ defineExpose({ focus, prefill })
   isolation: isolate;
   overflow: hidden;
   transform: translateZ(0);
-  border-radius: var(--ch-radius-xl);
+  border-radius: var(--zone-radius, var(--ch-radius-xl));
   background: transparent;
-  transition: box-shadow 360ms cubic-bezier(.22, .8, .25, 1);
+  transition: box-shadow 360ms cubic-bezier(.22, .8, .25, 1),
+    border-radius 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
 .input-stage-shell.has-hil {
@@ -293,10 +300,12 @@ defineExpose({ focus, prefill })
 .input-stage {
   display: grid;
   overflow: hidden;
-  border-radius: var(--ch-radius-xl);
-  clip-path: inset(0 round var(--ch-radius-xl));
+  border-radius: var(--zone-radius, var(--ch-radius-xl));
+  clip-path: inset(0 round var(--zone-radius, var(--ch-radius-xl)));
   grid-template-rows: 1fr 0fr;
-  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1);
+  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1),
+    border-radius 360ms cubic-bezier(.22, .8, .25, 1),
+    clip-path 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
 .input-stage.has-hil {
@@ -312,8 +321,10 @@ defineExpose({ focus, prefill })
 .stage-slot {
   min-height: 0;
   overflow: hidden;
-  border-radius: var(--ch-radius-xl);
-  transition: opacity 180ms ease, transform 360ms cubic-bezier(.22, .8, .25, 1);
+  border-radius: var(--zone-radius, var(--ch-radius-xl));
+  transition: opacity 180ms ease,
+    transform 360ms cubic-bezier(.22, .8, .25, 1),
+    border-radius 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
 .input-slot { opacity: 1; transform: translateY(0); }
@@ -356,6 +367,9 @@ defineExpose({ focus, prefill })
   grid-template-rows: 1fr;
   opacity: 1;
   transform: translateY(0);
+  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1),
+    opacity 200ms ease 180ms,
+    transform 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
 .input-editor-content,
@@ -374,28 +388,38 @@ defineExpose({ focus, prefill })
   grid-template-rows: 0fr;
   opacity: 0;
   transform: translateY(8px);
+  pointer-events: none;
+  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1),
+    opacity 100ms ease,
+    transform 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
 .input-wait-content {
+  align-self: end;
   display: flex;
   align-items: center;
   gap: var(--ch-space-3);
+  /* 等待胶囊文案整体右移，与定稿态对齐 */
+  padding-left: 8px;
 }
 
 .input-bar.is-disabled .input-editor {
   grid-template-rows: 0fr;
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(8px);
+  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1),
+    opacity 200ms ease,
+    transform 360ms cubic-bezier(.22, .8, .25, 1);
 }
 
 .input-bar.is-disabled .input-wait {
   grid-template-rows: 1fr;
   opacity: 1;
   transform: translateY(0);
+  transition: grid-template-rows 360ms cubic-bezier(.22, .8, .25, 1),
+    opacity 200ms ease,
+    transform 360ms cubic-bezier(.22, .8, .25, 1);
 }
-
-/* 定稿态胶囊文案整体右移，仅此态生效 */
-.input-bar.archived .input-wait-content { padding-left: 8px; }
 
 .input-wait-message {
   min-width: 0;
@@ -545,29 +569,82 @@ defineExpose({ focus, prefill })
   cursor: not-allowed;
 }
 
-.send-btn.is-waiting {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  line-height: 0;
-  align-self: center;
+/* 收发按钮常驻输入条右下角，大小恒定，收起时仅随内边距平移并换标 */
+.input-action {
+  position: absolute;
+  right: var(--ch-space-4);
+  bottom: 18px;
+  z-index: 1;
+  transition: right 360ms cubic-bezier(.22, .8, .25, 1),
+    background var(--ch-duration-fast) var(--ch-ease),
+    transform var(--ch-duration-fast) var(--ch-ease);
 }
 
-.send-btn.is-waiting svg {
-  display: block;
-  width: 20px;
-  height: 20px;
-  stroke-width: 2.2;
+.input-action.is-waiting {
+  right: 16px;
+}
+
+.action-spacer {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.action-spacer.is-wait {
+  width: 36px;
+  height: 36px;
+}
+
+.input-action .action-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 180ms ease, transform 360ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.input-action .action-icon.wait {
+  opacity: 0;
+  transform: scale(.6);
+}
+
+.input-action.is-waiting .action-icon.send {
+  opacity: 0;
+  transform: scale(.6);
+}
+
+.input-action.is-waiting .action-icon.wait {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.wait-glyph {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.wait-glyph.visible {
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .input-zone,
   .input-bar,
   .input-editor,
+  .input-bar.is-disabled .input-editor,
   .input-wait,
   .input-stage-shell,
   .input-stage,
-  .stage-slot { transition: none; }
+  .stage-slot,
+  .input-action,
+  .input-action .action-icon,
+  .wait-glyph { transition: none; }
 }
 
 @media (max-width: 780px) {

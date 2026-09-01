@@ -372,6 +372,7 @@ taskPolling.configure({
 function onHilConfirmed(taskId) {
   const sid = activeId.value
   if (!sid) return
+  taskPolling.refresh(sid)
   forceReloadMessages(sid)
 }
 function onHilRetried(taskId) {
