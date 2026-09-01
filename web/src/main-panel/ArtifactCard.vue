@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { Eye } from '@lucide/vue'
-import { firstImageUrl, firstParagraphText } from '../composables/renderPostCard.js'
+import { firstImageUrl, plainTextPostContent } from '../composables/renderPostCard.js'
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -12,15 +12,13 @@ defineEmits(['preview'])
 
 const card = computed(() => props.task.artifacts || {})
 
-const platformLabel = computed(() => props.task.artifacts.meta.preview_ref.split('/')[0])
-
 const coverUrl = computed(() => firstImageUrl(card.value))
 
 const title = computed(() => card.value.meta?.title || '')
 
-const firstParagraph = computed(() => {
-  const text = firstParagraphText(card.value.markdown)
-  return text.length > 80 ? text.slice(0, 80) + '…' : text
+const excerpt = computed(() => {
+  const text = plainTextPostContent(card.value)
+  return text.length > 140 ? text.slice(0, 140) + '…' : text
 })
 
 const isFinished = computed(() => props.task.status === 'finished')
@@ -40,9 +38,8 @@ const isFinished = computed(() => props.task.status === 'finished')
     >
       <img v-if="coverUrl" :src="coverUrl" class="ac-cover" loading="lazy" />
       <span class="ac-body">
-        <span class="ac-platform">发布到 {{ platformLabel }}</span>
         <span v-if="title" class="ac-title">{{ title }}</span>
-        <span v-if="firstParagraph" class="ac-excerpt">{{ firstParagraph }}</span>
+        <span v-if="excerpt" class="ac-excerpt">{{ excerpt }}</span>
         <span class="ac-preview-link">
           打开完整预览
           <Eye aria-hidden="true" />
@@ -64,9 +61,9 @@ const isFinished = computed(() => props.task.status === 'finished')
   font-family: var(--ch-font-sans);
 }
 .artifact-wrap.review {
-  padding: var(--ch-space-3);
+  padding: var(--ch-space-4);
   border: 0;
-  border-radius: var(--ch-radius-list);
+  border-radius: var(--ch-radius-card);
   box-shadow: none;
   background: var(--ch-surface-2);
 }
@@ -109,18 +106,17 @@ const isFinished = computed(() => props.task.status === 'finished')
   transition: border-color var(--ch-duration-fast) var(--ch-ease), background var(--ch-duration-fast) var(--ch-ease), transform var(--ch-duration-fast) var(--ch-ease);
 }
 .artifact-card:focus-visible { outline: 0; }
-.ac-cover { width: 160px; aspect-ratio: 4 / 3; object-fit: cover; flex-shrink: 0; border-radius: var(--ch-radius-card); }
+.ac-cover { width: 240px; aspect-ratio: 4 / 3; object-fit: cover; flex-shrink: 0; border-radius: var(--ch-radius-card); }
 .ac-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.ac-platform { color: var(--ch-text-muted); font-size: 14px; font-weight: 500; line-height: 1.5; }
-.ac-title { display: block; color: var(--ch-text); font-size: 18px; font-weight: 600; line-height: 1.3; }
+.ac-title { display: block; color: var(--ch-text); font-size: 20px; font-weight: 600; line-height: 1.3; }
 .ac-excerpt {
   display: -webkit-box;
   overflow: hidden;
   color: var(--ch-text-secondary);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 16px;
+  line-height: 1.6;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
 }
 .ac-preview-link {
   display: inline-flex;
@@ -130,7 +126,7 @@ const isFinished = computed(() => props.task.status === 'finished')
   margin-top: auto;
   padding-top: 4px;
   color: var(--ch-accent);
-  font: 600 14px/1.5 var(--ch-font-sans);
+  font: 600 16px/1.6 var(--ch-font-sans);
 }
 .ac-preview-link svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 @media (max-width: 620px) {
