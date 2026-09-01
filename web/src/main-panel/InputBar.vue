@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick, computed, watch } from 'vue'
-import { ArrowUp, Clock3, Lightbulb, Mic, Paperclip } from '@lucide/vue'
+import { ArrowUp, Check, Clock3, Lightbulb, Mic, Paperclip } from '@lucide/vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
 import OptionCard from './OptionCard.vue'
 
@@ -169,8 +169,9 @@ defineExpose({ focus, prefill })
           <div class="input-wait" :aria-hidden="!disabled">
             <div class="input-wait-content">
               <p class="input-wait-message" role="status">{{ placeholder }}</p>
-              <button class="send-btn is-waiting" type="button" disabled aria-label="正在等待">
-                <Clock3 aria-hidden="true" />
+              <button class="send-btn is-waiting" type="button" disabled :aria-label="props.archived ? '已定稿' : '正在等待'">
+                <Check v-if="props.archived" aria-hidden="true" />
+                <Clock3 v-else aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -392,6 +393,9 @@ defineExpose({ focus, prefill })
   opacity: 1;
   transform: translateY(0);
 }
+
+/* 定稿态胶囊文案整体右移，仅此态生效 */
+.input-bar.archived .input-wait-content { padding-left: 8px; }
 
 .input-wait-message {
   min-width: 0;
