@@ -80,15 +80,9 @@ defineExpose({ confirmChoices })
 
 <template>
   <section v-if="!archived" class="option-card" :class="{ compact }">
-    <header class="card-head">
-      <div class="head-copy">
-        <h2>补充创作偏好</h2>
-        <p>请依次完成 {{ questions.length }} 个选择</p>
-      </div>
-      <span class="status ch-status-pill is-awaiting">
-        <i aria-hidden="true"></i>待确认
-      </span>
-    </header>
+    <span class="status ch-status-pill is-awaiting">
+      <i aria-hidden="true"></i>待确认
+    </span>
 
     <div v-if="currentQuestion" class="options" role="radiogroup" :aria-label="currentQuestion.question">
       <p class="question-progress">第 {{ currentIndex + 1 }} / {{ questions.length }} 题</p>
@@ -109,7 +103,7 @@ defineExpose({ confirmChoices })
           <p>{{ opt.description }}</p>
         </span>
         <span class="option-selection" aria-hidden="true">
-          <span v-if="currentSignal === opt.signal" class="selection-label">已选择</span>
+          <span class="selection-label" :class="{ visible: currentSignal === opt.signal }">已选择</span>
           <span class="option-check" :class="{ selected: currentSignal === opt.signal }">
             <Check v-if="currentSignal === opt.signal" />
           </span>
@@ -184,6 +178,7 @@ defineExpose({ confirmChoices })
 
 <style scoped>
 .option-card {
+  position: relative;
   width: 100%;
   padding: var(--ch-space-4);
   border: 1px solid var(--ch-border);
@@ -194,42 +189,6 @@ defineExpose({ confirmChoices })
   font-family: var(--ch-font-sans);
 }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-
-.head-copy {
-  min-width: 0;
-}
-
-.head-copy h2 {
-  margin: 0;
-  font-size: var(--ch-text-xl);
-  font-weight: 600;
-  line-height: var(--ch-leading-snug);
-  overflow-wrap: anywhere;
-}
-
-.head-copy p {
-  margin: 8px 0 0;
-  color: var(--ch-text-muted);
-  font-size: var(--ch-text-sm);
-  line-height: 1.5;
-}
-
-.status {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
-.options {
-  display: grid;
-  gap: var(--ch-space-3);
-}
-
 .question-progress {
   margin: 0;
   color: var(--ch-text-muted);
@@ -237,10 +196,21 @@ defineExpose({ confirmChoices })
   font-weight: 600;
 }
 
+.status {
+  position: absolute;
+  top: var(--ch-space-4);
+  right: var(--ch-space-4);
+}
+
+.options {
+  display: grid;
+  gap: var(--ch-space-3);
+}
+
 .question-title {
   margin: 0 0 8px;
   color: var(--ch-text);
-  font-size: var(--ch-text-md);
+  font-size: var(--ch-text-lg);
   font-weight: 600;
   line-height: 1.3;
 }
@@ -331,6 +301,15 @@ defineExpose({ confirmChoices })
   font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
+}
+
+/* 已选标签常驻占位，仅切换可见性，避免选中时文字列被挤压位移。 */
+.selection-label {
+  visibility: hidden;
+}
+
+.selection-label.visible {
+  visibility: visible;
 }
 
 .custom-option-editor {
@@ -474,16 +453,6 @@ defineExpose({ confirmChoices })
   box-shadow: var(--ch-shadow-soft);
 }
 
-.compact .head-copy h2 {
-  font-size: var(--ch-text-lg);
-}
-
-.compact .head-copy p {
-  display: block;
-  margin-top: 4px;
-  font-size: var(--ch-text-xs);
-}
-
 .compact .options {
   gap: 8px;
 }
@@ -549,6 +518,11 @@ defineExpose({ confirmChoices })
 
   .option-card.compact {
     padding: 16px;
+  }
+
+  .status {
+    top: 16px;
+    right: 16px;
   }
 
   .compact .option-copy,
