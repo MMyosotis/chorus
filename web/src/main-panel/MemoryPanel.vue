@@ -46,7 +46,8 @@ function syncDraft(memory) {
         description: memory.description,
         content: memory.content,
         platform: normalizePlatform(memory.platform),
-        visible_to: [...memory.visible_to],
+        // 空 = 全员可见，编辑器里回填为全选展示
+        visible_to: memory.visible_to.length ? [...memory.visible_to] : VISIBLE_TO_OPTIONS.map((opt) => opt.value),
         kind: memory.kind,
       }
     : emptyDraft()
@@ -100,11 +101,13 @@ async function save() {
   }
   saving.value = true
   error.value = ''
+  const visibleTo = draft.value.visible_to
   const body = {
     description: draft.value.description.trim(),
     content: draft.value.content,
     platform: [draft.value.platform],
-    visible_to: draft.value.visible_to,
+    // 全选时存空数组，保持「空 = 全员可见」的存储语义
+    visible_to: visibleTo.length === VISIBLE_TO_OPTIONS.length ? [] : visibleTo,
     kind: draft.value.kind,
   }
   try {
