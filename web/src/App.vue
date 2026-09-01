@@ -662,6 +662,10 @@ async function runAssistantStream(sessionId, streamFactory) {
   bumpSession(sessionId)
 }
 
+function onStarterPick(text) {
+  inputBarRef.value?.prefill(text)
+}
+
 async function onSend(text) {
   if (!text.trim() || hasActiveTask.value || activeCompleted.value) return
   const sessionId = activeId.value || await onCreate()
@@ -801,6 +805,7 @@ onMounted(async () => {
               @intent-confirm="onIntentConfirm"
               @intent-revise="onIntentRevise"
               @option-choose="onOptionChoose"
+              @starter-pick="onStarterPick"
             >
               <template #scroll-header>
                 <ManuscriptHeader :kicker="stageKicker" :title="activeTitle || '未命名稿件'" />

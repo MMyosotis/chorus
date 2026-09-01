@@ -79,7 +79,7 @@ const placeholder = computed(() => {
   if (props.awaitingConfirm) return '请先确认或调整上方意图卡片'
   if (props.hasActiveTask) return '执行中，暂时不能输入；确认节点或完成后恢复'
   if (props.streaming) return '助手正在回复，请稍候…'
-  return '输入你的想法或任务…'
+  return '说说你想创作的内容…'
 })
 
 function handleKeydown(e) {
@@ -109,7 +109,15 @@ function focus() {
   textarea.value?.focus()
 }
 
-defineExpose({ focus })
+function prefill(text) {
+  inputText.value = text
+  nextTick(() => {
+    adjustHeight()
+    focus()
+  })
+}
+
+defineExpose({ focus, prefill })
 </script>
 
 <template>

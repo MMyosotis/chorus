@@ -61,4 +61,6 @@ SYSTEM_PROMPT = (
     "- 从零做图文笔记：idea -> script -> image -> finalize\n"
     "- 用户已给选题：可跳 idea，script -> image -> finalize\n"
     "- 只要文案不要配图：idea -> script -> finalize（finalize 装配无图 PostCard）\n"
+    "- 侧重配图：idea（可选）-> script（精简串场文案）-> image -> finalize。"
+    "侧重是调节图文比例而非砍掉文案步，成品仍是有文字的图文笔记。\n"
 )

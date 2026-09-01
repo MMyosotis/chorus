@@ -20,7 +20,47 @@ const props = defineProps({
   intentState: { type: Object, default: null },
 })
 
-defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise', 'option-choose'])
+const emit = defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise', 'option-choose', 'starter-pick'])
+
+const STARTER_CARDS = [
+  {
+    icon: BookOpen,
+    title: '图文并茂',
+    hint: '想法扔进来，成品直接到手',
+    samples: [
+      '帮我做一篇「秋冬通勤穿搭」的小红书爆款图文，先定选题，再写文案、配好图',
+      '我想做一期「打工人快手早餐」的公众号图文，从选题到配图帮我整条搞定',
+      '围绕「周末城市骑行路线」做一篇种草图文，文案和配图都要，风格轻快',
+    ],
+  },
+  {
+    icon: PenLine,
+    title: '妙笔生花',
+    hint: '把想说的写成能发的文案',
+    samples: [
+      '写一篇「新手露营装备清单」的种草文案，风格轻松接地气，适合小红书',
+      '帮我写一条「扫地机器人用了三个月的真实感受」好物测评文案，要真实不做作',
+      '写一篇「20 元搞定一周早餐」的省钱攻略文案，要有网感',
+    ],
+  },
+  {
+    icon: ImageIcon,
+    title: '画龙点睛',
+    hint: '图当主角，文案点到就好',
+    samples: [
+      '围绕「城市咖啡探店」出一组 4 张配图，每张配一句短文案，暖色调日系风格',
+      '给「夏日冰饮制作」画 3 张清新配图做小红书封面，配简短的引导文案',
+      '帮我出 4 张「居家收纳改造」的配图，明亮生活感，图之间配串场小文案',
+    ],
+  },
+]
+const starterPickCounts = [0, 0, 0]
+
+function pickStarter(index) {
+  const card = STARTER_CARDS[index]
+  emit('starter-pick', card.samples[starterPickCounts[index] % card.samples.length])
+  starterPickCounts[index] += 1
+}
 
 const container = ref(null)
 const stickToBottom = ref(false)
@@ -243,9 +283,16 @@ watch(
         <h2>今天想创作什么？</h2>
         <p>描述你的想法，我会和创作团队一起把它变成完整作品。</p>
         <div class="starter-grid">
-          <button type="button"><span class="starter-icon starter-icon-topic"><BookOpen aria-hidden="true" /></span><b>策划选题</b><small>从一个想法梳理内容方向</small></button>
-          <button type="button"><span class="starter-icon"><PenLine aria-hidden="true" /></span><b>创作文案</b><small>生成结构清晰的发布内容</small></button>
-          <button type="button"><span class="starter-icon"><ImageIcon aria-hidden="true" /></span><b>视觉构思</b><small>探索画面风格与配图方案</small></button>
+          <button
+            v-for="(card, index) in STARTER_CARDS"
+            :key="card.title"
+            type="button"
+            @click="pickStarter(index)"
+          >
+            <span class="starter-icon" :class="{ 'starter-icon-topic': index === 0 }"><component :is="card.icon" aria-hidden="true" /></span>
+            <b>{{ card.title }}</b>
+            <small>{{ card.hint }}</small>
+          </button>
         </div>
       </div>
     </div>
@@ -322,7 +369,8 @@ watch(
 .empty-hint h2 { margin: 0; color: var(--ch-text); font: 600 24px/1.3 var(--ch-font-sans); }
 .empty-hint > p { max-width: 480px; margin: 0 0 24px; color: var(--ch-text-faint); font: 400 14px/1.6 var(--ch-font-sans); }
 .starter-grid { width: min(100%, 704px); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.starter-grid button { min-height: 152px; display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--ch-border); border-radius: 16px; background: var(--ch-surface); color: var(--ch-text); text-align: left; cursor: default; box-shadow: none; }
+.starter-grid button { min-height: 152px; display: flex; flex-direction: column; align-items: flex-start; padding: 24px; border: 1px solid var(--ch-border); border-radius: 16px; background: var(--ch-surface); color: var(--ch-text); text-align: left; cursor: pointer; box-shadow: none; transition: border-color var(--ch-duration-fast) var(--ch-ease), background var(--ch-duration-fast) var(--ch-ease); }
+.starter-grid button:hover { border-color: color-mix(in srgb, var(--ch-accent) 40%, var(--ch-border)); background: var(--ch-accent-subtle); }
 .starter-grid .starter-icon { display: inline-flex; margin-bottom: 24px; color: var(--ch-accent); }
 .starter-grid .starter-icon svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .starter-grid .starter-icon-topic svg { width: 24px; height: 24px; }
