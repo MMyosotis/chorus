@@ -26,6 +26,7 @@ from chorus.agents.chat_model import ChatModelProvider
 from chorus.domain.compact import SummaryGenerationService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import setup_logging
+from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.domain.title import TitleGenerationService
 from chorus.domain.memory import MemoryLLMService
 from chorus.domain.task.aside import AsideGenerator
@@ -85,7 +86,7 @@ def create_app() -> FastAPI:
     trace_service = TraceService(trace_repo)
 
     chat_models = ChatModelProvider(settings_service)
-    # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理 / 历史摘要,不随用户当前对话设置变动
+    # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理 / 历史摘要 / 输入建议,不随用户当前对话设置变动
     bypass_entry = chat_models.bypass_entry()
     compact_service = CompactService(
         provider_msg_repo,
@@ -97,6 +98,7 @@ def create_app() -> FastAPI:
     option_service = OptionPromptService(option_repo, session_service)
 
     title_service = TitleGenerationService(bypass_entry.client, bypass_entry.model_id)
+    suggestion_service = SuggestionGenerationService(bypass_entry.client, bypass_entry.model_id)
     aside_generator = AsideGenerator(bypass_entry.client, bypass_entry.model_id)
 
     memory_repo = CreatorMemoryRepository(engine)
@@ -164,6 +166,7 @@ def create_app() -> FastAPI:
     app.state.settings_service = settings_service
     app.state.tool_dispatch = tool_dispatcher
     app.state.skill_loader = skill_loader
+    app.state.suggestion_service = suggestion_service
     app.state.memory_service = memory_service
 
     # noinspection PyTypeChecker

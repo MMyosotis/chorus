@@ -9,6 +9,7 @@ from fastapi import Request
 from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
+from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.services.intent_state import IntentStateService
 from chorus.services.memory import MemoryService
 from chorus.services.message import MessageService
@@ -41,3 +42,4 @@ provide_task_service = _provider("task_service", TaskService)
 provide_scheduler = _provider("scheduler", TaskScheduler)
 provide_tool_dispatch = _provider("tool_dispatch", ToolDispatch)
 provide_skill_loader = _provider("skill_loader", SkillLoader)
+provide_suggestion_service = _provider("suggestion_service", SuggestionGenerationService)

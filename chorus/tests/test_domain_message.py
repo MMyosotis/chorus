@@ -14,6 +14,8 @@ from chorus.domain.message import (
     UserMessage,
     build_history_view,
     build_provider_messages,
+    recent_chat_block,
+    recent_history_lines,
 )
 
 
@@ -91,6 +93,36 @@ def test_build_history_view_assistant_without_content_shows_empty():
     views = build_history_view([_assistant()], {})
     assert views[0].content == ""
     assert views[0].thinking == []
+
+
+def test_recent_history_lines_filters_tool_noise():
+    messages = [_user("定个选题"), _tool(content="技能原文"), _assistant("好的")]
+    assert recent_history_lines(messages) == ["用户：定个选题", "助手：好的"]
+
+
+def test_recent_history_lines_truncates_long_line():
+    lines = recent_history_lines([_user("字" * 500)], line_max=200)
+    assert len(lines[0]) == 201
+    assert lines[0].endswith("…")
+
+
+def test_recent_history_lines_keeps_tail():
+    messages = [_user(f"第{i}句") for i in range(20)]
+    lines = recent_history_lines(messages, limit=5)
+    assert lines == [f"用户：第{i}句" for i in range(15, 20)]
+
+
+def test_recent_history_lines_empty_input():
+    assert recent_history_lines([]) == []
+
+
+def test_recent_chat_block_wraps_lines_with_tags():
+    block = recent_chat_block([_user("想做骑行图文"), _assistant("好的")])
+    assert block == "<recent_chat>\n用户：想做骑行图文\n助手：好的\n</recent_chat>"
+
+
+def test_recent_chat_block_empty_conversation_uses_placeholder():
+    assert "还没有对话" in recent_chat_block([])
 
 
 def main():

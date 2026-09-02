@@ -13,11 +13,13 @@ from chorus.domain.intent import IntentConfirmation
 from chorus.domain.message import MessageView
 from chorus.domain.option import OptionPrompt
 from chorus.domain.trace import TraceEntry
+from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.routes.providers import (
     provide_intent_state_service,
     provide_message_service,
     provide_option_service,
     provide_session_service,
+    provide_suggestion_service,
     provide_supervisor_service,
     provide_tool_dispatch,
     provide_trace_service,
@@ -103,6 +105,20 @@ def get_intent_state(
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
     return {"state": intent.get(session_id).model_dump(mode="json")}
+
+
+@router.post("/{session_id}/suggestions")
+def suggest_input(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    intent: IntentStateService = Depends(provide_intent_state_service),
+    message: MessageService = Depends(provide_message_service),
+    suggestion: SuggestionGenerationService = Depends(provide_suggestion_service),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    state = intent.get(session_id)
+    return {"suggestions": suggestion.generate(state, message.list_messages(session_id))}
 
 
 def _resume_with_tool(

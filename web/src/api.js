@@ -120,6 +120,18 @@ export function streamChat(id, message, onEvent) {
   }, onEvent)
 }
 
+export async function suggestMessages(id) {
+  const res = await fetch(`${BASE}/${id}/suggestions`, { method: 'POST' })
+  if (res.status === 404) {
+    const err = new Error('session not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`suggestions failed: ${res.status}`)
+  const data = await res.json()
+  return data.suggestions || []
+}
+
 function streamSessionEventSource(url, options, onEvent) {
   const ctrl = new AbortController()
   const done = (async () => {

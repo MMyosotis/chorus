@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, computed, watch } from 'vue'
+import { ref, nextTick, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ArrowUp, Check, Clock3, Lightbulb, Mic, Paperclip } from '@lucide/vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
 import OptionCard from './OptionCard.vue'
@@ -12,9 +12,10 @@ const props = defineProps({
   archived: { type: Boolean, default: false },
   intentConfirmation: { type: Object, default: null },
   optionPrompt: { type: Object, default: null },
+  sessionId: { type: String, default: null },
 })
 
-const emit = defineEmits(['send', 'intent-confirm', 'intent-revise', 'option-choose'])
+const emit = defineEmits(['send', 'intent-confirm', 'intent-revise', 'option-choose', 'suggest'])
 
 const inputText = ref('')
 const textarea = ref(null)
@@ -119,11 +120,87 @@ function prefill(text) {
   })
 }
 
-defineExpose({ focus, prefill })
+const suggestVisible = ref(false)
+const suggestLoading = ref(false)
+const suggestItems = ref([])
+const suggestBtnRef = ref(null)
+const suggestPopoverRef = ref(null)
+
+const suggestDisabled = computed(() => disabled.value || !props.sessionId)
+
+watch(disabled, (value) => {
+  if (value) closeSuggest()
+})
+
+function toggleSuggest() {
+  if (suggestVisible.value) {
+    closeSuggest()
+    return
+  }
+  suggestVisible.value = true
+  suggestLoading.value = true
+  suggestItems.value = []
+  emit('suggest')
+}
+
+function showSuggestions(items) {
+  suggestLoading.value = false
+  suggestItems.value = items
+}
+
+function pickSuggestion(text) {
+  closeSuggest()
+  prefill(text)
+}
+
+function closeSuggest() {
+  suggestVisible.value = false
+  suggestLoading.value = false
+  suggestItems.value = []
+}
+
+function handleDocClick(event) {
+  if (!suggestVisible.value) return
+  if (suggestPopoverRef.value?.contains(event.target)) return
+  if (suggestBtnRef.value?.contains(event.target)) return
+  closeSuggest()
+}
+
+function handleDocKeydown(event) {
+  if (event.key === 'Escape' && suggestVisible.value) closeSuggest()
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleDocClick)
+  document.addEventListener('keydown', handleDocKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocClick)
+  document.removeEventListener('keydown', handleDocKeydown)
+})
+
+defineExpose({ focus, prefill, showSuggestions })
 </script>
 
 <template>
   <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil, 'is-hil-collapsed': optionCollapsed || intentCollapsed, 'is-waiting': disabled && !hasHilStage }">
+    <Transition name="suggest">
+      <div v-if="suggestVisible" ref="suggestPopoverRef" class="suggest-popover" aria-label="推荐输入">
+        <p v-if="suggestLoading" class="suggest-status">正在生成建议…</p>
+        <template v-else-if="suggestItems.length">
+          <button
+            v-for="text in suggestItems"
+            :key="text"
+            class="suggest-item"
+            type="button"
+            @click="pickSuggestion(text)"
+          >
+            {{ text }}
+          </button>
+        </template>
+        <p v-else class="suggest-status">暂时没有建议，稍后再试</p>
+      </div>
+    </Transition>
     <div class="input-stage-shell" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
     <div class="input-stage" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
       <div class="stage-slot input-slot" :aria-hidden="hasHil">
@@ -146,7 +223,14 @@ defineExpose({ focus, prefill })
                     <Paperclip aria-hidden="true" />
                     <span>附件</span>
                   </button>
-                  <button class="tool-btn" type="button" aria-label="智能推荐" :disabled="disabled">
+                  <button
+                    ref="suggestBtnRef"
+                    class="tool-btn"
+                    type="button"
+                    aria-label="智能推荐"
+                    :disabled="suggestDisabled || suggestLoading"
+                    @click="toggleSuggest"
+                  >
                     <Lightbulb aria-hidden="true" />
                     <span>智能推荐</span>
                   </button>
@@ -260,6 +344,56 @@ defineExpose({ focus, prefill })
 .input-zone.is-closing-hil {
   border-color: transparent;
   box-shadow: none;
+}
+
+/* 推荐浮层悬于输入条上方，点外或选中即收起 */
+.suggest-popover {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--ch-surface);
+  border: 1px solid var(--ch-border);
+  border-radius: var(--ch-radius-card);
+  box-shadow: var(--ch-shadow-soft);
+}
+
+.suggest-item {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ch-text);
+  font: 400 var(--ch-text-sm)/1.5 var(--ch-font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
+}
+.suggest-item:hover {
+  background: var(--ch-accent-subtle);
+  color: var(--ch-text);
+}
+
+.suggest-status {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--ch-text-faint);
+  font: 400 var(--ch-text-sm)/1.5 var(--ch-font-sans);
+}
+
+.suggest-enter-active,
+.suggest-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.suggest-enter-from,
+.suggest-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .input-bar {
@@ -648,6 +782,8 @@ defineExpose({ focus, prefill })
   .stage-slot,
   .input-action,
   .input-action .action-icon,
+  .suggest-enter-active,
+  .suggest-leave-active,
   .wait-glyph { transition: none; }
 }
 

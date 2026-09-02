@@ -157,6 +157,23 @@ def build_history_view(messages: Iterable[Message], traces: dict[str, MessageTra
     return [view for msg in messages if (view := msg.to_view(traces.get(msg.id))) is not None]
 
 
+def recent_history_lines(messages: Iterable[Message], limit: int = 12, line_max: int = 300) -> list[str]:
+    """近期对话的可读摘要：滤工具噪音，取尾部若干条，超长行截断，供旁路提示词取材。"""
+    picked = [msg for msg in messages if not isinstance(msg, ToolMessage)][-limit:]
+    lines = []
+    for msg in picked:
+        line = msg.to_history_line()
+        lines.append(line if len(line) <= line_max else line[:line_max] + "…")
+    return lines
+
+
+def recent_chat_block(messages: Iterable[Message], limit: int = 12, line_max: int = 300) -> str:
+    """序列化近期对话为标签块，供旁路提示词携带；空会话给占位说明。"""
+    lines = recent_history_lines(messages, limit, line_max)
+    body = "\n".join(lines) if lines else "（会话刚开始，还没有对话）"
+    return f"<recent_chat>\n{body}\n</recent_chat>"
+
+
 def first_user_text(messages: Iterable[Message]) -> str:
     """返回首条消息文本，供标题生成取材；会话由用户发起，首条即用户输入。"""
     first = next(iter(messages), None)

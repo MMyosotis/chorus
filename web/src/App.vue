@@ -12,6 +12,7 @@ import {
   renameSession,
   fetchMessages,
   streamChat,
+  suggestMessages,
   getIntentState,
   getIntentConfirmations,
   confirmIntent,
@@ -667,6 +668,17 @@ function onStarterPick(text) {
   inputBarRef.value?.prefill(text)
 }
 
+async function onSuggest() {
+  const sessionId = activeId.value
+  if (!sessionId) return
+  try {
+    const suggestions = await suggestMessages(sessionId)
+    inputBarRef.value?.showSuggestions(suggestions)
+  } catch {
+    inputBarRef.value?.showSuggestions([])
+  }
+}
+
 async function onSend(text) {
   if (!text.trim() || hasActiveTask.value || activeCompleted.value) return
   const sessionId = activeId.value || await onCreate()
@@ -823,7 +835,9 @@ onMounted(async () => {
           :archived="activeCompleted"
           :intent-confirmation="activeConfirmation"
           :option-prompt="activeOptionPrompt"
+          :session-id="activeId"
           @send="onSend"
+          @suggest="onSuggest"
           @intent-confirm="onIntentConfirm"
           @intent-revise="onIntentRevise"
           @option-choose="onOptionChoose"
