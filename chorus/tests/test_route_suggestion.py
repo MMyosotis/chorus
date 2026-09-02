@@ -45,7 +45,11 @@ class FakeSuggestionService:
 
     def generate(self, state, messages):
         self.calls.append((state, messages))
-        return ["建议一", "建议二", "建议三"]
+        return [
+            {"title": "建议一", "content": "完整建议一"},
+            {"title": "建议二", "content": "完整建议二"},
+            {"title": "建议三", "content": "完整建议三"},
+        ]
 
 
 def _client(session, intent, message, suggestion):
@@ -78,7 +82,11 @@ def test_suggest_returns_suggestions_with_context():
         suggestion,
     ).post("/api/sessions/s1/suggestions")
     assert r.status_code == 200
-    assert r.json() == {"suggestions": ["建议一", "建议二", "建议三"]}
+    assert r.json() == {"suggestions": [
+        {"title": "建议一", "content": "完整建议一"},
+        {"title": "建议二", "content": "完整建议二"},
+        {"title": "建议三", "content": "完整建议三"},
+    ]}
     state, received = suggestion.calls[0]
     assert state.topic == "城市骑行"
     assert received == messages

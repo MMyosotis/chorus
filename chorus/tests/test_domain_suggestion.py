@@ -43,14 +43,22 @@ def test_build_prompt_empty_history_uses_placeholder():
     assert "还没有对话" in prompt
 
 
-def test_parse_takes_lines_and_caps_at_three():
-    raw = "\n".join(f"第{i}条建议" for i in range(1, 6))
-    assert parse_suggestions(raw) == ["第1条建议", "第2条建议", "第3条建议"]
+def test_parse_takes_items_and_truncates_to_cap():
+    raw = '{"suggestions": [' + ",".join(
+        f'{{"title":"建议{i}","content":"完整内容{i}"}}' for i in range(1, 5)
+    ) + ']}'
+    assert [item.model_dump() for item in parse_suggestions(raw)] == [
+        {"title": "建议1", "content": "完整内容1"},
+        {"title": "建议2", "content": "完整内容2"},
+        {"title": "建议3", "content": "完整内容3"},
+    ]
 
 
-def test_parse_drops_blank_lines():
-    raw = "\n\n有效建议\n\n"
-    assert parse_suggestions(raw) == ["有效建议"]
+def test_parse_rejects_an_invalid_group_or_non_json():
+    raw = '{"suggestions":[{"title":"有效建议","content":"完整内容"},{"title":"","content":"缺标题"}]}'
+    assert parse_suggestions(raw) == []
+    assert parse_suggestions("不是 JSON") == []
+    assert parse_suggestions('{"suggestions":[{"title":"缺内容","content":""}]}') == []
 
 
 def _fake_client(content=None, error=None):
@@ -64,9 +72,16 @@ def _fake_client(content=None, error=None):
 
 
 def test_generate_parses_model_output():
-    service = SuggestionGenerationService(_fake_client(content="选题A\n选题B\n选题C"), "m")
+    service = SuggestionGenerationService(
+        _fake_client(content='{"suggestions":[{"title":"选题 A","content":"请做选题 A"},{"title":"选题 B","content":"请做选题 B"},{"title":"选题 C","content":"请做选题 C"}]}'),
+        "m",
+    )
     result = service.generate(_state(), [_user("想写点东西")])
-    assert result == ["选题A", "选题B", "选题C"]
+    assert [item.model_dump() for item in result] == [
+        {"title": "选题 A", "content": "请做选题 A"},
+        {"title": "选题 B", "content": "请做选题 B"},
+        {"title": "选题 C", "content": "请做选题 C"},
+    ]
 
 
 def test_generate_returns_empty_on_failure():
