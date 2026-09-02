@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ArrowUp, Check, Clock3, Lightbulb, Mic, Paperclip } from '@lucide/vue'
+import { ArrowUp, Check, Clock3, Lightbulb, Mic, Paperclip, RefreshCw } from '@lucide/vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
 import OptionCard from './OptionCard.vue'
 
@@ -125,6 +125,8 @@ const suggestLoading = ref(false)
 const suggestItems = ref([])
 const suggestBtnRef = ref(null)
 const suggestPopoverRef = ref(null)
+const bodyRef = ref(null)
+let heightTimer = null
 
 const suggestDisabled = computed(() => disabled.value || !props.sessionId)
 
@@ -132,31 +134,50 @@ watch(disabled, (value) => {
   if (value) closeSuggest()
 })
 
-function toggleSuggest() {
-  if (suggestVisible.value) {
-    closeSuggest()
-    return
-  }
+watch(() => props.sessionId, () => closeSuggest())
+
+function animateBodyHeight(target = null) {
+  const el = bodyRef.value
+  if (!el) return
+  el.style.height = el.offsetHeight + 'px'
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      el.style.height = (target ?? el.scrollHeight) + 'px'
+      clearTimeout(heightTimer)
+      heightTimer = setTimeout(() => {
+        el.style.height = ''
+      }, 400)
+    })
+  })
+}
+
+function requestSuggestions() {
   suggestVisible.value = true
   suggestLoading.value = true
   suggestItems.value = []
+  animateBodyHeight()
   emit('suggest')
 }
 
 function showSuggestions(items) {
   suggestLoading.value = false
   suggestItems.value = items
+  animateBodyHeight()
 }
 
-function pickSuggestion(text) {
+function pickSuggestion(item) {
   closeSuggest()
-  prefill(text)
+  prefill(item.content)
 }
 
 function closeSuggest() {
   suggestVisible.value = false
   suggestLoading.value = false
   suggestItems.value = []
+  nextTick(() => {
+    animateBodyHeight(textarea.value ? textarea.value.offsetHeight : 0)
+    adjustHeight()
+  })
 }
 
 function handleDocClick(event) {
@@ -177,6 +198,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('click', handleDocClick)
   document.removeEventListener('keydown', handleDocKeydown)
+  clearTimeout(heightTimer)
 })
 
 defineExpose({ focus, prefill, showSuggestions })
@@ -184,39 +206,57 @@ defineExpose({ focus, prefill, showSuggestions })
 
 <template>
   <div class="input-zone" :class="{ 'has-hil-stage': hasHilStage, 'is-closing-hil': isClosingHil, 'is-hil-collapsed': optionCollapsed || intentCollapsed, 'is-waiting': disabled && !hasHilStage }">
-    <Transition name="suggest">
-      <div v-if="suggestVisible" ref="suggestPopoverRef" class="suggest-popover" aria-label="推荐输入">
-        <p v-if="suggestLoading" class="suggest-status">正在生成建议…</p>
-        <template v-else-if="suggestItems.length">
-          <button
-            v-for="text in suggestItems"
-            :key="text"
-            class="suggest-item"
-            type="button"
-            @click="pickSuggestion(text)"
-          >
-            {{ text }}
-          </button>
-        </template>
-        <p v-else class="suggest-status">暂时没有建议，稍后再试</p>
-      </div>
-    </Transition>
     <div class="input-stage-shell" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
     <div class="input-stage" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
       <div class="stage-slot input-slot" :aria-hidden="hasHil">
         <div class="input-bar" :class="{ 'is-disabled': disabled, archived }">
           <div class="input-editor">
             <div class="input-editor-content">
-              <textarea
-                ref="textarea"
-                v-model="inputText"
-                class="input-field"
-                :placeholder="placeholder"
-                rows="1"
-                :disabled="disabled"
-                @keydown="handleKeydown"
-                @input="adjustHeight"
-              ></textarea>
+              <div ref="bodyRef" class="input-body">
+                <textarea
+                  ref="textarea"
+                  v-model="inputText"
+                  v-show="!suggestVisible"
+                  class="input-field"
+                  :placeholder="placeholder"
+                  rows="1"
+                  :disabled="disabled"
+                  @keydown="handleKeydown"
+                  @input="adjustHeight"
+                ></textarea>
+                <Transition name="suggest">
+                  <section v-if="suggestVisible" ref="suggestPopoverRef" class="suggest-panel" aria-label="推荐输入">
+                    <header class="suggest-header">
+                      <span class="suggest-title">
+                        <svg class="suggest-brand-mark" viewBox="0 0 18 18" aria-hidden="true">
+                          <path d="M8 1.5C8 5.25 10.75 9 13.5 9C10.75 9 8 12.75 8 16.5C8 12.75 5.25 9 2.5 9C5.25 9 8 5.25 8 1.5Z" />
+                          <path d="M14.5 11.5C14.5 12.75 15.4 14 16.3 14C15.4 14 14.5 15.25 14.5 16.5C14.5 15.25 13.6 14 12.7 14C13.6 14 14.5 12.75 14.5 11.5Z" />
+                        </svg>
+                        智能推荐
+                      </span>
+                      <button class="suggest-refresh" type="button" :disabled="suggestLoading" @click="requestSuggestions">
+                        <RefreshCw :class="{ 'is-spinning': suggestLoading }" aria-hidden="true" />
+                        换一组
+                      </button>
+                    </header>
+                    <p v-if="suggestLoading" class="suggest-status">正在生成建议…</p>
+                    <div v-else-if="suggestItems.length" class="suggest-items">
+                      <button
+                        v-for="(item, index) in suggestItems"
+                        :key="`${item.title}-${item.content}`"
+                        :style="{ animationDelay: `${index * 50}ms` }"
+                        class="suggest-item"
+                        type="button"
+                        @click="pickSuggestion(item)"
+                      >
+                        <span class="suggest-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                        <span class="suggest-item-title">{{ item.title }}</span>
+                      </button>
+                    </div>
+                    <p v-else class="suggest-status">暂时没有建议，稍后再试</p>
+                  </section>
+                </Transition>
+              </div>
               <div class="input-toolbar">
                 <div class="tool-group">
                   <button class="tool-btn" type="button" aria-label="附件" :disabled="disabled">
@@ -229,7 +269,7 @@ defineExpose({ focus, prefill, showSuggestions })
                     type="button"
                     aria-label="智能推荐"
                     :disabled="suggestDisabled || suggestLoading"
-                    @click="toggleSuggest"
+                    @click="requestSuggestions"
                   >
                     <Lightbulb aria-hidden="true" />
                     <span>智能推荐</span>
@@ -327,7 +367,8 @@ defineExpose({ focus, prefill, showSuggestions })
   clip-path: inset(0 round var(--ch-radius-card));
   border: 1px solid color-mix(in srgb, var(--ch-accent) 48%, var(--ch-border));
   border-radius: var(--ch-radius-card);
-  background: var(--ch-surface);
+  background: #fff;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ch-text) 5%, transparent);
   box-shadow: var(--ch-shadow-soft);
   transition: border-color 240ms cubic-bezier(.22, .8, .25, 1), border-radius 240ms cubic-bezier(.22, .8, .25, 1), clip-path 240ms cubic-bezier(.22, .8, .25, 1), box-shadow 240ms cubic-bezier(.22, .8, .25, 1);
 }
@@ -346,54 +387,125 @@ defineExpose({ focus, prefill, showSuggestions })
   box-shadow: none;
 }
 
-/* 推荐浮层悬于输入条上方，点外或选中即收起 */
-.suggest-popover {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
+.suggest-panel {
+  position: relative;
+  display: grid;
   gap: 8px;
-  padding: 8px;
-  background: var(--ch-surface);
-  border: 1px solid var(--ch-border);
-  border-radius: var(--ch-radius-card);
-  box-shadow: var(--ch-shadow-soft);
+  margin-bottom: 4px;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--ch-surface-2);
+}
+
+.suggest-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  padding: 0;
+}
+
+.suggest-title,
+.suggest-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.suggest-title {
+  color: var(--ch-text-secondary);
+  font: var(--ch-font-medium) var(--ch-text-sm)/var(--ch-leading-snug) var(--ch-font-sans);
+}
+.suggest-brand-mark {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: var(--ch-accent);
+}
+
+.suggest-refresh {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ch-text-muted);
+  font: var(--ch-font-normal) var(--ch-text-xs)/var(--ch-leading-snug) var(--ch-font-sans);
+  cursor: pointer;
+}
+.suggest-refresh:hover:not(:disabled) { color: var(--ch-accent); }
+.suggest-refresh:disabled { cursor: default; opacity: .55; }
+.suggest-refresh svg { width: 14px; height: 14px; }
+.suggest-refresh .is-spinning { animation: suggest-spin .8s linear infinite; }
+
+.suggest-items {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .suggest-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
   padding: 8px 16px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
+  border: 1px solid var(--ch-border);
+  border-radius: 12px;
+  background: var(--ch-surface);
   color: var(--ch-text);
-  font: 400 var(--ch-text-sm)/1.5 var(--ch-font-sans);
+  font: var(--ch-font-normal) var(--ch-text-sm)/var(--ch-leading-normal) var(--ch-font-sans);
   text-align: left;
   cursor: pointer;
-  transition: background var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
+  animation: suggest-item-in 240ms var(--ch-ease-out) backwards;
+  transition: border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
 }
 .suggest-item:hover {
-  background: var(--ch-accent-subtle);
-  color: var(--ch-text);
+  border-color: color-mix(in srgb, var(--ch-accent) 36%, var(--ch-border));
+  color: var(--ch-accent-soft-text);
 }
+
+.suggest-index {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: var(--ch-accent-soft);
+  color: var(--ch-accent);
+  font: var(--ch-font-medium) var(--ch-text-xs)/var(--ch-leading-tight) var(--ch-font-sans);
+  font-variant-numeric: tabular-nums;
+}
+.suggest-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .suggest-status {
   margin: 0;
-  padding: 8px 16px;
+  padding: 8px;
   color: var(--ch-text-faint);
-  font: 400 var(--ch-text-sm)/1.5 var(--ch-font-sans);
+  font: var(--ch-font-normal) var(--ch-text-sm)/var(--ch-leading-normal) var(--ch-font-sans);
 }
 
-.suggest-enter-active,
-.suggest-leave-active {
-  transition: opacity 160ms ease, transform 160ms ease;
+@keyframes suggest-spin { to { transform: rotate(360deg); } }
+
+@keyframes suggest-item-in {
+  from { opacity: 0; transform: translateY(6px); }
 }
+
+.suggest-enter-active {
+  transition: opacity 240ms var(--ch-ease-out);
+}
+
+.suggest-leave-active {
+  transition: opacity 160ms var(--ch-ease);
+}
+
 .suggest-enter-from,
 .suggest-leave-to {
   opacity: 0;
-  transform: translateY(8px);
 }
 
 .input-bar {
@@ -522,6 +634,17 @@ defineExpose({ focus, prefill, showSuggestions })
   gap: var(--ch-space-2);
 }
 
+.input-body {
+  display: grid;
+  overflow: hidden;
+  transition: height 360ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.input-body > * {
+  grid-area: 1 / 1;
+  align-self: start;
+}
+
 .input-wait {
   grid-template-rows: 0fr;
   opacity: 0;
@@ -617,7 +740,7 @@ defineExpose({ focus, prefill, showSuggestions })
   align-items: center;
   gap: var(--ch-space-2);
   height: 36px;
-  padding: 0;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -784,12 +907,16 @@ defineExpose({ focus, prefill, showSuggestions })
   .input-action .action-icon,
   .suggest-enter-active,
   .suggest-leave-active,
+  .suggest-item,
+  .input-body,
   .wait-glyph { transition: none; }
+  .suggest-item { animation: none; }
 }
 
 @media (max-width: 780px) {
   .input-bar { padding: var(--ch-space-4) var(--ch-space-4) var(--ch-space-3); }
   .input-field { font-size: var(--ch-text-sm); }
   .tool-btn span { display: none; }
+  .suggest-items { grid-template-columns: 1fr; }
 }
 </style>
