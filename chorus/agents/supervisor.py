@@ -111,11 +111,7 @@ class SupervisorLoopStrategy(LoopStrategy):
     def _handle_suspend(self, ctx, events):
         """挂起分支：关流但不视作完成，续写复用会话最新气泡。"""
         self._session.touch(self.session_id)
-        return LoopAction(LoopSignal.SUSPEND, events + [
-            SuspendEvent(),
-            DoneEvent(),
-            *self._hooks.trigger("Stop", ctx),
-        ])
+        return LoopAction(LoopSignal.SUSPEND, self._finish_events(ctx, prefix=[*events, SuspendEvent()]))
 
     def after_text(self, ctx, result):
         """纯文本回复：落库并发完成事件与收尾钩子。"""
@@ -124,15 +120,17 @@ class SupervisorLoopStrategy(LoopStrategy):
             self.session_id, message_id=ctx.turn.message_id, content=content,
         )
         self._session.touch(self.session_id)
+        return LoopAction(LoopSignal.FINISH, self._finish_events(ctx))
 
-        # 完成事件先出解禁前端，收尾钩子急切执行
-        stop_events = list(self._hooks.trigger("Stop", ctx))
-        return LoopAction(LoopSignal.FINISH, [DoneEvent(), *stop_events])
+    def _finish_events(self, ctx, prefix=()):
+        """完成事件先行解禁前端，收尾钩子惰性随后执行，旁路调用不拖住关流。"""
+        yield from prefix
+        yield DoneEvent()
+        yield from self._hooks.trigger("Stop", ctx)
 
     def on_truncation_exhausted(self, ctx):
         """放宽后仍截断：不落占位消息，直接收轮。"""
-        stop_events = list(self._hooks.trigger("Stop", ctx))
-        return LoopAction(LoopSignal.FINISH, [DoneEvent(), *stop_events])
+        return LoopAction(LoopSignal.FINISH, self._finish_events(ctx))
 
     def on_exhausted(self):
         return LoopAction(LoopSignal.FINISH, [ErrorEvent(content="主 Agent 未能完成本轮必要动作，请再试一次")])

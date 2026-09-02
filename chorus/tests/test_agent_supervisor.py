@@ -12,6 +12,7 @@ from chorus.agents.supervisor import SupervisorService, SupervisorLoopStrategy
 from chorus.domain.intent import IntentStateUpdate
 from chorus.domain.memory import CreatorMemory, MemoryRecall
 from chorus.domain.skill import SkillLoader
+from chorus.domain.stream import StreamResult
 from chorus.domain.task import ACTIVE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.engine import build_engine
@@ -456,6 +457,31 @@ def test_on_error_overflow_requests_retry_once():
     assert action.signal == LoopSignal.FINISH
     assert strategy.retry_requested is False
     assert any(getattr(e, "type", None) == "error" for e in action.events)
+
+
+def test_done_precedes_stop_hooks():
+    """完成事件先于收尾钩子执行：钩子惰性随行，旁路调用不拖住前端解禁。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    s = session_svc.create("test")
+    order = []
+    hooks = HookRegistry()
+    hooks.register("Stop", lambda ctx: order.append("hook"), source="supervisor")
+    intent_state = IntentStateService(
+        IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc
+    )
+    strategy = SupervisorLoopStrategy(
+        s.id, msg_svc, session_svc, hooks, intent_state,
+        SkillLoader(skills_dir=Path("/nonexistent-skills")), (),
+        memory=MemoryRecall(), compact=build_compact_service(engine),
+    )
+    ctx = AgentContext(session_id=s.id, chat_model="test-model")
+    ctx.turn.message_id = "m-done-first"
+    action = strategy.after_text(ctx, StreamResult(text_parts=["好"]))
+    events = iter(action.events)
+    assert next(events).type == "done"
+    assert order == []            # done 已可下发，收尾钩子尚未执行
+    list(events)                  # 耗尽余下事件，钩子随之执行
+    assert order == ["hook"]
 
 
 def main():

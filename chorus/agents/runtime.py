@@ -24,7 +24,7 @@ class LoopSignal(Enum):
 
 @dataclass
 class LoopAction:
-    """策略对单轮结局的判定：信号与附带事件。事件只被内核消费一次，推荐返回列表或元组。"""
+    """策略对单轮结局的判定：信号与附带事件。事件只被内核消费一次，列表或生成器均可。"""
 
     signal: LoopSignal
     events: Iterable[SseEvent] = ()
