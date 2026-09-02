@@ -75,6 +75,22 @@ describe('useTaskPolling', () => {
     expect(polling.pollingSession.value).toBeNull()
   })
 
+  it('启动时已空闲则一轮后自停且不触发完成回调', async () => {
+    const finished = vi.fn()
+    polling.configure({ isStreaming: () => false, reloadMessages: () => Promise.resolve(), onPipelineFinished: finished })
+    getTaskGraph.mockResolvedValue(graph(false, [
+      { agent_type: 'idea', status: 'finished' },
+      { agent_type: 'finalize', status: 'finished' },
+    ]))
+    await polling.start('s1')
+
+    expect(finished).not.toHaveBeenCalled()
+    expect(polling.pollingSession.value).toBeNull()
+    getTaskGraph.mockClear()
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(getTaskGraph).not.toHaveBeenCalled() // 已自停不再发请求
+  })
+
   it('切到新会话停旧轮询并切换 pollingSession', async () => {
     getTaskGraph.mockResolvedValue(graph(true, [{ agent_type: 'idea', status: 'running' }]))
     await polling.start('s1')

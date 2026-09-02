@@ -85,10 +85,11 @@ async function tick() {
     if (!isStreamingFn(sid)) {
       await reloadMessagesFn(sid)
     }
-    if (wasActive && !graph.active) {
+    // 空闲即自停（含启动时就无活跃任务的会话）；仅从忙转闲才回调完成
+    if (!graph.active) {
       stopInternal()
       pollingSession.value = null
-      if (isPipelineFinished(graph)) {
+      if (wasActive && isPipelineFinished(graph)) {
         onPipelineFinishedFn(sid)
       }
     }
