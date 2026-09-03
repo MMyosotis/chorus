@@ -148,7 +148,10 @@ defineExpose({ confirmChoices })
               <strong>补充你的想法</strong>
               <p>写下你希望突出呈现的角度或内容。</p>
             </span>
-            <span class="option-check" aria-hidden="true"></span>
+            <span class="option-selection" aria-hidden="true">
+              <span class="selection-label">已选择</span>
+              <span class="option-check"></span>
+            </span>
           </button>
 
           <div
@@ -319,6 +322,11 @@ defineExpose({ confirmChoices })
   height: 32px;
   opacity: 1;
   transform: translateY(0);
+}
+
+.collapsed-summary .question-progress {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .collapsed-question-title {
@@ -637,6 +645,8 @@ defineExpose({ confirmChoices })
 .compact .custom-input {
   height: 36px;
   min-height: 0;
+  margin-left: -16px;
+  width: calc(100% + 16px);
   font-size: var(--ch-text-xs);
 }
 
@@ -678,6 +688,11 @@ defineExpose({ confirmChoices })
   .compact .option-item p {
     overflow: visible;
     white-space: normal;
+  }
+
+  .compact .custom-input {
+    margin-left: 0;
+    width: 100%;
   }
 
   .actions {
