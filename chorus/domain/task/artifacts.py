@@ -9,10 +9,12 @@ from typing import Any, Optional, Union, cast
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
 
+from chorus.domain.task.errors import ValidationError
+
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskArtifacts:
-    """任务产物行：结构化产物。"""
+    """任务产物行：结构化产物按角色多态。"""
 
     task_id: str
     artifacts: Optional[Union["IdeaArtifacts", "ScriptArtifacts", "ImageArtifacts", "PostCard"]] = None
@@ -79,3 +81,27 @@ def _idea_view(artifacts: IdeaArtifacts) -> dict:
     """选题裁剪到生效选中候选。"""
     cand = artifacts.selected_candidate()
     return {"candidates": [dataclasses.asdict(cast(Any, cand))]} if cand else {}
+
+
+@singledispatch
+def build_edited_artifacts(current: Any, payload: dict) -> Any:
+    """人工编辑载荷按产物类型合成新产物，未注册的类型拒绝编辑。"""
+    raise ValidationError("该角色产物不支持编辑", "只有选题、文案与成品可人工编辑")
+
+
+@build_edited_artifacts.register
+def _idea_edit(current: IdeaArtifacts, payload: dict) -> IdeaArtifacts:
+    """选题编辑候选字段，选中项保持。"""
+    candidates = [IdeaCandidate(**item) for item in payload["candidates"]]
+    return IdeaArtifacts(candidates=candidates, selected=current.selected)
+
+
+@build_edited_artifacts.register
+def _script_edit(current: ScriptArtifacts, payload: dict) -> ScriptArtifacts:
+    return ScriptArtifacts(markdown=payload["markdown"])
+
+
+@build_edited_artifacts.register
+def _postcard_edit(current: PostCard, payload: dict) -> PostCard:
+    """成品编辑只换正文，资源元数据保留。"""
+    return PostCard(markdown=payload["markdown"], meta=current.meta)

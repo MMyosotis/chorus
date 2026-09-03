@@ -20,7 +20,7 @@ const props = defineProps({
   intentState: { type: Object, default: null },
 })
 
-const emit = defineEmits(['hil-confirmed', 'hil-retried', 'hil-cancelled', 'intent-confirm', 'intent-revise', 'option-choose', 'starter-pick'])
+const emit = defineEmits(['hil-confirmed', 'hil-retried', 'hil-edited', 'hil-cancelled', 'intent-confirm', 'intent-revise', 'option-choose', 'starter-pick'])
 
 const STARTER_CARDS = [
   {
@@ -240,6 +240,7 @@ watch(
               :session-id="sessionId"
               @confirmed="$emit('hil-confirmed', $event)"
               @retried="$emit('hil-retried', $event)"
+              @edited="$emit('hil-edited', $event)"
               @preview-task="openPreview"
             />
           </div>

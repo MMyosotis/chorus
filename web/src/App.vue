@@ -376,6 +376,12 @@ function onHilConfirmed(taskId) {
   taskPolling.refresh(sid)
   forceReloadMessages(sid)
 }
+function onHilEdited(taskId) {
+  const sid = activeId.value
+  if (!sid) return
+  // 编辑不翻状态，拉一次图重建虚拟卡即可，消息流不受影响
+  taskPolling.refresh(sid)
+}
 function onHilRetried(taskId) {
   const sid = activeId.value
   if (!sid) return
@@ -814,6 +820,7 @@ onMounted(async () => {
               :intent-state="activeIntentState"
               @hil-confirmed="onHilConfirmed"
               @hil-retried="onHilRetried"
+              @hil-edited="onHilEdited"
               @hil-cancelled="onHilCancelled"
               @intent-confirm="onIntentConfirm"
               @intent-revise="onIntentRevise"

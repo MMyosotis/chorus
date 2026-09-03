@@ -1,12 +1,13 @@
-"""task 路由 HTTP 适配层测试：5 端点的状态码映射。
+"""task 路由 HTTP 适配层测试：6 端点的状态码映射。
 
-只断言适配行为（会话不存在→404 / 参数越界→422），不测业务逻辑；最小 app + 依赖注入 fake service，不起 lifespan。
+只断言适配行为（会话不存在→404 / 编辑不支持的角色→422），不测业务逻辑；最小 app + 依赖注入 fake service，不起 lifespan。
 """
 from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from chorus.domain.task import ValidationError
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.routes.task import router as task_router
 
@@ -47,6 +48,9 @@ class FakeTaskService:
 
     def retry(self, task_id, feedback):
         return self._call("retry", task_id)
+
+    def edit(self, task_id, payload):
+        return self._call("edit", task_id)
 
     def cancel_pipeline(self, session_id):
         return self._call("cancel_pipeline", session_id)
@@ -115,6 +119,28 @@ def test_cancel_pipeline_ok():
     r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "cancelled": 2}
+
+
+def test_edit_ok():
+    """正常 → 200 + 透出 service 返回体。"""
+    task = FakeTaskService()
+    task.set("edit", "t1", {"id": "t1", "status": "awaiting_confirm"})
+    r = _client(FakeSessionService({"s1"}), task).post(
+        "/api/tasks/t1/edit", json={"markdown": "改后正文"}
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "awaiting_confirm"
+
+
+def test_edit_invalid_payload_422():
+    """编辑不支持的角色 → 422，透出修正提示。"""
+    task = FakeTaskService()
+    task.set("edit", "t1", ValidationError("该角色产物不支持编辑", "只有选题、文案与成品可人工编辑"))
+    r = _client(FakeSessionService({"s1"}), task).post(
+        "/api/tasks/t1/edit", json={"markdown": " "}
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"] == "只有选题、文案与成品可人工编辑"
 
 
 def main():

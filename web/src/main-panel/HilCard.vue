@@ -1,7 +1,8 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { Check, ChevronRight } from '@lucide/vue'
-import { confirmTask, retryTask } from '../api.js'
+import { confirmTask, retryTask, editTask } from '../api.js'
+import { parseFrontMatter, stripFrontMatter } from '../composables/renderPostCard.js'
 import ArtifactCard from './ArtifactCard.vue'
 import ScriptProof from './ScriptProof.vue'
 
@@ -10,7 +11,7 @@ const props = defineProps({
   sessionId: { type: String, default: '' },
   confirmed: { type: Boolean, default: false },
 })
-const emit = defineEmits(['confirmed', 'retried', 'preview-task'])
+const emit = defineEmits(['confirmed', 'retried', 'edited', 'preview-task'])
 const artifacts = computed(() => props.task.artifacts || {})
 const candidates = computed(() => artifacts.value.candidates || [])
 const selectedIdx = ref(props.task.artifacts?.selected ?? null)
@@ -19,6 +20,13 @@ const feedback = ref('')
 const busy = ref(false)
 const error = ref('')
 const needSelect = computed(() => props.task.agent_type === 'idea')
+const editable = computed(() => ['idea', 'script', 'finalize'].includes(props.task.agent_type))
+const editing = ref(false)
+const draftTitle = ref('')
+const draftFrontLines = ref([])
+const draftMarkdown = ref('')
+const editingCandidate = ref(false)
+const draftCandidate = ref(null)
 const scriptChars = computed(() => {
   const explicit = props.task.progress?.composing_chars || props.task.artifacts?.char_count
   if (explicit) return explicit
@@ -33,12 +41,14 @@ const meta = computed(() => ({
       : `${candidates.value.length || 0} 个候选，选择后即可继续`,
     approve: '确认这个选题',
     revise: '重新生成选题',
+    edit: '编辑选题',
   },
   script: {
     title: '确认文案内容',
     description: scriptChars.value ? `当前文案约 ${scriptChars.value} 字` : '检查结构、语气和细节',
     approve: '确认文案',
-    revise: '修改文案',
+    revise: '重新生成',
+    edit: '编辑文案',
   },
   image: {
     title: '确认配图方案',
@@ -51,12 +61,14 @@ const meta = computed(() => ({
     description: '检查标题、正文和配图的整体效果',
     approve: '确认成品',
     revise: '继续调整',
+    edit: '编辑成品',
   },
 }[props.task.agent_type] || {
   title: '确认当前内容',
   description: '检查后决定是否继续',
   approve: '确认',
   revise: '调整',
+  edit: '编辑',
 }))
 
 async function onConfirm() {
@@ -89,6 +101,73 @@ async function onRetry() {
   }
 }
 
+function startEdit() {
+  if (props.task.agent_type === 'idea') {
+    if (selectedIdx.value == null) {
+      error.value = '请先选择一个候选'
+      return
+    }
+    const current = candidates.value.find((item) => item.index === selectedIdx.value)
+    draftCandidate.value = { ...current }
+    editingCandidate.value = true
+    return
+  }
+  const markdown = artifacts.value.markdown || ''
+  const { front, body } = stripFrontMatter(markdown)
+  draftTitle.value = parseFrontMatter(markdown).title || ''
+  draftFrontLines.value = front.filter((line) => !line.startsWith('title:'))
+  draftMarkdown.value = body
+  editing.value = true
+}
+
+async function saveEdit() {
+  if (!draftTitle.value.trim()) {
+    error.value = '标题不能为空'
+    return false
+  }
+  if (!draftMarkdown.value.trim()) {
+    error.value = '正文不能为空'
+    return false
+  }
+  const lines = [`title: ${draftTitle.value.trim()}`, ...draftFrontLines.value]
+  const markdown = `---\n${lines.join('\n')}\n---\n\n${draftMarkdown.value}`
+  busy.value = true
+  error.value = ''
+  try {
+    await editTask(props.task.id, { markdown })
+    editing.value = false
+    emit('edited', props.task.id)
+    return true
+  } catch (e) {
+    error.value = e.detail || e.message
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
+async function saveCandidate() {
+  const draft = draftCandidate.value
+  if (!draft.title.trim()) {
+    error.value = '标题不能为空'
+    return false
+  }
+  const next = candidates.value.map((item) => (item.index === draft.index ? draft : item))
+  busy.value = true
+  error.value = ''
+  try {
+    await editTask(props.task.id, { candidates: next })
+    editingCandidate.value = false
+    emit('edited', props.task.id)
+    return true
+  } catch (e) {
+    error.value = e.detail || e.message
+    return false
+  } finally {
+    busy.value = false
+  }
+}
+
 </script>
 
 <template>
@@ -98,43 +177,83 @@ async function onRetry() {
         <h2>{{ meta.title }}</h2>
         <p>{{ meta.description }}</p>
       </div>
-      <span class="ch-status-pill" :class="confirmed ? 'is-complete' : 'is-awaiting'">
-        <i aria-hidden="true"></i>{{ confirmed ? '已确认' : '待确认' }}
-      </span>
+      <div class="head-tools">
+        <span class="ch-status-pill" :class="confirmed ? 'is-complete' : 'is-awaiting'">
+          <i aria-hidden="true"></i>{{ confirmed ? '已确认' : '待确认' }}
+        </span>
+      </div>
     </header>
 
     <div class="review-content">
       <div v-if="task.agent_type === 'idea'" class="candidates" role="radiogroup" aria-label="选题候选">
-        <button
-          v-for="c in candidates"
-          :key="c.index"
-          type="button"
-          class="candidate"
-          :class="{ selected: selectedIdx === c.index }"
-          role="radio"
-          :aria-checked="selectedIdx === c.index"
-          :aria-label="[c.title, c.angle || c.reason, selectedIdx === c.index ? '已选择' : ''].filter(Boolean).join('，')"
-          :disabled="confirmed"
-          @click="selectedIdx = c.index"
-        >
-          <span class="candidate-copy">
-            <h3>{{ c.title }}</h3>
-            <span v-if="c.angle || c.reason" class="candidate-summary">{{ c.angle || c.reason }}</span>
-          </span>
-          <span
-            class="candidate-selection"
-            :class="{ visible: selectedIdx === c.index }"
-            aria-hidden="true"
+        <div v-for="c in candidates" :key="c.index" class="candidate-slot">
+          <div
+            v-if="editingCandidate && draftCandidate && c.index === selectedIdx"
+            class="candidate-edit"
           >
-            <span class="candidate-state">已选择</span>
-            <span class="candidate-check" aria-hidden="true">
-              <Check />
+            <label>
+              <span>标题</span>
+              <input v-model="draftCandidate.title" type="text" />
+            </label>
+            <label>
+              <span>切入角度</span>
+              <input v-model="draftCandidate.angle" type="text" />
+            </label>
+            <label>
+              <span>推荐理由</span>
+              <textarea v-model="draftCandidate.reason" rows="2"></textarea>
+            </label>
+            <div class="edit-actions">
+              <button class="secondary" type="button" :disabled="busy" @click="editingCandidate = false">
+                取消
+              </button>
+              <button class="primary" type="button" :disabled="busy" @click="saveCandidate()">
+                {{ busy ? '正在保存' : '保存修改' }}
+              </button>
+            </div>
+          </div>
+          <button
+            v-else
+            type="button"
+            class="candidate"
+            :class="{ selected: selectedIdx === c.index }"
+            role="radio"
+            :aria-checked="selectedIdx === c.index"
+            :aria-label="[c.title, c.angle || c.reason, selectedIdx === c.index ? '已选择' : ''].filter(Boolean).join('，')"
+            :disabled="confirmed || editingCandidate"
+            @click="selectedIdx = c.index"
+          >
+            <span class="candidate-copy">
+              <h3>{{ c.title }}</h3>
+              <span v-if="c.angle || c.reason" class="candidate-summary">{{ c.angle || c.reason }}</span>
             </span>
-          </span>
-        </button>
+            <span
+              class="candidate-selection"
+              :class="{ visible: selectedIdx === c.index }"
+              aria-hidden="true"
+            >
+              <span class="candidate-state">已选择</span>
+              <span class="candidate-check" aria-hidden="true">
+                <Check />
+              </span>
+            </span>
+          </button>
+        </div>
       </div>
 
-      <ScriptProof v-else-if="task.agent_type === 'script'" :markdown="artifacts.markdown || ''" />
+      <template v-else-if="task.agent_type === 'script'">
+        <div v-if="editing" class="edit-fields">
+          <label>
+            <span>标题</span>
+            <input v-model="draftTitle" type="text" />
+          </label>
+          <label>
+            <span>正文</span>
+            <textarea v-model="draftMarkdown" class="edit-area" rows="14"></textarea>
+          </label>
+        </div>
+        <ScriptProof v-else :markdown="artifacts.markdown || ''" />
+      </template>
 
       <div v-else-if="task.agent_type === 'image'" class="images">
         <figure v-for="img in artifacts.images || []" :key="img.url">
@@ -143,12 +262,33 @@ async function onRetry() {
         </figure>
       </div>
 
-      <ArtifactCard
-        v-else-if="task.agent_type === 'finalize'"
-        :task="task"
-        review
-        @preview="$emit('preview-task', task)"
-      />
+      <template v-else-if="task.agent_type === 'finalize'">
+        <div v-if="editing" class="edit-fields">
+          <label>
+            <span>标题</span>
+            <input v-model="draftTitle" type="text" />
+          </label>
+          <label>
+            <span>正文</span>
+            <textarea v-model="draftMarkdown" class="edit-area" rows="14"></textarea>
+          </label>
+        </div>
+        <ArtifactCard
+          v-else
+          :task="task"
+          review
+          @preview="$emit('preview-task', task)"
+        />
+      </template>
+
+      <div v-if="editing" class="edit-actions">
+        <button class="secondary" type="button" :disabled="busy" @click="editing = false">
+          取消
+        </button>
+        <button class="primary" type="button" :disabled="busy" @click="saveEdit()">
+          {{ busy ? '正在保存' : '保存修改' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="revising" class="feedback">
@@ -161,10 +301,18 @@ async function onRetry() {
       ></textarea>
     </div>
 
-    <footer v-if="!confirmed" class="actions">
-      <div>
+    <footer v-if="!confirmed && !editing && !editingCandidate" class="actions">
+      <div v-if="!revising">
         <button
-          v-if="!revising"
+          v-if="editable"
+          class="secondary"
+          type="button"
+          :disabled="busy"
+          @click="startEdit"
+        >
+          {{ meta.edit }}
+        </button>
+        <button
           class="secondary"
           type="button"
           :disabled="busy"
@@ -172,8 +320,9 @@ async function onRetry() {
         >
           {{ meta.revise }}
         </button>
+      </div>
+      <div v-else>
         <button
-          v-else
           class="secondary"
           type="button"
           :disabled="busy"
@@ -181,11 +330,11 @@ async function onRetry() {
         >
           返回
         </button>
-        <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
-          {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
-          <ChevronRight v-if="!busy" aria-hidden="true" />
-        </button>
       </div>
+      <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
+        {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
+        <ChevronRight v-if="!busy" aria-hidden="true" />
+      </button>
     </footer>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -227,10 +376,13 @@ async function onRetry() {
   line-height: 1.5;
 }
 
-.review-head > span {
+.head-tools {
+  display: flex;
   flex: 0 0 auto;
-  align-self: center;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
+  align-self: center;
 }
 
 .review-content {
@@ -253,6 +405,114 @@ async function onRetry() {
 .candidates {
   display: grid;
   gap: var(--ch-space-3);
+}
+
+.candidate-slot {
+  min-width: 0;
+}
+
+.candidate-edit {
+  display: grid;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1px solid var(--ch-accent);
+  border-radius: var(--ch-radius-list);
+  background: var(--ch-surface);
+}
+
+.candidate-edit label {
+  display: grid;
+  gap: 8px;
+  color: var(--ch-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.edit-fields {
+  display: grid;
+  gap: 16px;
+}
+
+.edit-fields label {
+  display: grid;
+  gap: 8px;
+  color: var(--ch-text-muted);
+  font-size: var(--ch-text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.candidate-edit input,
+.candidate-edit textarea,
+.edit-fields input,
+.edit-area {
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--ch-border-strong);
+  border-radius: var(--ch-radius-card);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+  font: 400 14px/1.6 var(--ch-font-sans);
+  resize: vertical;
+  transition: border-color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.candidate-edit input:focus,
+.candidate-edit textarea:focus,
+.edit-fields input:focus,
+.edit-area:focus {
+  outline: 0;
+  border-color: var(--ch-accent);
+}
+
+.edit-area {
+  min-height: 320px;
+  font: 400 14px/1.6 var(--ch-font-sans);
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.edit-actions button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: var(--ch-radius-btn);
+  font: 600 14px/1 var(--ch-font-sans);
+  cursor: pointer;
+  transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease);
+}
+
+.edit-actions button:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+.edit-actions .secondary {
+  border: 1px solid var(--ch-border-strong);
+  background: var(--ch-surface);
+  color: var(--ch-text);
+}
+
+.edit-actions .secondary:hover:not(:disabled) {
+  background: var(--ch-surface-2);
+}
+
+.edit-actions .primary {
+  border: 0;
+  background: var(--ch-ink);
+  color: var(--ch-on-ink);
+}
+
+.edit-actions .primary:hover:not(:disabled) {
+  background: var(--ch-ink-hover);
 }
 
 .candidate {
@@ -433,9 +693,13 @@ async function onRetry() {
 .actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
   margin-top: var(--ch-space-4);
+}
+
+.feedback + .actions {
+  margin-top: var(--ch-space-3);
 }
 
 .actions > div {
@@ -451,7 +715,7 @@ async function onRetry() {
   gap: 6px;
   padding: 0 16px;
   border-radius: var(--ch-radius-btn);
-  font: 600 var(--ch-text-md)/1 var(--ch-font-sans);
+  font: 600 var(--ch-text-sm)/1 var(--ch-font-sans);
   cursor: pointer;
   transition: background var(--ch-duration-fast) var(--ch-ease), border-color var(--ch-duration-fast) var(--ch-ease), color var(--ch-duration-fast) var(--ch-ease);
 }
@@ -505,6 +769,7 @@ async function onRetry() {
 
   .actions {
     align-items: stretch;
+    flex-wrap: wrap;
   }
 
   .actions > div {

@@ -13,6 +13,7 @@ from chorus.domain.task import (
     TERMINAL_STATUSES,
     TaskGraph,
     TaskStatus,
+    build_edited_artifacts,
     build_task_graph,
     select_display_pipeline,
 )
@@ -55,6 +56,15 @@ class TaskService:
             self._memory.record_publication(task_id, task.agent_type)
         _logger.info("hil confirm", extra={"task_id": task_id, "selected": selected})
         return {"id": task_id, "status": TaskStatus.FINISHED}
+
+    def edit(self, task_id: str, payload: dict) -> dict:
+        """人工编辑产物：按产物类型校验合成，落库。"""
+        task = self._task_repo.get(task_id)
+        art = self._artifacts_repo.load(task_id)
+        artifacts = build_edited_artifacts(art.artifacts, payload)
+        self._artifacts_repo.upsert(task_id, task.agent_type, artifacts=artifacts)
+        _logger.info("hil edit", extra={"task_id": task_id, "agent_type": task.agent_type})
+        return {"id": task_id, "status": task.status}
 
     def retry(self, task_id: str, feedback: str) -> dict:
         """带反馈重跑本步：翻回待执行并写回反馈。"""

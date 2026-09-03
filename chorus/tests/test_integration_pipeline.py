@@ -60,9 +60,11 @@ class FakeStream:
 class FakeClient:
     def __init__(self, scripts):
         self._scripts = list(scripts)
+        self.calls = []
         self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
+        self.calls.append(kwargs)
         return self._scripts.pop(0)
 
 
@@ -166,12 +168,12 @@ def _build_assembly():
         interval=0.01, zombie_timeout=999,
         log_dir=Path(tempfile.mkdtemp()) / "logs",
     )
-    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, engine, intent_state
+    return supervisor, subagent, task_service, scheduler, task_repo, session_svc, engine, intent_state, sub_client
 
 
 def test_end_to_end_pipeline():
     """4 链路全跑通：supervisor 建图 → idea awaiting_confirm → confirm finished → scheduler 派发 finalize。"""
-    sup, sub, task_service, scheduler, task_repo, session_svc, engine, intent_state = _build_assembly()
+    sup, sub, task_service, scheduler, task_repo, session_svc, engine, intent_state, sub_client = _build_assembly()
     session = session_svc.create("集成测试")
     sid = session.id
     intent_state.patch_status(sid, "confirmed")
@@ -215,6 +217,42 @@ def test_end_to_end_pipeline():
     assert fin.status == TaskStatus.AWAITING_CONFIRM, f"finalize 链路未达待复核，实际: {fin.status}"
     task_service.confirm(finalize.id, None)
     assert task_repo.get(finalize.id).status == TaskStatus.FINISHED
+
+
+def test_edit_flows_to_downstream():
+    """人工编辑待确认产物后确认：下游收到的调用消息带编辑后内容（顺序契约锚定）。"""
+    sup, sub, task_service, scheduler, task_repo, session_svc, engine, intent_state, sub_client = _build_assembly()
+    session = session_svc.create("编辑链路测试")
+    sid = session.id
+    intent_state.patch_status(sid, "confirmed")
+    list(sup.stream(sid, "帮我写一篇夏日博文"))
+
+    tasks = task_repo.find_by_session_statuses(sid, ACTIVE_STATUSES)
+    idea = next(task for task in tasks if task.agent_type == "idea")
+    finalize = next(task for task in tasks if task.agent_type == "finalize")
+
+    task_repo.claim(idea.id, time.time())
+    sub.run(idea.id)
+    assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM
+
+    # 编辑选中候选的标题，再确认
+    task_service.edit(idea.id, {"candidates": [
+        {"index": 0, "title": "手改标题", "angle": "清凉", "reason": "应季"},
+    ]})
+    task_service.confirm(idea.id, selected=0)
+
+    scheduler._tick()
+    deadline = time.time() + 2.0
+    fin = task_repo.get(finalize.id)
+    while fin.status in (TaskStatus.PENDING, TaskStatus.RUNNING) and time.time() < deadline:
+        time.sleep(0.02)
+        fin = task_repo.get(finalize.id)
+    assert fin.status == TaskStatus.AWAITING_CONFIRM, f"finalize 未达待复核，实际: {fin.status}"
+
+    # 汇总那次模型请求的消息体须含编辑后标题（选题下游注入生效）
+    finalize_request = sub_client.calls[-1]
+    all_text = json.dumps(finalize_request.get("messages", []), ensure_ascii=False)
+    assert "手改标题" in all_text
 
 
 def main():

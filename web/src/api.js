@@ -275,6 +275,21 @@ export async function retryTask(taskId, feedback) {
   return res.json()
 }
 
+export async function editTask(taskId, payload) {
+  const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const err = new Error(`edit failed: ${res.status}`)
+    err.status = res.status
+    try { err.detail = (await res.json()).detail } catch { err.detail = '' }
+    throw err
+  }
+  return res.json()
+}
+
 export async function cancelPipeline(sessionId) {
   const res = await fetch(`${BASE}/${encodeURIComponent(sessionId)}/pipeline:cancel`, {
     method: 'POST',

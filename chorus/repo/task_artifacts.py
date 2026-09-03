@@ -22,20 +22,15 @@ def _to_domain(r: TaskArtifactsRecord) -> TaskArtifacts:
     return TaskArtifacts(task_id=r.task_id, artifacts=artifacts)
 
 
-def _from_domain(
-    task_id: str, agent_type: str, artifacts: Any,
-) -> TaskArtifactsRecord:
+def _from_domain(task_id: str, agent_type: str, artifacts: Any) -> TaskArtifactsRecord:
     return TaskArtifactsRecord(
-        task_id=task_id, agent_type=agent_type,
-        artifacts=dataclasses.asdict(artifacts),
+        task_id=task_id, agent_type=agent_type, artifacts=dataclasses.asdict(artifacts),
     )
 
 
 class TaskArtifactsRepository(BaseRepository):
     @write
-    def upsert(
-        self, db, task_id: str, agent_type: str, artifacts: Any,
-    ) -> None:
+    def upsert(self, db, task_id: str, agent_type: str, artifacts: Any) -> None:
         r = _from_domain(task_id, agent_type, artifacts)
         db.execute(
             insert(TaskArtifactsRecord)

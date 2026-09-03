@@ -1,16 +1,23 @@
-"""TaskService HIL smoke test：confirm/retry/cancel + get_graph。"""
+"""TaskService HIL smoke test：confirm/retry/cancel/edit + get_graph。"""
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from chorus.domain.session import Session
 from chorus.domain.task import (
     IdeaArtifacts,
     IdeaCandidate,
+    ImageArtifacts,
+    ImageItem,
+    PostCard,
+    ScriptArtifacts,
     Task,
     TaskContent,
     TaskStatus,
+    ValidationError,
 )
 from chorus.repo.engine import build_engine
 from chorus.repo.session import SessionRepository
@@ -124,6 +131,63 @@ def test_cancel_pipeline_writes_terminal_updated_at():
     assert a.updated_at > 0.0
 
 
+def test_edit_script_updates_artifacts():
+    """待确认文案可编辑：正文替换落库。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "script", "awaiting_confirm")
+    art_repo = TaskArtifactsRepository(_engine_of(task_repo))
+    art_repo.upsert("t1", "script", ScriptArtifacts(markdown="原文"))
+    res = svc.edit("t1", {"markdown": "改后正文"})
+    assert res["status"] == "awaiting_confirm"
+    got = art_repo.load("t1")
+    assert got.artifacts.markdown == "改后正文"
+
+
+def test_edit_finalize_preserves_meta():
+    """成品编辑保留资源元数据，只换正文。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "finalize", "awaiting_confirm")
+    art_repo = TaskArtifactsRepository(_engine_of(task_repo))
+    art_repo.upsert("t1", "finalize", PostCard(markdown="原文", meta={"preview_ref": "a/b"}))
+    svc.edit("t1", {"markdown": "改后正文"})
+    got = art_repo.load("t1")
+    assert got.artifacts.markdown == "改后正文"
+    assert got.artifacts.meta == {"preview_ref": "a/b"}
+
+
+def test_edit_idea_updates_candidates_keeps_selected():
+    """选题编辑候选字段，选中项保留。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
+    art_repo = TaskArtifactsRepository(_engine_of(task_repo))
+    art_repo.upsert("t1", "idea", IdeaArtifacts(
+        candidates=[
+            IdeaCandidate(index=0, title="旧一", angle="a", reason="r"),
+            IdeaCandidate(index=1, title="旧二", angle="a", reason="r"),
+        ],
+        selected=1,
+    ))
+    payload = {"candidates": [
+        {"index": 0, "title": "新一", "angle": "a", "reason": "r"},
+        {"index": 1, "title": "新二", "angle": "a", "reason": "r"},
+    ]}
+    svc.edit("t1", payload)
+    got = art_repo.load("t1")
+    assert got.artifacts.candidates[1].title == "新二"
+    assert got.artifacts.selected == 1
+
+
+def test_edit_rejected_for_image():
+    """配图产物未注册编辑分支，载荷校验层直接拒绝。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "image", "awaiting_confirm")
+    TaskArtifactsRepository(_engine_of(task_repo)).upsert(
+        "t1", "image", ImageArtifacts(images=[ImageItem(url="http://x/1.jpg")]),
+    )
+    with pytest.raises(ValidationError):
+        svc.edit("t1", {"markdown": "x"})
+
+
 def test_get_graph_active():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="running")
@@ -175,6 +239,7 @@ def test_get_graph_includes_progress_and_timestamps():
     progress_repo = TaskProgressRepository(engine)
     progress_repo.set_composing("t1", 120, 2)
     progress_repo.set_composing_label("t1", "张")
+    art_repo.upsert("t1", "image", ImageArtifacts(images=[ImageItem(url="http://x/1.jpg")]))
     graph = svc.get_graph("s1")
     t = graph.nodes[0]
     assert t.updated_at == 10.0

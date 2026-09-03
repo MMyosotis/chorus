@@ -6,10 +6,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from chorus.domain.task import ValidationError, dump_task_graph
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
-from chorus.domain.task import dump_task_graph
 
 router = APIRouter(prefix="/api")
 
@@ -20,6 +20,11 @@ class ConfirmRequest(BaseModel):
 
 class RetryRequest(BaseModel):
     feedback: str
+
+
+class EditRequest(BaseModel):
+    markdown: Optional[str] = None
+    candidates: Optional[list[dict]] = None
 
 
 @router.get("/tasks")
@@ -49,6 +54,19 @@ def retry_task(
     task: TaskService = Depends(provide_task_service),
 ):
     return task.retry(task_id, req.feedback)
+
+
+@router.post("/tasks/{task_id}/edit")
+def edit_task(
+    task_id: str,
+    req: EditRequest,
+    task: TaskService = Depends(provide_task_service),
+):
+    payload = {"markdown": req.markdown, "candidates": req.candidates}
+    try:
+        return task.edit(task_id, payload)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.correction) from e
 
 
 @router.post("/sessions/{session_id}/pipeline:cancel")
