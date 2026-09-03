@@ -140,9 +140,17 @@ const datelineTime = computed(() => {
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
+// 空壳助手轮（无正文、流式已收尾）不展示；流式尾部那条保留以承载状态条
+function isBlankShell(message, index) {
+  if (message.kind || message.role !== 'assistant') return false
+  if (message.content && message.content.trim()) return false
+  return !(props.streaming && index === props.messages.length - 1)
+}
+
 const displayMessages = computed(() => {
   const result = []
-  for (const message of props.messages) {
+  for (const [index, message] of props.messages.entries()) {
+    if (isBlankShell(message, index)) continue
     if (message.kind === 'intent-confirm') {
       const previous = result[result.length - 1]
       if (
