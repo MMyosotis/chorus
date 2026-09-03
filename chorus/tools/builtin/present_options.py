@@ -28,7 +28,7 @@ class PresentOptionsTool(Tool):
                 "items": {
                     "type": "object",
                     "properties": {
-                        "question": {"type": "string"},
+                        "question": {"type": "string", "description": "问题标题，15 字以内，一行可完整展示"},
                         "options": {
                             "type": "array",
                             "minItems": 3,

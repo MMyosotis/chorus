@@ -206,6 +206,7 @@ defineExpose({ confirmChoices })
 <style scoped>
 .option-card {
   --collapsed-reserve: 176px;
+  --controls-reserve: 160px;
   position: relative;
   width: 100%;
   padding: var(--ch-space-4);
@@ -334,10 +335,14 @@ defineExpose({ confirmChoices })
 
 .question-title {
   margin: 0 0 8px;
+  overflow: hidden;
+  padding-right: var(--controls-reserve);
   color: var(--ch-text);
   font-size: var(--ch-text-lg);
   font-weight: 600;
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .option-item {
@@ -647,6 +652,7 @@ defineExpose({ confirmChoices })
 @media (max-width: 700px) {
   .option-card {
     --collapsed-reserve: 160px;
+    --controls-reserve: 140px;
     padding: 16px;
   }
 
