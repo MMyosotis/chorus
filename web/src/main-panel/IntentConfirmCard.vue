@@ -11,6 +11,7 @@ const props = defineProps({
 const emit = defineEmits(['confirm', 'revise', 'collapse-change'])
 const locking = ref(false)
 const archived = computed(() => props.state?.status === 'answered')
+const actionsFolded = computed(() => archived.value || props.hideActions)
 
 const clean = (value, fallback = '待补充') => {
   const text = value == null ? '' : String(value).trim()
@@ -118,14 +119,16 @@ defineExpose({
           </dl>
         </section>
 
-        <footer v-if="!archived && !hideActions" class="actions">
-          <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
-            继续调整
-          </button>
-          <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
-            确认并开始创作
-            <ChevronRight aria-hidden="true" />
-          </button>
+        <footer class="actions" :class="{ folded: actionsFolded }" :inert="actionsFolded">
+          <div class="actions-frame">
+            <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
+              继续调整
+            </button>
+            <button class="confirm" type="button" :disabled="locking" @click="decide('confirm')">
+              确认并开始创作
+              <ChevronRight aria-hidden="true" />
+            </button>
+          </div>
         </footer>
       </div>
     </div>
@@ -456,11 +459,34 @@ defineExpose({
 }
 
 .actions {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  background: var(--ch-surface);
+  transition: grid-template-rows 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.actions.folded {
+  grid-template-rows: 0fr;
+}
+
+.actions-frame {
+  min-height: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin: 16px 0 0;
-  background: var(--ch-surface);
+  opacity: 1;
+  transform: translateY(0);
+  transition: margin-top 280ms cubic-bezier(.22, .8, .25, 1),
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.actions.folded .actions-frame {
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .actions button {
@@ -564,7 +590,7 @@ defineExpose({
   font-size: var(--ch-text-xs);
 }
 
-.compact .actions {
+.compact .actions-frame {
   margin-top: 16px;
 }
 
@@ -607,7 +633,7 @@ defineExpose({
     grid-template-columns: 1fr;
   }
 
-  .actions {
+  .actions-frame {
     flex-wrap: wrap;
   }
 

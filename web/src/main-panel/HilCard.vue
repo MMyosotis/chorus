@@ -22,6 +22,11 @@ const error = ref('')
 const needSelect = computed(() => props.task.agent_type === 'idea')
 const editable = computed(() => ['idea', 'script', 'finalize'].includes(props.task.agent_type))
 const editing = ref(false)
+const actionsFolded = computed(() => props.confirmed || editing.value || editingCandidate.value)
+
+function isEditingSlot(candidate) {
+  return Boolean(editingCandidate.value && draftCandidate.value && candidate.index === selectedIdx.value)
+}
 const draftTitle = ref('')
 const draftFrontLines = ref([])
 const draftMarkdown = ref('')
@@ -187,72 +192,88 @@ async function saveCandidate() {
     <div class="review-content">
       <div v-if="task.agent_type === 'idea'" class="candidates" role="radiogroup" aria-label="选题候选">
         <div v-for="c in candidates" :key="c.index" class="candidate-slot">
-          <div
-            v-if="editingCandidate && draftCandidate && c.index === selectedIdx"
-            class="candidate-edit"
-          >
-            <label>
-              <span>标题</span>
-              <input v-model="draftCandidate.title" type="text" />
-            </label>
-            <label>
-              <span>切入角度</span>
-              <input v-model="draftCandidate.angle" type="text" />
-            </label>
-            <label>
-              <span>推荐理由</span>
-              <textarea v-model="draftCandidate.reason" rows="2"></textarea>
-            </label>
-            <div class="edit-actions">
-              <button class="secondary" type="button" :disabled="busy" @click="editingCandidate = false">
-                取消
-              </button>
-              <button class="primary" type="button" :disabled="busy" @click="saveCandidate()">
-                {{ busy ? '正在保存' : '保存修改' }}
-              </button>
+          <div class="swap-stage">
+            <div class="swap-pane" :class="{ off: !isEditingSlot(c) }">
+              <div class="pane-frame">
+                <div v-if="draftCandidate && draftCandidate.index === c.index" class="candidate-edit">
+                  <label>
+                    <span>标题</span>
+                    <input v-model="draftCandidate.title" type="text" />
+                  </label>
+                  <label>
+                    <span>切入角度</span>
+                    <input v-model="draftCandidate.angle" type="text" />
+                  </label>
+                  <label>
+                    <span>推荐理由</span>
+                    <textarea v-model="draftCandidate.reason" rows="2"></textarea>
+                  </label>
+                  <div class="edit-actions">
+                    <button class="secondary" type="button" :disabled="busy" @click="editingCandidate = false">
+                      取消
+                    </button>
+                    <button class="primary" type="button" :disabled="busy" @click="saveCandidate()">
+                      {{ busy ? '正在保存' : '保存修改' }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="swap-pane" :class="{ off: isEditingSlot(c) }">
+              <div class="pane-frame">
+                <button
+                  type="button"
+                  class="candidate"
+                  :class="{ selected: selectedIdx === c.index }"
+                  role="radio"
+                  :aria-checked="selectedIdx === c.index"
+                  :aria-label="[c.title, c.angle || c.reason, selectedIdx === c.index ? '已选择' : ''].filter(Boolean).join('，')"
+                  :disabled="confirmed || editingCandidate"
+                  @click="selectedIdx = c.index"
+                >
+                  <span class="candidate-copy">
+                    <h3>{{ c.title }}</h3>
+                    <span v-if="c.angle || c.reason" class="candidate-summary">{{ c.angle || c.reason }}</span>
+                  </span>
+                  <span
+                    class="candidate-selection"
+                    :class="{ visible: selectedIdx === c.index }"
+                    aria-hidden="true"
+                  >
+                    <span class="candidate-state">已选择</span>
+                    <span class="candidate-check" aria-hidden="true">
+                      <Check />
+                    </span>
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
-          <button
-            v-else
-            type="button"
-            class="candidate"
-            :class="{ selected: selectedIdx === c.index }"
-            role="radio"
-            :aria-checked="selectedIdx === c.index"
-            :aria-label="[c.title, c.angle || c.reason, selectedIdx === c.index ? '已选择' : ''].filter(Boolean).join('，')"
-            :disabled="confirmed || editingCandidate"
-            @click="selectedIdx = c.index"
-          >
-            <span class="candidate-copy">
-              <h3>{{ c.title }}</h3>
-              <span v-if="c.angle || c.reason" class="candidate-summary">{{ c.angle || c.reason }}</span>
-            </span>
-            <span
-              class="candidate-selection"
-              :class="{ visible: selectedIdx === c.index }"
-              aria-hidden="true"
-            >
-              <span class="candidate-state">已选择</span>
-              <span class="candidate-check" aria-hidden="true">
-                <Check />
-              </span>
-            </span>
-          </button>
         </div>
       </div>
 
       <template v-else-if="task.agent_type === 'script'">
-        <div v-if="editing" class="edit-fields">
-          <label>
-            <span>标题</span>
-            <input v-model="draftTitle" type="text" />
-          </label>
-          <label>
-            <span>正文</span>
-            <textarea v-model="draftMarkdown" class="edit-area" rows="14"></textarea>
-          </label>
+        <div class="swap-stage">
+          <div class="swap-pane" :class="{ off: !editing }">
+            <div class="pane-frame">
+              <div class="edit-fields">
+                <label>
+                  <span>标题</span>
+                  <input v-model="draftTitle" type="text" />
+                </label>
+                <label>
+                  <span>正文</span>
+                  <textarea v-model="draftMarkdown" class="edit-area" rows="14"></textarea>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="swap-pane" :class="{ off: editing }">
+            <div class="pane-frame">
+              <ScriptProof :markdown="artifacts.markdown || ''" />
+            </div>
+          </div>
         </div>
-        <ScriptProof v-else :markdown="artifacts.markdown || ''" />
       </template>
 
       <div v-else-if="task.agent_type === 'image'" class="images">
@@ -263,78 +284,101 @@ async function saveCandidate() {
       </div>
 
       <template v-else-if="task.agent_type === 'finalize'">
-        <div v-if="editing" class="edit-fields">
-          <label>
-            <span>标题</span>
-            <input v-model="draftTitle" type="text" />
-          </label>
-          <label>
-            <span>正文</span>
-            <textarea v-model="draftMarkdown" class="edit-area" rows="14"></textarea>
-          </label>
+        <div class="swap-stage">
+          <div class="swap-pane" :class="{ off: !editing }">
+            <div class="pane-frame">
+              <div class="edit-fields">
+                <label>
+                  <span>标题</span>
+                  <input v-model="draftTitle" type="text" />
+                </label>
+                <label>
+                  <span>正文</span>
+                  <textarea v-model="draftMarkdown" class="edit-area" rows="14"></textarea>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="swap-pane" :class="{ off: editing }">
+            <div class="pane-frame">
+              <ArtifactCard
+                :task="task"
+                review
+                @preview="$emit('preview-task', task)"
+              />
+            </div>
+          </div>
         </div>
-        <ArtifactCard
-          v-else
-          :task="task"
-          review
-          @preview="$emit('preview-task', task)"
-        />
       </template>
 
-      <div v-if="editing" class="edit-actions">
-        <button class="secondary" type="button" :disabled="busy" @click="editing = false">
-          取消
-        </button>
-        <button class="primary" type="button" :disabled="busy" @click="saveEdit()">
-          {{ busy ? '正在保存' : '保存修改' }}
-        </button>
+      <div class="swap-stage">
+        <div class="swap-pane" :class="{ off: !editing }">
+          <div class="pane-frame">
+            <div class="edit-actions">
+              <button class="secondary" type="button" :disabled="busy" @click="editing = false">
+                取消
+              </button>
+              <button class="primary" type="button" :disabled="busy" @click="saveEdit()">
+                {{ busy ? '正在保存' : '保存修改' }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div v-if="revising" class="feedback">
-      <label for="review-feedback">希望怎样调整</label>
-      <textarea
-        id="review-feedback"
-        v-model="feedback"
-        placeholder="写下需要修改的内容或方向"
-        rows="3"
-      ></textarea>
+    <div class="feedback" :class="{ folded: !revising }" :inert="!revising">
+      <div class="feedback-frame">
+        <div class="feedback-body">
+          <label for="review-feedback">希望怎样调整</label>
+          <textarea
+            id="review-feedback"
+            v-model="feedback"
+            placeholder="写下需要修改的内容或方向"
+            rows="3"
+          ></textarea>
+        </div>
+      </div>
     </div>
 
-    <footer v-if="!confirmed && !editing && !editingCandidate" class="actions">
-      <div v-if="!revising">
-        <button
-          v-if="editable"
-          class="secondary"
-          type="button"
-          :disabled="busy"
-          @click="startEdit"
-        >
-          {{ meta.edit }}
-        </button>
-        <button
-          class="secondary"
-          type="button"
-          :disabled="busy"
-          @click="revising = true"
-        >
-          {{ meta.revise }}
+    <footer class="actions" :class="{ folded: actionsFolded }" :inert="actionsFolded">
+      <div class="actions-frame">
+        <Transition name="action-swap" mode="out-in">
+          <div v-if="!revising" key="review" class="actions-group">
+            <button
+              v-if="editable"
+              class="secondary"
+              type="button"
+              :disabled="busy"
+              @click="startEdit"
+            >
+              {{ meta.edit }}
+            </button>
+            <button
+              class="secondary"
+              type="button"
+              :disabled="busy"
+              @click="revising = true"
+            >
+              {{ meta.revise }}
+            </button>
+          </div>
+          <div v-else key="revise" class="actions-group">
+            <button
+              class="secondary"
+              type="button"
+              :disabled="busy"
+              @click="revising = false"
+            >
+              返回
+            </button>
+          </div>
+        </Transition>
+        <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
+          {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
+          <ChevronRight v-if="!busy" aria-hidden="true" />
         </button>
       </div>
-      <div v-else>
-        <button
-          class="secondary"
-          type="button"
-          :disabled="busy"
-          @click="revising = false"
-        >
-          返回
-        </button>
-      </div>
-      <button class="primary" type="button" :disabled="busy" @click="revising ? onRetry() : onConfirm()">
-        {{ busy ? '正在处理' : (revising ? '提交修改意见' : meta.approve) }}
-        <ChevronRight v-if="!busy" aria-hidden="true" />
-      </button>
     </footer>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -659,9 +703,33 @@ async function saveCandidate() {
 }
 
 .feedback {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  transition: grid-template-rows 320ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.feedback.folded {
+  grid-template-rows: 0fr;
+}
+
+.feedback-frame {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.feedback-body {
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid var(--ch-border);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease, transform 320ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.feedback.folded .feedback-body {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .feedback label {
@@ -691,20 +759,56 @@ async function saveCandidate() {
 }
 
 .actions {
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  transition: grid-template-rows 280ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.actions.folded {
+  grid-template-rows: 0fr;
+}
+
+.actions-frame {
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-top: var(--ch-space-4);
-}
-
-.feedback + .actions {
   margin-top: var(--ch-space-3);
+  opacity: 1;
+  transform: translateY(0);
+  transition: margin-top 280ms cubic-bezier(.22, .8, .25, 1),
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(.22, .8, .25, 1);
 }
 
-.actions > div {
+.actions.folded .actions-frame {
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.actions-group {
   display: flex;
   gap: 8px;
+}
+
+.action-swap-enter-active {
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.action-swap-leave-active {
+  transition: opacity 120ms ease;
+}
+
+.action-swap-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.action-swap-leave-to {
+  opacity: 0;
 }
 
 .actions button {
@@ -762,17 +866,53 @@ async function saveCandidate() {
   line-height: 1.5;
 }
 
+.swap-stage {
+  min-width: 0;
+  display: grid;
+}
+
+.swap-pane {
+  grid-area: 1 / 1;
+  align-self: start;
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+  opacity: 1;
+  transform: translateY(0);
+  transition: grid-template-rows 320ms cubic-bezier(.22, .8, .25, 1),
+    opacity 180ms ease,
+    transform 320ms cubic-bezier(.22, .8, .25, 1);
+}
+
+.swap-pane.off {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(8px);
+  visibility: hidden;
+  pointer-events: none;
+  transition: grid-template-rows 320ms cubic-bezier(.22, .8, .25, 1),
+    opacity 180ms ease,
+    transform 320ms cubic-bezier(.22, .8, .25, 1),
+    visibility 0s linear 320ms;
+}
+
+.pane-frame {
+  min-height: 0;
+  overflow: hidden;
+}
+
 @media (max-width: 700px) {
   .hil-card {
     padding: 16px;
   }
 
-  .actions {
+  .actions-frame {
     align-items: stretch;
     flex-wrap: wrap;
   }
 
-  .actions > div {
+  .actions-group {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }

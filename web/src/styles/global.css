@@ -368,6 +368,8 @@ select:focus-visible {
   font-weight: var(--ch-font-semibold);
   line-height: 1;
   white-space: nowrap;
+  transition: background var(--ch-duration-normal) var(--ch-ease),
+    color var(--ch-duration-normal) var(--ch-ease);
 }
 
 .ch-status-pill > i {

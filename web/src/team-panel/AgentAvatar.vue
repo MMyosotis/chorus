@@ -28,7 +28,7 @@ const avatarSrc = computed(() => {
     :aria-label="label"
   >
     <img class="agent-avatar-image" :src="avatarSrc" alt="" aria-hidden="true" />
-    <i v-if="online" aria-hidden="true"></i>
+    <i aria-hidden="true"></i>
   </span>
 </template>
 
@@ -42,6 +42,7 @@ const avatarSrc = computed(() => {
   place-items: center;
   border: 0;
   border-radius: 50%;
+  transition: opacity var(--ch-duration-normal) var(--ch-ease);
 }
 
 .agent-avatar-image {
@@ -50,6 +51,8 @@ const avatarSrc = computed(() => {
   height: 100%;
   border-radius: inherit;
   object-fit: cover;
+  transition: filter var(--ch-duration-normal) var(--ch-ease),
+    opacity var(--ch-duration-normal) var(--ch-ease);
 }
 
 .agent-avatar i {
@@ -61,9 +64,15 @@ const avatarSrc = computed(() => {
   border-radius: 50%;
   background: var(--ch-success);
   box-shadow: 0 0 0 2px var(--ch-accent-soft);
+  opacity: 0;
+  transform: scale(.4);
+  transition: opacity var(--ch-duration-normal) var(--ch-ease),
+    transform var(--ch-duration-normal) var(--ch-ease-out);
 }
 
 .agent-avatar.online i {
+  opacity: 1;
+  transform: scale(1);
   animation: avatarPulse 1.8s ease-in-out infinite;
 }
 
@@ -81,8 +90,8 @@ const avatarSrc = computed(() => {
 }
 
 @keyframes avatarPulse {
-  0%, 100% { opacity: .45; }
-  50% { opacity: 1; }
+  0%, 100% { box-shadow: 0 0 0 2px var(--ch-accent-soft); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--ch-accent-soft) 40%, transparent); }
 }
 
 @media (prefers-reduced-motion: reduce) {
