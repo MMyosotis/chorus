@@ -4,14 +4,11 @@ import { ChevronDown, ChevronRight, ChevronUp, FileText, Heart, Image, Monitor }
 
 const props = defineProps({
   state: { type: Object, default: null },
-  hideActions: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
   collapsed: { type: Boolean, default: false },
 })
 const emit = defineEmits(['confirm', 'revise', 'collapse-change'])
 const locking = ref(false)
-const archived = computed(() => props.state?.status === 'answered')
-const actionsFolded = computed(() => archived.value || props.hideActions)
 
 const clean = (value, fallback = '待补充') => {
   const text = value == null ? '' : String(value).trim()
@@ -39,7 +36,7 @@ const notes = computed(() =>
 )
 
 function decide(type) {
-  if (locking.value || archived.value) return
+  if (locking.value) return
   locking.value = true
   emit(type)
 }
@@ -55,10 +52,10 @@ defineExpose({
 </script>
 
 <template>
-  <section class="intent-confirm" :class="{ archived, compact, collapsed: props.collapsed }">
+  <section class="intent-confirm" :class="{ compact, collapsed: props.collapsed }">
     <div class="card-controls">
-      <span class="status ch-status-pill" :class="archived ? 'is-complete' : 'is-awaiting'">
-        <i aria-hidden="true"></i>{{ archived ? '已确认' : '待确认' }}
+      <span class="status ch-status-pill is-awaiting">
+        <i aria-hidden="true"></i>待确认
       </span>
       <button
         class="collapse-toggle"
@@ -119,7 +116,7 @@ defineExpose({
           </dl>
         </section>
 
-        <footer class="actions" :class="{ folded: actionsFolded }" :inert="actionsFolded">
+        <footer class="actions">
           <div class="actions-frame">
             <button class="revise" type="button" :disabled="locking" @click="decide('revise')">
               继续调整
@@ -458,35 +455,11 @@ defineExpose({
   white-space: nowrap;
 }
 
-.actions {
-  display: grid;
-  grid-template-rows: 1fr;
-  overflow: hidden;
-  background: var(--ch-surface);
-  transition: grid-template-rows 280ms cubic-bezier(.22, .8, .25, 1);
-}
-
-.actions.folded {
-  grid-template-rows: 0fr;
-}
-
 .actions-frame {
-  min-height: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin: 16px 0 0;
-  opacity: 1;
-  transform: translateY(0);
-  transition: margin-top 280ms cubic-bezier(.22, .8, .25, 1),
-    opacity 180ms ease,
-    transform 280ms cubic-bezier(.22, .8, .25, 1);
-}
-
-.actions.folded .actions-frame {
-  margin-top: 0;
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 .actions button {
