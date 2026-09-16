@@ -164,7 +164,7 @@ class _StubTitleService:
         self._title = title
         self.calls = []
 
-    def generate(self, user_text):
+    def generate(self, user_text, scope):
         self.calls.append(user_text)
         return self._title
 

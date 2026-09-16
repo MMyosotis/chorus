@@ -8,6 +8,7 @@ import json
 import time
 import types
 
+from chorus.domain.bypass import BypassScope
 from chorus.domain.memory import CreatorMemory, MemoryRecall
 from chorus.domain.memory.llm import MemoryLLMService
 from chorus.domain.message import AssistantMessage, UserMessage
@@ -20,7 +21,7 @@ from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.services.memory import MemoryService
 from chorus.services.settings import SettingsService
-from chorus.tests._helpers import fresh_engine, seed_session
+from chorus.tests._helpers import build_bypass_caller, fresh_engine, seed_session
 
 
 class FakeResponse:
@@ -28,6 +29,7 @@ class FakeResponse:
         self.choices = [types.SimpleNamespace(
             message=types.SimpleNamespace(content=content)
         )]
+        self.usage = None
 
 
 class FakeClient:
@@ -67,7 +69,7 @@ def _setup(client):
     art_repo = TaskArtifactsRepository(engine)
     task_repo = TaskRepository(engine)
     settings_svc = SettingsService(SettingsRepository(engine))
-    llm_svc = MemoryLLMService(client, "fake")
+    llm_svc = MemoryLLMService(build_bypass_caller(client)[0])
     memory_svc = MemoryService(
         memory_repo, llm_svc, settings_svc, message_repo, art_repo,
     )
@@ -85,7 +87,7 @@ def _seed_task(task_repo, task_id="t1", agent_type="idea"):
 def test_recall_for_disabled_returns_empty_digest():
     _, _, _, _, settings_svc, memory_svc = _setup(FakeClient([]))
     settings_svc.set_memory_enabled(False)
-    recall = memory_svc.recall_for("supervisor", "hint")
+    recall = memory_svc.recall_for("supervisor", "hint", BypassScope("s1"))
     assert recall.digest.is_empty
     assert recall.items == []
 
@@ -94,12 +96,12 @@ def test_recall_for_filters_by_visibility():
     memory_repo, _, _, _, _, memory_svc = _setup(FakeClient([]))
     memory_repo.upsert(_make_memory(id="m1", description="通用", visible_to=[]))
     memory_repo.upsert(_make_memory(id="m2", description="仅文案", visible_to=["script"]))
-    supervisor_recall = memory_svc.recall_for("supervisor", "hint")
+    supervisor_recall = memory_svc.recall_for("supervisor", "hint", BypassScope("s1"))
     assert len(supervisor_recall.digest.entries) == 2
-    idea_recall = memory_svc.recall_for("idea", "hint")
+    idea_recall = memory_svc.recall_for("idea", "hint", BypassScope("s1"))
     assert len(idea_recall.digest.entries) == 1
     assert idea_recall.digest.entries[0].id == "m1"
-    script_recall = memory_svc.recall_for("script", "hint")
+    script_recall = memory_svc.recall_for("script", "hint", BypassScope("s1"))
     assert len(script_recall.digest.entries) == 2
 
 
@@ -107,7 +109,7 @@ def test_recall_for_disabled_returns_empty_items():
     memory_repo, _, _, _, settings_svc, memory_svc = _setup(FakeClient([]))
     memory_repo.upsert(_make_memory(id="m1"))
     settings_svc.set_memory_enabled(False)
-    recall = memory_svc.recall_for("supervisor", "hint")
+    recall = memory_svc.recall_for("supervisor", "hint", BypassScope("s1"))
     assert recall.items == []
 
 
@@ -117,7 +119,7 @@ def test_recall_for_returns_selected_memories():
     )
     for memory_id in ("m1", "m2", "m3"):
         memory_repo.upsert(_make_memory(id=memory_id, description=f"记忆{memory_id}"))
-    recall = memory_svc.recall_for("supervisor", "test hint")
+    recall = memory_svc.recall_for("supervisor", "test hint", BypassScope("s1"))
     assert len(recall.items) == 2
     assert {memory.id for memory in recall.items} == {"m1", "m3"}
 
@@ -125,7 +127,7 @@ def test_recall_for_returns_selected_memories():
 def test_recall_for_llm_failure_returns_empty_items():
     memory_repo, _, _, _, _, memory_svc = _setup(ErrorClient())
     memory_repo.upsert(_make_memory(id="m1"))
-    recall = memory_svc.recall_for("supervisor", "hint")
+    recall = memory_svc.recall_for("supervisor", "hint", BypassScope("s1"))
     assert recall.items == []
 
 
@@ -224,7 +226,7 @@ def test_consolidate_below_threshold_no_change():
     memory_repo, _, _, _, _, memory_svc = _setup(FakeClient([]))
     for i in range(5):
         memory_repo.upsert(_make_memory(id=f"m{i}", description=f"记忆{i}"))
-    memory_svc.consolidate()
+    memory_svc.consolidate("s1")
     memories = memory_repo.list_all()
     assert len(memories) == 5
 
@@ -240,7 +242,7 @@ def test_consolidate_at_threshold_replaces_all():
     )
     for i in range(30):
         memory_repo.upsert(_make_memory(id=f"m{i}", description=f"记忆{i}"))
-    memory_svc.consolidate()
+    memory_svc.consolidate("s1")
     memories = memory_repo.list_all()
     assert len(memories) == 2
     descs = {memory.description for memory in memories}
@@ -257,7 +259,7 @@ def test_consolidate_preserves_timestamp_from_llm():
     )
     for i in range(30):
         memory_repo.upsert(_make_memory(id=f"m{i}", description=f"记忆{i}"))
-    memory_svc.consolidate()
+    memory_svc.consolidate("s1")
     memories = memory_repo.list_all()
     assert len(memories) == 1
     expected = time.mktime(time.strptime("2024-03-15 14:30", "%Y-%m-%d %H:%M"))
@@ -270,7 +272,7 @@ def test_consolidate_malformed_preserves_store():
     )
     for i in range(30):
         memory_repo.upsert(_make_memory(id=f"m{i}", description=f"记忆{i}"))
-    memory_svc.consolidate()
+    memory_svc.consolidate("s1")
     assert len(memory_repo.list_all()) == 30
 
 
@@ -278,7 +280,7 @@ def test_consolidate_llm_failure_preserves_store():
     memory_repo, _, _, _, _, memory_svc = _setup(ErrorClient())
     for i in range(30):
         memory_repo.upsert(_make_memory(id=f"m{i}", description=f"记忆{i}"))
-    memory_svc.consolidate()
+    memory_svc.consolidate("s1")
     assert len(memory_repo.list_all()) == 30
 
 

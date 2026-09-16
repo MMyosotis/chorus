@@ -27,7 +27,7 @@ class _FixedLlm:
     def __init__(self):
         self.calls = 0
 
-    def summarize(self, messages):
+    def summarize(self, messages, scope):
         self.calls += 1
         return "固定摘要"
 

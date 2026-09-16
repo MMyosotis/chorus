@@ -20,6 +20,7 @@ class TracePhase(str, Enum):
     MODEL_RESPONSE = "model_response"
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
+    BYPASS_CALL = "bypass_call"
 
 
 class ThinkingSegment(BaseModel):
@@ -108,11 +109,27 @@ class TraceToolResult(_PayloadBase):
     status: Literal["success", "error"] = "success"
 
 
+class BypassCall(_PayloadBase):
+    """旁路调用阶段载荷:一次非流式单轮调用的请求与响应合一行。"""
+
+    purpose: str
+    model: str
+    prompt: str
+    max_tokens: int
+    content: str = ""
+    status: Literal["success", "error"] = "success"
+    duration_ms: int = 0
+    usage: Optional[ModelUsage] = None
+    cost_cny: Optional[float] = None
+    error: Optional[str] = None
+
+
 TracePayload = Union[
     ModelRequest,
     ModelResponse,
     TraceToolCall,
     TraceToolResult,
+    BypassCall,
 ]
 
 

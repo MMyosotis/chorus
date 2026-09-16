@@ -156,7 +156,7 @@ def _build_assembly():
         progress_repo, content_repo,
         tool_dispatcher,
         stub_chat_model_provider(sub_client), agent_loop,
-        types.SimpleNamespace(generate=lambda agent_type, invoke: ""),
+        types.SimpleNamespace(generate=lambda agent_type, invoke, scope: ""),
         skill_loader,
         stub_memory_service(),
         lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),

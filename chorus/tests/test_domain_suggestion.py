@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from chorus.domain.bypass import BypassScope
 from chorus.domain.intent import IntentState
 from chorus.domain.message import AssistantMessage, UserMessage
 from chorus.domain.suggestion import (
@@ -13,6 +14,7 @@ from chorus.domain.suggestion import (
     build_suggestion_prompt,
     parse_suggestions,
 )
+from chorus.tests._helpers import build_bypass_caller
 
 
 def _user(text):
@@ -66,17 +68,19 @@ def _fake_client(content=None, error=None):
         if error is not None:
             raise error
         message = SimpleNamespace(content=content)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+        return SimpleNamespace(usage=None, choices=[SimpleNamespace(message=message)])
 
     return SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
 
 
+_SCOPE = BypassScope("s1")
+
+
 def test_generate_parses_model_output():
     service = SuggestionGenerationService(
-        _fake_client(content='{"suggestions":[{"title":"选题 A","content":"请做选题 A"},{"title":"选题 B","content":"请做选题 B"},{"title":"选题 C","content":"请做选题 C"}]}'),
-        "m",
+        build_bypass_caller(_fake_client(content='{"suggestions":[{"title":"选题 A","content":"请做选题 A"},{"title":"选题 B","content":"请做选题 B"},{"title":"选题 C","content":"请做选题 C"}]}'))[0],
     )
-    result = service.generate(_state(), [_user("想写点东西")])
+    result = service.generate(_state(), [_user("想写点东西")], _SCOPE)
     assert [item.model_dump() for item in result] == [
         {"title": "选题 A", "content": "请做选题 A"},
         {"title": "选题 B", "content": "请做选题 B"},
@@ -85,8 +89,8 @@ def test_generate_parses_model_output():
 
 
 def test_generate_returns_empty_on_failure():
-    service = SuggestionGenerationService(_fake_client(error=RuntimeError("boom")), "m")
-    assert service.generate(_state(), []) == []
+    service = SuggestionGenerationService(build_bypass_caller(_fake_client(error=RuntimeError("boom")))[0])
+    assert service.generate(_state(), [], _SCOPE) == []
 
 
 def main():

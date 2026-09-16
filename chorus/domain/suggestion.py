@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from openai import OpenAI
 from pydantic import BaseModel, Field, ValidationError
 
-from chorus.domain.bypass import call_once
+from chorus.domain.bypass import BypassCaller, BypassScope
 from chorus.domain.intent import IntentState, intent_state_block
 from chorus.domain.log import get_logger
 from chorus.domain.message import Message, recent_chat_block
@@ -54,14 +53,13 @@ def parse_suggestions(raw: str) -> list[Suggestion]:
 class SuggestionGenerationService:
     """非流式一次调用产出输入建议，失败返空列表交前端降级。"""
 
-    def __init__(self, client: OpenAI, model_id: str):
-        self._client = client
-        self._model = model_id
+    def __init__(self, bypass: BypassCaller):
+        self._bypass = bypass
 
-    def generate(self, state: IntentState, messages: Iterable[Message]) -> list[Suggestion]:
+    def generate(self, state: IntentState, messages: Iterable[Message], scope: BypassScope) -> list[Suggestion]:
         prompt = build_suggestion_prompt(state, messages)
         try:
-            raw = call_once(self._client, self._model, prompt, _MAX_TOKENS)
+            raw = self._bypass.call(prompt, _MAX_TOKENS, "suggestion", scope)
         except Exception:
             _logger.exception("suggestion generation failed")
             return []

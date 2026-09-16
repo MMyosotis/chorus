@@ -20,6 +20,7 @@ from chorus.domain.events import (
     SseEvent,
     SuspendEvent,
 )
+from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import is_context_overflow
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
@@ -213,7 +214,7 @@ class SupervisorService:
         """共用续跑内核：取模型、构造上下文与策略、跑 loop。"""
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
-        memory = self._prepare_memory(user_message)
+        memory = self._prepare_memory(session_id, user_message)
         ctx = AgentContext(
             session_id=session_id, user_message=user_message,
             tool_schemas=schemas, chat_model=entry.model_id,
@@ -237,6 +238,6 @@ class SupervisorService:
             strategy.retry_requested = False
             yield from self._loop.run(ctx, entry=entry, strategy=strategy)
 
-    def _prepare_memory(self, user_message) -> MemoryRecall:
+    def _prepare_memory(self, session_id: str, user_message) -> MemoryRecall:
         """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
-        return self._memory.recall_for("supervisor", user_message or "")
+        return self._memory.recall_for("supervisor", user_message or "", BypassScope(session_id=session_id))

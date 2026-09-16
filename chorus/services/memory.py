@@ -1,6 +1,7 @@
 """创作者记忆编排服务：摘要目录、召回、提取、整理与人工确认三钩点。"""
 from __future__ import annotations
 
+from chorus.domain.bypass import BypassScope
 from chorus.domain.log import get_logger
 from chorus.domain.memory.llm import MemoryLLMService
 from chorus.domain.memory.models import CreatorMemory, Kind, MemoryDigest, MemoryDigestEntry, MemoryDraft, MemoryRecall, draft_to_memory
@@ -32,13 +33,13 @@ class MemoryService:
         self._message_repo = message_repo
         self._artifacts_repo = task_artifacts_repo
 
-    def recall_for(self, agent_type: str, task_hint: str) -> MemoryRecall:
+    def recall_for(self, agent_type: str, task_hint: str, scope: BypassScope) -> MemoryRecall:
         """召回一次:摘要进系统段、命中条目进用户回合,开关关闭全短路。"""
         if not self._settings.get_memory_enabled():
             return MemoryRecall()
         digest = MemoryDigest(entries=self._visible_entries(agent_type))
         try:
-            ids = self._llm.select(digest, task_hint)
+            ids = self._llm.select(digest, task_hint, scope)
         except Exception:
             _logger.warning("memory recall failed, skip")
             return MemoryRecall(digest=digest)
@@ -52,22 +53,22 @@ class MemoryService:
         history = self._message_repo.list_by_session(session_id)[-_EXTRACT_WINDOW:]
         existing = self._repo.list_all()
         try:
-            drafts = self._llm.extract(history, existing)
+            drafts = self._llm.extract(history, existing, BypassScope(session_id=session_id))
         except Exception:
             _logger.warning("memory extract failed, skip")
             drafts = []
         for draft in drafts:
             self._store_draft(draft)
         _logger.debug("memory extract", extra={"session": session_id, "drafts": len(drafts)})
-        self.consolidate()
+        self.consolidate(session_id)
 
-    def consolidate(self) -> None:
+    def consolidate(self, session_id: str) -> None:
         all_memories = self._repo.list_all()
         if len(all_memories) < _CONSOLIDATE_THRESHOLD:
             _logger.debug("memory consolidate skip, below threshold", extra={"count": len(all_memories)})
             return
         try:
-            drafts = self._llm.merge(all_memories)
+            drafts = self._llm.merge(all_memories, BypassScope(session_id=session_id))
         except Exception:
             _logger.warning("memory consolidate failed, skip")
             return

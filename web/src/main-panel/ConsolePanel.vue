@@ -1,6 +1,17 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ChevronDown, PanelLeft } from '@lucide/vue'
+import {
+  BYPASS_PURPOSE_LABELS,
+  buildBypassCalls,
+  buildModelCalls,
+  buildSessionStats,
+  buildTimeline,
+  messageText,
+  parseUserContent,
+  shortJson,
+  toolsFor,
+} from '../composables/consoleProjection.js'
 import { ROLE_FULL, ROLE_LABELS, ROLE_SHORT } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
@@ -34,34 +45,9 @@ function agentNameFor(source, taskId) {
   return task?.display_name || task?.agent_name || ROLE_FULL[task?.agent_type] || '子代理'
 }
 
-const modelCalls = computed(() => {
-  const byMessage = new Map()
-  const ordered = [...traces.value].sort((a, b) => (a.created_at || 0) - (b.created_at || 0))
+const modelCalls = computed(() => buildModelCalls(traces.value))
 
-  for (const trace of ordered) {
-    const key = trace.message_id || `${trace.source || 'supervisor'}:${trace.task_id || ''}:${trace.created_at}`
-    if (trace.phase === 'model_request') {
-      byMessage.set(key, {
-        key,
-        created_at: trace.created_at,
-        source: trace.source || 'supervisor',
-        task_id: trace.task_id || null,
-        request: trace,
-        response: null,
-        toolCalls: [],
-        toolResults: new Map(),
-      })
-      continue
-    }
-
-    const call = byMessage.get(key)
-    if (!call) continue
-    if (trace.phase === 'model_response') call.response = trace
-    if (trace.phase === 'tool_call') call.toolCalls.push(trace)
-    if (trace.phase === 'tool_result') call.toolResults.set(trace.payload?.tool_call_id, trace)
-  }
-  return [...byMessage.values()].sort((a, b) => a.created_at - b.created_at)
-})
+const bypassCalls = computed(() => buildBypassCalls(traces.value))
 
 const toolMetaById = computed(() => {
   const meta = new Map()
@@ -75,7 +61,7 @@ const toolMetaById = computed(() => {
 
 const agents = computed(() => {
   const seen = new Map()
-  for (const call of modelCalls.value) {
+  for (const call of [...modelCalls.value, ...bypassCalls.value]) {
     const role = roleFor(call.source, call.task_id)
     if (!seen.has(role.key)) seen.set(role.key, role)
   }
@@ -90,72 +76,23 @@ const visibleCalls = computed(() => {
   return modelCalls.value.filter((call) => roleFor(call.source, call.task_id).key === activeAgent.value)
 })
 
-const timelineAll = computed(() => buildTimeline(modelCalls.value))
+const visibleBypass = computed(() => {
+  if (activeAgent.value === 'all') return bypassCalls.value
+  return bypassCalls.value.filter((call) => roleFor(call.source, call.task_id).key === activeAgent.value)
+})
+
+const timelineAll = computed(() => buildTimeline(modelCalls.value, bypassCalls.value, roleFor))
 
 const timeline = computed(() => {
   if (activeAgent.value === 'all') return timelineAll.value
-  return buildTimeline(visibleCalls.value)
+  return buildTimeline(visibleCalls.value, visibleBypass.value, roleFor)
 })
 
-function buildTimeline(calls) {
-  const result = []
-  let previous = null
-  let currentTurn = 0
-
-  for (const call of calls) {
-    const messages = call.request?.payload?.messages || []
-    const continuesAfterTool = messages.at(-1)?.role === 'tool'
-    if (continuesAfterTool && previous) {
-      const tools = resultTools(previous)
-      const totalMs = tools.reduce((sum, tool) => sum + (tool.duration_ms || 0), 0)
-      if (tools.length) result.push({ kind: 'toolback', created_at: call.created_at, tools, turn: currentTurn, total_ms: totalMs })
-    } else {
-      currentTurn += 1
-      const user = userInputFor(call)
-      if (user) result.push({ kind: 'user', created_at: call.created_at, message: user, turn: currentTurn })
-    }
-
-    result.push({ kind: 'loop', created_at: call.created_at, role: roleFor(call.source, call.task_id), call, turn: currentTurn })
-    previous = call
-  }
-  return result
-}
-
-const sessionStats = computed(() => {
-  const calls = modelCalls.value
-  if (!calls.length) return null
-  const first = calls[0].created_at
-  let lastEnd = first
-  let toolCount = 0
-  let costCny = null
-  let inputTokens = 0
-  let outputTokens = 0
-  let totalTokens = 0
-  for (const call of calls) {
-    lastEnd = Math.max(lastEnd, call.created_at, call.response?.created_at || 0)
-    for (const trace of call.toolResults.values()) {
-      toolCount += 1
-      lastEnd = Math.max(lastEnd, trace.created_at || 0)
-    }
-    const payload = call.response?.payload
-    if (payload?.cost_cny != null) costCny = (costCny ?? 0) + payload.cost_cny
-    if (payload?.usage) {
-      inputTokens += payload.usage.input_tokens || 0
-      outputTokens += payload.usage.output_tokens || 0
-      totalTokens += payload.usage.total_tokens ?? ((payload.usage.input_tokens || 0) + (payload.usage.output_tokens || 0))
-    }
-  }
-  return {
-    durationMs: (lastEnd - first) * 1000,
-    turnCount: timelineAll.value.at(-1)?.turn || 0,
-    callCount: calls.length,
-    toolCount,
-    costCny,
-    inputTokens,
-    outputTokens,
-    totalTokens,
-  }
-})
+const sessionStats = computed(() => buildSessionStats(
+  modelCalls.value,
+  bypassCalls.value,
+  timelineAll.value.filter((item) => item.kind === 'loop').at(-1)?.turn || 0,
+))
 
 const turnGroups = computed(() => {
   const groups = []
@@ -167,6 +104,7 @@ const turnGroups = computed(() => {
     group.items.push(item)
     let end = item.created_at
     if (item.kind === 'loop') end += (item.call.response?.payload?.duration_ms || 0) / 1000
+    if (item.kind === 'bypass') end += (item.item.payload?.duration_ms || 0) / 1000
     group.end = Math.max(group.end, end)
   }
   for (const group of groups) {
@@ -174,83 +112,25 @@ const turnGroups = computed(() => {
     group.toolCount = group.items.filter((entry) => entry.kind === 'toolback').reduce((sum, entry) => sum + entry.tools.length, 0)
     group.durationMs = (group.end - group.start) * 1000
     const loop = group.items.find((entry) => entry.kind === 'loop')
-    group.agentName = loop ? agentNameFor(loop.call.source, loop.call.task_id) : '—'
+    const bypassItem = group.items.find((entry) => entry.kind === 'bypass')
+    group.agentName = loop
+      ? agentNameFor(loop.call.source, loop.call.task_id)
+      : (bypassItem ? agentNameFor(bypassItem.item.source, bypassItem.item.task_id) : '—')
   }
   return groups
 })
 
-function resultTools(call) {
-  return toolsFor(call)
-    .filter((tool) => tool.result)
-    .map((tool) => {
-      const content = tool.result.payload?.content
-      return {
-        id: tool.id,
-        name: tool.name,
-        display: tool.display,
-        duration_ms: tool.result.payload?.duration_ms,
-        status: tool.result.payload?.status || 'success',
-        content,
-        pretty: parseMaybeJson(content),
-      }
-    })
+function userParsed(message) {
+  return parseUserContent(messageText(message))
 }
 
-const INJECTION_LABELS = { recalled_memories: '记忆召回', current_intent_state: '意图状态' }
-const INJECTION_PATTERN = /<(recalled_memories|current_intent_state)>[\s\S]*?<\/\1>/g
-
-function parseUserContent(raw) {
-  const injections = []
-  const text = raw.replace(INJECTION_PATTERN, (block) => {
-    const tag = block.slice(1, block.indexOf('>'))
-    const openTag = `<${tag}>`
-    const closeTag = `</${tag}>`
-    const content = block.slice(openTag.length, block.length - closeTag.length).trim()
-    injections.push({ label: INJECTION_LABELS[tag] || tag, content })
-    return ''
-  }).trim()
-  return { text, injections }
+function bypassPurposeLabel(purpose) {
+  return BYPASS_PURPOSE_LABELS[purpose] || purpose || '旁路调用'
 }
 
-function userInputFor(call) {
-  const messages = call.request?.payload?.messages || []
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message.role !== 'user') continue
-    const raw = typeof message.content === 'string' ? message.content : shortJson(message.content)
-    if (!raw) return null
-    const parsed = parseUserContent(raw)
-    if (!parsed.text) return null
-    return { key: `${index}:${raw}`, text: parsed.text, injections: parsed.injections }
-  }
-  return null
-}
-
-function toolsFor(call) {
-  const rows = new Map()
-  for (const tool of call.response?.payload?.tool_calls || []) {
-    rows.set(tool.tool_call_id, {
-      id: tool.tool_call_id,
-      name: tool.name,
-      arguments: tool.arguments,
-      display: tool.name,
-      runningLabel: '',
-    })
-  }
-  for (const trace of call.toolCalls) {
-    const payload = trace.payload || {}
-    rows.set(payload.tool_call_id, {
-      id: payload.tool_call_id,
-      name: payload.name,
-      arguments: payload.arguments,
-      display: payload.display || payload.name,
-      runningLabel: payload.running_label || '',
-    })
-  }
-  return [...rows.values()].map((tool) => ({
-    ...tool,
-    result: call.toolResults.get(tool.id),
-  }))
+function bypassSummary(payload) {
+  if (payload.status === 'error') return payload.error || '调用失败'
+  return previewText(payload.content, 96)
 }
 
 function fmtTs(value) {
@@ -260,14 +140,6 @@ function fmtTs(value) {
   const mm = String(date.getMinutes()).padStart(2, '0')
   const ss = String(date.getSeconds()).padStart(2, '0')
   return `${hh}:${mm}:${ss}`
-}
-
-function messageText(message) {
-  return typeof message.content === 'string' ? message.content : shortJson(message.content)
-}
-
-function userParsed(message) {
-  return parseUserContent(messageText(message))
 }
 
 function historyPreview(message) {
@@ -319,17 +191,6 @@ function callStatusLabel(call) {
   return ({ success: '成功', error: '失败', pending: '进行中' })[callStatus(call)]
 }
 
-function parseMaybeJson(content) {
-  if (typeof content !== 'string') return null
-  const trimmed = content.trim()
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2)
-  } catch {
-    return null
-  }
-}
-
 function thinkingTotal(segments) {
   return segments.reduce((sum, segment) => sum + (segment.duration_ms || 0), 0)
 }
@@ -363,14 +224,6 @@ function selectContextTab(key, index) {
 function previewText(value, max = 96) {
   if (typeof value !== 'string') return ''
   return value.length > max ? `${value.slice(0, max)}…` : value
-}
-
-function shortJson(value) {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value || '')
-  }
 }
 
 const CONSOLE_POLL = 1500
@@ -425,6 +278,7 @@ onBeforeUnmount(stopConsolePoll)
           <span class="overview-item"><span class="overview-label">对话轮次</span><span class="overview-value">{{ sessionStats.turnCount }} 轮</span></span>
           <span class="overview-item"><span class="overview-label">模型调用</span><span class="overview-value">{{ sessionStats.callCount }} 次</span></span>
           <span class="overview-item"><span class="overview-label">工具执行</span><span class="overview-value">{{ sessionStats.toolCount }} 次</span></span>
+          <span class="overview-item"><span class="overview-label">旁路调用</span><span class="overview-value">{{ sessionStats.bypassCount }} 次</span></span>
           <span class="overview-item"><span class="overview-label">总费用</span><span class="overview-value">{{ sessionStats.costCny != null ? fmtCost(sessionStats.costCny) : '未配置' }}</span></span>
           <span class="overview-item"><span class="overview-label">输入 Token</span><span class="overview-value">{{ fmtTokens(sessionStats.inputTokens) }}</span></span>
           <span class="overview-item"><span class="overview-label">输出 Token</span><span class="overview-value">{{ fmtTokens(sessionStats.outputTokens) }}</span></span>
@@ -434,14 +288,14 @@ onBeforeUnmount(stopConsolePoll)
 
       <details v-for="group in turnGroups" :key="group.turn" class="turn-group" open>
         <summary>
-          <span class="turn-index">{{ group.turn }}</span>
-          <span class="turn-title">第 {{ group.turn }} 轮对话</span>
+          <span v-if="group.turn" class="turn-index">{{ group.turn }}</span>
+          <span class="turn-title">{{ group.turn ? `第 ${group.turn} 轮对话` : '旁路调用' }}</span>
           <span class="turn-agent">{{ group.agentName }}</span>
           <span class="turn-meta">{{ fmtDuration(group.durationMs) }} · {{ fmtTs(group.start) }}</span>
           <ChevronDown class="block-caret" aria-hidden="true" />
         </summary>
         <div class="turn-items">
-          <template v-for="(item, itemIndex) in group.items" :key="`${item.kind}:${item.created_at}:${item.role?.key || item.message?.key || itemIndex}`">
+          <template v-for="(item, itemIndex) in group.items" :key="`${item.kind}:${item.created_at}:${item.role?.key || item.message?.key || item.item?.key || itemIndex}`">
             <details v-if="item.kind === 'user'" class="trace-block type-user">
               <summary>
                 <span class="block-head">
@@ -491,6 +345,38 @@ onBeforeUnmount(stopConsolePoll)
                     <pre>{{ tool.pretty ?? tool.content }}</pre>
                   </details>
                 </div>
+              </div>
+            </details>
+
+            <details v-else-if="item.kind === 'bypass'" class="trace-block type-bypass">
+              <summary>
+                <span class="block-head">
+                  <span class="block-pill">旁路调用</span>
+                  <span class="bypass-purpose">{{ bypassPurposeLabel(item.item.payload.purpose) }}</span>
+                  <span class="call-status" :class="`status-${item.item.payload.status || 'success'}`">{{ item.item.payload.status === 'error' ? '失败' : '成功' }}</span>
+                  <span v-if="item.item.payload.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.item.payload.duration_ms) }}</span>
+                  <ChevronDown :class="['block-caret', { 'end-caret': item.item.payload.duration_ms == null }]" aria-hidden="true" />
+                </span>
+                <span class="block-main">{{ bypassSummary(item.item.payload) }}</span>
+              </summary>
+
+              <div class="call-details bypass-details">
+                <section class="region">
+                  <header class="region-head">
+                    <strong>请求</strong>
+                    <small>{{ item.item.payload.model || '—' }} · 上限 {{ item.item.payload.max_tokens }} token</small>
+                  </header>
+                  <pre class="bypass-prompt">{{ item.item.payload.prompt }}</pre>
+                </section>
+
+                <section class="region">
+                  <header class="region-head">
+                    <strong>响应</strong>
+                    <small v-if="item.item.payload.usage">输入 {{ fmtTokens(item.item.payload.usage.input_tokens) }} · 输出 {{ fmtTokens(item.item.payload.usage.output_tokens) }}<template v-if="item.item.payload.cost_cny != null"> · 额度 {{ fmtCost(item.item.payload.cost_cny) }}</template></small>
+                  </header>
+                  <pre v-if="item.item.payload.status === 'error'" class="bypass-error">{{ item.item.payload.error || '调用失败' }}</pre>
+                  <pre v-else class="bypass-content">{{ item.item.payload.content || '（无输出）' }}</pre>
+                </section>
               </div>
             </details>
 
@@ -665,6 +551,15 @@ onBeforeUnmount(stopConsolePoll)
 .trace-block.type-user > summary::before { background: var(--ch-dot-user); }
 .trace-block.type-toolback > summary::before { background: var(--ch-dot-toolback); }
 .trace-block.type-loop > summary::before { background: var(--ch-dot-model); }
+.trace-block.type-bypass > summary::before { background: var(--ch-dot-bypass); }
+.type-bypass { border-color: var(--ch-border); }
+.type-bypass .block-pill { background: var(--ch-success-soft); color: var(--ch-success-text); }
+.type-bypass .block-main { color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: 400; }
+.type-bypass[open] .block-main { display: block; }
+.bypass-purpose { overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-medium); white-space: nowrap; text-overflow: ellipsis; }
+.bypass-details .region-head small { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.bypass-prompt, .bypass-content { max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
+.bypass-error { max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-danger-soft); color: var(--ch-danger-text); font-size: var(--ch-text-xs); line-height: 1.5; }
 .type-loop .block-main { color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: 400; }
 .block-pill { display: inline-flex; align-items: center; padding: var(--ch-space-1) var(--ch-space-2); border-radius: 4px; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); line-height: 1.4; white-space: nowrap; }
 .block-time { display: inline-flex; align-items: center; gap: var(--ch-space-1); color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); white-space: nowrap; }

@@ -47,13 +47,20 @@ def stub_chat_model_provider(client, model_id: str = "fake"):
 def stub_memory_service():
     """记忆服务空 stub：所有方法恒返空/空操作，供不关心记忆的测试注入。"""
     return types.SimpleNamespace(
-        recall_for=lambda agent_type, task_hint: MemoryRecall(),
+        recall_for=lambda agent_type, task_hint, scope: MemoryRecall(),
         extract=lambda session_id: None,
-        consolidate=lambda: None,
+        consolidate=lambda session_id: None,
         record_selection=lambda task_id, agent_type: None,
         record_publication=lambda task_id, agent_type: None,
         record_correction=lambda task_id, agent_type, feedback: None,
     )
+
+
+def build_bypass_caller(client, model_id: str = "fake"):
+    """真旁路调用器 + 收集轨迹的 sink，返回 (调用器, 轨迹列表) 供断言。"""
+    from chorus.domain.bypass import BypassCaller
+    entries = []
+    return BypassCaller(client, model_id, sink=entries.append), entries
 
 
 def build_compact_service(engine: Engine, summary: str = "固定摘要"):
@@ -61,5 +68,5 @@ def build_compact_service(engine: Engine, summary: str = "固定摘要"):
     from chorus.repo.provider_message import ProviderMessageRepository
     from chorus.services.compact import CompactService
 
-    llm = types.SimpleNamespace(summarize=lambda messages: summary)
+    llm = types.SimpleNamespace(summarize=lambda messages, scope: summary)
     return CompactService(ProviderMessageRepository(engine), llm)

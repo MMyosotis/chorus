@@ -43,8 +43,8 @@ class FakeSuggestionService:
     def __init__(self):
         self.calls = []
 
-    def generate(self, state, messages):
-        self.calls.append((state, messages))
+    def generate(self, state, messages, scope):
+        self.calls.append((state, messages, scope.session_id))
         return [
             {"title": "建议一", "content": "完整建议一"},
             {"title": "建议二", "content": "完整建议二"},
@@ -87,9 +87,10 @@ def test_suggest_returns_suggestions_with_context():
         {"title": "建议二", "content": "完整建议二"},
         {"title": "建议三", "content": "完整建议三"},
     ]}
-    state, received = suggestion.calls[0]
+    state, received, scope_session = suggestion.calls[0]
     assert state.topic == "城市骑行"
     assert received == messages
+    assert scope_session == "s1"
 
 
 def main():

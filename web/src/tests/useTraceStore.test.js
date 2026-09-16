@@ -6,8 +6,8 @@ vi.mock('../api.js', () => ({ fetchTraces }))
 
 const { useTraceStore } = await import('../composables/useTraceStore.js')
 
-function traceItem(createdAt, phase, messageId, taskId) {
-  return { created_at: createdAt, phase, message_id: messageId, task_id: taskId, payload: {} }
+function traceItem(createdAt, phase, messageId, taskId, source = 'supervisor', payload = {}) {
+  return { created_at: createdAt, phase, message_id: messageId, task_id: taskId, source, payload }
 }
 
 describe('useTraceStore', () => {
@@ -72,16 +72,18 @@ describe('useTraceStore', () => {
     expect(store.getTraces('s1')[2].phase).toBe('tool_call')
   })
 
-  it('pollFromServer 同时间不同来源视为不同条目', async () => {
+  it('pollFromServer 同时间不同来源或旁路用途视为不同条目', async () => {
     fetchTraces.mockResolvedValue([traceItem(1, 'model_request', 'm1', null)])
     await store.loadFromServer('s1')
 
     fetchTraces.mockResolvedValue([
       traceItem(1, 'model_request', 'm1', null),
-      traceItem(1, 'model_request', 'm1', 't1'), // 同时间但 task_id 不同
+      traceItem(1, 'model_request', 'm1', null, 'subagent'),
+      traceItem(2, 'bypass_call', null, null, 'supervisor', { purpose: 'title' }),
+      traceItem(2, 'bypass_call', null, null, 'supervisor', { purpose: 'summary' }),
     ])
     await store.pollFromServer('s1')
-    expect(store.getTraces('s1')).toHaveLength(2)
+    expect(store.getTraces('s1')).toHaveLength(4)
   })
 
   it('loadFromServer 失败时降级为空列表不抛', async () => {

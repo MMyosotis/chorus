@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from chorus.agents.supervisor import SupervisorService
+from chorus.domain.bypass import BypassScope
 from chorus.domain.events import IntentStateEvent
 from chorus.domain.intent import IntentConfirmation
 from chorus.domain.message import MessageView
@@ -118,7 +119,7 @@ def suggest_input(
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
     state = intent.get(session_id)
-    return {"suggestions": suggestion.generate(state, message.list_messages(session_id))}
+    return {"suggestions": suggestion.generate(state, message.list_messages(session_id), BypassScope(session_id=session_id))}
 
 
 def _resume_with_tool(

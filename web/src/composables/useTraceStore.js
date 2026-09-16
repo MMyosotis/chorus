@@ -45,11 +45,11 @@ export function useTraceStore() {
       try {
         const list = await fetchTraces(sessionId)
         const cur = tracesBySession[sessionId] || (tracesBySession[sessionId] = [])
-        const seen = new Set(cur.map((t) => `${t.created_at}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`))
-        for (const t of list) {
-          const key = `${t.created_at}|${t.phase}|${t.message_id || ''}|${t.task_id || ''}`
+        const seen = new Set(cur.map((trace) => `${trace.created_at}|${trace.phase}|${trace.source || ''}|${trace.message_id || ''}|${trace.task_id || ''}|${trace.payload?.purpose || ''}`))
+        for (const trace of list) {
+          const key = `${trace.created_at}|${trace.phase}|${trace.source || ''}|${trace.message_id || ''}|${trace.task_id || ''}|${trace.payload?.purpose || ''}`
           if (!seen.has(key)) {
-            cur.push(t)
+            cur.push(trace)
             seen.add(key)
           }
         }

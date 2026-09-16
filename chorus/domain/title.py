@@ -7,9 +7,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from openai import OpenAI
-
-from chorus.domain.bypass import call_once
+from chorus.domain.bypass import BypassCaller, BypassScope
 from chorus.domain.log import get_logger
 
 _logger = get_logger("domain.title")
@@ -41,11 +39,10 @@ def normalize_title(title: str, max_len: int = STORED_TITLE_MAX_LEN) -> str:
 class TitleGenerationService:
     """非流式一次调用生成短会话标题。仅负责产出文本，落库由钩子完成。"""
 
-    def __init__(self, client: OpenAI, model_id: str):
-        self._client = client
-        self._model = model_id
+    def __init__(self, bypass: BypassCaller):
+        self._bypass = bypass
 
-    def generate(self, user_text: str) -> Optional[str]:
+    def generate(self, user_text: str, scope: BypassScope) -> Optional[str]:
         if not user_text:
             return None
         prompt = (
@@ -53,7 +50,7 @@ class TitleGenerationService:
             f"用户：{user_text[:200]}"
         )
         try:
-            raw = call_once(self._client, self._model, prompt, 512)
+            raw = self._bypass.call(prompt, 512, "title", scope)
         except Exception:
             _logger.exception("title generation failed, fallback")
             return None

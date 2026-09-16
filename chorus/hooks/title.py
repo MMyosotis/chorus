@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Iterable, Optional
 
 from chorus.agents.runtime import AgentContext
+from chorus.domain.bypass import BypassScope
 from chorus.domain.events import SseEvent, TitleUpdateEvent
 from chorus.domain.message import first_user_text
 from chorus.domain.title import TitleGenerationService
@@ -31,7 +32,7 @@ class TitlePostProcessor:
         if self._session.is_title_set(ctx.session_id):
             return None
         user_text = self._first_user(ctx.session_id)
-        title = self._title.generate(user_text)
+        title = self._title.generate(user_text, BypassScope(session_id=ctx.session_id))
         if not title:
             return None
         if not self._session.set_title(ctx.session_id, title):

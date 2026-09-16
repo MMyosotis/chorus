@@ -103,7 +103,7 @@ def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, conte
     hooks.register("PostToolUse", trace.on_tool_result)
     loop = AgentLoop(hooks, disp)
     if aside_gen is None:
-        aside_gen = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
+        aside_gen = types.SimpleNamespace(generate=lambda agent_type, invoke, scope: "")
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo, content_repo,
         disp, stub_chat_model_provider(client), loop, aside_gen,
@@ -322,7 +322,7 @@ def test_progress_aside_written_on_entry():
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="idea")
     body = _idea_md()
-    aside_gen = types.SimpleNamespace(generate=lambda agent_type, invoke: "打算用光线串起一杯咖啡的时间")
+    aside_gen = types.SimpleNamespace(generate=lambda agent_type, invoke, scope: "打算用光线串起一杯咖啡的时间")
     client = FakeClient([FakeStream([({"content": body}, "stop")])])
     sub = _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo, client, aside_gen=aside_gen)
     sub.run("t1")

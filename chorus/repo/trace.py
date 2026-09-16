@@ -10,6 +10,7 @@ from typing import cast
 from sqlalchemy import delete, select
 
 from chorus.domain.trace import (
+    BypassCall,
     MessageTrace,
     ModelRequest,
     ModelResponse,
@@ -28,6 +29,7 @@ _PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
     TracePhase.MODEL_RESPONSE: ModelResponse,
     TracePhase.TOOL_CALL: TraceToolCall,
     TracePhase.TOOL_RESULT: TraceToolResult,
+    TracePhase.BYPASS_CALL: BypassCall,
 }
 
 

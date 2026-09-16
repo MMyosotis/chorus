@@ -1,9 +1,11 @@
-"""TraceRepository 多来源 smoke test：来源与任务写入、按会话/任务聚合、四种 phase 载荷往返。"""
+"""TraceRepository 多来源 smoke test：来源与任务写入、按会话/任务聚合、各 phase 载荷往返。"""
 from __future__ import annotations
 
 from chorus.domain.trace import (
+    BypassCall,
     ModelRequest,
     ModelResponse,
+    ModelUsage,
     ThinkingSegment,
     TraceEntry,
     TracePhase,
@@ -76,7 +78,7 @@ def test_batch_aggregate_groups_by_message():
 
 
 def test_payload_round_trip_all_phases():
-    """四种 phase 的 payload 入库后读回，类型与字段全保留。"""
+    """五种 phase 的 payload 入库后读回，类型与字段全保留。"""
     engine = _setup()
     repo = TraceRepository(engine)
     cases = [
@@ -88,6 +90,10 @@ def test_payload_round_trip_all_phases():
                                              display="d", running_label="跑")),
         (TracePhase.TOOL_RESULT, TraceToolResult(tool_call_id="c", name="n",
                                                  content="r", duration_ms=7)),
+        (TracePhase.BYPASS_CALL, BypassCall(
+            purpose="title", model="m", prompt="p", max_tokens=512,
+            content="标题", usage=ModelUsage(input_tokens=3, output_tokens=5, total_tokens=8),
+            cost_cny=0.0001)),
     ]
     for i, (phase, payload) in enumerate(cases):
         repo.add(TraceEntry(session_id="s1", phase=phase, created_at=float(i), payload=payload))
@@ -99,10 +105,25 @@ def test_payload_round_trip_all_phases():
         assert entry.payload == expected
 
 
+def test_bypass_call_row_keeps_source_and_task_id():
+    """旁路轨迹行归属发起方与任务，不带消息标识。"""
+    engine = _setup()
+    repo = TraceRepository(engine)
+    repo.add(TraceEntry(
+        session_id="s1", task_id="t1", source="subagent", phase=TracePhase.BYPASS_CALL,
+        created_at=0.0, payload=BypassCall(purpose="aside", model="m", prompt="p", max_tokens=512),
+    ))
+    entry = repo.list_by_session("s1")[0]
+    assert entry.message_id is None
+    assert entry.task_id == "t1"
+    assert entry.source == "subagent"
+
+
 def main():
     test_add_with_source_and_task_id()
     test_batch_aggregate_groups_by_message()
     test_payload_round_trip_all_phases()
+    test_bypass_call_row_keeps_source_and_task_id()
     print("\n全部用例通过")
 
 

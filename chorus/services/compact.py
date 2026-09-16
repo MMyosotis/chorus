@@ -8,6 +8,7 @@ import time
 import uuid6
 from typing import Optional
 
+from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import (
     COMPACT_THRESHOLD_TOKENS,
     TOOL_PLACEHOLDER,
@@ -61,7 +62,7 @@ class CompactService:
         """摘要整段覆写现场表，落库后现场只剩一条摘要行。"""
         if not rows:
             return None
-        summary = self._llm.summarize(rows)
+        summary = self._llm.summarize(rows, BypassScope(session_id=session_id))
         if not summary:
             return None
         row = UserMessage(

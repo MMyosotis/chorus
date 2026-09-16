@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from openai import OpenAI
-
-from chorus.domain.bypass import call_once
+from chorus.domain.bypass import BypassCaller, BypassScope
 from chorus.domain.log import get_logger
 from chorus.domain.message import Message
 
@@ -27,16 +25,15 @@ _SUMMARY_INSTRUCTION = (
 class SummaryGenerationService:
     """非流式一次调用生成历史摘要，失败返 None 由调用方降级。"""
 
-    def __init__(self, client: OpenAI, model_id: str):
-        self._client = client
-        self._model = model_id
+    def __init__(self, bypass: BypassCaller):
+        self._bypass = bypass
 
-    def summarize(self, messages: list[Message]) -> Optional[str]:
+    def summarize(self, messages: list[Message], scope: BypassScope) -> Optional[str]:
         lines = [msg.to_history_line() for msg in messages]
         conversation = "\n".join(lines)[:_SUMMARY_INPUT_MAX_CHARS]
         prompt = f"{_SUMMARY_INSTRUCTION}\n\n{conversation}"
         try:
-            return call_once(self._client, self._model, prompt, _SUMMARY_MAX_TOKENS)
+            return self._bypass.call(prompt, _SUMMARY_MAX_TOKENS, "summary", scope)
         except Exception:
             _logger.exception("compact summary failed")
             return None

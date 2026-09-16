@@ -10,6 +10,7 @@ from typing import Any, Optional, cast
 from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
 from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
+from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import apply_micro
 from chorus.domain.message import (
     AssistantMessage,
@@ -205,11 +206,12 @@ class SubAgentService:
             return
 
         invoke = self._build_invoke(task, content)
-        self._progress.set_aside(task.id, self._aside_gen.generate(task.agent_type, invoke))
+        scope = BypassScope(task.session_id, task_id=task.id, source="subagent")
+        self._progress.set_aside(task.id, self._aside_gen.generate(task.agent_type, invoke, scope))
         self._progress.set_composing_label(task.id, AGENT_PROFILES[task.agent_type].composing_label)
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS[task.agent_type])
-        memory = self._prepare_memory(task, invoke)
+        memory = self._prepare_memory(task, invoke, scope)
         ctx = AgentContext(
             session_id=task.session_id,
             source="subagent",
@@ -234,9 +236,9 @@ class SubAgentService:
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))
 
-    def _prepare_memory(self, task, invoke) -> MemoryRecall:
+    def _prepare_memory(self, task, invoke, scope: BypassScope) -> MemoryRecall:
         """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
-        return self._memory.recall_for(task.agent_type, invoke)
+        return self._memory.recall_for(task.agent_type, invoke, scope)
 
     def _build_invoke(self, task, content) -> str:
         prior = self._artifacts_repo.load(task.id)

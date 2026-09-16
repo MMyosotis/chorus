@@ -28,6 +28,10 @@ class TraceService:
         ))
         return created_at
 
+    def add_entry(self, entry: TraceEntry) -> None:
+        """落一条调用方已组装完的轨迹行,时间戳由调用方打。"""
+        self._trace_repo.add(entry)
+
     def list_traces(self, session_id: str) -> list[TraceEntry]:
         return self._trace_repo.list_by_session(session_id)
 

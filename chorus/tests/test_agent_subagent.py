@@ -128,7 +128,7 @@ def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_rep
     _provider = stub_chat_model_provider(fake_client)
     loop = AgentLoop(hooks, tool_dispatcher)
     if status_gen is None:
-        status_gen = types.SimpleNamespace(generate=lambda agent_type, invoke: "")
+        status_gen = types.SimpleNamespace(generate=lambda agent_type, invoke, scope: "")
     progress_repo = TaskProgressRepository(engine)
     return SubAgentService(
         msg_svc, task_repo, art_repo, progress_repo,

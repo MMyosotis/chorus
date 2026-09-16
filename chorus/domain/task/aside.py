@@ -1,9 +1,7 @@
 """运行期 agent 旁白:读任务说明调小模型生成一句进行态描述,失败兜默认文案。"""
 from __future__ import annotations
 
-from openai import OpenAI
-
-from chorus.domain.bypass import call_once
+from chorus.domain.bypass import BypassCaller, BypassScope
 from chorus.domain.log import get_logger
 
 _logger = get_logger("domain.task.aside")
@@ -26,11 +24,10 @@ _DEFAULT_ASIDE = {
 class AsideGenerator:
     """基于任务说明生成一句任务级进行态描述,失败兜默认文案。"""
 
-    def __init__(self, client: OpenAI, model_id: str):
-        self._client = client
-        self._model = model_id
+    def __init__(self, bypass: BypassCaller):
+        self._bypass = bypass
 
-    def generate(self, agent_type: str, invoke: str) -> str:
+    def generate(self, agent_type: str, invoke: str, scope: BypassScope) -> str:
         fallback = _DEFAULT_ASIDE.get(agent_type, "我正在准备中")
         role = _ROLE_HINT.get(agent_type, agent_type)
         prompt = (
@@ -39,7 +36,7 @@ class AsideGenerator:
             f"{invoke[:500]}"
         )
         try:
-            raw = call_once(self._client, self._model, prompt, 512)
+            raw = self._bypass.call(prompt, 512, "aside", scope)
         except Exception:
             _logger.exception("aside generation failed, fallback")
             return fallback

@@ -23,6 +23,7 @@ from chorus.config import (
     LOG_RETENTION_DAYS,
 )
 from chorus.agents.chat_model import ChatModelProvider
+from chorus.domain.bypass import BypassCaller
 from chorus.domain.compact import SummaryGenerationService
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import setup_logging
@@ -88,21 +89,27 @@ def create_app() -> FastAPI:
     chat_models = ChatModelProvider(settings_service)
     # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理 / 历史摘要 / 输入建议,不随用户当前对话设置变动
     bypass_entry = chat_models.bypass_entry()
+    bypass_caller = BypassCaller(
+        bypass_entry.client,
+        bypass_entry.model_id,
+        sink=trace_service.add_entry,
+        cost_fn=bypass_entry.pricing.cost_cny if bypass_entry.pricing else None,
+    )
     compact_service = CompactService(
         provider_msg_repo,
-        SummaryGenerationService(bypass_entry.client, bypass_entry.model_id),
+        SummaryGenerationService(bypass_caller),
     )
     message_service = MessageService(msg_repo, provider_msg_repo, trace_service, compact_service)
     intent_state_service = IntentStateService(intent_repo, intent_confirmation_repo, session_service)
     option_repo = OptionPromptRepository(engine)
     option_service = OptionPromptService(option_repo, session_service)
 
-    title_service = TitleGenerationService(bypass_entry.client, bypass_entry.model_id)
-    suggestion_service = SuggestionGenerationService(bypass_entry.client, bypass_entry.model_id)
-    aside_generator = AsideGenerator(bypass_entry.client, bypass_entry.model_id)
+    title_service = TitleGenerationService(bypass_caller)
+    suggestion_service = SuggestionGenerationService(bypass_caller)
+    aside_generator = AsideGenerator(bypass_caller)
 
     memory_repo = CreatorMemoryRepository(engine)
-    memory_llm = MemoryLLMService(bypass_entry.client, bypass_entry.model_id)
+    memory_llm = MemoryLLMService(bypass_caller)
     memory_service = MemoryService(
         memory_repo, memory_llm, settings_service, msg_repo, task_artifacts_repo,
     )
