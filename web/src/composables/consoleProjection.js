@@ -1,6 +1,6 @@
 export const BYPASS_PURPOSE_LABELS = {
   title: '生成标题',
-  summary: '上下文摘要',
+  summary: '历史摘要',
   suggestion: '输入建议',
   aside: '任务旁白',
   memory_extract: '记忆提取',

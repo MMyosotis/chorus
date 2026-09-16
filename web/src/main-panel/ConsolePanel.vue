@@ -128,11 +128,6 @@ function bypassPurposeLabel(purpose) {
   return BYPASS_PURPOSE_LABELS[purpose] || purpose || '旁路调用'
 }
 
-function bypassSummary(payload) {
-  if (payload.status === 'error') return payload.error || '调用失败'
-  return previewText(payload.content, 96)
-}
-
 function fmtTs(value) {
   if (!value) return ''
   const date = new Date(value * 1000)
@@ -357,7 +352,14 @@ onBeforeUnmount(stopConsolePoll)
                   <span v-if="item.item.payload.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.item.payload.duration_ms) }}</span>
                   <ChevronDown :class="['block-caret', { 'end-caret': item.item.payload.duration_ms == null }]" aria-hidden="true" />
                 </span>
-                <span class="block-main">{{ bypassSummary(item.item.payload) }}</span>
+                <span class="call-metrics">
+                  <span class="call-model"><span>模型：{{ item.item.payload.model || '—' }}</span><span>思考：—</span></span>
+                  <span class="call-usage">
+                    <span>输入：{{ item.item.payload.usage ? fmtTokens(item.item.payload.usage.input_tokens) : '—' }}</span>
+                    <span>输出：{{ item.item.payload.usage ? fmtTokens(item.item.payload.usage.output_tokens) : '—' }}</span>
+                    <span>额度：{{ item.item.payload.cost_cny != null ? fmtCost(item.item.payload.cost_cny) : '未配置' }}</span>
+                  </span>
+                </span>
               </summary>
 
               <div class="call-details bypass-details">
@@ -553,10 +555,8 @@ onBeforeUnmount(stopConsolePoll)
 .trace-block.type-loop > summary::before { background: var(--ch-dot-model); }
 .trace-block.type-bypass > summary::before { background: var(--ch-dot-bypass); }
 .type-bypass { border-color: var(--ch-border); }
-.type-bypass .block-pill { background: var(--ch-success-soft); color: var(--ch-success-text); }
-.type-bypass .block-main { color: var(--ch-text-muted); font-size: var(--ch-text-xs); font-weight: 400; }
-.type-bypass[open] .block-main { display: block; }
-.bypass-purpose { overflow: hidden; color: var(--ch-text-secondary); font-size: var(--ch-text-xs); font-weight: var(--ch-font-medium); white-space: nowrap; text-overflow: ellipsis; }
+.type-bypass .block-pill, .bypass-purpose { background: var(--ch-muted-gradient); color: var(--ch-text-secondary); }
+.bypass-purpose { display: inline-flex; min-height: 24px; align-items: center; overflow: hidden; padding: 0 var(--ch-space-2); border-radius: 4px; font-size: var(--ch-text-xs); font-weight: var(--ch-font-semibold); line-height: 1.4; white-space: nowrap; text-overflow: ellipsis; }
 .bypass-details .region-head small { flex: 1; min-width: 0; overflow: hidden; color: var(--ch-text-muted); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .bypass-prompt, .bypass-content { max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
 .bypass-error { max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-danger-soft); color: var(--ch-danger-text); font-size: var(--ch-text-xs); line-height: 1.5; }
