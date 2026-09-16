@@ -18,15 +18,16 @@ class TraceService:
 
     def add_trace(
             self, *, session_id: str, phase: TracePhase, payload: TracePayload,
-            message_id: Optional[str] = None, task_id: Optional[str] = None, source: str = "supervisor"
+            message_id: Optional[str] = None, task_id: Optional[str] = None, source: str = "supervisor",
+            created_at: Optional[float] = None,
     ) -> float:
-        """落一条轨迹行，时间由本层打戳。返回时间戳供调用方事件复用以对齐。"""
-        created_at = time.time()
+        """落一条轨迹行，可复用业务事件时间。"""
+        trace_time = created_at if created_at is not None else time.time()
         self._trace_repo.add(TraceEntry(
             id=None, session_id=session_id, message_id=message_id, task_id=task_id,
-            source=source, phase=phase, created_at=created_at, payload=payload,
+            source=source, phase=phase, created_at=trace_time, payload=payload,
         ))
-        return created_at
+        return trace_time
 
     def add_entry(self, entry: TraceEntry) -> None:
         """落一条调用方已组装完的轨迹行,时间戳由调用方打。"""

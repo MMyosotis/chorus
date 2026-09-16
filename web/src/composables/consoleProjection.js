@@ -70,18 +70,41 @@ export function buildBypassCalls(traces) {
     .sort((a, b) => a.created_at - b.created_at)
 }
 
-export function buildTimeline(calls, bypassCalls, roleFor) {
+export function buildUserInputs(traces) {
+  return traces
+    .filter((trace) => trace.phase === 'user_input')
+    .map((trace) => {
+      const key = trace.message_id || `user:${trace.created_at}`
+      return {
+        created_at: trace.created_at || 0,
+        source: trace.source || 'supervisor',
+        message: { key, ...parseUserContent(trace.payload?.content || '') },
+      }
+    })
+    .sort((a, b) => a.created_at - b.created_at)
+}
+
+export function buildTimeline(calls, bypassCalls, userInputs, roleFor) {
   const events = []
   for (const call of calls) events.push({ at: call.created_at || 0, call })
   for (const item of bypassCalls) events.push({ at: item.created_at, bypass: item })
+  for (const item of userInputs) events.push({ at: item.created_at, user: item })
   events.sort((a, b) => a.at - b.at || (a.call ? -1 : 1))
 
   const result = []
   const pendingBypass = []
   let previous = null
   let currentTurn = 0
+  let explicitUserPending = false
 
   for (const event of events) {
+    if (event.user) {
+      currentTurn += 1
+      explicitUserPending = true
+      result.push({ kind: 'user', created_at: event.at, message: event.user.message, turn: currentTurn })
+      continue
+    }
+
     if (event.bypass) {
       const item = { kind: 'bypass', created_at: event.at, item: event.bypass, turn: currentTurn }
       if (currentTurn) result.push(item)
@@ -97,12 +120,15 @@ export function buildTimeline(calls, bypassCalls, roleFor) {
       const totalMs = tools.reduce((sum, tool) => sum + (tool.duration_ms || 0), 0)
       if (tools.length) result.push({ kind: 'toolback', created_at: call.created_at, tools, turn: currentTurn, total_ms: totalMs })
     } else {
-      currentTurn += 1
+      if (!explicitUserPending) {
+        currentTurn += 1
+        const user = userInputFor(call)
+        if (user) result.push({ kind: 'user', created_at: call.created_at, message: user, turn: currentTurn })
+      }
       for (const item of pendingBypass) result.push({ ...item, turn: currentTurn })
       pendingBypass.length = 0
-      const user = userInputFor(call)
-      if (user) result.push({ kind: 'user', created_at: call.created_at, message: user, turn: currentTurn })
     }
+    explicitUserPending = false
 
     result.push({ kind: 'loop', created_at: call.created_at, role: roleFor(call.source, call.task_id), call, turn: currentTurn })
     previous = call

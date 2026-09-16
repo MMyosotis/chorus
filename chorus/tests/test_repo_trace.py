@@ -11,6 +11,7 @@ from chorus.domain.trace import (
     TracePhase,
     TraceToolCall,
     TraceToolResult,
+    UserInput,
 )
 from chorus.repo.trace import TraceRepository
 from chorus.tests._helpers import fresh_engine, seed_session
@@ -78,10 +79,11 @@ def test_batch_aggregate_groups_by_message():
 
 
 def test_payload_round_trip_all_phases():
-    """五种 phase 的 payload 入库后读回，类型与字段全保留。"""
+    """六种 phase 的 payload 入库后读回，类型与字段全保留。"""
     engine = _setup()
     repo = TraceRepository(engine)
     cases = [
+        (TracePhase.USER_INPUT, UserInput(content="hi")),
         (TracePhase.MODEL_REQUEST, _request()),
         (TracePhase.MODEL_RESPONSE, ModelResponse(
             content="hi", finish_reason="stop",

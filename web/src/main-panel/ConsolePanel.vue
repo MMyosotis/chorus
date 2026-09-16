@@ -7,6 +7,7 @@ import {
   buildModelCalls,
   buildSessionStats,
   buildTimeline,
+  buildUserInputs,
   messageText,
   parseUserContent,
   shortJson,
@@ -49,6 +50,8 @@ const modelCalls = computed(() => buildModelCalls(traces.value))
 
 const bypassCalls = computed(() => buildBypassCalls(traces.value))
 
+const userInputs = computed(() => buildUserInputs(traces.value))
+
 const toolMetaById = computed(() => {
   const meta = new Map()
   for (const call of modelCalls.value) {
@@ -81,11 +84,16 @@ const visibleBypass = computed(() => {
   return bypassCalls.value.filter((call) => roleFor(call.source, call.task_id).key === activeAgent.value)
 })
 
-const timelineAll = computed(() => buildTimeline(modelCalls.value, bypassCalls.value, roleFor))
+const visibleUserInputs = computed(() => {
+  if (activeAgent.value === 'all') return userInputs.value
+  return userInputs.value.filter((item) => roleFor(item.source, null).key === activeAgent.value)
+})
+
+const timelineAll = computed(() => buildTimeline(modelCalls.value, bypassCalls.value, userInputs.value, roleFor))
 
 const timeline = computed(() => {
   if (activeAgent.value === 'all') return timelineAll.value
-  return buildTimeline(visibleCalls.value, visibleBypass.value, roleFor)
+  return buildTimeline(visibleCalls.value, visibleBypass.value, visibleUserInputs.value, roleFor)
 })
 
 const sessionStats = computed(() => buildSessionStats(

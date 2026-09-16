@@ -5,6 +5,7 @@ import {
   buildModelCalls,
   buildSessionStats,
   buildTimeline,
+  buildUserInputs,
 } from '../composables/consoleProjection.js'
 
 function requestTrace(at, messageId, messages) {
@@ -17,6 +18,10 @@ function responseTrace(at, messageId, extra = {}) {
 
 function bypassTrace(at, purpose, extra = {}) {
   return { phase: 'bypass_call', created_at: at, message_id: null, source: 'supervisor', task_id: null, payload: { purpose, model: 'm', prompt: 'p', max_tokens: 512, status: 'success', ...extra } }
+}
+
+function userTrace(at, content = '问') {
+  return { phase: 'user_input', created_at: at, message_id: `u${at}`, source: 'supervisor', payload: { content } }
 }
 
 const roleFor = (source, taskId) => ({ key: `${source}:${taskId || ''}`, label: source })
@@ -50,9 +55,9 @@ test('buildTimeline 首轮前的旁路并入第一轮不占轮次', () => {
     responseTrace(3, 'm1'),
   ])
   const bypasses = buildBypassCalls([bypassTrace(1, 'memory_recall')])
-  const timeline = buildTimeline(calls, bypasses, roleFor)
+  const timeline = buildTimeline(calls, bypasses, [], roleFor)
 
-  expect(timeline.map((item) => item.kind)).toEqual(['bypass', 'user', 'loop'])
+  expect(timeline.map((item) => item.kind)).toEqual(['user', 'bypass', 'loop'])
   expect(new Set(timeline.map((item) => item.turn))).toEqual(new Set([1]))
 })
 
@@ -67,7 +72,7 @@ test('buildTimeline 轮间与收尾后的旁路继承当前轮次', () => {
     bypassTrace(3.5, 'summary'),
     bypassTrace(6, 'title'),
   ])
-  const timeline = buildTimeline(calls, bypasses, roleFor)
+  const timeline = buildTimeline(calls, bypasses, [], roleFor)
 
   const summaryItem = timeline.find((item) => item.kind === 'bypass' && item.item.payload.purpose === 'summary')
   const titleItem = timeline.find((item) => item.kind === 'bypass' && item.item.payload.purpose === 'title')
@@ -76,9 +81,27 @@ test('buildTimeline 轮间与收尾后的旁路继承当前轮次', () => {
 })
 
 test('buildTimeline 只有旁路轨迹时不增加对话轮次', () => {
-  const timeline = buildTimeline([], buildBypassCalls([bypassTrace(1, 'title')]), roleFor)
+  const timeline = buildTimeline([], buildBypassCalls([bypassTrace(1, 'title')]), [], roleFor)
   expect(timeline).toHaveLength(1)
   expect(timeline[0]).toMatchObject({ kind: 'bypass', turn: 0 })
+})
+
+test('buildTimeline 使用独立用户输入的真实时间', () => {
+  const traces = [
+    userTrace(1, '真实输入'),
+    bypassTrace(2, 'memory_recall'),
+    requestTrace(3, 'm1', [{ role: 'user', content: '真实输入' }]),
+    responseTrace(4, 'm1'),
+  ]
+  const timeline = buildTimeline(
+    buildModelCalls(traces),
+    buildBypassCalls(traces),
+    buildUserInputs(traces),
+    roleFor,
+  )
+
+  expect(timeline.map((item) => item.kind)).toEqual(['user', 'bypass', 'loop'])
+  expect(timeline[0]).toMatchObject({ created_at: 1, message: { text: '真实输入' } })
 })
 
 test('buildSessionStats 折算旁路用量与费用', () => {

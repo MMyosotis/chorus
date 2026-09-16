@@ -19,15 +19,17 @@ from chorus.domain.events import (
     MessageStartEvent,
     SseEvent,
     SuspendEvent,
+    TraceEvent,
 )
 from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import is_context_overflow
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
-from chorus.domain.message import ToolCallSpec
+from chorus.domain.message import ToolCallSpec, UserMessage
 from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
+from chorus.domain.trace import TracePhase, UserInput
 from chorus.hooks import HookRegistry
 from chorus.services.intent_state import IntentStateService
 from chorus.services.memory import MemoryService
@@ -35,6 +37,7 @@ from chorus.services.compact import CompactService
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
+from chorus.services.trace import TraceService
 from chorus.tools import ToolDispatch
 from chorus.tools.framework import Suspend
 
@@ -164,6 +167,7 @@ class SupervisorService:
         skill_loader: SkillLoader,
         memory_service: MemoryService,
         compact_service: CompactService,
+        trace_service: TraceService,
     ):
         self._session = session_service
         self._message = message_service
@@ -176,6 +180,7 @@ class SupervisorService:
         self._skill = skill_loader
         self._memory = memory_service
         self._compact = compact_service
+        self._trace = trace_service
 
     def stream(
         self, session_id: str, user_message: str,
@@ -186,9 +191,28 @@ class SupervisorService:
             yield reject
             return
 
-        self._message.append_user_message(session_id, user_message)
+        message = self._message.append_user_message(session_id, user_message)
         self._session.touch(session_id)
+        yield from self._emit_user_input(message)
         yield from self._run(session_id, user_message)
+
+    def _emit_user_input(self, message: UserMessage) -> Iterator[SseEvent]:
+        """落用户输入轨迹并发对应事件，复用消息时间戳保证排在召回之前。"""
+        payload = UserInput(content=message.content)
+        created_at = self._trace.add_trace(
+            session_id=message.session_id,
+            message_id=message.id,
+            phase=TracePhase.USER_INPUT,
+            payload=payload,
+            created_at=message.created_at,
+        )
+        yield TraceEvent(
+            phase=TracePhase.USER_INPUT,
+            message_id=message.id,
+            created_at=created_at,
+            payload=payload.model_dump(),
+        )
+
 
     def resume(self, session_id: str, tool_name: str, result_text: str) -> Iterator[SseEvent]:
         """解开挂起 loop 的通用原语：改写指定工具结果后续跑。"""

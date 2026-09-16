@@ -19,12 +19,14 @@ from chorus.domain.trace import (
     TracePayload,
     TraceToolCall,
     TraceToolResult,
+    UserInput,
     aggregate_trace,
 )
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.models import TraceRecord
 
 _PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
+    TracePhase.USER_INPUT: UserInput,
     TracePhase.MODEL_REQUEST: ModelRequest,
     TracePhase.MODEL_RESPONSE: ModelResponse,
     TracePhase.TOOL_CALL: TraceToolCall,

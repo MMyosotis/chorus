@@ -104,7 +104,7 @@ def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_s
     sup = SupervisorService(
         session_svc, msg_svc, hooks, entry,
         task_svc, tool_dispatcher, loop, intent_state, skill_loader,
-        stub_memory_service(), build_compact_service(engine),
+        stub_memory_service(), build_compact_service(engine), trace_svc,
     )
     return sup, intent_state
 
@@ -130,11 +130,15 @@ def test_only_reply():
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "hi"))
     types_seq = [e.type for e in events]
-    assert types_seq[0] == "message_start"
+    assert types_seq[:2] == ["trace", "message_start"]
     assert "token" in types_seq
     assert types_seq[-1] == "done"
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant"]
+    traces = trace_svc.list_traces(s.id)
+    assert traces[0].phase.value == "user_input"
+    assert traces[0].message_id == msgs[0].id
+    assert traces[0].created_at == msgs[0].created_at
 
 
 def test_truncation_exhausted_falls_to_placeholder():

@@ -140,6 +140,7 @@ def create_app() -> FastAPI:
         tool_dispatcher, agent_loop, intent_state_service, skill_loader,
         memory_service=memory_service,
         compact_service=compact_service,
+        trace_service=trace_service,
     )
     lease_guard = LeaseGuard(task_repo, task_artifacts_repo, task_content_repo, task_progress_repo)
     subagent_service = SubAgentService(

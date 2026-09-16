@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class TracePhase(str, Enum):
     """轨迹行阶段，载荷结构由阶段决定。"""
 
+    USER_INPUT = "user_input"
     MODEL_REQUEST = "model_request"
     MODEL_RESPONSE = "model_response"
     TOOL_CALL = "tool_call"
@@ -65,6 +66,12 @@ class ModelRequest(_PayloadBase):
     model: str
     messages: list[dict]
     tools: list[dict]
+
+
+class UserInput(_PayloadBase):
+    """用户真实输入的原始内容。"""
+
+    content: str
 
 
 class ToolCallSummary(_PayloadBase):
@@ -125,6 +132,7 @@ class BypassCall(_PayloadBase):
 
 
 TracePayload = Union[
+    UserInput,
     ModelRequest,
     ModelResponse,
     TraceToolCall,

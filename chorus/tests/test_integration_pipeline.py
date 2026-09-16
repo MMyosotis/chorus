@@ -142,7 +142,7 @@ def _build_assembly():
         session_svc, msg_svc, hooks,
         stub_chat_model_provider(sup_client), task_service, tool_dispatcher, agent_loop,
         intent_state, skill_loader,
-        stub_memory_service(), build_compact_service(engine),
+        stub_memory_service(), build_compact_service(engine), trace_svc,
     )
 
     # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
