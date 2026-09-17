@@ -21,7 +21,7 @@ def _args(topic="夏日晚风", steps=None, intent_extras=None):
     if steps is None:
         steps = [
             {"agent_type": "idea", "deps": [], "focus": "选题"},
-            {"agent_type": "finalize", "deps": [0], "focus": "汇总"},
+            {"agent_type": "finalize", "deps": [0], "focus": "排版"},
         ]
     intent = {"topic": topic, "style": "轻松", "image_count": 2}
     if intent_extras:

@@ -5,7 +5,7 @@ export const ROLE_LABELS = {
   idea: '选题官',
   script: '文案官',
   image: '配图官',
-  finalize: '汇总官',
+  finalize: '排版官',
 }
 
 export const ROLE_INITIALS = {
@@ -13,7 +13,7 @@ export const ROLE_INITIALS = {
   idea: '选',
   script: '文',
   image: '视',
-  finalize: '汇',
+  finalize: '排',
 }
 
 export const ROLE_ORDER = ['idea', 'script', 'image', 'finalize']
@@ -22,21 +22,21 @@ export const ROLE_TAG = {
   idea: '选题洞察',
   script: '文案撰写',
   image: '配图生成',
-  finalize: '成品整合',
+  finalize: '成品排版',
 }
 
 export const ROLE_FULL = {
   idea: '选题官',
   script: '文案官',
   image: '配图官',
-  finalize: '汇总官',
+  finalize: '排版官',
 }
 
 export const ROLE_SHORT = {
   idea: '选题',
   script: '文案',
   image: '配图',
-  finalize: '汇总',
+  finalize: '排版',
 }
 
 export function stepOf(agentType) {

@@ -171,7 +171,7 @@ def parse_image_md(body: str) -> dict[str, Any]:
 
 @_abandon_aware
 def parse_postcard_md(body: str) -> dict[str, Any]:
-    """解析汇总官的成品 markdown 与资源引用元数据。"""
+    """解析排版官的成品 markdown 与资源引用元数据。"""
     front_lines, rest = _split_front_matter(body)
     preview = _take_field(front_lines, "preview_ref")
     stylesheet = _take_field(front_lines, "stylesheet_ref")

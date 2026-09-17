@@ -11,13 +11,13 @@ _ROLE_HINT = {
     "idea": "选题官",
     "script": "文案官",
     "image": "配图官",
-    "finalize": "汇总官",
+    "finalize": "排版官",
 }
 _DEFAULT_ASIDE = {
     "idea": "我正在调研候选选题",
     "script": "我正在撰写正文",
     "image": "我正在生成配图",
-    "finalize": "我正在整合成品",
+    "finalize": "我正在排版成品",
 }
 
 

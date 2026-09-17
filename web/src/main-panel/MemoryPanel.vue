@@ -14,7 +14,7 @@ const VISIBLE_TO_OPTIONS = [
   { value: 'idea', avatar: 'idea', label: '选题官' },
   { value: 'script', avatar: 'script', label: '文案官' },
   { value: 'image', avatar: 'image', label: '配图官' },
-  { value: 'finalize', avatar: 'finalize', label: '汇总官' },
+  { value: 'finalize', avatar: 'finalize', label: '排版官' },
 ]
 const PLATFORM_OPTIONS = ['博客', '小红书']
 const LEGACY_PLATFORM_MAP = { '网页博客': '博客', 'web-blog': '博客' }

@@ -1,6 +1,6 @@
 """子 agent 进度快照写入位点 + 运行租约终态门控。
 
-进度快照一任务一行覆盖更新；四个终态写入点（入口、自纠、失败、汇总）拦截陈旧工作线程。
+进度快照一任务一行覆盖更新；四个终态写入点（入口、自纠、失败、排版）拦截陈旧工作线程。
 """
 from __future__ import annotations
 
@@ -204,7 +204,7 @@ def test_lease_drift_at_max_steps_skips_fail():
 
 
 def test_lease_takeover_prevents_stale_finalize():
-    """汇总轮归属漂移 -> 租约拦下：不翻待复核、不落产物。"""
+    """排版轮归属漂移 -> 租约拦下：不翻待复核、不落产物。"""
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     client = _SideClient([
@@ -232,7 +232,7 @@ def test_lease_takeover_prevents_stale_failed_on_exception():
 
 
 def test_finalize_drift_writes_no_terminal():
-    """汇总轮被取消 -> 租约校验状态非 running 即早退：不落产物。"""
+    """排版轮被取消 -> 租约校验状态非 running 即早退：不落产物。"""
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     task_repo.transition("t1", "cancelled")

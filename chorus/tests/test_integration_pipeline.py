@@ -1,6 +1,6 @@
-"""多智能体端到端 4 链路 smoke：建图 → 子 agent 待复核 → 确认完成 → 派发汇总成品。
+"""多智能体端到端 4 链路 smoke：建图 → 子 agent 待复核 → 确认完成 → 派发排版成品。
 
-FakeClient 模拟 LLM，不经真实 API / HTTP；scheduler 仅手调一次，其派发的汇总 worker 是唯一异步点。
+FakeClient 模拟 LLM，不经真实 API / HTTP；scheduler 仅手调一次，其派发的排版 worker 是唯一异步点。
 """
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ def _build_assembly():
         stub_memory_service(), build_compact_service(engine), trace_svc,
     )
 
-    # subagent：选题 + 汇总两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
+    # subagent：选题 + 排版两轮产出按执行顺序入队（共享同一 FakeClient 队列）。
     sub_client = FakeClient([
         FakeStream([({"content": _idea_content()}, "stop")]),
         FakeStream([({"content": _finalize_content()}, "stop")]),
@@ -196,7 +196,7 @@ def test_end_to_end_pipeline():
     sub.run(idea.id)
     assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM
 
-    # 确认前：汇总仍被依赖阻塞（选题待复核≠已完成）
+    # 确认前：排版仍被依赖阻塞（选题待复核≠已完成）
     assert not finalize.can_schedule([task_repo.get(idea.id)])
 
     # —— 链路 3：confirm idea → finished ——
@@ -205,15 +205,15 @@ def test_end_to_end_pipeline():
 
     # —— 链路 4：scheduler 派发 finalize（dep 已解除）——
     assert finalize.can_schedule([task_repo.get(idea.id)])  # 现在可调度
-    scheduler._tick()  # 占槽并起 worker 线程跑汇总子 agent
+    scheduler._tick()  # 占槽并起 worker 线程跑排版子 agent
 
-    # 汇总由 worker 线程异步跑，轮询等其离开 pending/running。
+    # 排版由 worker 线程异步跑，轮询等其离开 pending/running。
     deadline = time.time() + 2.0
     fin = task_repo.get(finalize.id)
     while fin.status in (TaskStatus.PENDING, TaskStatus.RUNNING) and time.time() < deadline:
         time.sleep(0.02)
         fin = task_repo.get(finalize.id)
-    # 成品终审门：汇总先达待复核，确认后才 finished
+    # 成品终审门：排版先达待复核，确认后才 finished
     assert fin.status == TaskStatus.AWAITING_CONFIRM, f"finalize 链路未达待复核，实际: {fin.status}"
     task_service.confirm(finalize.id, None)
     assert task_repo.get(finalize.id).status == TaskStatus.FINISHED
@@ -249,7 +249,7 @@ def test_edit_flows_to_downstream():
         fin = task_repo.get(finalize.id)
     assert fin.status == TaskStatus.AWAITING_CONFIRM, f"finalize 未达待复核，实际: {fin.status}"
 
-    # 汇总那次模型请求的消息体须含编辑后标题（选题下游注入生效）
+    # 排版那次模型请求的消息体须含编辑后标题（选题下游注入生效）
     finalize_request = sub_client.calls[-1]
     all_text = json.dumps(finalize_request.get("messages", []), ensure_ascii=False)
     assert "手改标题" in all_text

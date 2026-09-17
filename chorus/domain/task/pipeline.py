@@ -39,7 +39,7 @@ class TaskPlan:
 
     def _validate(self) -> None:
         if not self.steps:
-            raise ValidationError("steps 为空", "请至少编排一个创作步骤，末步须为 finalize 汇总")
+            raise ValidationError("steps 为空", "请至少编排一个创作步骤，末步须为 finalize 排版")
         if len(self.steps) > _MAX_STEPS:
             raise ValidationError(
                 f"steps 过多({len(self.steps)})",

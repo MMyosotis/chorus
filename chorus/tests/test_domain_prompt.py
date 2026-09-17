@@ -103,7 +103,7 @@ def test_subagent_prompt_has_abandon_exit():
 
 
 def test_postcard_prompt_guides_image_url():
-    """汇总 prompt 指引：图片用 ![图注](url)，url 从上游配图取。"""
+    """排版 prompt 指引：图片用 ![图注](url)，url 从上游配图取。"""
     p = subagent_base("finalize")
     assert "![图注](url)" in p
     assert "从上游配图产物取" in p

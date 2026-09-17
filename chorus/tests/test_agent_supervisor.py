@@ -113,7 +113,7 @@ def _plan_args(topic="夏日晚风", steps=None):
     if steps is None:
         steps = [
             {"agent_type": "idea", "deps": [], "focus": "选题"},
-            {"agent_type": "finalize", "deps": [0], "focus": "汇总"},
+            {"agent_type": "finalize", "deps": [0], "focus": "排版"},
         ]
     return {
         "thought": "想了一下",

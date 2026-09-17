@@ -102,7 +102,7 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
     ),
     "finalize": AgentProfile(
         agent_type="finalize",
-        display_name="汇总官",
+        display_name="排版官",
         role_desc="装配前三步原料成整棵 PostCard 成品，是唯一成品出口；不新增内容、不搜索",
         artifacts_schema="postcard",
         artifacts_model=PostCard,
