@@ -106,14 +106,13 @@ class SupervisorLoopStrategy(LoopStrategy):
         )
         events.extend(event for _, dispatch in pairs for event in dispatch.events)
 
-        suspend = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
+        suspend = next((dispatch for _, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
         if suspend is not None:
             return self._handle_suspend(ctx, events)
         return LoopAction(LoopSignal.CONTINUE, events)
 
     def _handle_suspend(self, ctx, events):
         """挂起分支：关流但不视作完成，续写复用会话最新气泡。"""
-        self._session.touch(self.session_id)
         return LoopAction(LoopSignal.SUSPEND, self._finish_events(ctx, prefix=[*events, SuspendEvent()]))
 
     def after_text(self, ctx, result):

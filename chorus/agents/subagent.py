@@ -28,6 +28,8 @@ from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
     AbandonError,
+    Task,
+    TaskContent,
     TaskStatus,
     ValidationError,
     downstream_view,
@@ -191,15 +193,15 @@ class SubAgentService:
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
-        task = self._task_repo.get(task_id)
-        content = self._content_repo.load(task_id)
+        task = cast(Task, self._task_repo.get(task_id))
+        content = cast(TaskContent, self._content_repo.load(task_id))
         try:
             self._run_loop(task, content, task.owner_id)
         except Exception as e:
             _logger.exception("subagent failed", extra={"task_id": task_id})
             self._lease.fail(task, str(e), task.owner_id)
 
-    def _run_loop(self, task, content, owner_id: Optional[float]) -> None:
+    def _run_loop(self, task: Task, content: TaskContent, owner_id: Optional[float]) -> None:
         # 入口租约校验，被回收重抢则放弃
         if not self._lease.valid(task.id, owner_id):
             _logger.info("entry lease invalid, abort", extra={"task_id": task.id})
@@ -240,7 +242,7 @@ class SubAgentService:
         """入口同步召回一次，缓存进策略供每轮注入，工具循环内不重召。"""
         return self._memory.recall_for(task.agent_type, invoke, scope)
 
-    def _build_invoke(self, task, content) -> str:
+    def _build_invoke(self, task: Task, content: TaskContent) -> str:
         prior = self._artifacts_repo.load(task.id)
         deps_outputs: dict = {}
         for dep_id in task.dependencies:
