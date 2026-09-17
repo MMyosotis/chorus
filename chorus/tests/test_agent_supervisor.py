@@ -435,7 +435,7 @@ def test_provider_messages_injects_recall_before_intent_block():
 
 
 def test_tool_turn_persists_reasoning():
-    """纯工具轮的思考内容随行落库：思考模型要求历史回传思考，缺了会被服务端拒收。"""
+    """纯工具轮的思考内容随行落库，纯文本轮思考字段为空。"""
     engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
     intent_args = {
         "intent_status": "empty",

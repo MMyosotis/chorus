@@ -65,7 +65,6 @@ def test_assistant_tool_calls_in_provider_dict():
 
 
 def test_assistant_reasoning_roundtrip_in_provider_dict():
-    # 思考模型要求回传思考内容，有则带上、无则完全不出现该字段
     with_reasoning = AssistantMessage(
         id="a1", session_id="s", created_at=0.0, content=None, reasoning="想想",
     )

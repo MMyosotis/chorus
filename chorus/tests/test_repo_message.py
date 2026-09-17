@@ -45,7 +45,7 @@ def test_rewrite_last_tool_result():
 
 
 def test_assistant_reasoning_roundtrip_both_tables():
-    """思考内容两表齐落齐读，现场表重建历史时随行带回。"""
+    """思考内容在原始表与现场表齐落齐读。"""
     engine = fresh_engine()
     seed_session(engine)
     provider_repo = ProviderMessageRepository(engine)

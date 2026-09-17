@@ -80,7 +80,6 @@ class AssistantMessage(_MessageBase):
 
     def to_provider_dict(self) -> dict:
         entry: dict = {"role": "assistant", "content": self.content}
-        # 思考模型要求把上一轮思考原样回传，缺了会被服务端拒收
         if self.reasoning:
             entry["reasoning_content"] = self.reasoning
         if self.tool_calls:
