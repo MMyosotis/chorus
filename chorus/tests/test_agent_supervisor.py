@@ -434,6 +434,36 @@ def test_provider_messages_injects_recall_before_intent_block():
     assert "帮我写博文" in content
 
 
+def test_tool_turn_persists_reasoning():
+    """纯工具轮的思考内容随行落库：思考模型要求历史回传思考，缺了会被服务端拒收。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    intent_args = {
+        "intent_status": "empty",
+        "topic": "",
+        "style": "",
+        "image_count": 3,
+        "extra": {},
+        "progress_percent": 0,
+    }
+    # 第一轮：思考 + 纯工具（无正文）→ 落库 assistant(content=None, reasoning=想想)
+    tool_stream = FakeStream([
+        ({"reasoning_content": "想想"}, None),
+        ({"tool_calls": [types.SimpleNamespace(
+            index=0, id="c1", function=types.SimpleNamespace(
+                name="update_intent_state", arguments=json.dumps(intent_args)))]}, "tool_calls"),
+    ])
+    # 第二轮：纯文本无思考 → reasoning 如实为 None
+    text_stream = FakeStream([({"content": "很高兴帮你"}, "stop")])
+    client = FakeClient([tool_stream, text_stream])
+    sup, _ = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    s = session_svc.create("test")
+    list(sup.stream(s.id, "你好"))
+    msgs = msg_svc.list_messages(s.id)
+    assert msgs[1].reasoning == "想想"
+    assert msgs[1].content is None
+    assert msgs[3].reasoning is None
+
+
 def test_on_error_overflow_requests_retry_once():
     """输入超长先应急压缩并请求重跑，第二次同错不再重试、走报错收尾。"""
     engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()

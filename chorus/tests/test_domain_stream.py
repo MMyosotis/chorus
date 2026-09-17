@@ -111,6 +111,19 @@ def test_consume_stream_returns_stream_result():
     assert result.finish_reason == "stop"
 
 
+def test_stream_result_text_and_reasoning_joined_or_none():
+    from chorus.domain.trace import ThinkingSegment
+    empty = StreamResult()
+    assert empty.text is None
+    assert empty.reasoning is None
+    filled = StreamResult(
+        text_parts=["你", "好"],
+        thinking_segments=[ThinkingSegment(text="想一", duration_ms=1), ThinkingSegment(text="想二", duration_ms=1)],
+    )
+    assert filled.text == "你好"
+    assert filled.reasoning == "想一想二"
+
+
 def test_final_chunk_usage_is_collected():
     usage = types.SimpleNamespace(prompt_tokens=12, completion_tokens=7, total_tokens=19)
     _events, result = _run([_chunk({"content": "x"}, "stop", usage)])

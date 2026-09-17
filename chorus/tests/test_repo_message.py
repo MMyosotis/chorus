@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid6
 
+from chorus.domain.message import AssistantMessage
 from chorus.repo.message import MessageRepository
 from chorus.repo.provider_message import ProviderMessageRepository
 from chorus.repo.trace import TraceRepository
@@ -21,7 +22,9 @@ def test_three_role_roundtrip():
     svc = _setup()
     svc.append_user_message("s1", "hi")
     # 用 uuid7 让 id 趋势递增，排序才正确
-    svc.append_assistant_message("s1", message_id=str(uuid6.uuid7()), content="yo", tool_calls=[])
+    svc.append_assistant_message(AssistantMessage(
+        id=str(uuid6.uuid7()), session_id="s1", created_at=0.0, content="yo",
+    ))
     svc.append_tool_message("s1", tool_call_id="c1", name="search", content="r")
     msgs = svc.list_messages("s1")
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]
@@ -41,9 +44,29 @@ def test_rewrite_last_tool_result():
     assert msgs[1].content == "其它工具结果"
 
 
+def test_assistant_reasoning_roundtrip_both_tables():
+    """思考内容两表齐落齐读，现场表重建历史时随行带回。"""
+    engine = fresh_engine()
+    seed_session(engine)
+    provider_repo = ProviderMessageRepository(engine)
+    svc = MessageService(
+        MessageRepository(engine), provider_repo,
+        TraceService(TraceRepository(engine)), build_compact_service(engine),
+    )
+    svc.append_assistant_message(AssistantMessage(
+        id=str(uuid6.uuid7()), session_id="s1", created_at=0.0,
+        content=None, reasoning="想想",
+    ))
+    assert svc.list_messages("s1")[0].reasoning == "想想"
+    rows = provider_repo.list_by_session("s1")
+    assert rows[0].reasoning == "想想"
+    assert rows[0].to_provider_dict()["reasoning_content"] == "想想"
+
+
 def main():
     test_three_role_roundtrip()
     test_rewrite_last_tool_result()
+    test_assistant_reasoning_roundtrip_both_tables()
     print("\n全部用例通过")
 
 

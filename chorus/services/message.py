@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 import uuid6
 
@@ -14,7 +13,6 @@ from chorus.domain.message import (
     AssistantMessage,
     Message,
     MessageView,
-    ToolCallSpec,
     ToolMessage,
     UserMessage,
     build_history_view,
@@ -52,19 +50,10 @@ class MessageService:
         self._append_both(msg)
         return msg
 
-    def append_assistant_message(
-        self, session_id: str, *, message_id: str, content: Optional[str],
-        tool_calls: Optional[list[ToolCallSpec]] = None,
-    ) -> AssistantMessage:
-        msg = AssistantMessage(
-            id=message_id,
-            session_id=session_id,
-            created_at=time.time(),
-            content=content,
-            tool_calls=tool_calls or [],
-        )
-        self._append_both(msg)
-        return msg
+    def append_assistant_message(self, msg: AssistantMessage) -> AssistantMessage:
+        stamped = msg.model_copy(update={"created_at": time.time()})
+        self._append_both(stamped)
+        return stamped
 
     def append_error_placeholder(self, session_id: str, message_id: str, error: Exception) -> None:
         """异常时写入的助手占位行，关闭前端气泡。"""

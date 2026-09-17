@@ -25,7 +25,7 @@ from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import is_context_overflow
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
-from chorus.domain.message import ToolCallSpec, UserMessage
+from chorus.domain.message import AssistantMessage, ToolCallSpec, UserMessage
 from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import consume_stream
@@ -88,14 +88,12 @@ class SupervisorLoopStrategy(LoopStrategy):
 
     def after_tools(self, ctx, result, pairs):
         """成对落库，据是否命中挂起决定续跑或关流。"""
-        suspend = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
-        content = "".join(ctx.turn.text_parts) if ctx.turn.text_parts else None
-
-        self._message.append_assistant_message(
-            self.session_id, message_id=ctx.turn.message_id,
-            content=content,
-            tool_calls=[ToolCallSpec.from_arguments(call.id, call.name, call.arguments) for call, _ in pairs],
+        msg = AssistantMessage.from_stream(
+            self.session_id, result, message_id=ctx.turn.message_id,
+            tool_calls=[ToolCallSpec.from_arguments(call.id, call.name, call.arguments) for call, _ in pairs]
         )
+        self._message.append_assistant_message(msg)
+
         for call, dispatch in pairs:
             self._message.append_tool_message(
                 self.session_id, tool_call_id=call.id, name=call.name,
@@ -108,6 +106,7 @@ class SupervisorLoopStrategy(LoopStrategy):
         )
         events.extend(event for _, dispatch in pairs for event in dispatch.events)
 
+        suspend = next(((call, dispatch) for call, dispatch in pairs if isinstance(dispatch.outcome, Suspend)), None)
         if suspend is not None:
             return self._handle_suspend(ctx, events)
         return LoopAction(LoopSignal.CONTINUE, events)
@@ -119,10 +118,8 @@ class SupervisorLoopStrategy(LoopStrategy):
 
     def after_text(self, ctx, result):
         """纯文本回复：落库并发完成事件与收尾钩子。"""
-        content = "".join(result.text_parts) if result.text_parts else None
-        self._message.append_assistant_message(
-            self.session_id, message_id=ctx.turn.message_id, content=content,
-        )
+        msg = AssistantMessage.from_stream(self.session_id, result, message_id=ctx.turn.message_id)
+        self._message.append_assistant_message(msg)
         self._session.touch(self.session_id)
         return LoopAction(LoopSignal.FINISH, self._finish_events(ctx))
 

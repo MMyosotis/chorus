@@ -45,7 +45,8 @@ def to_domain(r) -> Message:
     if r.role == "assistant":
         return AssistantMessage(
             id=r.id, session_id=r.session_id, created_at=r.created_at,
-            content=r.content, tool_calls=_parse_tool_calls(r.tool_calls_json),
+            content=r.content, reasoning=r.reasoning,
+            tool_calls=_parse_tool_calls(r.tool_calls_json),
         )
     if r.role == "tool":
         return ToolMessage(
@@ -65,7 +66,8 @@ def from_domain(msg: Message, record_cls=MessageRecord):
     if msg.role == "assistant":
         return record_cls(
             id=msg.id, session_id=msg.session_id, role="assistant",
-            content=msg.content, tool_calls_json=_dump_tool_calls(msg.tool_calls),
+            content=msg.content, reasoning=msg.reasoning,
+            tool_calls_json=_dump_tool_calls(msg.tool_calls),
             created_at=msg.created_at,
         )
     if msg.role == "tool":

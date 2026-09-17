@@ -38,6 +38,16 @@ class StreamResult:
     thinking_segments: list[ThinkingSegment] = field(default_factory=list)
     usage: Optional[ModelUsage] = None
 
+    @property
+    def text(self) -> Optional[str]:
+        """正文片段拼整段，空归 None。"""
+        return "".join(self.text_parts) or None
+
+    @property
+    def reasoning(self) -> Optional[str]:
+        """思考片段拼整段，空归 None。"""
+        return "".join(segment.text for segment in self.thinking_segments) or None
+
 
 class ThinkingTracker:
     """思考段开合盒：逐片喂入，非思考输出出现或流结束时收口。"""
@@ -123,9 +133,8 @@ def _accumulate(stream) -> Generator[SseEvent, None, StreamResult]:
             text_parts.append(delta.content)
             yield TokenEvent(content=delta.content)
 
-        if delta.tool_calls:
-            for call in delta.tool_calls:
-                _merge_tool_call(accumulated, call)
+        for call in delta.tool_calls or []:
+            _merge_tool_call(accumulated, call)
 
     # 流结束兜底收口（只有思考没有正文场景）
     yield from thinking.close_if_open()

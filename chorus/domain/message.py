@@ -75,10 +75,14 @@ class ToolCallSpec(BaseModel):
 class AssistantMessage(_MessageBase):
     role: Literal["assistant"] = "assistant"
     content: Optional[str] = None
+    reasoning: Optional[str] = None
     tool_calls: list[ToolCallSpec] = Field(default_factory=list)
 
     def to_provider_dict(self) -> dict:
         entry: dict = {"role": "assistant", "content": self.content}
+        # 思考模型要求把上一轮思考原样回传，缺了会被服务端拒收
+        if self.reasoning:
+            entry["reasoning_content"] = self.reasoning
         if self.tool_calls:
             entry["tool_calls"] = [call.to_provider_dict() for call in self.tool_calls]
         return entry
@@ -98,16 +102,37 @@ class AssistantMessage(_MessageBase):
         return f"助手：{text}"
 
     def payload_chars(self) -> int:
-        """正文加各工具调用参数的字符量。"""
-        return len(self.content or "") + sum(len(call.arguments_json) for call in self.tool_calls)
+        """正文加思考加各工具调用参数的字符量。"""
+        return (
+            len(self.content or "")
+            + len(self.reasoning or "")
+            + sum(len(call.arguments_json) for call in self.tool_calls)
+        )
 
     @classmethod
-    def from_stream_result(cls, session_id: str, result: StreamResult) -> AssistantMessage:
-        """把一次流式消费的累积结果整理成内存历史消息。"""
+    def _tool_calls_from_result(cls, result: StreamResult) -> list[ToolCallSpec]:
+        return [ToolCallSpec.from_accumulator(acc) for _, acc in sorted(result.tool_calls.items())]
+
+    @classmethod
+    def transient_from_stream(cls, session_id: str, result: StreamResult) -> Self:
+        """内存草稿整体造，身份字段随手生成。"""
         return cls.transient(
             session_id,
-            content="".join(result.text_parts) or None,
-            tool_calls=[ToolCallSpec.from_accumulator(acc) for _, acc in sorted(result.tool_calls.items())],
+            content=result.text,
+            reasoning=result.reasoning,
+            tool_calls=cls._tool_calls_from_result(result),
+        )
+
+    @classmethod
+    def from_stream(
+        cls, session_id: str, result: StreamResult, *,
+        message_id: str, tool_calls: Optional[list[ToolCallSpec]] = None,
+    ) -> Self:
+        """落库消息：标识沿用轮首契约，工具清单缺省取流结果、可传实际派发清单覆盖。"""
+        return cls(
+            id=message_id, session_id=session_id, created_at=0.0,
+            content=result.text, reasoning=result.reasoning,
+            tool_calls=tool_calls if tool_calls is not None else cls._tool_calls_from_result(result),
         )
 
 

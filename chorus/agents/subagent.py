@@ -110,7 +110,7 @@ class SubagentLoopStrategy(LoopStrategy):
 
     def after_tools(self, ctx, result, pairs):
         session_id = self.task.session_id
-        self.history.append(AssistantMessage.from_stream_result(session_id, result))
+        self.history.append(AssistantMessage.transient_from_stream(session_id, result))
         self.history.extend(
             ToolMessage.transient(session_id, tool_call_id=call.id, name=call.name, content=dispatch.outcome.content)
             for call, dispatch in pairs

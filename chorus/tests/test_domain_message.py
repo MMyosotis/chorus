@@ -64,6 +64,32 @@ def test_assistant_tool_calls_in_provider_dict():
     ]
 
 
+def test_assistant_reasoning_roundtrip_in_provider_dict():
+    # 思考模型要求回传思考内容，有则带上、无则完全不出现该字段
+    with_reasoning = AssistantMessage(
+        id="a1", session_id="s", created_at=0.0, content=None, reasoning="想想",
+    )
+    assert with_reasoning.to_provider_dict()["reasoning_content"] == "想想"
+    assert "reasoning_content" not in _assistant("答").to_provider_dict()
+
+
+def test_assistant_from_stream_constructors():
+    from chorus.domain.stream import StreamResult
+    from chorus.domain.trace import ThinkingSegment
+    result = StreamResult(
+        thinking_segments=[
+            ThinkingSegment(text="想一", duration_ms=1),
+            ThinkingSegment(text="想二", duration_ms=2),
+        ],
+    )
+    transient = AssistantMessage.transient_from_stream("s", result)
+    assert transient.reasoning == "想一想二"
+    assert transient.content is None
+    persisted = AssistantMessage.from_stream("s", result, message_id="a1")
+    assert persisted.id == "a1"
+    assert persisted.reasoning == "想一想二"
+
+
 def test_message_frozen_and_extra_forbidden():
     u = _user("hi")
     with pytest.raises(ValidationError):
