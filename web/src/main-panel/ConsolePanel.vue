@@ -11,6 +11,7 @@ import {
   messageText,
   parseUserContent,
   shortJson,
+  toolCallArguments,
   toolsFor,
 } from '../composables/consoleProjection.js'
 import { ROLE_FULL, ROLE_LABELS, ROLE_SHORT } from '../team-panel/roleMeta.js'
@@ -148,6 +149,7 @@ function fmtTs(value) {
 function historyPreview(message) {
   if (message.role === 'user') return userParsed(message).text
   if (message.role === 'assistant' && !message.content) {
+    if (message.reasoning_content) return '无正文 · think'
     const count = (message.tool_calls || []).length
     if (count) return `无正文 · ${count} 个工具调用`
   }
@@ -439,16 +441,44 @@ onBeforeUnmount(stopConsolePoll)
                             <pre v-if="activeContextTab(`${item.call.key}:${index}`) !== null" class="context-content">{{ userParsed(message).injections[activeContextTab(`${item.call.key}:${index}`)].content }}</pre>
                           </template>
                           <template v-else-if="message.role === 'assistant'">
-                            <pre>{{ message.content == null ? 'null' : messageText(message) }}</pre>
-                            <ul v-if="(message.tool_calls || []).length" class="assistant-tools">
-                              <li v-for="toolCall in message.tool_calls" :key="toolCall.id">{{ toolCall.function?.name }}</li>
-                            </ul>
+                            <pre v-if="messageText(message)">{{ messageText(message) }}</pre>
+                            <div
+                              v-if="message.reasoning_content || (message.tool_calls || []).length"
+                              class="context-tabs mono-tabs"
+                              role="tablist"
+                              aria-label="思考与工具调用"
+                            >
+                              <button
+                                v-if="message.reasoning_content"
+                                type="button"
+                                role="tab"
+                                :aria-selected="activeContextTab(`${item.call.key}:${index}`) === 0"
+                                :class="{ active: activeContextTab(`${item.call.key}:${index}`) === 0 }"
+                                @click="selectContextTab(`${item.call.key}:${index}`, 0)"
+                              >think</button>
+                              <button
+                                v-for="(toolCall, toolIndex) in message.tool_calls || []"
+                                :key="toolCall.id"
+                                type="button"
+                                role="tab"
+                                :aria-selected="activeContextTab(`${item.call.key}:${index}`) === toolIndex + 1"
+                                :class="{ active: activeContextTab(`${item.call.key}:${index}`) === toolIndex + 1 }"
+                                @click="selectContextTab(`${item.call.key}:${index}`, toolIndex + 1)"
+                              >{{ toolCall.function?.name }}</button>
+                            </div>
+                            <pre
+                              v-if="message.reasoning_content && activeContextTab(`${item.call.key}:${index}`) === 0"
+                              class="context-content"
+                            >{{ message.reasoning_content }}</pre>
+                            <template v-for="(toolCall, toolIndex) in message.tool_calls || []" :key="toolCall.id">
+                              <pre
+                                v-if="activeContextTab(`${item.call.key}:${index}`) === toolIndex + 1"
+                                class="context-content"
+                              >{{ toolCallArguments(toolCall) }}</pre>
+                            </template>
                           </template>
                           <template v-else>
                             <pre v-if="messageText(message)">{{ messageText(message) }}</pre>
-                            <ul v-if="(message.tool_calls || []).length" class="assistant-tools">
-                              <li v-for="toolCall in message.tool_calls" :key="toolCall.id">{{ toolCall.function?.name }}</li>
-                            </ul>
                           </template>
                         </div>
                       </details>
@@ -589,6 +619,8 @@ onBeforeUnmount(stopConsolePoll)
 .user-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); margin: 0 var(--ch-space-3); padding: var(--ch-space-3) 0; border-top: 1px solid var(--ch-border); }
 .user-context-head { display: flex; align-items: center; gap: var(--ch-space-2); color: var(--ch-text-faint); font-size: var(--ch-text-xs); line-height: 1.4; }
 .context-tabs.user-context-tabs { gap: var(--ch-space-2); }
+
+.context-tabs.mono-tabs button { font-family: var(--ch-font-mono); }
 .block-body-text, .msg-text, .part-text { margin: 0; max-height: 240px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .context-tabs { display: flex; gap: var(--ch-space-2); }
 .agent-tabs { flex-wrap: wrap; margin: 0 0 var(--ch-space-3); }
@@ -642,8 +674,6 @@ pre { margin: 0; font-family: var(--ch-font-mono); white-space: pre-wrap; word-b
 .msg-detail { display: flex; flex-direction: column; gap: var(--ch-space-2); padding: 0 var(--ch-space-2) var(--ch-space-2); }
 .msg-detail pre { max-height: 160px; overflow: auto; padding: var(--ch-space-2); border-radius: var(--ch-radius-btn); background: var(--ch-surface-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); line-height: 1.5; }
 .msg-detail .msg-text, .msg-detail pre { border-radius: 4px; }
-.assistant-tools { display: flex; flex-wrap: wrap; gap: var(--ch-space-2); margin: 0; padding: 0; list-style: none; color: var(--ch-text-secondary); font-family: var(--ch-font-mono); font-size: var(--ch-text-xs); }
-.assistant-tools li { padding: var(--ch-space-1) var(--ch-space-2); border: 1px solid var(--ch-border); border-radius: 4px; background: var(--ch-surface); }
 .schema-list { overflow: hidden; border: 1px solid var(--ch-border); border-radius: var(--ch-radius-btn); background: var(--ch-surface); }
 .schema-list summary { display: flex; align-items: center; padding: var(--ch-space-2); color: var(--ch-text-secondary); font-size: var(--ch-text-xs); cursor: pointer; list-style: none; }
 .schema-list .block-caret { margin-left: auto; }

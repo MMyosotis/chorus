@@ -28,6 +28,12 @@ export function messageText(message) {
   return typeof message.content === 'string' ? message.content : shortJson(message.content)
 }
 
+export function toolCallArguments(toolCall) {
+  const raw = toolCall?.function?.arguments
+  if (typeof raw !== 'string') return ''
+  return parseMaybeJson(raw) || raw
+}
+
 export function buildModelCalls(traces) {
   const byMessage = new Map()
   const ordered = [...traces].sort((a, b) => (a.created_at || 0) - (b.created_at || 0))

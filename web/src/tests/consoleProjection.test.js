@@ -6,6 +6,7 @@ import {
   buildSessionStats,
   buildTimeline,
   buildUserInputs,
+  toolCallArguments,
 } from '../composables/consoleProjection.js'
 
 function requestTrace(at, messageId, messages) {
@@ -133,4 +134,11 @@ test('buildSessionStats 双空返回空、仅旁路可成统计', () => {
 test('旁路用途标签覆盖全部已知用途', () => {
   const known = ['title', 'summary', 'suggestion', 'aside', 'memory_extract', 'memory_merge', 'memory_recall']
   for (const purpose of known) expect(BYPASS_PURPOSE_LABELS[purpose]).toBeTruthy()
+})
+
+test('toolCallArguments 美化 JSON 参数字符串并原样保留非 JSON', () => {
+  const parsed = toolCallArguments({ function: { arguments: '{"style":"治愈","image_count":3}' } })
+  expect(parsed).toBe('{\n  "style": "治愈",\n  "image_count": 3\n}')
+  expect(toolCallArguments({ function: { arguments: 'plain text' } })).toBe('plain text')
+  expect(toolCallArguments({ function: {} })).toBe('')
 })
