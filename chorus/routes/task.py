@@ -69,6 +69,17 @@ def edit_task(
         raise HTTPException(status_code=422, detail=e.correction) from e
 
 
+@router.get("/sessions/{session_id}/products")
+def list_products(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    task: TaskService = Depends(provide_task_service),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"products": task.list_products(session_id)}
+
+
 @router.post("/sessions/{session_id}/pipeline:cancel")
 def cancel_pipeline(
     session_id: str,

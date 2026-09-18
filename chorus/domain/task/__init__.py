@@ -23,7 +23,7 @@ from chorus.domain.task.artifacts import (
     PostCard,
     ScriptArtifacts,
     TaskArtifacts,
-    downstream_view,
+    invoke_text,
     build_edited_artifacts,
 )
 from chorus.domain.task.progress import (
@@ -33,6 +33,12 @@ from chorus.domain.task.progress import (
 from chorus.domain.task.pipeline import (
     StepSpec,
     TaskPlan,
+)
+from chorus.domain.task.products import (
+    ProductCandidate,
+    DeliveredProduct,
+    format_product_list,
+    list_products,
 )
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.state import (
@@ -64,6 +70,8 @@ __all__ = [
     "TaskPlan",
     "TaskStatus",
     "PostCard",
+    "ProductCandidate",
+    "DeliveredProduct",
     "AgentProfile",
     "AGENT_PROFILES",
     "ACTIVE_STATUSES",
@@ -76,6 +84,8 @@ __all__ = [
     "build_task_graph",
     "dump_progress",
     "dump_task_graph",
-    "downstream_view",
+    "invoke_text",
     "build_edited_artifacts",
+    "list_products",
+    "format_product_list",
 ]

@@ -275,7 +275,7 @@ def test_image_after_dispatch_counts_units():
         task_repo=task_repo, progress_repo=progress_repo,
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
-        tool_names=("generate_image",), tool_dispatch=ToolDispatch([], _stub_settings()),
+        tool_dispatch=ToolDispatch([], _stub_settings()),
         memory=MemoryRecall(),
     )
     call = ToolCall(id="c1", name="generate_image", arguments={"prompt": "窗边咖啡"})
@@ -297,7 +297,7 @@ def test_tool_without_units_not_counted():
         task_repo=task_repo, progress_repo=progress_repo,
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
-        tool_names=("generate_image",), tool_dispatch=ToolDispatch([], _stub_settings()),
+        tool_dispatch=ToolDispatch([], _stub_settings()),
         memory=MemoryRecall(),
     )
     call = ToolCall(id="c1", name="baidu_search", arguments={"query": "咖啡"})

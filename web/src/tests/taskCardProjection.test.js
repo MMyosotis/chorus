@@ -1,7 +1,7 @@
 // 任务卡投影规则单测。
 
 import { test, expect } from 'vitest'
-import { planTaskCards, planIntentCard, planIntentCards, planOptionCard, planOptionCards } from '../composables/taskCardProjection.js'
+import { planTaskCards, planProductCards, planIntentCard, planIntentCards, planOptionCard, planOptionCards } from '../composables/taskCardProjection.js'
 
 test('planTaskCards 无图返回空', () => {
   expect(planTaskCards(null)).toEqual([])
@@ -24,9 +24,9 @@ test('planTaskCards 失败归恢复卡', () => {
   expect(plan[0]).toMatchObject({ kind: 'recovery', id: 'recovery:t2' })
 })
 
-test('planTaskCards 已交付定稿归确认卡', () => {
+test('planTaskCards 已交付定稿不出确认卡', () => {
   const plan = planTaskCards({ tasks: [{ id: 't3', status: 'finished', agent_type: 'finalize' }] })
-  expect(plan[0]).toMatchObject({ kind: 'confirmed', id: 'confirmed:t3' })
+  expect(plan).toEqual([])
 })
 
 test('planTaskCards 运行中归运行卡', () => {
@@ -46,9 +46,20 @@ test('planTaskCards 已完成非定稿各自成卡', () => {
   expect(plan[0].task.id).toBe('a')
 })
 
-test('planTaskCards 定稿成品使用与其他阶段一致的确认卡', () => {
-  const plan = planTaskCards({ tasks: [{ id: 'f', status: 'finished', agent_type: 'finalize' }] })
-  expect(plan.find((card) => card.kind === 'confirmed')).toMatchObject({ id: 'confirmed:f' })
+test('planProductCards 成品复用定稿卡并锚定建图气泡', () => {
+  const plan = planProductCards([
+    { id: 'f1', message_id: 'm1', title: '夏日晚风', markdown: '正文', created_at: 1 },
+    { id: 'f2', message_id: 'm2', title: '秋日骑行', markdown: '另一篇', created_at: 2 },
+  ])
+  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'confirmed'])
+  expect(plan[0]).toMatchObject({ id: 'confirmed:f1', role: 'assistant', anchorMessageId: 'm1' })
+  expect(plan[0].task).toMatchObject({ id: 'f1', agent_type: 'finalize', status: 'finished' })
+  expect(plan[0].task.artifacts).toEqual({ markdown: '正文', meta: { title: '夏日晚风' } })
+})
+
+test('planProductCards 无成品返回空', () => {
+  expect(planProductCards(null)).toEqual([])
+  expect(planProductCards([])).toEqual([])
 })
 
 test('planTaskCards 混合任务按顺序投影', () => {
@@ -60,7 +71,7 @@ test('planTaskCards 混合任务按顺序投影', () => {
       { id: 'd', status: 'finished', agent_type: 'finalize' },
     ],
   })
-  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'confirmed', 'running', 'hil'])
+  expect(plan.map((card) => card.kind)).toEqual(['confirmed', 'running', 'hil'])
 })
 
 test('planIntentCard 无留档返回空', () => {

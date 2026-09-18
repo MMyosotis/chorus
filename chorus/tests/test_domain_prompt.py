@@ -1,24 +1,26 @@
-"""系统提示词纯函数断言：supervisor / subagent prompt 拼装规则与技能段 gating。
+"""提示词纯函数断言：supervisor / subagent 基础文案、条件段装配与首轮调用消息。
 
-锚定 prompt 含关键锚点（create_plan 工具、profiles 注入、Markdown 产出协议与 chorus 注释话术、禁 emoji），
-并验证技能段只在白名单含 load_skill 时拼入。
+锚定 prompt 含关键锚点（create_plan 工具、profiles 注入、Markdown 产出协议、禁 emoji），
+验证段顺序、缺料整段缺席与技能段 gating。
 """
 from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
-from chorus.domain.memory import MemoryDigest, MemoryRecall
+from chorus.domain.intent import Intent
+from chorus.domain.memory import MemoryDigest
 from chorus.domain.memory.models import CreatorMemory, MemoryDigestEntry
 from chorus.domain.prompt import (
-    SYSTEM_PROMPT,
-    PromptContext,
-    UserMessageContext,
-    build_system_prompt,
-    inject_user_blocks,
+    InvokeInputs,
+    SkeletonInputs,
+    SubagentSystemInputs,
+    SubagentUserInputs,
+    SupervisorSystemInputs,
     subagent_base,
 )
 from chorus.domain.skill import SkillLoader
+from chorus.domain.task import PostCard
 
 
 _empty_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
@@ -50,21 +52,13 @@ def test_subagent_prompt_guides_list_before_load():
 
 
 def test_supervisor_prompt_has_profiles():
-    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT, skill_loader=_empty_loader, memory_digest=_empty_digest))
+    p = SupervisorSystemInputs(digest=_empty_digest).render_system_prompt()
     assert "create_plan" in p
     assert "finalize" in p
     assert "选题官" in p
 
 
-def test_skill_section_absent_without_load_skill():
-    loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-    p = build_system_prompt(PromptContext(
-        base=SYSTEM_PROMPT, tool_names=("update_intent_state",), skill_loader=loader, memory_digest=_empty_digest,
-    ))
-    assert "可用技能" not in p
-
-
-def test_skill_section_present_with_load_skill():
+def test_subagent_system_prompt_includes_skill_and_digest():
     tmp = Path(tempfile.mkdtemp())
     skill_dir = tmp / "infographic"
     skill_dir.mkdir(parents=True)
@@ -72,14 +66,12 @@ def test_skill_section_present_with_load_skill():
         "---\nname: infographic\ndescription: 信息图配图法\n---\n正文",
         encoding="utf-8",
     )
-    loader = SkillLoader(skills_dir=tmp)
-    p = build_system_prompt(PromptContext(
-        base=SYSTEM_PROMPT, tool_names=("generate_image", "load_skill"), skill_loader=loader, memory_digest=_empty_digest,
-    ))
-    assert "可用技能" in p
-    assert "infographic" in p
-    # 标题只出现一次（不与 format_hints 自带标题重复）
-    assert p.count("可用技能") == 1
+    prompt = SubagentSystemInputs(
+        agent_type="image", skill_loader=SkillLoader(skills_dir=tmp), digest=_empty_digest,
+    ).render_system_prompt()
+    assert "可用技能" in prompt
+    assert "infographic" in prompt
+    assert prompt.count("## 可用技能") == 1
 
 
 def test_image_prompt_caps_retry():
@@ -110,14 +102,14 @@ def test_postcard_prompt_guides_image_url():
 
 
 def test_memory_block_absent_without_digest():
-    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT, skill_loader=_empty_loader, memory_digest=_empty_digest))
+    p = SupervisorSystemInputs(digest=_empty_digest).render_system_prompt()
     assert "## 创作者档案" not in p
 
 
 def test_memory_block_present_with_digest():
     entry = MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance")
     digest = MemoryDigest(entries=[entry])
-    p = build_system_prompt(PromptContext(base=SYSTEM_PROMPT, skill_loader=_empty_loader, memory_digest=digest))
+    p = SupervisorSystemInputs(digest=digest).render_system_prompt()
     assert "## 创作者档案" in p
     assert "身份：程序员" in p
     assert "小红书" in p
@@ -130,12 +122,51 @@ def test_inject_user_blocks_repeat_not_accumulate():
         platform=[], visible_to=[], kind="reference", created_at=0.0,
     )
     history = [{"role": "user", "content": "原始指令"}]
-    uctx = UserMessageContext(recalled_memories=[memory])
     for _ in range(3):
         msgs = [{"role": "system", "content": "系统"}] + history
-        inject_user_blocks(msgs, uctx)
+        SubagentUserInputs(memories=[memory]).inject_user_context(msgs)
         assert msgs[1]["content"].count("<recalled_memories>") == 1
     assert history[0]["content"] == "原始指令"
+
+
+def test_render_skeleton_note_and_base_card():
+    """交待与底稿在建图时冻进骨架，缺省区块整段不出现。"""
+    base_card = PostCard(markdown="---\ntitle: 夏日晚风\n---\n\n旧稿正文", meta={"title": "夏日晚风"})
+    intent = Intent(topic="夏日晚风", image_count=1)
+    skeleton = SkeletonInputs("idea", "标题整体保留，只微调语气", intent, base_card).render_skeleton()
+    assert "角色：选题官" in skeleton
+    assert "本步交待：标题整体保留，只微调语气" in skeleton
+    assert "底稿：" in skeleton
+    assert "旧稿正文" in skeleton
+    # 无交待：区块不出现，但底稿与意图仍在
+    no_note = SkeletonInputs("finalize", "", intent, base_card).render_skeleton()
+    assert "本步交待" not in no_note
+    assert "底稿" in no_note
+    # 无底稿：底稿区块整段不出现
+    fresh = SkeletonInputs("idea", "", Intent(topic="新篇", image_count=1), None).render_skeleton()
+    assert "底稿" not in fresh
+
+
+def test_assemble_invoke_appends_sections_in_fixed_order():
+    out = InvokeInputs(
+        skeleton="骨架",
+        dependencies=[("文案官", "旧稿正文")],
+        prior="上轮正文",
+        feedback="改标题",
+    ).assemble_invoke()
+    assert out.index("骨架") < out.index("前置产物") < out.index("上轮产物") < out.index("用户反馈")
+    assert "[文案官] 旧稿正文" in out
+
+
+def test_assemble_invoke_empty_sections_omitted():
+    # 缺料整段缺席；全空时只剩骨架
+    out = InvokeInputs(skeleton="骨架", dependencies=[]).assemble_invoke()
+    assert out == "骨架"
+    full = InvokeInputs(
+        skeleton="骨架", dependencies=[("文案官", "正文")], feedback="改标题",
+    ).assemble_invoke()
+    assert "上轮产物" not in full
+    assert "前置产物" in full and "用户反馈" in full
 
 
 def main():

@@ -117,7 +117,7 @@ def _build_assembly():
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     intent_state = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc)
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, intent_state)], _stub_settings())
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, art_repo, intent_state)], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
@@ -141,7 +141,7 @@ def _build_assembly():
     supervisor = SupervisorService(
         session_svc, msg_svc, hooks,
         stub_chat_model_provider(sup_client), task_service, tool_dispatcher, agent_loop,
-        intent_state, skill_loader,
+        intent_state,
         stub_memory_service(), build_compact_service(engine), trace_svc,
     )
 

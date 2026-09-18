@@ -23,6 +23,7 @@ from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.memory import MemoryService
+from chorus.services.products import load_delivered_products
 from chorus.services.session import SessionService
 
 _logger = get_logger("service.task")
@@ -76,8 +77,8 @@ class TaskService:
         return {"id": task_id, "status": TaskStatus.PENDING}
 
     def cancel_pipeline(self, session_id: str) -> dict:
-        """放弃整条流水线：批量取消待执行与待确认任务，运行中保留。无进行中则幂等返 0。"""
-        pipeline_id = self._active_pipeline_id(session_id)
+        """放弃整条流水线：批量取消待执行/运行中/待确认/失败任务，无图可弃则幂等返 0。"""
+        pipeline_id = self._latest_pipeline_id(session_id)
         count = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
         _logger.info("cancel pipeline", extra={"session_id": session_id, "cancelled": count})
         return {"pipeline_id": pipeline_id, "cancelled": count}
@@ -102,18 +103,24 @@ class TaskService:
         display = select_display_pipeline([], same_pipeline)
         return self._build_graph(latest.pipeline_id, display, False)
 
-    def is_finalized(self, session_id: str) -> bool:
-        """会话是否已定稿：存在 finished 的 finalize 步即视为本篇存档。"""
-        finished = self._task_repo.find_by_session_statuses(session_id, [TaskStatus.FINISHED])
-        return any(task.agent_type == "finalize" for task in finished)
-
     def count_active(self, session_id: str) -> int:
         """会话内活跃任务数，供入口门禁判定是否进行中。"""
         return self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES)
 
-    def _active_pipeline_id(self, session_id: str) -> Optional[str]:
+    def _latest_pipeline_id(self, session_id: str) -> Optional[str]:
+        """进行中流水线优先，无则取最近更新的流水线，供取消/回执定位同一张图。"""
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
-        return active[0].pipeline_id if active else None
+        if active:
+            return active[0].pipeline_id
+        terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
+        if not terminal:
+            return None
+        return max(terminal, key=lambda task: task.updated_at).pipeline_id
+
+    def list_products(self, session_id: str) -> list[dict]:
+        """已交付成品列表：本会话全部完成的排版任务，带全文/标题/标识/锚点。"""
+        products = load_delivered_products(self._task_repo, self._artifacts_repo, session_id)
+        return [dataclasses.asdict(product) for product in products]
 
     def _set_selected(self, task_id: str, agent_type: str, selected: Optional[int]) -> None:
         """把选中候选写回候选角色产物（子 agent 已先落，必就绪）。"""

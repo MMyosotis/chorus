@@ -3,7 +3,6 @@ import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { BookOpen, Image as ImageIcon, PenLine } from '@lucide/vue'
 import MessageBubble from './MessageBubble.vue'
 import HilCard from './HilCard.vue'
-import ArtifactCard from './ArtifactCard.vue'
 import PlatformPreviewShell from './PlatformPreviewShell.vue'
 import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
@@ -140,10 +139,12 @@ const datelineTime = computed(() => {
   return `${period} ${h12}:${String(minute).padStart(2, '0')}`
 })
 
-// 空壳助手轮（无正文、流式已收尾）不展示；流式尾部那条保留以承载状态条
+// 空壳助手轮（无正文、流式已收尾）不展示；流式尾部那条保留以承载状态条。
+// 挂起宿主虽无正文，但承载留档卡与建图计划，必须保留。
 function isBlankShell(message, index) {
   if (message.kind || message.role !== 'assistant') return false
   if (message.content && message.content.trim()) return false
+  if (message.suspended) return false
   return !(props.streaming && index === props.messages.length - 1)
 }
 
@@ -252,7 +253,6 @@ watch(
               @preview-task="openPreview"
             />
           </div>
-          <ArtifactCard v-else-if="msg.kind === 'postcard'" :task="msg.task" @preview="openPreview(msg.task)" />
           <ConfirmedCard v-else-if="msg.kind === 'confirmed'" :task="msg.task" @preview-task="openPreview" />
           <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
           <div v-else-if="msg.kind === 'recovery'" class="recovery-panel">

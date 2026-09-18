@@ -19,7 +19,9 @@ TERMINAL_STATUSES: frozenset[str] = frozenset({
 })
 CANCELLABLE_STATUSES: frozenset[str] = frozenset({
     TaskStatus.PENDING,
+    TaskStatus.RUNNING,
     TaskStatus.AWAITING_CONFIRM,
+    TaskStatus.FAILED,
 })
 
 LEGAL_TRANSITIONS: set[tuple[str, str]] = {
@@ -31,6 +33,8 @@ LEGAL_TRANSITIONS: set[tuple[str, str]] = {
     (TaskStatus.AWAITING_CONFIRM, TaskStatus.PENDING),
     (TaskStatus.AWAITING_CONFIRM, TaskStatus.CANCELLED),
     (TaskStatus.PENDING, TaskStatus.CANCELLED),
+    (TaskStatus.RUNNING, TaskStatus.CANCELLED),
+    (TaskStatus.FAILED, TaskStatus.CANCELLED),
     (TaskStatus.FAILED, TaskStatus.PENDING),
 }
 

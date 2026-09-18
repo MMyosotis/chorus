@@ -12,7 +12,6 @@ from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.events import (
-    ArchivedEvent,
     BusyEvent,
     DoneEvent,
     ErrorEvent,
@@ -25,9 +24,8 @@ from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import is_context_overflow
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
-from chorus.domain.message import AssistantMessage, ToolCallSpec, UserMessage
-from chorus.domain.prompt import SYSTEM_PROMPT, PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks
-from chorus.domain.skill import SkillLoader
+from chorus.domain.message import AssistantMessage, ToolCallSpec, ToolMessage, UserMessage
+from chorus.domain.prompt.supervisor import SupervisorSystemInputs, SupervisorUserInputs
 from chorus.domain.stream import consume_stream
 from chorus.domain.trace import TracePhase, UserInput
 from chorus.hooks import HookRegistry
@@ -52,15 +50,13 @@ class SupervisorLoopStrategy(LoopStrategy):
     max_steps = _SUPERVISOR_MAX_STEPS
 
     def __init__(self, session_id, message_service, session_service, hooks,
-                 intent_state: IntentStateService, skill_loader, tool_names: tuple,
+                 intent_state: IntentStateService,
                  memory: MemoryRecall, compact: CompactService):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
         self._hooks = hooks
         self._intent_state = intent_state
-        self._skill_loader = skill_loader
-        self._tool_names = tool_names
         self._recall = memory
         self._compact = compact
         self._reactive_done = False
@@ -70,17 +66,13 @@ class SupervisorLoopStrategy(LoopStrategy):
         return [MessageStartEvent(id=ctx.turn.message_id)]
 
     def provider_messages(self):
-        prompt = build_system_prompt(PromptContext(
-            base=SYSTEM_PROMPT,
-            tool_names=self._tool_names,
-            skill_loader=self._skill_loader,
-            memory_digest=self._recall.digest,
-        ))
-        msgs = self._message.build_provider_messages(self.session_id, prompt)
-        inject_user_blocks(msgs, UserMessageContext(
+        system_inputs = SupervisorSystemInputs(digest=self._recall.digest)
+        user_inputs = SupervisorUserInputs(
+            memories=self._recall.items,
             intent_state=self._intent_state.get(self.session_id),
-            recalled_memories=self._recall.items,
-        ))
+        )
+        msgs = self._message.build_provider_messages(self.session_id, system_inputs.render_system_prompt())
+        user_inputs.inject_user_context(msgs)
         return msgs
 
     def consume(self, stream):
@@ -160,7 +152,6 @@ class SupervisorService:
         tool_dispatcher: ToolDispatch,
         loop: AgentLoop,
         intent_state: IntentStateService,
-        skill_loader: SkillLoader,
         memory_service: MemoryService,
         compact_service: CompactService,
         trace_service: TraceService,
@@ -173,7 +164,6 @@ class SupervisorService:
         self._tools = tool_dispatcher
         self._loop = loop
         self._intent_state = intent_state
-        self._skill = skill_loader
         self._memory = memory_service
         self._compact = compact_service
         self._trace = trace_service
@@ -220,11 +210,16 @@ class SupervisorService:
         self._message.rewrite_last_tool_result(session_id, tool_name, result_text)
         yield from self._run(session_id, None)
 
+    def has_unreceipted_plan(self, session_id: str) -> bool:
+        """收尾锁：末条消息是建图工具结果且无活跃任务，即确有未回执挂起。"""
+        if self._task.count_active(session_id) > 0:
+            return False
+        messages = self._message.list_messages(session_id)
+        last = messages[-1] if messages else None
+        return isinstance(last, ToolMessage) and last.name == "create_plan"
+
     def _admit(self, session_id: str) -> Optional[SseEvent]:
-        """入口业务门禁：会话已定稿或有进行中任务则拒收。存在性由路由层 404 保证。"""
-        if self._task.is_finalized(session_id):
-            _logger.info("reject: session finalized", extra={"session_id": session_id})
-            return ArchivedEvent(content="本篇已定稿存档，请新建会话开始下一篇")
+        """入口业务门禁：有进行中任务则拒收。存在性由路由层 404 保证。"""
         if self._task.count_active(session_id) > 0:
             _logger.info("reject: active task in progress", extra={"session_id": session_id})
             return BusyEvent(content="该会话有创作任务进行中，请等待完成")
@@ -243,8 +238,6 @@ class SupervisorService:
         strategy = SupervisorLoopStrategy(
             session_id, self._message, self._session, self._hooks,
             intent_state=self._intent_state,
-            skill_loader=self._skill,
-            tool_names=TOOL_WHITELISTS["supervisor"],
             memory=memory,
             compact=self._compact,
         )

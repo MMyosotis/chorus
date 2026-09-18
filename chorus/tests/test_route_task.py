@@ -55,6 +55,9 @@ class FakeTaskService:
     def cancel_pipeline(self, session_id):
         return self._call("cancel_pipeline", session_id)
 
+    def list_products(self, session_id):
+        return self._call("list_products", session_id)
+
 
 def _client(session: FakeSessionService, task: FakeTaskService) -> TestClient:
     app = FastAPI()
@@ -119,6 +122,23 @@ def test_cancel_pipeline_ok():
     r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "cancelled": 2}
+
+
+def test_list_products_session_not_found():
+    """会话不存在 → 404（先于任务 service）。"""
+    r = _client(FakeSessionService(set()), FakeTaskService()).get(
+        "/api/sessions/unknown/products"
+    )
+    assert r.status_code == 404
+
+
+def test_list_products_ok():
+    """正常 → 200 + 成品清单透出。"""
+    task = FakeTaskService()
+    task.set("list_products", "s1", [{"id": "t-final", "title": "夏日晚风", "markdown": "正文", "created_at": 1.0}])
+    r = _client(FakeSessionService({"s1"}), task).get("/api/sessions/s1/products")
+    assert r.status_code == 200
+    assert r.json() == {"products": [{"id": "t-final", "title": "夏日晚风", "markdown": "正文", "created_at": 1.0}]}
 
 
 def test_edit_ok():

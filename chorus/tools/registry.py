@@ -8,6 +8,7 @@ from __future__ import annotations
 from chorus.config import BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL
 from chorus.domain.skill import SkillLoader
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
 from chorus.services.option import OptionPromptService
@@ -29,6 +30,7 @@ def build_tool_dispatch(
     settings_service: SettingsService,
     task_repo: TaskRepository,
     content_repo: TaskContentRepository,
+    task_artifacts_repo: TaskArtifactsRepository,
     skill_loader: SkillLoader,
     intent_state: IntentStateService,
     option_service: OptionPromptService,
@@ -42,6 +44,6 @@ def build_tool_dispatch(
         GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
         UpdateIntentStateTool(intent_state),
-        CreatePlanTool(task_repo, content_repo, intent_state),
+        CreatePlanTool(task_repo, content_repo, task_artifacts_repo, intent_state),
         PresentOptionsTool(option_service),
     ], settings_service)

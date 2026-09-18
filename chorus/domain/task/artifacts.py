@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 from functools import singledispatch
-from typing import Any, Optional, Union, cast
+from typing import Any, Optional, Union
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -71,16 +72,19 @@ class PostCard:
 
 
 @singledispatch
-def downstream_view(artifacts: Any) -> dict:
-    """产物转下游注入视图，默认全量。"""
-    return dataclasses.asdict(artifacts)
+def invoke_text(artifacts: Any) -> str:
+    """产物喂回模型的文本：结构化产物给全量 JSON。"""
+    return json.dumps(dataclasses.asdict(artifacts), ensure_ascii=False, indent=2)
 
 
-@downstream_view.register
-def _idea_view(artifacts: IdeaArtifacts) -> dict:
-    """选题裁剪到生效选中候选。"""
-    cand = artifacts.selected_candidate()
-    return {"candidates": [dataclasses.asdict(cast(Any, cand))]} if cand else {}
+@invoke_text.register
+def _script_text(artifacts: ScriptArtifacts) -> str:
+    return artifacts.markdown
+
+
+@invoke_text.register
+def _postcard_text(artifacts: PostCard) -> str:
+    return artifacts.markdown
 
 
 @singledispatch

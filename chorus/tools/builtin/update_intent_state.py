@@ -27,11 +27,13 @@ class UpdateIntentStateTool(Tool):
                 "type": "string",
                 "enum": _INTENT_STATUS_ENUM,
                 "description": (
-                    "意图成熟度，按对话推进单调前进："
+                    "意图成熟度，正常随对话推进前进："
                     "empty=刚打招呼无创作意图；"
                     "capturing=用户已提创作需求，正在识别槽位（创作必须从此态开始，不要停 empty）；"
                     "needs_clarification=信息不足需追问；"
                     "ready_to_confirm=五个必填字段齐全且 extra 至少两条补充，等用户拍板；"
+                    "已交付成品后用户提出新要求（修订或新创作）时，"
+                    "可视情况退回任意更早状态并同步更新字段，重新走确认门；"
                     "confirmed/dispatched 由系统翻转，模型不要主动填"
                 ),
             },

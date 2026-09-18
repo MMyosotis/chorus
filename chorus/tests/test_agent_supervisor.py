@@ -13,7 +13,7 @@ from chorus.domain.intent import IntentStateUpdate
 from chorus.domain.memory import CreatorMemory, MemoryRecall
 from chorus.domain.skill import SkillLoader
 from chorus.domain.stream import StreamResult
-from chorus.domain.task import ACTIVE_STATUSES, Task
+from chorus.domain.task import ACTIVE_STATUSES, CANCELLABLE_STATUSES, Task
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.engine import build_engine
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
@@ -89,7 +89,7 @@ def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_s
     hooks = HookRegistry()
     intent_state = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc)
     tool_dispatcher = ToolDispatch([
-        CreatePlanTool(task_repo, content_repo, intent_state),
+        CreatePlanTool(task_repo, content_repo, TaskArtifactsRepository(engine), intent_state),
         LoadSkillTool(skill_loader),
         UpdateIntentStateTool(intent_state),
     ], _stub_settings())
@@ -103,7 +103,7 @@ def _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_s
     loop = AgentLoop(hooks, tool_dispatcher)
     sup = SupervisorService(
         session_svc, msg_svc, hooks, entry,
-        task_svc, tool_dispatcher, loop, intent_state, skill_loader,
+        task_svc, tool_dispatcher, loop, intent_state,
         stub_memory_service(), build_compact_service(engine), trace_svc,
     )
     return sup, intent_state
@@ -382,9 +382,8 @@ def test_provider_messages_injects_intent_block_before_last_user():
             intent_status="capturing", image_count=2, progress_percent=40,
         ),
     )
-    skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
-        s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
+        s.id, msg_svc, session_svc, HookRegistry(), intent_state,
         memory=MemoryRecall(), compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
@@ -419,9 +418,8 @@ def test_provider_messages_injects_recall_before_intent_block():
             created_at=0.0,
         )
     ]
-    skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     strategy = SupervisorLoopStrategy(
-        s.id, msg_svc, session_svc, HookRegistry(), intent_state, skill_loader, (),
+        s.id, msg_svc, session_svc, HookRegistry(), intent_state,
         memory=MemoryRecall(items=recalled), compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
@@ -475,7 +473,6 @@ def test_on_error_overflow_requests_retry_once():
     compact = build_compact_service(engine)
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, HookRegistry(), _intent_state,
-        SkillLoader(skills_dir=Path("/nonexistent-skills")), (),
         memory=MemoryRecall(), compact=compact,
     )
     ctx = AgentContext(session_id=s.id, chat_model="test-model")
@@ -505,7 +502,6 @@ def test_done_precedes_stop_hooks():
     )
     strategy = SupervisorLoopStrategy(
         s.id, msg_svc, session_svc, hooks, intent_state,
-        SkillLoader(skills_dir=Path("/nonexistent-skills")), (),
         memory=MemoryRecall(), compact=build_compact_service(engine),
     )
     ctx = AgentContext(session_id=s.id, chat_model="test-model")
@@ -516,6 +512,39 @@ def test_done_precedes_stop_hooks():
     assert order == []            # done 已可下发，收尾钩子尚未执行
     list(events)                  # 耗尽余下事件，钩子随之执行
     assert order == ["hook"]
+
+
+def test_resume_rewrites_receipt_and_locks():
+    """挂起图收尾锁：图活跃不放，放弃后放开；补回执改写原工具结果不追加，续跑落助手正文后锁复位。"""
+    engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo = _setup()
+    tool_stream = FakeStream([({"tool_calls": [types.SimpleNamespace(
+        index=0, id="c1", function=types.SimpleNamespace(
+            name="create_plan", arguments=json.dumps(_plan_args())))]}, "tool_calls")])
+    text_stream = FakeStream([({"content": "本次流水线已按你的要求收尾"}, "stop")])
+    client = FakeClient([tool_stream, text_stream])
+    sup, intent_state = _build_supervisor(engine, session_svc, msg_svc, trace_svc, task_repo, task_svc, content_repo, client)
+    s = session_svc.create("test")
+    intent_state.patch_status(s.id, "confirmed")
+    list(sup.stream(s.id, "帮我写一篇夏日博文"))
+
+    # 图仍活跃：锁不放（活跃任务优先挡按铃）
+    assert sup.has_unreceipted_plan(s.id) is False
+    # 放弃整条流水线后：末条是未回执的建图结果，锁放开
+    cancellable = task_repo.find_by_session_statuses(s.id, CANCELLABLE_STATUSES)
+    task_repo.cancel_pipeline(cancellable[0].pipeline_id, CANCELLABLE_STATUSES)
+    assert sup.has_unreceipted_plan(s.id) is True
+    tool_msg_id = msg_svc.list_messages(s.id)[-1].id
+
+    list(sup.resume(s.id, "create_plan", "创作流水线已被用户放弃，本次未交付成品"))
+
+    msgs = msg_svc.list_messages(s.id)
+    # 原工具结果被改写（同一行，不追加新 tool 消息），续跑补助手正文
+    assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
+    assert msgs[2].id == tool_msg_id
+    assert msgs[2].content == "创作流水线已被用户放弃，本次未交付成品"
+    assert msgs[3].content == "本次流水线已按你的要求收尾"
+    # 回执已落：锁复位，挡重复按铃
+    assert sup.has_unreceipted_plan(s.id) is False
 
 
 def main():

@@ -30,7 +30,7 @@ def _registry() -> ToolDispatch:
     return ToolDispatch([
         LoadSkillTool(None),
         UpdateIntentStateTool(None),
-        CreatePlanTool(None, None, None),
+        CreatePlanTool(None, None, None, None),
         PresentOptionsTool(None),
         BaiduSearchTool(None),
         GenerateImageTool(_stub_settings(), _stub_provider()),

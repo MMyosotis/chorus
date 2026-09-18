@@ -1,20 +1,28 @@
-"""提示词装配包：主调度基础文案与子角色模板同住，条件段经装配入口统一拼入。"""
+"""提示词装配包：每个 agent 一个模块，打开即见该 agent 全部上下文注入位置；装配机制在 assembly。"""
 from __future__ import annotations
 
-from chorus.domain.prompt.assembly import (
-    PromptContext,
-    UserMessageContext,
-    build_system_prompt,
-    inject_user_blocks,
+from chorus.domain.prompt.subagent import (
+    SubagentSystemInputs,
+    SubagentUserInputs,
+    SkeletonInputs,
+    InvokeInputs,
+    build_task_content,
+    subagent_base,
 )
-from chorus.domain.prompt.subagent import subagent_base
-from chorus.domain.prompt.supervisor import SYSTEM_PROMPT
+from chorus.domain.prompt.supervisor import (
+    SYSTEM_PROMPT,
+    SupervisorSystemInputs,
+    SupervisorUserInputs,
+)
 
 __all__ = [
     "SYSTEM_PROMPT",
-    "PromptContext",
-    "UserMessageContext",
-    "build_system_prompt",
-    "inject_user_blocks",
+    "SubagentSystemInputs",
+    "SubagentUserInputs",
+    "SkeletonInputs",
+    "InvokeInputs",
+    "build_task_content",
+    "SupervisorSystemInputs",
+    "SupervisorUserInputs",
     "subagent_base",
 ]

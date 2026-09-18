@@ -99,36 +99,43 @@ def test_retry_from_failed():
 def test_cancel_pipeline():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="pending")
-    _mk(task_repo, content_repo, "b", status="running")  # 运行中不可中途停
+    _mk(task_repo, content_repo, "b", status="running")  # 运行中也一并了结
     _mk(task_repo, content_repo, "c", status="finished")
     res = svc.cancel_pipeline("s1")
-    assert res["cancelled"] == 1  # 仅 pending
+    assert res["cancelled"] == 2  # pending + running
     assert task_repo.get("a").status == TaskStatus.CANCELLED
-    assert task_repo.get("b").status == TaskStatus.RUNNING  # 运行中保留
+    assert task_repo.get("b").status == TaskStatus.CANCELLED
     assert task_repo.get("c").status == TaskStatus.FINISHED
 
 
-def test_cancel_no_active():
-    """无 active 流水线：幂等返 cancelled=0，不报错（放弃整条对已终态流水线为 no-op）。"""
+def test_cancel_no_pipeline():
+    """会话无任何任务：幂等返 cancelled=0，不报错。"""
     svc, task_repo, content_repo = _setup()
-    _mk(task_repo, content_repo, "c", status="finished")
     res = svc.cancel_pipeline("s1")
     assert res["cancelled"] == 0
     assert res["pipeline_id"] is None
+
+
+def test_cancel_failed_only_pipeline():
+    """只剩失败任务的流水线也能定位并了结，图上留下用户放弃痕迹。"""
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "x", status="failed", pipeline_id="p1")
+    res = svc.cancel_pipeline("s1")
+    assert res["cancelled"] == 1
+    assert res["pipeline_id"] == "p1"
+    assert task_repo.get("x").status == TaskStatus.CANCELLED
 
 
 def test_cancel_pipeline_writes_terminal_updated_at():
     """批量取消至 cancelled 后，结束时刻写入时间戳。"""
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "a", status="pending", updated_at=0.0)
-    _mk(task_repo, content_repo, "b", status="running", updated_at=0.0)  # 运行中不可中途停
-    _mk(task_repo, content_repo, "c", status="finished")
+    _mk(task_repo, content_repo, "b", status="running", updated_at=0.0)
     svc.cancel_pipeline("s1")
-    a = task_repo.get("a")
-    b = task_repo.get("b")
-    assert a.status == TaskStatus.CANCELLED
-    assert b.status == TaskStatus.RUNNING  # 运行中保留
-    assert a.updated_at > 0.0
+    for tid in ("a", "b"):
+        got = task_repo.get(tid)
+        assert got.status == TaskStatus.CANCELLED
+        assert got.updated_at > 0.0
 
 
 def test_edit_script_updates_artifacts():
@@ -325,6 +332,31 @@ def test_retry_records_correction():
     _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
     svc.retry("t1", feedback="标题不够吸引")
     assert fake.corrections == [("t1", "标题不够吸引")]
+
+
+def test_list_products():
+    """成品清单只收已完成的排版任务，带全文与标题，按创建先后排序。"""
+    svc, task_repo, content_repo = _setup()
+    art_repo = TaskArtifactsRepository(_engine_of(task_repo))
+
+    def _seed(tid, agent_type, status, created_at, artifacts=None):
+        task_repo.insert(Task(
+            id=tid, session_id="s1", pipeline_id="p1", agent_type=agent_type,
+            status=status, dependencies=[], created_at=created_at, updated_at=created_at,
+        ))
+        if artifacts is not None:
+            art_repo.upsert(tid, agent_type, artifacts)
+
+    _seed("draft", "finalize", "awaiting_confirm", 4.0, PostCard(markdown="草稿", meta={}))
+    _seed("later", "finalize", "finished", 2.0,
+          PostCard(markdown="---\ntitle: 后发\n---\n\n后发正文", meta={"title": "后发"}))
+    _seed("first", "finalize", "finished", 1.0,
+          PostCard(markdown="---\ntitle: 先发\n---\n\n先发正文", meta={"title": "先发"}))
+    _seed("script", "script", "finished", 3.0, ScriptArtifacts(markdown="文案产物"))
+    products = svc.list_products("s1")
+    assert [p["id"] for p in products] == ["first", "later"]  # 按创建先后
+    assert products[1]["title"] == "后发"
+    assert "后发正文" in products[1]["markdown"]
 
 
 def main():

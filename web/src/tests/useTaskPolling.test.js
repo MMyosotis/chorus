@@ -57,14 +57,14 @@ describe('useTaskPolling', () => {
     expect(reload).toHaveBeenCalledWith('s2') // s2 非流式 -> 刷新
   })
 
-  it('pipeline 完成翻转 active 时自停并回调', async () => {
+  it('pipeline 全部完成翻转 active 时自停并回调', async () => {
     const finished = vi.fn()
     polling.configure({ isStreaming: () => false, reloadMessages: () => Promise.resolve(), onPipelineFinished: finished })
     // 首次 active=true
     getTaskGraph.mockResolvedValueOnce(graph(true, [{ agent_type: 'idea', status: 'running' }]))
     await polling.start('s1')
 
-    // 下一 tick：active 翻 false 且 finalize finished
+    // 下一 tick：active 翻 false 且全任务完成
     getTaskGraph.mockResolvedValueOnce(graph(false, [
       { agent_type: 'idea', status: 'finished' },
       { agent_type: 'finalize', status: 'finished' },
@@ -73,6 +73,36 @@ describe('useTaskPolling', () => {
 
     expect(finished).toHaveBeenCalledWith('s1')
     expect(polling.pollingSession.value).toBeNull()
+  })
+
+  it('出现失败任务时不触发完成回调（取消路径由取消回调按铃）', async () => {
+    const finished = vi.fn()
+    polling.configure({ isStreaming: () => false, reloadMessages: () => Promise.resolve(), onPipelineFinished: finished })
+    getTaskGraph.mockResolvedValueOnce(graph(true, [{ agent_type: 'idea', status: 'running' }]))
+    await polling.start('s1')
+
+    getTaskGraph.mockResolvedValueOnce(graph(false, [
+      { agent_type: 'idea', status: 'finished' },
+      { agent_type: 'script', status: 'failed' },
+    ]))
+    await vi.advanceTimersToNextTimerAsync()
+
+    expect(finished).not.toHaveBeenCalled()
+  })
+
+  it('含已取消任务时不触发完成回调', async () => {
+    const finished = vi.fn()
+    polling.configure({ isStreaming: () => false, reloadMessages: () => Promise.resolve(), onPipelineFinished: finished })
+    getTaskGraph.mockResolvedValueOnce(graph(true, [{ agent_type: 'idea', status: 'running' }]))
+    await polling.start('s1')
+
+    getTaskGraph.mockResolvedValueOnce(graph(false, [
+      { agent_type: 'idea', status: 'finished' },
+      { agent_type: 'script', status: 'cancelled' },
+    ]))
+    await vi.advanceTimersToNextTimerAsync()
+
+    expect(finished).not.toHaveBeenCalled()
   })
 
   it('启动时已空闲则一轮后自停且不触发完成回调', async () => {

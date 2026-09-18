@@ -1,11 +1,10 @@
 """tasks / task_content 核心行模型 + 任务图共享词汇表（状态/角色枚举）。
 
-数据模型带只读行为：任务持可调度判定，内容行持调用消息渲染。"""
+数据模型带只读行为：任务持可调度判定。"""
 from __future__ import annotations
 
-import json
 from enum import Enum
-from typing import Any, Iterable, Optional
+from typing import Iterable, Optional
 
 from pydantic import ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -49,6 +48,10 @@ class Task:
             return False
         return all(dep.status == TaskStatus.FINISHED for dep in deps)
 
+    def is_delivered(self) -> bool:
+        """判断任务是否为已交付成品。"""
+        return self.agent_type == AgentType.FINALIZE and self.status == TaskStatus.FINISHED
+
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class TaskContent:
@@ -58,23 +61,3 @@ class TaskContent:
     invoke_message: str
     error: Optional[str] = None
     feedback: Optional[str] = None
-
-    def render_invoke(
-        self, deps_outputs: dict[str, Any], self_prior: Optional[Any],
-    ) -> str:
-        """拼首轮调用消息：基础骨架，按需附前置产物、上轮产物、用户反馈。"""
-        parts = [self.invoke_message]
-        if deps_outputs:
-            parts.append("前置步骤产物：")
-            for dep_id, out in deps_outputs.items():
-                parts.append(f"--- {dep_id} ---\n{json.dumps(out, ensure_ascii=False, indent=2)}")
-
-        if self_prior is not None:
-            parts.append("你上一轮的产物（据此定向改进，不要简单重复）：")
-            parts.append(json.dumps(self_prior, ensure_ascii=False, indent=2))
-
-        if self.feedback:
-            parts.append("用户反馈（请据此改进）：")
-            parts.append(self.feedback)
-
-        return "\n\n".join(parts)

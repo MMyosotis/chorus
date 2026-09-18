@@ -10,7 +10,6 @@ const props = defineProps({
   activeId: { type: String, default: null },
   streamingMap: { type: Object, default: () => ({}) },
   activeWorking: { type: Boolean, default: false },
-  activeCompleted: { type: Boolean, default: false },
   settingsOpen: { type: Boolean, default: false },
   memoryOpen: { type: Boolean, default: false },
   consoleOpen: { type: Boolean, default: false },

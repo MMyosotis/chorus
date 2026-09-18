@@ -1,15 +1,15 @@
-"""任务图纯函数：步骤校验、整图展开、调用消息渲染规格，不碰数据库。"""
+"""任务图模型：步骤校验、整图展开与内容行生成，不碰数据库。"""
 from __future__ import annotations
 
-import json
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
 
 from chorus.domain.intent import Intent
+from chorus.domain.task.artifacts import PostCard
 from chorus.domain.task.errors import ValidationError
-from chorus.domain.task.models import Task, TaskContent, TaskStatus
+from chorus.domain.task.models import Task, TaskStatus
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 _MAX_STEPS = 20
@@ -21,6 +21,7 @@ class StepSpec:
 
     agent_type: str
     deps: list[int]
+    note: str = ""
 
 
 @dataclass
@@ -31,6 +32,7 @@ class TaskPlan:
     intent: Intent
     steps: list[StepSpec]
     message_id: Optional[str] = None
+    base_card: Optional[PostCard] = None
     pipeline_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     created_at: float = field(default_factory=time.time)
 
@@ -41,10 +43,7 @@ class TaskPlan:
         if not self.steps:
             raise ValidationError("steps 为空", "请至少编排一个创作步骤，末步须为 finalize 排版")
         if len(self.steps) > _MAX_STEPS:
-            raise ValidationError(
-                f"steps 过多({len(self.steps)})",
-                f"步骤数不超过 {_MAX_STEPS}",
-            )
+            raise ValidationError("steps 过多({len(self.steps)})", "步骤数不超过 {_MAX_STEPS}")
 
         for index in range(len(self.steps)):
             self._validate_step(index)
@@ -73,32 +72,25 @@ class TaskPlan:
                 f"步骤{index}的 deps 只能引用前置步骤索引(0..{index - 1})",
             )
 
-    def expand(self) -> list[tuple[Task, TaskContent]]:
+    def expand(self) -> list[tuple[Task, StepSpec]]:
+        """整图展开为任务行与步骤规格。"""
         ids = [uuid.uuid4().hex for _ in self.steps]
         return [
             self._one_task(ids, index)
             for index in range(len(self.steps))
         ]
 
-    def _one_task(self, ids: list[str], index: int) -> tuple[Task, TaskContent]:
+    def _one_task(self, ids: list[str], index: int) -> tuple[Task, StepSpec]:
         step = self.steps[index]
-        task_id = ids[index]
         task = Task(
-            id=task_id, session_id=self.session_id, message_id=self.message_id, pipeline_id=self.pipeline_id,
-            agent_type=step.agent_type, status=TaskStatus.PENDING,
+            id=ids[index],
+            session_id=self.session_id,
+            message_id=self.message_id,
+            pipeline_id=self.pipeline_id,
+            agent_type=step.agent_type,
+            status=TaskStatus.PENDING,
             dependencies=[ids[dep] for dep in step.deps],
-            created_at=self.created_at, updated_at=self.created_at,
+            created_at=self.created_at,
+            updated_at=self.created_at,
         )
-        content = TaskContent(
-            task_id=task_id,
-            invoke_message=self._render_skeleton(step),
-        )
-        return task, content
-
-    def _render_skeleton(self, step: StepSpec) -> str:
-        """完整意图 JSON + 角色，不逐字段拆解。"""
-        return "\n".join([
-            "创作意图：",
-            json.dumps(self.intent.model_dump(mode="json"), ensure_ascii=False, indent=2),
-            f"角色：{AGENT_PROFILES[step.agent_type].display_name}",
-        ])
+        return task, step

@@ -11,7 +11,6 @@ from chorus.agents import AgentContext
 from chorus.agents.runtime import ModelCallStats
 from chorus.agents.supervisor import SupervisorLoopStrategy
 from chorus.domain.memory import MemoryRecall
-from chorus.domain.skill import SkillLoader
 from chorus.domain.events import TitleUpdateEvent
 from chorus.agents.chat_model import ModelPricing
 from chorus.domain.trace import ModelUsage, TracePhase
@@ -48,7 +47,7 @@ class _StubDispatcher:
 def test_supervisor_on_error_appends_error_message():
     msg_svc, trace_svc, _, engine = _setup()
     msg_svc.append_user_message("s1", "hi")
-    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, SkillLoader(), (), MemoryRecall(), build_compact_service(engine))
+    strategy = SupervisorLoopStrategy("s1", msg_svc, None, None, None, MemoryRecall(), build_compact_service(engine))
     ctx = AgentContext(session_id="s1", chat_model="test-model")
     ctx.turn.message_id = "m-err"
     ctx.outcome.exception = ValueError("boom")

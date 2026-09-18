@@ -1,23 +1,31 @@
 """建图工具：解析、校验、整图成型与事务落库全在工具内收口。
 
 对模型是普通工具，主流程只据挂起信号关流本轮。可预料失败返回传由模型自纠，
-仅意外异常由派发层兜底。
+仅意外异常由派发层兜底。挂起收口的回执也在此拼装：由最近一张图的状态推导
+成品直给或取消一句话。
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, cast
 
 from pydantic import ValidationError as PydanticValidationError
 
 from chorus.domain.intent import Intent
+from chorus.domain.prompt import SkeletonInputs, build_task_content
 from chorus.domain.task import (
+    PostCard,
     StepSpec,
+    TaskArtifacts,
     TaskPlan,
+    TaskStatus,
     ValidationError,
+    format_product_list,
 )
 from chorus.repo.task import TaskRepository
+from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
+from chorus.services.products import load_delivered_products
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
 
@@ -25,7 +33,8 @@ class CreatePlanTool(Tool):
     name = "create_plan"
     description = (
         "当用户要创作图文博文时调用，按用户实际自主编排创作步骤；"
-        "普通对话直接文本回复不调用本工具。"
+        "普通对话直接文本回复不调用本工具。修订已交付成品时，"
+        "把此前收口回执给出的成品标识填作底稿标识。"
     )
     parameters = {
         "type": "object",
@@ -37,6 +46,11 @@ class CreatePlanTool(Tool):
                     "topic", "platform", "format", "style", "image_count", "extra",
                 ),
                 "required": ["topic"],
+            },
+            "base_product_id": {
+                "type": "string",
+                "description": "底稿标识：修订所基于的已交付成品（排版任务 id），"
+                "取此前收口回执给出的成品标识；全新创作不填",
             },
             "steps": {
                 "type": "array",
@@ -53,6 +67,10 @@ class CreatePlanTool(Tool):
                             "items": {"type": "integer"},
                             "description": "前置步骤索引(0-based)",
                         },
+                        "note": {
+                            "type": "string",
+                            "description": "本步交待：给该步骤的捎话，修订时说清改哪留哪，可不填",
+                        },
                     },
                     "required": ["agent_type", "deps"],
                 },
@@ -66,10 +84,12 @@ class CreatePlanTool(Tool):
         self,
         task_repo: TaskRepository,
         content_repo: TaskContentRepository,
+        task_artifacts_repo: TaskArtifactsRepository,
         intent_state: IntentStateService,
     ):
         self._task_repo = task_repo
         self._content_repo = content_repo
+        self._artifacts_repo = task_artifacts_repo
         self._intent_state = intent_state
 
     def display(self, arguments: dict) -> str:
@@ -77,11 +97,14 @@ class CreatePlanTool(Tool):
         return f"创作：{topic or '(未指定主题)'}"
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
-        blocked = self._intent_gate(ctx.session_id)
+        session_id = cast(str, ctx.session_id)
+        blocked = self._intent_gate(session_id)
         if blocked:
             return ToolRunResult(blocked)
         try:
-            pairs = self._build_pairs(arguments, ctx.session_id, ctx.message_id)
+            base_product_id = arguments.get("base_product_id")
+            base_card = self._load_base_card(session_id, cast(str, base_product_id)) if base_product_id else None
+            pairs = self._build_pairs(arguments, session_id, ctx.message_id, base_card)
         except (KeyError, TypeError, PydanticValidationError) as e:
             return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"))
         except ValidationError as e:
@@ -100,14 +123,32 @@ class CreatePlanTool(Tool):
             "或在 ready_to_confirm 后等待用户确认。"
         )
 
-    def _build_pairs(self, arguments: dict, session_id: str, message_id: Optional[str]):
-        """解析 steps、整份 intent 透传（不逐字段拆解）、校验、展开成 (task, content) 对。"""
+    def _load_base_card(self, session_id: str, base_product_id: str) -> PostCard:
+        """按底稿标识直查校验并冻结成品卡，无效抛校验错打回。"""
+        task = self._task_repo.get(base_product_id)
+        if task is not None and task.session_id == session_id and task.is_delivered():
+            loaded = cast(TaskArtifacts, self._artifacts_repo.load(base_product_id))
+            return cast(PostCard, loaded.artifacts)
+
+        products = load_delivered_products(self._task_repo, self._artifacts_repo, session_id)
+        raise ValidationError(
+            f"底稿标识无效: {base_product_id}",
+            "底稿标识须是本会话已交付成品的排版任务 id。\n"
+            f"当前可用的成品：\n{format_product_list(products)}",
+        )
+
+    def _build_pairs(self, arguments: dict, session_id: str, message_id: Optional[str], base_card: Optional[PostCard]):
+        """解析 steps、整份 intent 透传（不逐字段拆解）、校验，展开并渲染骨架内容行。"""
         intent = Intent.model_validate(arguments["intent"])
         steps = [
-            StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []))
+            StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []), note=step.get("note", ""))
             for step in arguments["steps"]
         ]
-        return TaskPlan(session_id=session_id, message_id=message_id, intent=intent, steps=steps).expand()
+        plan = TaskPlan(session_id=session_id, message_id=message_id, intent=intent, steps=steps, base_card=base_card)
+        return [
+            (task, build_task_content(task.id, SkeletonInputs.from_plan(plan, step)))
+            for task, step in plan.expand()
+        ]
 
     def _persist(self, pairs):
         """逐条落库 task 与其 content。"""
@@ -125,6 +166,23 @@ class CreatePlanTool(Tool):
         )
 
     def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
-        """pipeline 全部跑完后的收尾：复位意图状态，告知模型计划已落地。"""
-        state = self._intent_state.patch_status(session_id, "empty")
-        return f"计划已完成，所有创作步骤均已落地（version={state.version}）"
+        """图收敛后的回执：最近一张图成品完成则直给全文与成品标识，否则取消一句话。"""
+        tasks = self._latest_pipeline_tasks(session_id)
+        finalize_task = next((task for task in tasks if task.agent_type == "finalize"), None)
+        if finalize_task is None or finalize_task.status != TaskStatus.FINISHED:
+            return "创作流水线已被用户放弃，本次未交付成品"
+
+        card = cast(PostCard, self._artifacts_repo.load(finalize_task.id).artifacts)
+        title = card.meta["title"]
+        return (
+            f"创作流水线已收口，成品标识={finalize_task.id}（标题：{title}），"
+            "成品全文已交付用户，内容如下：\n\n" + card.markdown
+        )
+
+    def _latest_pipeline_tasks(self, session_id: str) -> list:
+        """取会话最近一张图的全部任务行。挂起期间不会再建新图，最近即本张。"""
+        tasks = self._task_repo.find_by_session_statuses(session_id, list(TaskStatus))
+        if not tasks:
+            return []
+        latest = max(tasks, key=lambda task: task.updated_at)
+        return [task for task in tasks if task.pipeline_id == latest.pipeline_id]

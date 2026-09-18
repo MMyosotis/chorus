@@ -1,17 +1,42 @@
-"""subagent system prompt 模板：角色各自的职责、输入来源与产出协议。
+"""子 agent 提示词：基础文案、每轮系统/用户段组装、首轮调用消息与纠错消息组装。
 
-条件段由装配入口统一拼入，本文件只提供基础文案。
+首轮调用消息固定段顺序：骨架（角色/交待/意图/底稿）→前置产物→上轮产物→用户反馈，
+与基础文案声明的输入顺序一致；建图时只冻骨架，其余三段开跑时补齐。
 """
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Optional
+
+from chorus.domain.intent import Intent
+from chorus.domain.memory import (
+    CreatorMemory,
+    MemoryDigest,
+    render_digest_block,
+    render_recall_block,
+)
+from chorus.domain.prompt.assembly import (
+    build_system_prompt,
+    inject_user_blocks,
+    join_sections,
+    section,
+)
+from chorus.domain.skill import SkillLoader
+from chorus.domain.task.artifacts import PostCard
+from chorus.domain.task.models import TaskContent
 from chorus.domain.task.profiles import AGENT_PROFILES
+
+if TYPE_CHECKING:
+    from chorus.domain.task.pipeline import StepSpec, TaskPlan
 
 _BASE = (
     "你是多平台图文创作团队的{role_name}。{role_desc}\n\n"
     "禁用任何 emoji 字符，最终产物一律使用纯文本。\n\n"
     "## 你的输入\n"
-    "首轮调用消息包含完整创作意图，并按需附带前置步骤产物、上轮产物和用户反馈。"
-    "只做你的角色职责，复用上游已完成的内容，不要重做。\n\n"
+    "首轮调用消息按固定顺序给出你的角色、本步交待（如有）、创作意图、底稿（如有）、"
+    "前置产物、上轮产物与用户反馈。只做你的角色职责，复用上游已完成的内容，不要重做。"
+    "前置产物若含多个候选，以 selected 指向的候选为准，不要自行换角度或混用其他候选。\n\n"
     "## 平台 Skill\n"
     "根据创作意图的 platform，在可用技能中选择与平台匹配的 Skill。"
     "先用 list_skill 列出该 Skill 包内有哪些文件，再用 load_skill 读取 SKILL.md 与本角色需要的参考文件。"
@@ -92,7 +117,7 @@ _ROLE_RULES = {
 
 
 def subagent_base(agent_type: str) -> str:
-    """按角色返回 system prompt 基础文案，技能段由装配入口按白名单拼入。"""
+    """按角色返回 system 基础文案。"""
     profile = AGENT_PROFILES[agent_type]
     return _BASE.format(
         role_name=profile.display_name,
@@ -100,3 +125,93 @@ def subagent_base(agent_type: str) -> str:
         artifacts_shape=_SHAPES[profile.artifacts_schema],
         role_rules=_ROLE_RULES[profile.artifacts_schema],
     )
+
+
+@dataclass(frozen=True)
+class SubagentSystemInputs:
+    """子 agent 系统消息原料：角色、技能加载器与创作者档案摘要。"""
+
+    agent_type: str
+    skill_loader: SkillLoader
+    digest: MemoryDigest
+
+    def render_system_prompt(self) -> str:
+        """拼接子 agent 的 system 消息。"""
+        return build_system_prompt(subagent_base(self.agent_type), [
+            self.skill_loader.format_hints(),
+            render_digest_block(self.digest),
+        ])
+
+
+@dataclass(frozen=True)
+class SubagentUserInputs:
+    """子 agent 用户消息原料：当前召回的记忆。"""
+
+    memories: list[CreatorMemory] = field(default_factory=list)
+
+    def inject_user_context(self, msgs: list[dict]) -> None:
+        """把子 agent 的用户上下文注入末条用户消息前。"""
+        inject_user_blocks(msgs, [render_recall_block(self.memories)])
+
+
+@dataclass(frozen=True)
+class SkeletonInputs:
+    """建图时冻进内容行的骨架原料：角色、交待、意图、底稿。"""
+
+    agent_type: str
+    note: str
+    intent: Intent
+    base_card: Optional[PostCard] = None
+
+    @classmethod
+    def from_plan(cls, plan: "TaskPlan", step: "StepSpec") -> "SkeletonInputs":
+        """按任务计划与步骤生成骨架原料。"""
+        return cls(
+            agent_type=step.agent_type,
+            note=step.note,
+            intent=plan.intent,
+            base_card=plan.base_card,
+        )
+
+    def render_skeleton(self) -> str:
+        """建图时渲染并冻结骨架内容。"""
+        intent_text = json.dumps(
+            self.intent.model_dump(mode="json"),
+            ensure_ascii=False,
+            indent=2,
+        )
+        sections = [
+            f"角色：{AGENT_PROFILES[self.agent_type].display_name}",
+            f"本步交待：{self.note}" if self.note else "",
+            f"创作意图：\n{intent_text}",
+            f"底稿：\n{self.base_card.markdown}" if self.base_card is not None else "",
+        ]
+        return "\n\n".join(section for section in sections if section)
+
+
+def build_task_content(task_id: str, skeleton: SkeletonInputs) -> TaskContent:
+    """按骨架渲染落库内容行。"""
+    return TaskContent(task_id=task_id, invoke_message=skeleton.render_skeleton())
+
+
+@dataclass(frozen=True)
+class InvokeInputs:
+    """首轮调用消息原料：骨架、前置产物、上轮产物与用户反馈。"""
+
+    skeleton: str
+    dependencies: list[tuple[str, str]]
+    prior: Optional[str] = None
+    feedback: Optional[str] = None
+
+    def assemble_invoke(self) -> str:
+        """按固定顺序拼接子 agent 首轮调用消息。"""
+        dependency_sections = [
+            section(f"[{role_name}] ", output, inline=True)
+            for role_name, output in self.dependencies
+        ]
+        return join_sections([
+            self.skeleton,
+            section("前置产物（上游已确认的产出）：", "\n".join(dependency_sections)),
+            section("上轮产物（被打回的草稿，据此改进，不要简单重复）：", self.prior),
+            section("用户反馈（据此改进）：", self.feedback),
+        ])

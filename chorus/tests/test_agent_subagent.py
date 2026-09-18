@@ -317,7 +317,7 @@ def test_subagent_provider_messages_injects_recall():
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
-        tool_names=(), tool_dispatch=None,
+        tool_dispatch=None,
         memory=MemoryRecall(items=recalled),
     )
     msgs = strategy.provider_messages()
@@ -344,7 +344,7 @@ def test_subagent_provider_messages_injects_digest_into_system():
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
-        tool_names=(), tool_dispatch=None,
+        tool_dispatch=None,
         memory=MemoryRecall(digest=digest),
     )
     msgs = strategy.provider_messages()

@@ -12,11 +12,12 @@ from chorus.domain.task import (
     ACTIVE_STATUSES,
     AGENT_PROFILES,
     CANCELLABLE_STATUSES,
+    DeliveredProduct,
     LEGAL_TRANSITIONS,
     PostCard,
+    ProductCandidate,
     TERMINAL_STATUSES,
     Task,
-    TaskContent,
     TaskPlan,
     TaskProgress,
     TaskStatus,
@@ -24,13 +25,17 @@ from chorus.domain.task import (
     ValidationError,
     build_task_graph,
     dump_task_graph,
+    format_product_list,
+    invoke_text,
     is_legal_transition,
+    list_products,
     select_display_pipeline,
     topological_order,
     IdeaArtifacts,
     IdeaCandidate,
+    ImageArtifacts,
+    ImageItem,
     ScriptArtifacts,
-    TaskArtifacts,
 )
 from chorus.domain.task.errors import AbandonError
 
@@ -55,6 +60,28 @@ def test_postcard_contract():
     assert card.meta["title"] == "夏日晚风"
 
 
+def test_delivered_products_filter_and_format():
+    draft = _mk(TaskStatus.AWAITING_CONFIRM, id="draft", agent_type="finalize", created_at=4.0)
+    later = _mk(TaskStatus.FINISHED, id="later", agent_type="finalize", created_at=2.0)
+    first = _mk(
+        TaskStatus.FINISHED, id="first", agent_type="finalize", created_at=1.0,
+        message_id="m1",
+    )
+    script = _mk(TaskStatus.FINISHED, id="script", agent_type="script", created_at=3.0)
+    candidates = [
+        ProductCandidate(
+            task=task,
+            card=PostCard(markdown=f"{task.id}正文", meta={"title": title}),
+        )
+        for task, title in [(draft, "草稿"), (script, "文案"), (later, "后发"), (first, "先发")]
+    ]
+    products = list_products(candidates)
+    assert isinstance(products[0], DeliveredProduct)
+    assert [product.id for product in products] == ["first", "later"]
+    assert format_product_list(products) == "- first 《先发》\n- later 《后发》"
+    assert "暂无已交付成品" in format_product_list([])
+
+
 def test_legal_transitions_table():
     # 终态不可再转移
     assert not any(f == TaskStatus.FINISHED for f, _ in LEGAL_TRANSITIONS)
@@ -64,10 +91,11 @@ def test_legal_transitions_table():
     assert is_legal_transition("awaiting_confirm", "finished")
     assert is_legal_transition("awaiting_confirm", "pending")  # retry
     assert is_legal_transition("failed", "pending")  # retry 复活
-    # 批量取消只翻非运行态：运行中不可中途停
+    # 批量取消可覆盖运行中与失败：放弃整条流水线要能把任何残余任务了结掉
     assert is_legal_transition("pending", "cancelled")
     assert is_legal_transition("awaiting_confirm", "cancelled")
-    assert not is_legal_transition("running", "cancelled")
+    assert is_legal_transition("running", "cancelled")
+    assert is_legal_transition("failed", "cancelled")
     # 非法
     assert not is_legal_transition("finished", "running")
     assert not is_legal_transition("finished", "pending")
@@ -90,7 +118,7 @@ def test_can_schedule():
 def test_status_sets():
     assert ACTIVE_STATUSES == frozenset({"pending", "running", "awaiting_confirm"})
     assert TERMINAL_STATUSES == frozenset({"finished", "failed", "cancelled"})
-    assert CANCELLABLE_STATUSES == frozenset({"pending", "awaiting_confirm"})  # 运行中不可中途停
+    assert CANCELLABLE_STATUSES == frozenset({"pending", "running", "awaiting_confirm", "failed"})
     assert ACTIVE_STATUSES.isdisjoint(TERMINAL_STATUSES)
 
 
@@ -176,33 +204,37 @@ def test_expand_pipeline():
         session_id="sess-x", intent=intent, steps=steps, created_at=1000.0,
     ).expand()
     assert len(pairs) == 2
-    tasks = [t for t, _ in pairs]
-    contents = [c for _, c in pairs]
-    assert all(t.status == TaskStatus.PENDING for t in tasks)
-    assert all(t.session_id == "sess-x" and t.created_at == 1000.0 for t in tasks)
+    tasks = [task for task, _ in pairs]
+    paired_steps = [step for _, step in pairs]
+    assert all(task.status == TaskStatus.PENDING for task in tasks)
+    assert all(task.session_id == "sess-x" and task.created_at == 1000.0 for task in tasks)
     assert tasks[0].dependencies == []
     assert tasks[1].dependencies == [tasks[0].id]
-    assert all(t.pipeline_id == tasks[0].pipeline_id for t in tasks)
-    # 框架前缀 + 意图 JSON 原文注入调用消息
-    assert "创作意图：" in contents[0].invoke_message
-    assert "夏日晚风" in contents[0].invoke_message
-    # 内容行对齐调度行标识
-    assert all(c.task_id == t.id for t, c in pairs)
+    assert all(task.pipeline_id == tasks[0].pipeline_id for task in tasks)
+    assert [step.agent_type for step in paired_steps] == ["idea", "finalize"]
+    assert paired_steps[1].deps == [0]
 
 
-def test_render_invoke_message_injects_deps_and_feedback():
-    content = TaskContent(
-        task_id="t", invoke_message="骨架",
-        feedback="改标题",
-    )
-    out = content.render_invoke({"d1": {"title": "x"}}, {"prev": 1})
-    assert "骨架" in out
-    assert "前置步骤产物" in out
-    assert "你上一轮的产物" in out
-    assert "用户反馈" in out
-    # 无注入时只骨架
-    bare = TaskContent(task_id="t", invoke_message="骨架")
-    assert bare.render_invoke({}, None) == "骨架"
+def test_invoke_text_markdown_bodies_return_raw():
+    # markdown 本体给原文，不带 JSON 壳与转义
+    script = ScriptArtifacts(markdown="第一行\n第二行")
+    assert invoke_text(script) == "第一行\n第二行"
+    card = PostCard(markdown="# 标题\n正文", meta={"title": "标题"})
+    assert invoke_text(card) == "# 标题\n正文"
+
+
+def test_invoke_text_structured_bodies_return_full_json():
+    # 结构化产物给全量 JSON：选题保留全部候选与 selected，不裁剪
+    idea = IdeaArtifacts(candidates=[
+        IdeaCandidate(index=0, title="甲", angle="a", reason="r"),
+        IdeaCandidate(index=1, title="乙", angle="b", reason="r"),
+    ], selected=1)
+    idea_text = invoke_text(idea)
+    assert '"甲"' in idea_text and '"乙"' in idea_text
+    assert '"selected": 1' in idea_text
+    image = ImageArtifacts(images=[ImageItem(url="http://x/a.png", caption="图注")])
+    image_text = invoke_text(image)
+    assert "http://x/a.png" in image_text and "图注" in image_text
 
 
 def test_parse_output_idea_ok():

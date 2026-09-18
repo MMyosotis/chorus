@@ -1,9 +1,22 @@
-"""supervisor system prompt 基础文案：角色档案 + 意图规则 + 编排规则。
+"""主调度提示词：角色档案基础文案，及每轮系统/用户段组装。
 
-条件段由装配入口统一拼入，本文件只提供基础文案。
+召回记忆段与子 agent 共用，直接取 chorus.domain.memory 的渲染函数。
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
+from chorus.domain.intent import IntentState, intent_state_block
+from chorus.domain.memory import (
+    CreatorMemory,
+    MemoryDigest,
+    render_digest_block,
+    render_recall_block,
+)
+from chorus.domain.prompt.assembly import (
+    build_system_prompt,
+    inject_user_blocks,
+)
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 
@@ -33,7 +46,9 @@ SYSTEM_PROMPT = (
     "needs_clarification=信息不足需追问；"
     "ready_to_confirm=五字段齐全且 extra 至少两条补充，等用户拍板"
     "（系统自动投影五字段，不用自己列）；"
-    "confirmed/dispatched 由系统翻转，不要主动填。\n"
+    "confirmed/dispatched 由系统翻转，不要主动填。"
+    "已交付成品后用户提出新要求（修订或新创作），可视情况退回任意更早状态"
+    "（capturing/needs_clarification/ready_to_confirm）并同步更新字段，重新走确认门。\n"
     "- 五个必填字段：topic（主题）、platform（平台展示名）、format（体裁）、style（风格）、"
     "image_count（配图数，追问阶段主动确认）。extra 只放受众/篇幅/约束等零散要求"
     "（key 中文短词、value 自然语言），不放这五个字段。\n"
@@ -54,7 +69,12 @@ SYSTEM_PROMPT = (
     "## 编排规则\n"
     "- create_plan.intent 必须完整抄写已确认快照的 topic/platform/format/style/image_count/extra，"
     "不要丢字段或添加派生字段。\n"
+    "- 修订已交付成品时，base_product_id 填此前收口回执中给出的成品标识，"
+    "并在各步骤的 note 里说清改哪留哪；全新创作两者都不填。底稿会原样下发给每个步骤。\n"
     "- steps 是创作步骤序列，末步必须为 finalize（它是唯一成品出口，装配整棵 PostCard）。\n"
+    "- 图收敛后的按铃续跑会收到 create_plan 的收口回执，内含成品全文仅供你知晓交付结果："
+    "此时只用一句话告知用户成品已在下方卡片中交付，严禁复述或转贴回执里的成品标题与正文；"
+    "收到流水线已被放弃的回执时同理，一句话收尾即可。\n"
     "- deps 决定子 Agent 能看到哪些前置产物。只引用前面步骤的 0-based 索引，"
     "并把当前步骤真正需要的上游全部列入；只有第一步可以无依赖。\n"
     "- agent_type 只能是 idea/script/image/finalize 之一。\n\n"
@@ -65,3 +85,29 @@ SYSTEM_PROMPT = (
     "- 侧重配图：idea（可选）-> script（精简串场文案）-> image -> finalize。"
     "侧重是调节图文比例而非砍掉文案步，成品仍是有文字的图文笔记。\n"
 )
+
+
+@dataclass(frozen=True)
+class SupervisorSystemInputs:
+    """supervisor 系统消息原料：创作者档案摘要。"""
+
+    digest: MemoryDigest
+
+    def render_system_prompt(self) -> str:
+        """拼接 supervisor 的 system 消息。"""
+        return build_system_prompt(SYSTEM_PROMPT, [render_digest_block(self.digest)])
+
+
+@dataclass(frozen=True)
+class SupervisorUserInputs:
+    """supervisor 用户消息原料：意图快照与召回记忆。"""
+
+    intent_state: IntentState
+    memories: list[CreatorMemory] = field(default_factory=list)
+
+    def inject_user_context(self, msgs: list[dict]) -> None:
+        """把 supervisor 的用户上下文注入末条用户消息前。"""
+        inject_user_blocks(msgs, [
+            render_recall_block(self.memories),
+            intent_state_block(self.intent_state),
+        ])

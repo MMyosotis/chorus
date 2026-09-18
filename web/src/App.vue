@@ -12,6 +12,8 @@ import {
   renameSession,
   fetchMessages,
   streamChat,
+  resumeSession,
+  fetchProducts,
   suggestMessages,
   getIntentState,
   getIntentConfirmations,
@@ -23,7 +25,7 @@ import {
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
 import { mergeAssistantHistory } from './composables/messageHistory.js'
-import { planTaskCards, planIntentCards, planOptionCards } from './composables/taskCardProjection.js'
+import { planTaskCards, planProductCards, planIntentCards, planOptionCards } from './composables/taskCardProjection.js'
 import { replaceAnchoredCards } from './composables/anchoredCards.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import { ROLE_FULL } from './team-panel/roleMeta.js'
@@ -42,6 +44,7 @@ const streamingBySession = reactive({})
 const intentStateBySession = reactive({})
 const intentConfirmationsBySession = reactive({})
 const optionPromptsBySession = reactive({})
+const productsBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
 const leftRailOpen = ref(true)
@@ -150,7 +153,6 @@ const messages = computed(() => messagesBySession[activeId.value] || [])
 const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
-const activeCompleted = computed(() => (activeGraph.value?.tasks || []).some((task) => task.agent_type === 'finalize' && task.status === 'finished'))
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
 const activeConfirmations = computed(() => intentConfirmationsBySession[activeId.value] || [])
 const activeConfirmation = computed(() => activeConfirmations.value.find((confirmation) => confirmation.status === 'open') || null)
@@ -252,6 +254,38 @@ async function loadIntentConfirmations(id) {
   }
 }
 
+async function loadProducts(id) {
+  try {
+    productsBySession[id] = await fetchProducts(id)
+  } catch {
+    productsBySession[id] = []
+  }
+}
+
+// 收尾锁镜像：尾部跳过虚拟卡后，末条真实消息为挂起助手气泡且带建图工具，任务图又已空闲
+function hasUnreceiptedPlan(id) {
+  const graph = taskPolling.getGraph(id)
+  if (graph?.active) return false
+  const list = messagesBySession[id] || []
+  let lastIdx = list.length - 1
+  while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
+  const last = list[lastIdx]
+  return !!(
+    last &&
+    last.role === 'assistant' &&
+    last.suspended &&
+    (last.tools?.items || []).some((item) => item.name === 'create_plan')
+  )
+}
+
+// 按铃续跑：解开建图挂起让主编辑拿回执收尾，流结束后补拉成品重注卡片
+async function ringResumeUnreceipted(sessionId) {
+  if (streamingBySession[sessionId] || !hasUnreceiptedPlan(sessionId)) return
+  await runAssistantStream(sessionId, (onEvent) => resumeSession(sessionId, onEvent))
+  await loadProducts(sessionId)
+  injectTaskCards(sessionId)
+}
+
 let sessionSelectionToken = 0
 
 function pinLeavingPaper(el) {
@@ -280,7 +314,7 @@ async function selectSession(id) {
   const selectionToken = ++sessionSelectionToken
   // 窄屏侧栏为覆盖层，切换后收起以展示对话；桌面端则保持用户展开状态。
   if (window.matchMedia('(max-width: 780px)').matches) leftRailOpen.value = false
-  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id), loadIntentConfirmations(id), loadOptionHistory(id)])
+  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id), loadIntentConfirmations(id), loadOptionHistory(id), loadProducts(id)])
   if (selectionToken !== sessionSelectionToken) return
   if (!messagesReady) {
     if (sessions.value.length > 0) await selectSession(sessions.value[0].id)
@@ -299,6 +333,9 @@ async function selectSession(id) {
   injectIntentCard(id)
   injectOptionCard(id)
   await commitSessionSwitch(id, selectionToken)
+  if (selectionToken !== sessionSelectionToken) return
+  // 开档补按：停摆中的挂起建图直接续跑，不阻塞切换
+  ringResumeUnreceipted(id)
 }
 
 async function forceReloadMessages(id) {
@@ -315,12 +352,12 @@ async function forceReloadMessages(id) {
   }
 }
 
-const TASK_CARD_KINDS = new Set(['hil', 'postcard', 'recovery', 'confirmed', 'running'])
+const TASK_CARD_KINDS = new Set(['hil', 'recovery', 'confirmed', 'running'])
 
 function injectTaskCards(id) {
   const list = messagesBySession[id]
   if (!list) return
-  const plan = planTaskCards(taskPolling.getGraph(id))
+  const plan = planTaskCards(taskPolling.getGraph(id)).concat(planProductCards(productsBySession[id]))
   // 运行卡复用旧实例只更新数据；单独插会抢到前序卡片之前。
   const existing = new Map(
     list.filter((message) => TASK_CARD_KINDS.has(message.kind)).map((message) => [message.id, message]),
@@ -368,6 +405,7 @@ watch(() => optionPromptsBySession[activeId.value], () => {
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
   reloadMessages: forceReloadMessages,
+  onPipelineFinished: ringResumeUnreceipted,
 })
 
 function onHilConfirmed(taskId) {
@@ -387,9 +425,10 @@ function onHilRetried(taskId) {
   if (!sid) return
   taskPolling.start(sid) // 重跑后重新轮询跟踪进度
 }
-function onHilCancelled(sid) {
-  taskPolling.stop()
-  forceReloadMessages(sid)
+async function onHilCancelled(sid) {
+  // 取消后失败停摆的流水线不会再有轮询回调，先拉新图与消息供收敛判定，再直接按铃
+  await taskPolling.start(sid)
+  ringResumeUnreceipted(sid)
 }
 
 async function onCreate() {
@@ -559,6 +598,13 @@ function createStreamHandler(sessionId) {
       while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
       const last = list[lastIdx]
       if (last && last.role === 'assistant' && last.suspended) {
+        // 建图挂起是流水线边界：按铃收尾在卡片之后另起气泡，不续写挂起气泡
+        const planResume = (last.tools?.items || []).some((item) => item.name === 'create_plan')
+        if (planResume) {
+          startNewAssistant(payload.id)
+          cur().thinking.state = 'running'
+          return
+        }
         assistantIdx = lastIdx
         last.suspended = false
         // 每轮请求一开始就展示同一条气泡内的过程提示；工具状态会在调用时覆盖它。
@@ -641,9 +687,6 @@ function createStreamHandler(sessionId) {
     } else if (payload.type === 'busy') {
       // 活跃任务准入拒绝的瞬时信号：不解禁输入框、不注入气泡，进度由任务图反映
       streamingBySession[sessionId] = false
-    } else if (payload.type === 'archived') {
-      // 定稿存档拒收：停流式、不建气泡，输入框由定稿态锁死
-      streamingBySession[sessionId] = false
     } else if (payload.type === 'error') {
       // 错误覆盖正文前丢弃队列、停掉打字机，避免残帧把旧字符写回
       charQueue.length = 0
@@ -686,7 +729,7 @@ async function onSuggest() {
 }
 
 async function onSend(text) {
-  if (!text.trim() || hasActiveTask.value || activeCompleted.value) return
+  if (!text.trim() || hasActiveTask.value) return
   const sessionId = activeId.value || await onCreate()
   if (!sessionId || streamingBySession[sessionId]) return
 
@@ -773,7 +816,6 @@ onMounted(async () => {
       :active-id="activeId"
       :streaming-map="streamingBySession"
       :active-working="hasActiveTask || awaitingConfirm || awaitingOption || streaming"
-      :active-completed="activeCompleted"
       :settings-open="settingsOpen"
       :memory-open="memoryOpen"
       :memory-refresh-key="memoryRefreshKey"
@@ -839,7 +881,6 @@ onMounted(async () => {
           :has-active-task="hasActiveTask"
           :awaiting-confirm="awaitingConfirm"
           :awaiting-option="awaitingOption"
-          :archived="activeCompleted"
           :intent-confirmation="activeConfirmation"
           :option-prompt="activeOptionPrompt"
           :session-id="activeId"

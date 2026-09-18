@@ -112,6 +112,22 @@ export async function getIntentConfirmations(id) {
   return data.confirmations || []
 }
 
+export function resumeSession(id, onEvent) {
+  return streamSessionEventSource(`${BASE}/${id}/resume`, { method: 'POST' }, onEvent)
+}
+
+export async function fetchProducts(id) {
+  const res = await fetch(`${BASE}/${id}/products`)
+  if (res.status === 404) {
+    const err = new Error('session not found')
+    err.status = 404
+    throw err
+  }
+  if (!res.ok) throw new Error(`products failed: ${res.status}`)
+  const data = await res.json()
+  return data.products || []
+}
+
 export function streamChat(id, message, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/chat`, {
     method: 'POST',

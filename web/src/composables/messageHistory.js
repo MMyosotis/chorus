@@ -42,6 +42,10 @@ function hostsHilCard(toolItems) {
   return waitsForIntentConfirmation(toolItems) || waitsForOptionSelection(toolItems)
 }
 
+function hostsPlanCard(toolItems) {
+  return toolItems.some((item) => item.name === 'create_plan')
+}
+
 export function normalizeAssistant(msg) {
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
   const text = (msg.content || '').trim()
@@ -76,6 +80,11 @@ export function mergeAssistantHistory(raw) {
     const hasContent = !!(m.content && m.content.trim())
     const hasTools = Array.isArray(m.tools) && m.tools.length > 0
     const hilHost = hostsHilCard(m.tools || [])
+    // 建图挂起是流水线边界：卡片挂在这条轮次上，按铃收尾属流水线结束后的新发言，
+    // 不能并回挂起气泡，否则卡片无法排在两段气泡中间。
+    if (segBubble && segBubble.suspended && hostsPlanCard(segBubble.tools.items)) {
+      segBubble = null
+    }
     if (segBubble) {
       if (hasContent) {
         segBubble.content += (segBubble.content ? '\n\n' : '') + m.content

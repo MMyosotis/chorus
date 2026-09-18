@@ -5,7 +5,8 @@ export function planTaskCards(graph) {
   const tasks = (graph && graph.tasks) || []
   const plan = []
   for (const task of tasks) {
-    if (task.status === 'finished') {
+    // 成品任务不出确认卡：成品卡由成品清单单独投影，避免同一任务两张卡
+    if (task.status === 'finished' && task.agent_type !== 'finalize') {
       plan.push({ kind: 'confirmed', task, id: 'confirmed:' + task.id, role: 'assistant', anchorMessageId: task.message_id })
     }
   }
@@ -21,6 +22,22 @@ export function planTaskCards(graph) {
     }
   }
   return plan
+}
+
+export function planProductCards(products) {
+  return (products || []).map((product) => ({
+    kind: 'confirmed',
+    task: {
+      id: product.id,
+      agent_type: 'finalize',
+      status: 'finished',
+      message_id: product.message_id,
+      artifacts: { markdown: product.markdown, meta: { title: product.title } },
+    },
+    id: 'confirmed:' + product.id,
+    role: 'assistant',
+    anchorMessageId: product.message_id,
+  }))
 }
 
 export function planIntentCard(confirmation) {

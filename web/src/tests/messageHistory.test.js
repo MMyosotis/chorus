@@ -223,6 +223,48 @@ test('mergeAssistantHistory 跨用户段的无正文工具轮保留在新段', (
   expect(out[2].tools.items.map((item) => item.name)).toEqual(['b'])
 })
 
+test('mergeAssistantHistory 建图挂起后的按铃收尾另起气泡', () => {
+  const raw = [
+    { role: 'user', content: '帮我写' },
+    { role: 'assistant', content: '收到，我先安排。', tools: [] },
+    {
+      id: 'plan-turn',
+      role: 'assistant',
+      content: '',
+      tools: [{ name: 'create_plan' }],
+    },
+    {
+      id: 'closing-turn',
+      role: 'assistant',
+      content: '成品已在下方卡片交付。',
+      tools: [],
+    },
+  ]
+  const out = mergeAssistantHistory(raw)
+  expect(out).toHaveLength(3)
+  expect(out[1].content).toBe('收到，我先安排。')
+  expect(out[1].suspended).toBe(true)
+  expect(containsMessageId(out[1], 'plan-turn')).toBe(true)
+  expect(out[2].content).toBe('成品已在下方卡片交付。')
+  expect(out[2].suspended).toBe(false)
+  expect(containsMessageId(out[2], 'plan-turn')).toBe(false)
+})
+
+test('mergeAssistantHistory 意图确认挂起后的续写仍合并同气泡', () => {
+  const raw = [
+    { role: 'user', content: '写一篇' },
+    {
+      role: 'assistant',
+      content: '请确认创作方向。',
+      tools: [{ name: 'update_intent_state', arguments: { intent_status: 'ready_to_confirm' } }],
+    },
+    { role: 'assistant', content: '已确认，开始创作。', tools: [] },
+  ]
+  const out = mergeAssistantHistory(raw)
+  expect(out).toHaveLength(2)
+  expect(out[1].content).toBe('请确认创作方向。\n\n已确认，开始创作。')
+})
+
 test('mergeAssistantHistory 段内工具轮合并，跨用户消息保持分段', () => {
   const raw = [
     { role: 'assistant', content: '首答', tools: [{ name: 'a' }] },

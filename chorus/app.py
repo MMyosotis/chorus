@@ -115,7 +115,8 @@ def create_app() -> FastAPI:
     )
 
     tool_dispatcher = build_tool_dispatch(
-        settings_service, task_repo, task_content_repo, skill_loader, intent_state_service, option_service,
+        settings_service, task_repo, task_content_repo, task_artifacts_repo,
+        skill_loader, intent_state_service, option_service,
     )
 
     hooks = HookRegistry()
@@ -137,7 +138,7 @@ def create_app() -> FastAPI:
     supervisor_service = SupervisorService(
         session_service, message_service, hooks,
         chat_models, task_service,
-        tool_dispatcher, agent_loop, intent_state_service, skill_loader,
+        tool_dispatcher, agent_loop, intent_state_service,
         memory_service=memory_service,
         compact_service=compact_service,
         trace_service=trace_service,

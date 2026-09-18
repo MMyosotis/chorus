@@ -175,6 +175,9 @@ def resume_session(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
+    # 收尾锁：先验确有未回执的建图挂起再放行，挡重复按铃
+    if not supervisor.has_unreceipted_plan(session_id):
+        raise HTTPException(status_code=409, detail="no unreceipted plan to resume")
     return sse_stream(_resume_with_tool(session_id, "create_plan", "finish", intent, supervisor, tools))
 
 

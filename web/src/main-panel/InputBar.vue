@@ -1,6 +1,6 @@
 <script setup>
 import { ref, nextTick, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { ArrowUp, Check, Clock3, Lightbulb, Mic, Paperclip, RefreshCw } from '@lucide/vue'
+import { ArrowUp, Clock3, Lightbulb, Mic, Paperclip, RefreshCw } from '@lucide/vue'
 import IntentConfirmCard from './IntentConfirmCard.vue'
 import OptionCard from './OptionCard.vue'
 
@@ -9,7 +9,6 @@ const props = defineProps({
   hasActiveTask: { type: Boolean, default: false },
   awaitingConfirm: { type: Boolean, default: false },
   awaitingOption: { type: Boolean, default: false },
-  archived: { type: Boolean, default: false },
   intentConfirmation: { type: Object, default: null },
   optionPrompt: { type: Object, default: null },
   sessionId: { type: String, default: null },
@@ -20,7 +19,7 @@ const emit = defineEmits(['send', 'intent-confirm', 'intent-revise', 'option-cho
 const inputText = ref('')
 const textarea = ref(null)
 
-const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm || props.awaitingOption || props.archived)
+const disabled = computed(() => props.streaming || props.hasActiveTask || props.awaitingConfirm || props.awaitingOption)
 const hasHil = computed(() => !!(props.intentConfirmation || props.optionPrompt))
 const displayedOptionPrompt = ref(null)
 const displayedIntentConfirmation = ref(null)
@@ -77,7 +76,6 @@ function resetHilCollapse() {
 }
 
 const placeholder = computed(() => {
-  if (props.archived) return '本篇已定稿存档，请新建会话开始下一篇'
   if (props.awaitingOption) return '请先在上方选择一个选项'
   if (props.awaitingConfirm) return '请先确认或调整上方意图卡片'
   if (props.hasActiveTask) return '执行中，暂时不能输入；确认节点或完成后恢复'
@@ -209,7 +207,7 @@ defineExpose({ focus, prefill, showSuggestions })
     <div class="input-stage-shell" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
     <div class="input-stage" :class="{ 'has-hil': hasHil, 'is-closing-hil': isClosingHil }">
       <div class="stage-slot input-slot" :aria-hidden="hasHil">
-        <div class="input-bar" :class="{ 'is-disabled': disabled, archived }">
+        <div class="input-bar" :class="{ 'is-disabled': disabled }">
           <div class="input-editor">
             <div class="input-editor-content">
               <div ref="bodyRef" class="input-body">
@@ -297,13 +295,12 @@ defineExpose({ focus, prefill, showSuggestions })
             :class="{ 'is-waiting': disabled }"
             type="button"
             :disabled="disabled || !inputText.trim()"
-            :aria-label="disabled ? (archived ? '已定稿' : '正在等待') : '发送'"
+            :aria-label="disabled ? '正在等待' : '发送'"
             @click="send"
           >
             <span class="action-icon send"><ArrowUp aria-hidden="true" /></span>
             <span class="action-icon wait">
-              <span class="wait-glyph clock" :class="{ visible: !archived }"><Clock3 aria-hidden="true" /></span>
-              <span class="wait-glyph done" :class="{ visible: archived }"><Check aria-hidden="true" /></span>
+              <span class="wait-glyph clock visible"><Clock3 aria-hidden="true" /></span>
             </span>
           </button>
         </div>

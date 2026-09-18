@@ -4,8 +4,7 @@
 """
 from __future__ import annotations
 
-import dataclasses
-from typing import Any, Optional, cast
+from typing import Optional, cast
 
 from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
@@ -19,7 +18,11 @@ from chorus.domain.message import (
     UserMessage,
     build_provider_messages,
 )
-from chorus.domain.prompt import PromptContext, UserMessageContext, build_system_prompt, inject_user_blocks, subagent_base
+from chorus.domain.prompt.subagent import (
+    InvokeInputs,
+    SubagentSystemInputs,
+    SubagentUserInputs,
+)
 from chorus.domain.skill import SkillLoader
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
@@ -32,7 +35,7 @@ from chorus.domain.task import (
     TaskContent,
     TaskStatus,
     ValidationError,
-    downstream_view,
+    invoke_text,
 )
 from chorus.domain.task.aside import AsideGenerator
 from chorus.repo.task import TaskRepository
@@ -60,7 +63,7 @@ class SubagentLoopStrategy(LoopStrategy):
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, owner_id, profile, invoke,
-                 task_repo, progress_repo, lease, skill_loader, tool_names, tool_dispatch,
+                 task_repo, progress_repo, lease, skill_loader, tool_dispatch,
                  memory: MemoryRecall):
         self.task = task
         self.owner_id = owner_id
@@ -70,7 +73,6 @@ class SubagentLoopStrategy(LoopStrategy):
         self._progress_repo = progress_repo
         self._lease = lease
         self._skill_loader = skill_loader
-        self._tool_names = tool_names
         self._tool_dispatch = tool_dispatch
         self._produced_units = 0
         self._recall = memory
@@ -85,15 +87,14 @@ class SubagentLoopStrategy(LoopStrategy):
         return True
 
     def provider_messages(self):
-        ctx = PromptContext(
-            base=subagent_base(self.task.agent_type),
-            tool_names=self._tool_names,
+        system_inputs = SubagentSystemInputs(
+            agent_type=self.task.agent_type,
             skill_loader=self._skill_loader,
-            memory_digest=self._recall.digest,
+            digest=self._recall.digest,
         )
-        # 内存历史已就地换过占位，直接作为模型现场
-        msgs = build_provider_messages(build_system_prompt(ctx), self.history)
-        inject_user_blocks(msgs, UserMessageContext(recalled_memories=self._recall.items))
+        user_inputs = SubagentUserInputs(memories=self._recall.items)
+        msgs = build_provider_messages(system_inputs.render_system_prompt(), self.history)
+        user_inputs.inject_user_context(msgs)
         return msgs
 
     def consume(self, stream):
@@ -144,9 +145,7 @@ class SubagentLoopStrategy(LoopStrategy):
         self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
         if content:
             self.history.append(AssistantMessage.transient(self.task.session_id, content=content))
-        self.history.append(UserMessage.transient(
-            self.task.session_id,
-            content=f"{error.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"))
+        self.history.append(UserMessage.transient(self.task.session_id, content=f"{error.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"))
         return LoopAction(LoopSignal.CONTINUE, [])
 
     def on_truncation_exhausted(self, ctx):
@@ -231,7 +230,6 @@ class SubAgentService:
             progress_repo=self._progress,
             lease=self._lease,
             skill_loader=self._skill,
-            tool_names=TOOL_WHITELISTS[task.agent_type],
             tool_dispatch=self._tools,
             memory=memory,
         )
@@ -243,13 +241,16 @@ class SubAgentService:
         return self._memory.recall_for(task.agent_type, invoke, scope)
 
     def _build_invoke(self, task: Task, content: TaskContent) -> str:
-        prior = self._artifacts_repo.load(task.id)
-        deps_outputs: dict = {}
+        dependencies: list[tuple[str, str]] = []
         for dep_id in task.dependencies:
+            dep_task = cast(Task, self._task_repo.get(dep_id))
             dep_art = self._artifacts_repo.load(dep_id)
-            deps_outputs[dep_id] = downstream_view(dep_art.artifacts)
+            dependencies.append((AGENT_PROFILES[dep_task.agent_type].display_name, invoke_text(dep_art.artifacts)))
 
-        return content.render_invoke(
-            deps_outputs,
-            dataclasses.asdict(cast(Any, prior.artifacts)) if prior else None,
-        )
+        prior = self._artifacts_repo.load(task.id)
+        return InvokeInputs(
+            skeleton=content.invoke_message,
+            dependencies=dependencies,
+            prior=invoke_text(prior.artifacts) if prior else None,
+            feedback=content.feedback,
+        ).assemble_invoke()

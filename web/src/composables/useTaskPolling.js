@@ -66,11 +66,11 @@ function stopInternal() {
   }
 }
 
-function isPipelineFinished(graph) {
+function isPipelineSettled(graph) {
   const tasks = graph.tasks || []
+  // 全部终态且无失败/取消才视为收敛：失败与取消路径由取消回调直接按铃续跑
   if (!tasks.length) return false
-  const last = tasks[tasks.length - 1]
-  return last.agent_type === 'finalize' && last.status === 'finished'
+  return tasks.every((task) => task.status === 'finished')
 }
 
 async function tick() {
@@ -89,7 +89,7 @@ async function tick() {
     if (!graph.active) {
       stopInternal()
       pollingSession.value = null
-      if (wasActive && isPipelineFinished(graph)) {
+      if (wasActive && isPipelineSettled(graph)) {
         onPipelineFinishedFn(sid)
       }
     }
