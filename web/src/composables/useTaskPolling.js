@@ -1,9 +1,9 @@
-// 每会话任务图轮询：subagent/scheduler 后台只写库不连 SSE，前端定时拉图驱动进度横幅与角色卡。
-// 非流式时顺带刷新消息取回进度气泡，全任务终态即自停。
+// 每会话视图轮询：subagent/scheduler 后台只写库不连 SSE，前端定时拉会话视图驱动团队栏与卡片。
+// 任务图始终同步；流式时气泡由 SSE 推进，跳过整体套用。全任务终态即自停。
 
 import { reactive, ref } from 'vue'
 
-import { getTaskGraph } from '../api.js'
+import { fetchSessionView } from '../api.js'
 
 const POLL_INTERVAL = 1500
 
@@ -11,8 +11,8 @@ const graphBySession = reactive({})
 const pollingSession = ref(null)
 let timer = null
 let isStreamingFn = () => false
-let reloadMessagesFn = () => Promise.resolve()
-let onPipelineFinishedFn = () => {}
+let onViewFn = () => Promise.resolve()
+let onSettledFn = () => {}
 let lastErrorSignature = null
 
 export function useTaskPolling() {
@@ -20,10 +20,10 @@ export function useTaskPolling() {
     graphBySession,
     pollingSession,
 
-    configure({ isStreaming, reloadMessages, onPipelineFinished }) {
+    configure({ isStreaming, onView, onSettled }) {
       isStreamingFn = isStreaming || isStreamingFn
-      reloadMessagesFn = reloadMessages || reloadMessagesFn
-      onPipelineFinishedFn = onPipelineFinished || onPipelineFinishedFn
+      onViewFn = onView || onViewFn
+      onSettledFn = onSettled || onSettledFn
     },
 
     getGraph(sessionId) {
@@ -48,7 +48,7 @@ export function useTaskPolling() {
       pollingSession.value = null
     },
 
-    // 确认/重跑后立即拉一次图，不等下一轮周期，避免旧状态多亮一个轮询间隔
+    // 确认/重跑后立即拉一次视图，不等下一轮周期，避免旧状态多亮一个轮询间隔
     refresh(sessionId) {
       if (pollingSession.value === sessionId && timer) {
         tick()
@@ -77,20 +77,19 @@ async function tick() {
   const sid = pollingSession.value
   if (!sid) return
   try {
-    const graph = await getTaskGraph(sid)
+    const view = await fetchSessionView(sid)
     const wasActive = graphBySession[sid]?.active
-    graphBySession[sid] = graph
+    graphBySession[sid] = view.graph
     lastErrorSignature = null
-    // 非流式时刷新消息，取回流式外落库的进度气泡
     if (!isStreamingFn(sid)) {
-      await reloadMessagesFn(sid)
+      await onViewFn(sid, view)
     }
     // 空闲即自停（含启动时就无活跃任务的会话）；仅从忙转闲才回调完成
-    if (!graph.active) {
+    if (!view.graph.active) {
       stopInternal()
       pollingSession.value = null
-      if (wasActive && isPipelineSettled(graph)) {
-        onPipelineFinishedFn(sid)
+      if (wasActive && isPipelineSettled(view.graph)) {
+        onSettledFn(sid)
       }
     }
   } catch (error) {

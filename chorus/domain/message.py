@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import Self
 
 from chorus.domain.stream import StreamResult, ToolCallAccumulator
-from chorus.domain.trace import MessageTrace, ThinkingSegment, ToolInvocation
+from chorus.domain.trace import MessageTrace, ToolInvocation
 
 
 class _MessageBase(BaseModel):
@@ -89,7 +89,6 @@ class AssistantMessage(_MessageBase):
     def to_view(self, trace: Optional[MessageTrace]) -> Optional[MessageView]:
         return MessageView(
             id=self.id, role="assistant", content=self.content or "",
-            thinking=trace.thinking if trace else [],
             tools=trace.tools if trace else [],
         )
 
@@ -158,14 +157,13 @@ Message = Annotated[
 
 
 class MessageView(BaseModel):
-    """前端视图：滤掉工具噪音，挂回助手的思考与工具元数据。"""
+    """前端视图：滤掉工具噪音，挂回助手的工具元数据。"""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     role: Literal["user", "assistant"]
     content: str
-    thinking: list[ThinkingSegment] = Field(default_factory=list)
     tools: list[ToolInvocation] = Field(default_factory=list)
 
 
@@ -177,7 +175,7 @@ def build_provider_messages(system_prompt: str, messages: Iterable[Message]) -> 
 
 
 def build_history_view(messages: Iterable[Message], traces: dict[str, MessageTrace]) -> list[MessageView]:
-    """前端视图：工具消息隐去，助手消息挂回思考与工具元数据。"""
+    """前端视图：工具消息隐去，助手消息挂回工具元数据。"""
     return [view for msg in messages if (view := msg.to_view(traces.get(msg.id))) is not None]
 
 

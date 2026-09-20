@@ -1,4 +1,4 @@
-"""task 路由 HTTP 适配层测试：6 端点的状态码映射。
+"""task 路由 HTTP 适配层测试：4 端点的状态码映射。
 
 只断言适配行为（会话不存在→404 / 编辑不支持的角色→422），不测业务逻辑；最小 app + 依赖注入 fake service，不起 lifespan。
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from chorus.domain.task import DeliveredProduct, ValidationError
+from chorus.domain.task import ValidationError
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.routes.task import router as task_router
 
@@ -25,7 +25,7 @@ class FakeSessionService:
 class FakeTaskService:
     """脚本化 stub：按方法与键查表，命中返回值；存的是异常则抛出。
 
-    未注册的调用默认抛 KeyError（对应路由 500）。11 个用例共用同一份 fake，靠键区分各用例的预期副作用。
+    未注册的调用默认抛 KeyError（对应路由 500）。6 个用例共用同一份 fake，靠键区分各用例的预期副作用。
     """
 
     def __init__(self):
@@ -40,9 +40,6 @@ class FakeTaskService:
             raise val
         return val
 
-    def get_graph(self, session_id):
-        return self._call("get_graph", session_id)
-
     def confirm(self, task_id, selected):
         return self._call("confirm", task_id)
 
@@ -55,9 +52,6 @@ class FakeTaskService:
     def cancel_pipeline(self, session_id):
         return self._call("cancel_pipeline", session_id)
 
-    def list_products(self, session_id):
-        return self._call("list_products", session_id)
-
 
 def _client(session: FakeSessionService, task: FakeTaskService) -> TestClient:
     app = FastAPI()
@@ -65,26 +59,6 @@ def _client(session: FakeSessionService, task: FakeTaskService) -> TestClient:
     app.dependency_overrides[provide_session_service] = lambda: session
     app.dependency_overrides[provide_task_service] = lambda: task
     return TestClient(app)
-
-
-def test_get_tasks_session_not_found():
-    """会话不存在 → 404，不触达任务 service。"""
-    session = FakeSessionService(known=set())
-    task = FakeTaskService()
-    r = _client(session, task).get("/api/tasks", params={"session_id": "unknown"})
-    assert r.status_code == 404
-
-
-def test_get_tasks_ok():
-    """会话存在 → 200 + 任务图序列化透出。"""
-    from chorus.domain.task import TaskGraph, build_task_graph
-
-    session = FakeSessionService(known={"s1"})
-    task = FakeTaskService()
-    task.set("get_graph", "s1", build_task_graph("p1", [], {}, {}, {}, True))
-    r = _client(session, task).get("/api/tasks", params={"session_id": "s1"})
-    assert r.status_code == 200
-    assert r.json() == {"pipeline_id": "p1", "active": True, "tasks": []}
 
 
 def test_confirm_ok():
@@ -122,25 +96,6 @@ def test_cancel_pipeline_ok():
     r = _client(FakeSessionService({"s1"}), task).post("/api/sessions/s1/pipeline:cancel")
     assert r.status_code == 200
     assert r.json() == {"pipeline_id": "p1", "cancelled": 2}
-
-
-def test_list_products_session_not_found():
-    """会话不存在 → 404（先于任务 service）。"""
-    r = _client(FakeSessionService(set()), FakeTaskService()).get(
-        "/api/sessions/unknown/products"
-    )
-    assert r.status_code == 404
-
-
-def test_list_products_ok():
-    """正常 → 200 + 成品领域对象在路由层转 dict 透出。"""
-    task = FakeTaskService()
-    task.set("list_products", "s1", [DeliveredProduct(
-        id="t-final", message_id=None, title="夏日晚风", markdown="正文", created_at=1.0,
-    )])
-    r = _client(FakeSessionService({"s1"}), task).get("/api/sessions/s1/products")
-    assert r.status_code == 200
-    assert r.json() == {"products": [{"id": "t-final", "message_id": None, "title": "夏日晚风", "markdown": "正文", "created_at": 1.0}]}
 
 
 def test_edit_ok():

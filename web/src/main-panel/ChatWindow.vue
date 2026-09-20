@@ -7,9 +7,9 @@ import PlatformPreviewShell from './PlatformPreviewShell.vue'
 import RunningPanel from './RunningPanel.vue'
 import RecoveryCard from './RecoveryCard.vue'
 import ConfirmedCard from './ConfirmedCard.vue'
+import ProductCard from './ProductCard.vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
 import { ROLE_FULL } from '../team-panel/roleMeta.js'
-import { containsMessageId } from '../composables/messageHistory.js'
 
 const props = defineProps({
   messages: { type: Array, required: true },
@@ -108,11 +108,11 @@ function scrollToTask(taskId) {
 
 defineExpose({ scrollToBottom, followBottom, scrollToTask, openPreview })
 
-const previewTask = ref(null)
-function openPreview(task) { previewTask.value = task }
+const previewCard = ref(null)
+function openPreview(source) { previewCard.value = source?.artifacts || source }
 
 function messageKey(msg, idx) {
-  return msg.id || `${msg.kind || msg.role}:${msg.task?.id || idx}`
+  return msg.id || `${msg.kind || msg.role}:${msg.task?.id || msg.product?.id || idx}`
 }
 
 function taskRoleLabel(task) {
@@ -148,44 +148,18 @@ function isBlankShell(message, index) {
   return !(props.streaming && index === props.messages.length - 1)
 }
 
-const displayMessages = computed(() => {
-  const result = []
-  for (const [index, message] of props.messages.entries()) {
-    if (isBlankShell(message, index)) continue
-    if (message.kind === 'intent-confirm') {
-      const previous = result[result.length - 1]
-      if (
-        previous && previous.role === 'assistant' && !previous.kind &&
-        containsMessageId(previous, message.anchorMessageId)
-      ) {
-        result[result.length - 1] = {
-          ...previous,
-          recaps: [...(previous.recaps || []), { id: message.id, intentState: message.state }],
-        }
-        continue
-      }
-      result.push({ ...message, content: '', recaps: [{ id: message.id, intentState: message.state }] })
-      continue
-    }
-    if (message.kind === 'option') {
-      const previous = result[result.length - 1]
-      if (
-        previous && previous.role === 'assistant' && !previous.kind &&
-        containsMessageId(previous, message.anchorMessageId)
-      ) {
-        result[result.length - 1] = {
-          ...previous,
-          recaps: [...(previous.recaps || []), { id: message.id, optionPrompt: message.prompt }],
-        }
-        continue
-      }
-      result.push({ ...message, content: '', recaps: [{ id: message.id, optionPrompt: message.prompt }] })
-      continue
-    }
-    result.push(message)
-  }
-  return result
-})
+const displayMessages = computed(() =>
+  props.messages.filter((message, index) => !isBlankShell(message, index))
+)
+
+// 视图气泡的工具是数组、无思考态，流式气泡是 { state, items } 包裹，渲染前统一包一层
+function wrapTools(tools) {
+  if (Array.isArray(tools)) return { state: 'idle', items: tools }
+  return tools || { state: 'idle', items: [] }
+}
+function wrapState(state) {
+  return state || { state: 'idle' }
+}
 
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
 onUnmounted(() => window.removeEventListener('scroll', onScroll))
@@ -194,7 +168,7 @@ watch(
   () => ({
     structure: props.messages.map((m, idx) => messageKey(m, idx)).join('|'),
     content: props.messages.map((m) => {
-      const tItems = m.tools?.items || []
+      const tItems = Array.isArray(m.tools) ? m.tools : (m.tools?.items || [])
       const toolsSig = tItems
         .map((t) => `${t.content?.length ?? 0}:${t.duration_ms ?? ''}`)
         .join(',')
@@ -238,7 +212,7 @@ watch(
     <slot name="scroll-header"></slot>
     <div class="chat-inner">
       <TransitionGroup name="flow-stage" tag="div" class="flow-list">
-        <div v-for="(msg, idx) in displayMessages" :key="messageKey(msg, idx)" class="flow-entry" :data-task-id="msg.task?.id">
+        <div v-for="(msg, idx) in displayMessages" :key="messageKey(msg, idx)" class="flow-entry" :data-task-id="msg.task?.id || msg.product?.id">
           <div v-if="msg.kind === 'hil'" class="hil-panel">
             <header class="task-turn-head">
               <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="36" />
@@ -254,6 +228,7 @@ watch(
             />
           </div>
           <ConfirmedCard v-else-if="msg.kind === 'confirmed'" :task="msg.task" @preview-task="openPreview" />
+          <ProductCard v-else-if="msg.kind === 'product'" :product="msg.product" @preview="openPreview" />
           <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
           <div v-else-if="msg.kind === 'recovery'" class="recovery-panel">
             <header class="task-turn-head">
@@ -271,8 +246,8 @@ watch(
             v-else
             :role="msg.role"
             :content="msg.content || ''"
-            :thinking="msg.thinking"
-            :tools="msg.tools"
+            :thinking="wrapState(msg.thinking)"
+            :tools="wrapTools(msg.tools)"
             :recaps="msg.recaps"
             :suspended="msg.suspended"
             :active="streaming && idx === displayMessages.length - 1 && msg.role === 'assistant'"
@@ -307,13 +282,13 @@ watch(
     </div>
     <Teleport to="body">
       <Transition name="preview-modal">
-        <div v-if="previewTask" class="preview-overlay" @click.self="previewTask = null">
+        <div v-if="previewCard" class="preview-overlay" @click.self="previewCard = null">
           <div class="preview-frame">
             <PlatformPreviewShell
-              :card="previewTask.artifacts || {}"
-              :preview-ref="previewTask.artifacts?.meta?.preview_ref"
-              :stylesheet-ref="previewTask.artifacts?.meta?.stylesheet_ref"
-              @close="previewTask = null"
+              :card="previewCard"
+              :preview-ref="previewCard.meta?.preview_ref"
+              :stylesheet-ref="previewCard.meta?.stylesheet_ref"
+              @close="previewCard = null"
             />
           </div>
         </div>

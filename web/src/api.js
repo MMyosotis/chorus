@@ -36,18 +36,6 @@ export async function renameSession(id, title) {
   return res.json()
 }
 
-export async function fetchMessages(id) {
-  const res = await fetch(`${BASE}/${id}/messages`)
-  if (res.status === 404) {
-    const err = new Error('session not found')
-    err.status = 404
-    throw err
-  }
-  if (!res.ok) throw new Error(`messages failed: ${res.status}`)
-  const data = await res.json()
-  return data.messages || []
-}
-
 export async function fetchTraces(id) {
   const res = await fetch(`${BASE}/${id}/traces`)
   if (res.status === 404) {
@@ -58,18 +46,6 @@ export async function fetchTraces(id) {
   if (!res.ok) throw new Error(`traces failed: ${res.status}`)
   const data = await res.json()
   return data.traces || []
-}
-
-export async function getIntentState(id) {
-  const res = await fetch(`${BASE}/${id}/intent-state`)
-  if (res.status === 404) {
-    const err = new Error('session not found')
-    err.status = 404
-    throw err
-  }
-  if (!res.ok) throw new Error(`intent state failed: ${res.status}`)
-  const data = await res.json()
-  return data.state || null
 }
 
 export function confirmIntent(id, onEvent) {
@@ -88,51 +64,19 @@ export function chooseOption(id, body, onEvent) {
   }, onEvent)
 }
 
-export async function fetchOptionHistory(id) {
-  const res = await fetch(`${BASE}/${id}/options`)
+export async function fetchSessionView(id) {
+  const res = await fetch(`${BASE}/${id}/view`)
   if (res.status === 404) {
     const err = new Error('session not found')
     err.status = 404
     throw err
   }
-  if (!res.ok) throw new Error(`option history failed: ${res.status}`)
-  const data = await res.json()
-  return data.prompts || []
-}
-
-export async function getIntentConfirmations(id) {
-  const res = await fetch(`${BASE}/${id}/intent-confirmations`)
-  if (res.status === 404) {
-    const err = new Error('session not found')
-    err.status = 404
-    throw err
-  }
-  if (!res.ok) throw new Error(`intent confirmations failed: ${res.status}`)
-  const data = await res.json()
-  return data.confirmations || []
+  if (!res.ok) throw new Error(`session view failed: ${res.status}`)
+  return res.json()
 }
 
 export function resumeSession(id, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/resume`, { method: 'POST' }, onEvent)
-}
-
-export async function fetchResumeStatus(id) {
-  const res = await fetch(`${BASE}/${id}/resume:status`)
-  if (!res.ok) throw new Error(`resume status failed: ${res.status}`)
-  const data = await res.json()
-  return !!data.resumable
-}
-
-export async function fetchProducts(id) {
-  const res = await fetch(`${BASE}/${id}/products`)
-  if (res.status === 404) {
-    const err = new Error('session not found')
-    err.status = 404
-    throw err
-  }
-  if (!res.ok) throw new Error(`products failed: ${res.status}`)
-  const data = await res.json()
-  return data.products || []
 }
 
 export function streamChat(id, message, onEvent) {
@@ -235,15 +179,6 @@ export async function getModelLists() {
   return res.json()
 }
 
-let _profilesCache = null
-export async function getAgentProfiles() {
-  if (_profilesCache) return _profilesCache
-  const res = await fetch('/api/agents/profiles')
-  if (!res.ok) throw new Error(`getAgentProfiles failed: ${res.status}`)
-  _profilesCache = await res.json()
-  return _profilesCache
-}
-
 export async function getOptions() {
   const res = await fetch(`${SETTINGS_BASE}/options`)
   if (!res.ok) throw new Error(`getOptions failed: ${res.status}`)
@@ -261,12 +196,6 @@ export async function setOptions(patch) {
 }
 
 const TASKS_BASE = '/api/tasks'
-
-export async function getTaskGraph(sessionId) {
-  const res = await fetch(`${TASKS_BASE}?session_id=${encodeURIComponent(sessionId)}`)
-  if (!res.ok) throw new Error(`getTaskGraph failed: ${res.status}`)
-  return res.json()
-}
 
 export async function confirmTask(taskId, selected) {
   const res = await fetch(`${TASKS_BASE}/${encodeURIComponent(taskId)}/confirm`, {

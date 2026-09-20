@@ -99,25 +99,22 @@ def test_message_frozen_and_extra_forbidden():
 
 
 def test_build_history_view_filters_tool_and_attaches_trace():
-    from chorus.domain.trace import MessageTrace, ThinkingSegment, ToolInvocation
+    from chorus.domain.trace import MessageTrace, ToolInvocation
     traces = {"a1": MessageTrace(
         message_id="a1",
-        thinking=[ThinkingSegment(text="想", duration_ms=5)],
         tools=[ToolInvocation(tool_call_id="c1", name="search", arguments={},
                               display="搜索", duration_ms=10, content="结果")],
     )}
     views = build_history_view([_user("问"), _assistant("答"), _tool()], traces)
-    # 工具消息不进前端，助手挂回思考与工具元数据
+    # 工具消息不进前端，助手挂回工具元数据
     assert [view.role for view in views] == ["user", "assistant"]
     assert [view.content for view in views] == ["问", "答"]
-    assert views[1].thinking[0].text == "想"
     assert views[1].tools[0].name == "search"
 
 
 def test_build_history_view_assistant_without_content_shows_empty():
     views = build_history_view([_assistant()], {})
     assert views[0].content == ""
-    assert views[0].thinking == []
 
 
 def test_recent_history_lines_filters_tool_noise():

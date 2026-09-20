@@ -1,13 +1,12 @@
-"""任务资源路由：任务图查询与人工确认写操作。"""
+"""任务资源路由：人工确认写操作。"""
 from __future__ import annotations
 
-import dataclasses
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from chorus.domain.task import ValidationError, dump_task_graph
+from chorus.domain.task import ValidationError
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
@@ -26,17 +25,6 @@ class RetryRequest(BaseModel):
 class EditRequest(BaseModel):
     markdown: Optional[str] = None
     candidates: Optional[list[dict]] = None
-
-
-@router.get("/tasks")
-def get_task_graph(
-    session_id: str,
-    session: SessionService = Depends(provide_session_service),
-    task: TaskService = Depends(provide_task_service),
-):
-    if not session.exists(session_id):
-        raise HTTPException(status_code=404, detail="session not found")
-    return dump_task_graph(task.get_graph(session_id))
 
 
 @router.post("/tasks/{task_id}/confirm")
@@ -68,18 +56,6 @@ def edit_task(
         return task.edit(task_id, payload)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.correction) from e
-
-
-@router.get("/sessions/{session_id}/products")
-def list_products(
-    session_id: str,
-    session: SessionService = Depends(provide_session_service),
-    task: TaskService = Depends(provide_task_service),
-):
-    if not session.exists(session_id):
-        raise HTTPException(status_code=404, detail="session not found")
-    products = task.list_products(session_id)
-    return {"products": [dataclasses.asdict(product) for product in products]}
 
 
 @router.post("/sessions/{session_id}/pipeline:cancel")

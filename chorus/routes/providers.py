@@ -15,6 +15,7 @@ from chorus.services.memory import MemoryService
 from chorus.services.message import MessageService
 from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
+from chorus.services.session_view import SessionViewService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
 from chorus.services.trace import TraceService
@@ -39,6 +40,7 @@ provide_settings_service = _provider("settings_service", SettingsService)
 provide_memory_service = _provider("memory_service", MemoryService)
 provide_supervisor_service = _provider("supervisor_service", SupervisorService)
 provide_task_service = _provider("task_service", TaskService)
+provide_session_view_service = _provider("session_view_service", SessionViewService)
 provide_scheduler = _provider("scheduler", TaskScheduler)
 provide_tool_dispatch = _provider("tool_dispatch", ToolDispatch)
 provide_skill_loader = _provider("skill_loader", SkillLoader)

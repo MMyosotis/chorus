@@ -302,7 +302,8 @@ async function saveCandidate() {
           <div class="swap-pane" :class="{ off: editing }">
             <div class="pane-frame">
               <ArtifactCard
-                :task="task"
+                :card="artifacts"
+                :finished="task.status === 'finished'"
                 review
                 @preview="$emit('preview-task', task)"
               />

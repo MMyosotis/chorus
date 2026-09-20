@@ -4,29 +4,26 @@ import { Eye } from '@lucide/vue'
 import { firstImageUrl, plainTextPostContent } from '../composables/renderPostCard.js'
 
 const props = defineProps({
-  task: { type: Object, required: true },
+  card: { type: Object, required: true },
+  finished: { type: Boolean, default: false },
   review: { type: Boolean, default: false },
 })
 
 defineEmits(['preview'])
 
-const card = computed(() => props.task.artifacts || {})
+const coverUrl = computed(() => firstImageUrl(props.card))
 
-const coverUrl = computed(() => firstImageUrl(card.value))
-
-const title = computed(() => card.value.meta?.title || '')
+const title = computed(() => props.card.meta?.title || '')
 
 const excerpt = computed(() => {
-  const text = plainTextPostContent(card.value)
+  const text = plainTextPostContent(props.card)
   return text.length > 140 ? text.slice(0, 140) + '…' : text
 })
-
-const isFinished = computed(() => props.task.status === 'finished')
 </script>
 
 <template>
   <section class="artifact-wrap" :class="{ review }">
-    <div v-if="isFinished && !review" class="finish">
+    <div v-if="finished && !review" class="finish">
       <div><h2>创作完成</h2><p>标题、正文和配图已经整理完毕</p></div>
       <span>已完成</span>
     </div>

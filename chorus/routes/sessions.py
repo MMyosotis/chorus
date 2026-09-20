@@ -1,4 +1,4 @@
-"""会话增删改查与消息、轨迹视图路由。"""
+"""会话增删改查、轨迹与会话视图、续跑入口路由。"""
 
 from __future__ import annotations
 
@@ -10,9 +10,6 @@ from pydantic import BaseModel
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.bypass import BypassScope
 from chorus.domain.events import IntentStateEvent
-from chorus.domain.intent import IntentConfirmation
-from chorus.domain.message import MessageView
-from chorus.domain.option import OptionPrompt
 from chorus.domain.trace import TraceEntry
 from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.routes.providers import (
@@ -20,6 +17,7 @@ from chorus.routes.providers import (
     provide_message_service,
     provide_option_service,
     provide_session_service,
+    provide_session_view_service,
     provide_suggestion_service,
     provide_supervisor_service,
     provide_tool_dispatch,
@@ -30,6 +28,7 @@ from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
 from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
+from chorus.services.session_view import SessionViewService
 from chorus.services.trace import TraceService
 from chorus.tools import ToolDispatch
 
@@ -75,17 +74,6 @@ def rename_session(session_id: str, req: RenameRequest, session: SessionService 
     return {"id": renamed.id, "title": renamed.title, "created_at": renamed.created_at, "updated_at": renamed.updated_at}
 
 
-@router.get("/{session_id}/messages")
-def get_messages(
-    session_id: str,
-    session: SessionService = Depends(provide_session_service),
-    message: MessageService = Depends(provide_message_service),
-):
-    if not session.exists(session_id):
-        raise HTTPException(status_code=404, detail="session not found")
-    return {"messages": [_view_to_dict(view) for view in message.history_view(session_id)]}
-
-
 @router.get("/{session_id}/traces")
 def get_traces(
     session_id: str,
@@ -95,17 +83,6 @@ def get_traces(
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
     return {"traces": [_trace_to_dict(entry) for entry in trace.list_traces(session_id)]}
-
-
-@router.get("/{session_id}/intent-state")
-def get_intent_state(
-    session_id: str,
-    session: SessionService = Depends(provide_session_service),
-    intent: IntentStateService = Depends(provide_intent_state_service),
-):
-    if not session.exists(session_id):
-        raise HTTPException(status_code=404, detail="session not found")
-    return {"state": intent.get(session_id).model_dump(mode="json")}
 
 
 @router.post("/{session_id}/suggestions")
@@ -181,15 +158,16 @@ def resume_session(
     return sse_stream(_resume_with_tool(session_id, "create_plan", "finish", intent, supervisor, tools))
 
 
-@router.get("/{session_id}/resume:status")
-def get_resume_status(
+@router.get("/{session_id}/view")
+def get_session_view(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
+    view: SessionViewService = Depends(provide_session_view_service),
     supervisor: SupervisorService = Depends(provide_supervisor_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"resumable": supervisor.has_unreceipted_plan(session_id)}
+    return view.collect(session_id, needs_resume=supervisor.has_unreceipted_plan(session_id))
 
 
 class OptionChooseAnswerRequest(BaseModel):
@@ -231,51 +209,6 @@ def choose_option(
     if open_prompt is None:
         raise HTTPException(status_code=409, detail="option prompt not open")
     return sse_stream(_resume_option(session_id, req, supervisor, tools))
-
-
-@router.get("/{session_id}/options")
-def list_option_prompts(
-    session_id: str,
-    session: SessionService = Depends(provide_session_service),
-    option: OptionPromptService = Depends(provide_option_service),
-):
-    if not session.exists(session_id):
-        raise HTTPException(status_code=404, detail="session not found")
-    return {"prompts": [_option_prompt_to_dict(prompt) for prompt in option.list_by_session(session_id)]}
-
-
-@router.get("/{session_id}/intent-confirmations")
-def list_intent_confirmations(
-    session_id: str,
-    session: SessionService = Depends(provide_session_service),
-    intent: IntentStateService = Depends(provide_intent_state_service),
-):
-    if not session.exists(session_id):
-        raise HTTPException(status_code=404, detail="session not found")
-    return {"confirmations": [_confirmation_to_dict(confirmation) for confirmation in intent.list_confirmations(session_id)]}
-
-
-def _option_prompt_to_dict(prompt: OptionPrompt) -> dict:
-    return {
-        "prompt_id": prompt.prompt_id,
-        "message_id": prompt.message_id,
-        "questions": [question.model_dump() for question in prompt.questions],
-        "status": prompt.status,
-        "answers": [answer.model_dump(exclude_none=True) for answer in prompt.answers],
-        "created_at": prompt.created_at,
-    }
-
-
-def _confirmation_to_dict(confirmation: IntentConfirmation) -> dict:
-    return confirmation.model_dump(mode="json", exclude={"session_id"}, exclude_none=True)
-
-
-def _view_to_dict(view: MessageView) -> dict:
-    item: dict = {"id": view.id, "role": view.role, "content": view.content}
-    if view.role == "assistant":
-        item["thinking"] = [seg.model_dump() for seg in view.thinking]
-        item["tools"] = [tool.model_dump() for tool in view.tools]
-    return item
 
 
 def _trace_to_dict(entry: TraceEntry) -> dict:

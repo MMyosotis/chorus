@@ -10,26 +10,18 @@ import {
   createSession,
   deleteSession,
   renameSession,
-  fetchMessages,
+  fetchSessionView,
   streamChat,
   resumeSession,
-  fetchResumeStatus,
-  fetchProducts,
   suggestMessages,
-  getIntentState,
-  getIntentConfirmations,
   confirmIntent,
   reopenIntent,
   chooseOption,
-  fetchOptionHistory,
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
-import { isPlanResumeBoundary, mergeAssistantHistory } from './composables/messageHistory.js'
-import { planTaskCards, planProductCards, planIntentCards, planOptionCards } from './composables/taskCardProjection.js'
-import { replaceAnchoredCards } from './composables/anchoredCards.js'
+import { isPlanResumeBoundary } from './composables/messageHistory.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
-import { ROLE_FULL } from './team-panel/roleMeta.js'
 import MemoryPanel from './main-panel/MemoryPanel.vue'
 
 const uiReviewMode = import.meta.env.DEV && new URLSearchParams(window.location.search).has('ui-review')
@@ -45,7 +37,8 @@ const streamingBySession = reactive({})
 const intentStateBySession = reactive({})
 const intentConfirmationsBySession = reactive({})
 const optionPromptsBySession = reactive({})
-const productsBySession = reactive({})
+const stageBySession = reactive({})
+const needsResumeBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
 const leftRailOpen = ref(true)
@@ -170,18 +163,7 @@ const activeSessionUpdatedAt = computed(() => {
   const c = sessions.value.find((x) => x.id === activeId.value)
   return c ? c.updated_at : null
 })
-const currentTask = computed(() => (activeGraph.value?.tasks || []).find((task) => ['running', 'awaiting_confirm', 'failed'].includes(task.status)) || null)
-const stageKicker = computed(() => {
-  if (awaitingOption.value) return '等待选择'
-  if (awaitingConfirm.value) return '等待确认'
-  const task = currentTask.value
-  if (task) {
-    if (task.status === 'failed') return `${ROLE_FULL[task.agent_type] || task.agent_type} · 需要处理`
-    return `${ROLE_FULL[task.agent_type] || task.agent_type} · ${task.status === 'awaiting_confirm' ? '等待确认' : '执行中'}`
-  }
-  const completedFinal = (activeGraph.value?.tasks || []).find((task) => task.agent_type === 'finalize' && task.status === 'finished')
-  return completedFinal ? '已完成' : '自由对话'
-})
+const stageKicker = computed(() => stageBySession[activeId.value] || '自由对话')
 
 function makeEmptyAssistant(id) {
   return {
@@ -196,86 +178,49 @@ function makeEmptyAssistant(id) {
   }
 }
 
-async function loadMessages(id) {
-  if (messagesBySession[id]) {
-    traceStore.loadFromServer(id)
-    return true
-  }
+// 会话视图一次套用：气泡、信箱、阶段与续跑判定都以后端成品结构为准
+function applyView(id, view) {
+  messagesBySession[id] = view.bubbles
+  intentStateBySession[id] = view.intent_state
+  intentConfirmationsBySession[id] = view.open_confirmation ? [view.open_confirmation] : []
+  optionPromptsBySession[id] = view.open_option_prompt ? [view.open_option_prompt] : []
+  stageBySession[id] = view.stage
+  needsResumeBySession[id] = view.needs_resume
+  traceStore.loadFromServer(id)
+}
+
+async function refreshView(id) {
+  // 流式回调闭包持有当前气泡数组引用，整体换引用会让流式写入脱钩，流中跳过、收尾后再套用
+  if (streamingBySession[id]) return true
   try {
-    const raw = await fetchMessages(id)
-    messagesBySession[id] = mergeAssistantHistory(raw)
-    traceStore.loadFromServer(id)
+    applyView(id, await fetchSessionView(id))
     return true
   } catch (e) {
-    if (e.status === 404) {
-      // 该会话已被后端清理
-      sessions.value = sessions.value.filter((c) => c.id !== id)
-      delete messagesBySession[id]
-      delete streamingBySession[id]
-      if (activeId.value === id) {
-        if (sessions.value.length > 0) {
-          activeId.value = sessions.value[0].id
-          await loadMessages(activeId.value)
-        } else {
-          activeId.value = null
-          focusedTaskId.value = null
-          taskPolling.stop()
-        }
-        alert('该会话已过期，已自动切换')
+    if (e.status !== 404) return true // 网络等瞬时错误保留现状，不打断会话
+    // 该会话已被后端清理
+    sessions.value = sessions.value.filter((c) => c.id !== id)
+    delete messagesBySession[id]
+    delete streamingBySession[id]
+    if (activeId.value === id) {
+      if (sessions.value.length > 0) {
+        activeId.value = sessions.value[0].id
+        await refreshView(activeId.value)
+      } else {
+        activeId.value = null
+        focusedTaskId.value = null
+        taskPolling.stop()
       }
-      return false
-    } else {
-      messagesBySession[id] = []
-      return true
+      alert('该会话已过期，已自动切换')
     }
+    return false
   }
 }
 
-async function loadIntentState(id) {
-  try {
-    intentStateBySession[id] = await getIntentState(id)
-  } catch {
-    intentStateBySession[id] = null
-  }
-}
-
-async function loadOptionHistory(id) {
-  try {
-    optionPromptsBySession[id] = await fetchOptionHistory(id)
-  } catch {
-    optionPromptsBySession[id] = []
-  }
-}
-
-async function loadIntentConfirmations(id) {
-  try {
-    intentConfirmationsBySession[id] = await getIntentConfirmations(id)
-  } catch {
-    intentConfirmationsBySession[id] = []
-  }
-}
-
-async function loadProducts(id) {
-  try {
-    productsBySession[id] = await fetchProducts(id)
-  } catch {
-    productsBySession[id] = []
-  }
-}
-
-// 挂起建图续跑：判定交给后端收尾锁接口，确有未收口挂起才解开，流结束后补拉成品重注卡片
+// 挂起建图续跑：视图判定确有未回执挂起才按铃，流结束后重套视图收卡片
 async function ringResumeUnreceipted(sessionId) {
-  if (streamingBySession[sessionId]) return
-  let resumable = false
-  try {
-    resumable = await fetchResumeStatus(sessionId)
-  } catch {
-    return
-  }
-  if (!resumable || streamingBySession[sessionId]) return
+  if (streamingBySession[sessionId] || !needsResumeBySession[sessionId]) return
   await runAssistantStream(sessionId, (onEvent) => resumeSession(sessionId, onEvent))
-  await loadProducts(sessionId)
-  injectTaskCards(sessionId)
+  await refreshView(sessionId)
 }
 
 let sessionSelectionToken = 0
@@ -306,110 +251,32 @@ async function selectSession(id) {
   const selectionToken = ++sessionSelectionToken
   // 窄屏侧栏为覆盖层，切换后收起以展示对话；桌面端则保持用户展开状态。
   if (window.matchMedia('(max-width: 780px)').matches) leftRailOpen.value = false
-  const [messagesReady] = await Promise.all([loadMessages(id), loadIntentState(id), loadIntentConfirmations(id), loadOptionHistory(id), loadProducts(id)])
-  if (selectionToken !== sessionSelectionToken) return
-  if (!messagesReady) {
-    if (sessions.value.length > 0) await selectSession(sessions.value[0].id)
-    else {
-      activeId.value = null
-      focusedTaskId.value = null
-      taskPolling.stop()
-    }
-    alert('该会话已过期，已自动切换')
-    return
-  }
-  // 先恢复目标会话的任务图，再一次性切换稿纸，避免阶段卡延迟注入造成二次定位
+  const ok = await refreshView(id)
+  if (selectionToken !== sessionSelectionToken || !ok) return // 404 已在刷新内清理并切换
+  // 先恢复目标会话的任务图，再一次性切换稿纸
   await taskPolling.start(id)
   if (selectionToken !== sessionSelectionToken) return
-  injectTaskCards(id)
-  injectIntentCard(id)
-  injectOptionCard(id)
   await commitSessionSwitch(id, selectionToken)
   if (selectionToken !== sessionSelectionToken) return
   // 开档补按：停摆中的挂起建图直接续跑，不阻塞切换
   ringResumeUnreceipted(id)
 }
 
-async function forceReloadMessages(id) {
-  try {
-    const [raw, prompts, confirmations] = await Promise.all([fetchMessages(id), fetchOptionHistory(id), getIntentConfirmations(id)])
-    messagesBySession[id] = mergeAssistantHistory(raw)
-    optionPromptsBySession[id] = prompts
-    intentConfirmationsBySession[id] = confirmations
-    injectTaskCards(id)
-    injectIntentCard(id)
-    injectOptionCard(id)
-  } catch {
-    // 轮询期间忽略
-  }
-}
-
-const TASK_CARD_KINDS = new Set(['hil', 'recovery', 'confirmed', 'running'])
-
-function injectTaskCards(id) {
-  const list = messagesBySession[id]
-  if (!list) return
-  const plan = planTaskCards(taskPolling.getGraph(id)).concat(planProductCards(productsBySession[id]))
-  // 运行卡复用旧实例只更新数据；单独插会抢到前序卡片之前。
-  const existing = new Map(
-    list.filter((message) => TASK_CARD_KINDS.has(message.kind)).map((message) => [message.id, message]),
-  )
-  replaceAnchoredCards(
-    list,
-    (message) => TASK_CARD_KINDS.has(message.kind),
-    plan.map((card) => {
-      const prior = existing.get(card.id)
-      if (!prior || card.kind !== 'running') return card
-      prior.task = card.task
-      return prior
-    }),
-  )
-}
-
-function injectIntentCard(id) {
-  const list = messagesBySession[id]
-  if (!list) return
-  replaceAnchoredCards(
-    list,
-    (message) => message.kind === 'intent-confirm',
-    planIntentCards((intentConfirmationsBySession[id] || []).filter((confirmation) => confirmation.status === 'answered')),
-  )
-}
-
-function injectOptionCard(id) {
-  const list = messagesBySession[id]
-  if (!list) return
-  replaceAnchoredCards(
-    list,
-    (message) => message.kind === 'option',
-    planOptionCards((optionPromptsBySession[id] || []).filter((prompt) => prompt.status === 'answered')),
-  )
-}
-
-watch(() => intentConfirmationsBySession[activeId.value], () => {
-  if (activeId.value) injectIntentCard(activeId.value)
-}, { deep: true })
-
-watch(() => optionPromptsBySession[activeId.value], () => {
-  if (activeId.value) injectOptionCard(activeId.value)
-}, { deep: true })
-
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
-  reloadMessages: forceReloadMessages,
-  onPipelineFinished: ringResumeUnreceipted,
+  onView: (sid, view) => applyView(sid, view),
+  onSettled: ringResumeUnreceipted,
 })
 
 function onHilConfirmed(taskId) {
   const sid = activeId.value
   if (!sid) return
   taskPolling.refresh(sid)
-  forceReloadMessages(sid)
 }
 function onHilEdited(taskId) {
   const sid = activeId.value
   if (!sid) return
-  // 编辑不翻状态，拉一次图重建虚拟卡即可，消息流不受影响
+  // 编辑不翻状态，拉一次视图重建卡片即可，消息流不受影响
   taskPolling.refresh(sid)
 }
 function onHilRetried(taskId) {
@@ -418,7 +285,7 @@ function onHilRetried(taskId) {
   taskPolling.start(sid) // 重跑后重新轮询跟踪进度
 }
 async function onHilCancelled(sid) {
-  // 取消后失败停摆的流水线不会再有轮询回调，先拉新图与消息供收敛判定，再直接按铃
+  // 取消后失败停摆的流水线不会再有轮询回调，先拉一次视图供收敛与续跑判定，再直接按铃
   await taskPolling.start(sid)
   ringResumeUnreceipted(sid)
 }
@@ -431,8 +298,9 @@ async function onCreate() {
     intentStateBySession[meta.id] = null
     intentConfirmationsBySession[meta.id] = []
     optionPromptsBySession[meta.id] = []
+    stageBySession[meta.id] = '自由对话'
+    needsResumeBySession[meta.id] = false
     activeId.value = meta.id
-    loadIntentState(meta.id)
     return meta.id
   } catch (e) {
     alert(`新建失败: ${e.message}`)
@@ -454,10 +322,12 @@ async function onDelete(id) {
   delete intentStateBySession[id]
   delete intentConfirmationsBySession[id]
   delete optionPromptsBySession[id]
+  delete stageBySession[id]
+  delete needsResumeBySession[id]
   if (wasActive) {
     if (sessions.value.length > 0) {
       activeId.value = sessions.value[0].id
-      await Promise.all([loadMessages(activeId.value), loadIntentState(activeId.value), loadIntentConfirmations(activeId.value), loadOptionHistory(activeId.value)])
+      await refreshView(activeId.value)
     } else {
       activeId.value = null
       focusedTaskId.value = null
@@ -527,9 +397,17 @@ function createStreamHandler(sessionId) {
     list.push(makeEmptyAssistant(id))
     assistantIdx = list.length - 1
   }
+  // 流式写入按 { state, items } 结构改工具与思考态，视图气泡的工具是数组，接管前归一一次
+  function asStreamingBubble(bubble) {
+    if (Array.isArray(bubble.tools)) {
+      bubble.tools = { state: 'idle', items: bubble.tools }
+      bubble.thinking = bubble.thinking || { state: 'idle' }
+    }
+    return bubble
+  }
   function ensureAssistant() {
     if (!cur()) startNewAssistant()
-    return cur()
+    return asStreamingBubble(cur())
   }
   function finalizeCurrent() {
     // 收尾前把队列剩余字一次性吐出，避免最后几个字丢失或拖到流结束
@@ -598,6 +476,7 @@ function createStreamHandler(sessionId) {
           return
         }
         assistantIdx = lastIdx
+        asStreamingBubble(last)
         last.suspended = false
         // 每轮请求一开始就展示同一条气泡内的过程提示；工具状态会在调用时覆盖它。
         last.thinking.state = 'running'
@@ -674,8 +553,8 @@ function createStreamHandler(sessionId) {
       finalizeCurrent()
       dropTrailingEmptyBubble()
       streamingBySession[sessionId] = false
-      // 重拉取回非流式落库的气泡并续轮询
-      forceReloadMessages(sessionId).finally(() => taskPolling.start(sessionId))
+      // 重套会话视图取回非流式落库的卡片并续轮询
+      refreshView(sessionId).finally(() => taskPolling.start(sessionId))
     } else if (payload.type === 'busy') {
       // 活跃任务准入拒绝的瞬时信号：不解禁输入框、不注入气泡，进度由任务图反映
       streamingBySession[sessionId] = false

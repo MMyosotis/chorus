@@ -46,7 +46,6 @@ from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.repo.trace import TraceRepository
-from chorus.routes.agents import router as agents_router
 from chorus.routes.chat import router as chat_router
 from chorus.routes.memory import router as memory_router
 from chorus.routes.sessions import router as sessions_router
@@ -60,6 +59,7 @@ from chorus.services.message import MessageService
 from chorus.services.intent_state import IntentStateService
 from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
+from chorus.services.session_view import SessionViewService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
 from chorus.services.task_lease import LeaseGuard
@@ -119,6 +119,7 @@ def create_app() -> FastAPI:
         task_progress_repo, task_content_repo, session_service,
         memory_service=memory_service,
     )
+    session_view_service = SessionViewService(message_service, task_service, intent_state_service, option_service)
 
     tool_dispatcher = build_tool_dispatch(
         settings_service, task_repo, task_service, task_content_repo, task_artifacts_repo,
@@ -172,6 +173,7 @@ def create_app() -> FastAPI:
     app.state.option_service = option_service
     app.state.supervisor_service = supervisor_service
     app.state.task_service = task_service
+    app.state.session_view_service = session_view_service
     app.state.scheduler = scheduler
     app.state.settings_service = settings_service
     app.state.tool_dispatch = tool_dispatcher
@@ -186,7 +188,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"], allow_headers=["*"],
     )
     app.include_router(sessions_router)
-    app.include_router(agents_router)
     app.include_router(chat_router)
     app.include_router(task_router)
     app.include_router(settings_router)
