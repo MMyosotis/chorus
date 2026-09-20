@@ -114,8 +114,14 @@ def create_app() -> FastAPI:
         memory_repo, memory_llm, settings_service, msg_repo, task_artifacts_repo,
     )
 
+    task_service = TaskService(
+        task_repo, task_artifacts_repo,
+        task_progress_repo, task_content_repo, session_service,
+        memory_service=memory_service,
+    )
+
     tool_dispatcher = build_tool_dispatch(
-        settings_service, task_repo, task_content_repo, task_artifacts_repo,
+        settings_service, task_repo, task_service, task_content_repo, task_artifacts_repo,
         skill_loader, intent_state_service, option_service,
     )
 
@@ -130,11 +136,6 @@ def create_app() -> FastAPI:
 
     agent_loop = AgentLoop(hooks, tool_dispatcher)
 
-    task_service = TaskService(
-        task_repo, task_artifacts_repo,
-        task_progress_repo, task_content_repo, session_service,
-        memory_service=memory_service,
-    )
     supervisor_service = SupervisorService(
         session_service, message_service, hooks,
         chat_models, task_service,

@@ -63,7 +63,7 @@ class SubagentLoopStrategy(LoopStrategy):
     max_steps = _MAX_STEPS
 
     def __init__(self, *, task, owner_id, profile, invoke,
-                 task_repo, progress_repo, lease, skill_loader, tool_dispatch,
+                 task_repo, progress_repo, lease, skill_hints, tool_dispatch,
                  memory: MemoryRecall):
         self.task = task
         self.owner_id = owner_id
@@ -72,7 +72,7 @@ class SubagentLoopStrategy(LoopStrategy):
         self._task_repo = task_repo
         self._progress_repo = progress_repo
         self._lease = lease
-        self._skill_loader = skill_loader
+        self._skill_hints = skill_hints
         self._tool_dispatch = tool_dispatch
         self._produced_units = 0
         self._recall = memory
@@ -89,7 +89,7 @@ class SubagentLoopStrategy(LoopStrategy):
     def provider_messages(self):
         system_inputs = SubagentSystemInputs(
             agent_type=self.task.agent_type,
-            skill_loader=self._skill_loader,
+            skill_hints=self._skill_hints,
             digest=self._recall.digest,
         )
         user_inputs = SubagentUserInputs(memories=self._recall.items)
@@ -230,7 +230,7 @@ class SubAgentService:
             task_repo=self._task_repo,
             progress_repo=self._progress,
             lease=self._lease,
-            skill_loader=self._skill,
+            skill_hints=self._skill.format_hints(),
             tool_dispatch=self._tools,
             memory=memory,
         )

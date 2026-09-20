@@ -26,6 +26,7 @@ from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
 from chorus.services.products import load_delivered_products
+from chorus.services.task import TaskService
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
 
@@ -83,11 +84,13 @@ class CreatePlanTool(Tool):
     def __init__(
         self,
         task_repo: TaskRepository,
+        task_service: TaskService,
         content_repo: TaskContentRepository,
         task_artifacts_repo: TaskArtifactsRepository,
         intent_state: IntentStateService,
     ):
         self._task_repo = task_repo
+        self._task_service = task_service
         self._content_repo = content_repo
         self._artifacts_repo = task_artifacts_repo
         self._intent_state = intent_state
@@ -167,7 +170,7 @@ class CreatePlanTool(Tool):
 
     def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
         """图收敛后的回执：最近一张图成品完成则直给全文与成品标识，否则取消一句话。"""
-        tasks = self._latest_pipeline_tasks(session_id)
+        tasks = self._task_service.current_pipeline_tasks(session_id)
         finalize_task = next((task for task in tasks if task.agent_type == "finalize"), None)
         if finalize_task is None or finalize_task.status != TaskStatus.FINISHED:
             return "创作流水线已被用户放弃，本次未交付成品"
@@ -178,11 +181,3 @@ class CreatePlanTool(Tool):
             f"创作流水线已收口，成品标识={finalize_task.id}（标题：{title}），"
             "成品全文已交付用户，内容如下：\n\n" + card.markdown
         )
-
-    def _latest_pipeline_tasks(self, session_id: str) -> list:
-        """取会话最近一张图的全部任务行。挂起期间不会再建新图，最近即本张。"""
-        tasks = self._task_repo.find_by_session_statuses(session_id, list(TaskStatus))
-        if not tasks:
-            return []
-        latest = max(tasks, key=lambda task: task.updated_at)
-        return [task for task in tasks if task.pipeline_id == latest.pipeline_id]

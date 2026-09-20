@@ -117,7 +117,11 @@ def _build_assembly():
     hooks = HookRegistry()
     skill_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
     intent_state = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc)
-    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, content_repo, art_repo, intent_state)], _stub_settings())
+    task_service = TaskService(
+        task_repo, art_repo, TaskProgressRepository(engine), content_repo, session_svc,
+        stub_memory_service(),
+    )
+    tool_dispatcher = ToolDispatch([CreatePlanTool(task_repo, task_service, content_repo, art_repo, intent_state)], _stub_settings())
     trace = TraceEmitter(trace_svc, tool_dispatcher)
     hooks.register("BeforeModelRequest", trace.before_model_request)
     hooks.register("AfterModelResponse", trace.after_model_response)
@@ -125,11 +129,6 @@ def _build_assembly():
     hooks.register("PostToolUse", trace.on_tool_result)
 
     agent_loop = AgentLoop(hooks, tool_dispatcher)
-
-    task_service = TaskService(
-        task_repo, art_repo, TaskProgressRepository(engine), content_repo, session_svc,
-        stub_memory_service(),
-    )
 
     # supervisor：一次建图工具调用流
     sup_client = FakeClient([FakeStream([

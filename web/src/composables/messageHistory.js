@@ -46,6 +46,10 @@ function hostsPlanCard(toolItems) {
   return toolItems.some((item) => item.name === 'create_plan')
 }
 
+export function isPlanResumeBoundary(message) {
+  return !!(message?.suspended && hostsPlanCard(message.tools?.items || []))
+}
+
 export function normalizeAssistant(msg) {
   const toolItems = Array.isArray(msg.tools) ? msg.tools : []
   const text = (msg.content || '').trim()
@@ -82,7 +86,7 @@ export function mergeAssistantHistory(raw) {
     const hilHost = hostsHilCard(m.tools || [])
     // 建图挂起是流水线边界：卡片挂在这条轮次上，按铃收尾属流水线结束后的新发言，
     // 不能并回挂起气泡，否则卡片无法排在两段气泡中间。
-    if (segBubble && segBubble.suspended && hostsPlanCard(segBubble.tools.items)) {
+    if (isPlanResumeBoundary(segBubble)) {
       segBubble = null
     }
     if (segBubble) {

@@ -29,7 +29,9 @@ from chorus.domain.task import (
     invoke_text,
     is_legal_transition,
     list_products,
+    select_delivered_tasks,
     select_display_pipeline,
+    select_pipeline_id,
     topological_order,
     IdeaArtifacts,
     IdeaCandidate,
@@ -68,12 +70,14 @@ def test_delivered_products_filter_and_format():
         message_id="m1",
     )
     script = _mk(TaskStatus.FINISHED, id="script", agent_type="script", created_at=3.0)
+    tasks = [draft, script, later, first]
+    assert [task.id for task in select_delivered_tasks(tasks)] == ["later", "first"]
     candidates = [
         ProductCandidate(
             task=task,
             card=PostCard(markdown=f"{task.id}正文", meta={"title": title}),
         )
-        for task, title in [(draft, "草稿"), (script, "文案"), (later, "后发"), (first, "先发")]
+        for task, title in [(later, "后发"), (first, "先发")]
     ]
     products = list_products(candidates)
     assert isinstance(products[0], DeliveredProduct)
@@ -129,6 +133,14 @@ def test_select_display_pipeline():
     # 无运行中则返已完成与失败（不含已取消）
     assert select_display_pipeline([], terminal) == [_mk("finished", id="f1"), _mk("failed", id="x1")]
     assert select_display_pipeline([], []) == []
+
+
+def test_select_pipeline_id_prefers_active_then_latest_terminal():
+    active = [_mk("running", id="active", pipeline_id="active-pipeline", updated_at=1.0)]
+    terminal = [_mk("finished", id="old", pipeline_id="old-pipeline", updated_at=5.0)]
+    assert select_pipeline_id(active, terminal) == "active-pipeline"
+    assert select_pipeline_id([], terminal) == "old-pipeline"
+    assert select_pipeline_id([], []) is None
 
 
 def test_agent_profiles_registry():

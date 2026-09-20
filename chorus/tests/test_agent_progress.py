@@ -274,7 +274,7 @@ def test_image_after_dispatch_counts_units():
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
-        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=ToolDispatch([], _stub_settings()),
         memory=MemoryRecall(),
     )
@@ -296,7 +296,7 @@ def test_tool_without_units_not_counted():
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
-        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=ToolDispatch([], _stub_settings()),
         memory=MemoryRecall(),
     )

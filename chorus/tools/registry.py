@@ -13,6 +13,7 @@ from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
 from chorus.services.option import OptionPromptService
 from chorus.services.settings import SettingsService
+from chorus.services.task import TaskService
 from chorus.tools.builtin import (
     BaiduSearchTool,
     CreatePlanTool,
@@ -29,6 +30,7 @@ from chorus.tools.framework import ToolDispatch
 def build_tool_dispatch(
     settings_service: SettingsService,
     task_repo: TaskRepository,
+    task_service: TaskService,
     content_repo: TaskContentRepository,
     task_artifacts_repo: TaskArtifactsRepository,
     skill_loader: SkillLoader,
@@ -44,6 +46,6 @@ def build_tool_dispatch(
         GenerateImageTool(settings_service, image_models),
         BaiduSearchTool(baidu_client),
         UpdateIntentStateTool(intent_state),
-        CreatePlanTool(task_repo, content_repo, task_artifacts_repo, intent_state),
+        CreatePlanTool(task_repo, task_service, content_repo, task_artifacts_repo, intent_state),
         PresentOptionsTool(option_service),
     ], settings_service)

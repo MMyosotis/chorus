@@ -316,7 +316,7 @@ def test_subagent_provider_messages_injects_recall():
         task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
-        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=None,
         memory=MemoryRecall(items=recalled),
     )
@@ -343,7 +343,7 @@ def test_subagent_provider_messages_injects_digest_into_system():
         task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
-        skill_loader=SkillLoader(skills_dir=Path("/nonexistent-skills")),
+        skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=None,
         memory=MemoryRecall(digest=digest),
     )

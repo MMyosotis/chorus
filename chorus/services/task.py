@@ -11,11 +11,13 @@ from chorus.domain.task import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
+    Task,
     TaskGraph,
     TaskStatus,
     build_edited_artifacts,
     build_task_graph,
     select_display_pipeline,
+    select_pipeline_id,
 )
 from chorus.domain.log import get_logger
 from chorus.repo.task import TaskRepository
@@ -78,44 +80,38 @@ class TaskService:
 
     def cancel_pipeline(self, session_id: str) -> dict:
         """放弃整条流水线：批量取消待执行/运行中/待确认/失败任务，无图可弃则幂等返 0。"""
-        pipeline_id = self._latest_pipeline_id(session_id)
+        tasks = self.current_pipeline_tasks(session_id)
+        pipeline_id = tasks[0].pipeline_id if tasks else None
         count = self._task_repo.cancel_pipeline(pipeline_id, CANCELLABLE_STATUSES) if pipeline_id else 0
         _logger.info("cancel pipeline", extra={"session_id": session_id, "cancelled": count})
         return {"pipeline_id": pipeline_id, "cancelled": count}
 
     def get_graph(self, session_id: str) -> TaskGraph:
         """任务图视图：进行中流水线优先，无则取最近已完成。"""
-        active_tasks = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
-        if active_tasks:
+        tasks = self.current_pipeline_tasks(session_id)
+        if not tasks:
+            return build_task_graph(None, [], {}, {}, {}, False)
+        pipeline_id = tasks[0].pipeline_id
+        if any(task.status in ACTIVE_STATUSES for task in tasks):
             # 渲染整图含已完成前序，否则成员会随完成逐个消失
-            pipeline_id = active_tasks[0].pipeline_id
-            all_tasks = self._task_repo.find_by_pipeline(pipeline_id)
-            return self._build_graph(pipeline_id, all_tasks, True)
+            return self._build_graph(pipeline_id, tasks, True)
 
         # 无进行中：取该会话终态任务，按流水线分组取最近完成
-        terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
-        if not terminal:
-            return build_task_graph(None, [], {}, {}, {}, False)
-
-        # 取最近更新的流水线
-        latest = max(terminal, key=lambda task: task.updated_at)
-        same_pipeline = [task for task in terminal if task.pipeline_id == latest.pipeline_id]
-        display = select_display_pipeline([], same_pipeline)
-        return self._build_graph(latest.pipeline_id, display, False)
+        display = select_display_pipeline([], tasks)
+        return self._build_graph(pipeline_id, display, False)
 
     def count_active(self, session_id: str) -> int:
         """会话内活跃任务数，供入口门禁判定是否进行中。"""
         return self._task_repo.count_by_session_statuses(session_id, ACTIVE_STATUSES)
 
-    def _latest_pipeline_id(self, session_id: str) -> Optional[str]:
-        """进行中流水线优先，无则取最近更新的流水线，供取消/回执定位同一张图。"""
+    def current_pipeline_tasks(self, session_id: str) -> list[Task]:
+        """取会话当前流水线的全部任务，活跃流水线优先。"""
         active = self._task_repo.find_by_session_statuses(session_id, ACTIVE_STATUSES)
-        if active:
-            return active[0].pipeline_id
         terminal = self._task_repo.find_by_session_statuses(session_id, TERMINAL_STATUSES)
-        if not terminal:
-            return None
-        return max(terminal, key=lambda task: task.updated_at).pipeline_id
+        pipeline_id = select_pipeline_id(active, terminal)
+        if pipeline_id is None:
+            return []
+        return self._task_repo.find_by_pipeline(pipeline_id)
 
     def list_products(self, session_id: str) -> list[dict]:
         """已交付成品列表：本会话全部完成的排版任务，带全文/标题/标识/锚点。"""

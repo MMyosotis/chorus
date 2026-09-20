@@ -1,7 +1,7 @@
 """已交付成品的筛选、组装与清单文本规则。"""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Iterable, Optional
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydataclass
@@ -16,10 +16,6 @@ class ProductCandidate:
 
     task: Task
     card: PostCard
-
-    def is_delivered(self) -> bool:
-        """判断候选是否为已交付成品。"""
-        return self.task.is_delivered()
 
     def to_delivered_product(self) -> DeliveredProduct:
         """把候选转换为成品列表项。"""
@@ -43,11 +39,15 @@ class DeliveredProduct:
     created_at: float
 
 
+def select_delivered_tasks(tasks: Iterable[Task]) -> list[Task]:
+    """筛出可作为已交付成品的任务。"""
+    return [task for task in tasks if task.is_delivered()]
+
+
 def list_products(candidates: list[ProductCandidate]) -> list[DeliveredProduct]:
-    """筛选已完成的排版任务并组装成品列表。"""
-    delivered = [candidate for candidate in candidates if candidate.is_delivered()]
-    delivered.sort(key=lambda candidate: candidate.task.created_at)
-    return [candidate.to_delivered_product() for candidate in delivered]
+    """把已筛好的成品候选按创建时间组装为清单。"""
+    ordered = sorted(candidates, key=lambda candidate: candidate.task.created_at)
+    return [candidate.to_delivered_product() for candidate in ordered]
 
 
 def format_product_list(products: list[DeliveredProduct]) -> str:

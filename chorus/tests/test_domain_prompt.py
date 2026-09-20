@@ -67,7 +67,7 @@ def test_subagent_system_prompt_includes_skill_and_digest():
         encoding="utf-8",
     )
     prompt = SubagentSystemInputs(
-        agent_type="image", skill_loader=SkillLoader(skills_dir=tmp), digest=_empty_digest,
+        agent_type="image", skill_hints=SkillLoader(skills_dir=tmp).format_hints(), digest=_empty_digest,
     ).render_system_prompt()
     assert "<available_skills>" in prompt
     assert "infographic" in prompt

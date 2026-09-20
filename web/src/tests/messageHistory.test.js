@@ -1,7 +1,7 @@
 // 助手历史合并规则单测。
 
 import { test, expect } from 'vitest'
-import { containsMessageId, mapToolItem, normalizeAssistant, mergeAssistantHistory } from '../composables/messageHistory.js'
+import { containsMessageId, isPlanResumeBoundary, mapToolItem, normalizeAssistant, mergeAssistantHistory } from '../composables/messageHistory.js'
 
 test('mapToolItem 正常映射', () => {
   const out = mapToolItem({ name: 'load_skill', arguments: { x: 1 }, duration_ms: 5, content: 'c', display: 'd' })
@@ -51,6 +51,17 @@ test('normalizeAssistant 选项征询轮有正文也保留续写标记', () => {
     }],
   })
   expect(out.suspended).toBe(true)
+})
+
+test('isPlanResumeBoundary 统一识别建图挂起边界', () => {
+  expect(isPlanResumeBoundary({
+    suspended: true,
+    tools: { items: [{ name: 'create_plan' }] },
+  })).toBe(true)
+  expect(isPlanResumeBoundary({
+    suspended: false,
+    tools: { items: [{ name: 'create_plan' }] },
+  })).toBe(false)
 })
 
 test('normalizeAssistant 正文与工具缺省', () => {

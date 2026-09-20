@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from chorus.domain.task.models import Task, TaskStatus
 
@@ -42,6 +43,15 @@ LEGAL_TRANSITIONS: set[tuple[str, str]] = {
 def is_legal_transition(from_status: str, to_status: str) -> bool:
     """是否合法转移。终态不可再转移。"""
     return (from_status, to_status) in LEGAL_TRANSITIONS
+
+
+def select_pipeline_id(active: list[Task], terminal: list[Task]) -> Optional[str]:
+    """选择会话当前流水线：优先活跃任务，否则取最近更新的终态任务。"""
+    if active:
+        return active[0].pipeline_id
+    if not terminal:
+        return None
+    return max(terminal, key=lambda task: task.updated_at).pipeline_id
 
 
 def topological_order(tasks: list[Task]) -> list[Task]:

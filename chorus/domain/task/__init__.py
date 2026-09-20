@@ -39,6 +39,7 @@ from chorus.domain.task.products import (
     DeliveredProduct,
     format_product_list,
     list_products,
+    select_delivered_tasks,
 )
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
 from chorus.domain.task.state import (
@@ -48,6 +49,7 @@ from chorus.domain.task.state import (
     TERMINAL_STATUSES,
     is_legal_transition,
     select_display_pipeline,
+    select_pipeline_id,
     topological_order,
 )
 
@@ -88,4 +90,6 @@ __all__ = [
     "build_edited_artifacts",
     "list_products",
     "format_product_list",
+    "select_delivered_tasks",
+    "select_pipeline_id",
 ]

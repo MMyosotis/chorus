@@ -22,7 +22,6 @@ from chorus.domain.prompt.assembly import (
     join_sections,
     tagged_block,
 )
-from chorus.domain.skill import SkillLoader
 from chorus.domain.task.artifacts import PostCard
 from chorus.domain.task.models import TaskContent
 from chorus.domain.task.profiles import AGENT_PROFILES
@@ -129,17 +128,17 @@ def subagent_base(agent_type: str) -> str:
 
 @dataclass(frozen=True)
 class SubagentSystemInputs:
-    """子 agent 系统消息原料：角色、技能加载器与创作者档案摘要。"""
+    """子 agent 系统消息原料：角色、技能摘要与创作者档案摘要。"""
 
     agent_type: str
-    skill_loader: SkillLoader
+    skill_hints: str
     digest: MemoryDigest
 
     def render_system_prompt(self) -> str:
         """拼接子 agent 的 system 消息。"""
         digest = render_digest(self.digest)
         return build_system_prompt(subagent_base(self.agent_type), [
-            tagged_block("available_skills", self.skill_loader.format_hints()),
+            tagged_block("available_skills", self.skill_hints),
             tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None),
         ])
 

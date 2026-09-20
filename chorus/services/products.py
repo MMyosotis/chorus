@@ -8,6 +8,7 @@ from chorus.domain.task import (
     PostCard,
     ProductCandidate,
     TaskStatus,
+    select_delivered_tasks,
     list_products as build_product_list,
 )
 from chorus.repo.task import TaskRepository
@@ -21,13 +22,13 @@ def load_delivered_products(
 ) -> list[DeliveredProduct]:
     """跨任务与产物仓储读取已交付成品。"""
     finished = task_repo.find_by_session_statuses(session_id, [TaskStatus.FINISHED])
-    finalizers = [task for task in finished if task.agent_type == "finalize"]
-    artifacts_by_task = artifacts_repo.load_many([task.id for task in finalizers])
+    delivered_tasks = select_delivered_tasks(finished)
+    artifacts_by_task = artifacts_repo.load_many([task.id for task in delivered_tasks])
     candidates = [
         ProductCandidate(
             task=task,
             card=cast(PostCard, artifacts_by_task[task.id].artifacts),
         )
-        for task in finalizers
+        for task in delivered_tasks
     ]
     return build_product_list(candidates)

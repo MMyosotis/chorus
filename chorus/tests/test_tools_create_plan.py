@@ -8,12 +8,15 @@ from chorus.domain.task import ACTIVE_STATUSES, CANCELLABLE_STATUSES, PostCard, 
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
+from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.session import SessionRepository
 from chorus.services.intent_state import IntentStateService
 from chorus.services.session import SessionService
+from chorus.services.task import TaskService
 from chorus.tests._helpers import fresh_engine, seed_session
+from chorus.tests._helpers import stub_memory_service
 from chorus.tools.builtin.create_plan import CreatePlanTool
 from chorus.tools.framework import Reply, Suspend, ToolContext
 
@@ -36,9 +39,14 @@ def _build():
     repo = TaskRepository(engine)
     content_repo = TaskContentRepository(engine)
     art_repo = TaskArtifactsRepository(engine)
-    intent = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), SessionService(SessionRepository(engine)))
+    session_service = SessionService(SessionRepository(engine))
+    intent = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_service)
     intent.patch_status("s1", "confirmed")
-    tool = CreatePlanTool(repo, content_repo, art_repo, intent)
+    task_service = TaskService(
+        repo, art_repo, TaskProgressRepository(engine), content_repo,
+        session_service, stub_memory_service(),
+    )
+    tool = CreatePlanTool(repo, task_service, content_repo, art_repo, intent)
     ctx = ToolContext(session_id="s1", message_id="m-plan")
     return engine, repo, content_repo, art_repo, tool, ctx
 
@@ -68,8 +76,14 @@ def test_unconfirmed_intent_blocks_plan_creation():
     seed_session(engine, sid="s1")
     repo = TaskRepository(engine)
     content_repo = TaskContentRepository(engine)
-    intent = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), SessionService(SessionRepository(engine)))
-    tool = CreatePlanTool(repo, content_repo, TaskArtifactsRepository(engine), intent)
+    art_repo = TaskArtifactsRepository(engine)
+    session_service = SessionService(SessionRepository(engine))
+    intent = IntentStateService(IntentStateRepository(engine), IntentConfirmationRepository(engine), session_service)
+    task_service = TaskService(
+        repo, art_repo, TaskProgressRepository(engine), content_repo,
+        session_service, stub_memory_service(),
+    )
+    tool = CreatePlanTool(repo, task_service, content_repo, art_repo, intent)
     outcome = tool.run(_args(), ToolContext(session_id="s1")).outcome
     assert isinstance(outcome, Reply)
     assert "blocked" in outcome.content

@@ -24,7 +24,7 @@ import {
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
-import { mergeAssistantHistory } from './composables/messageHistory.js'
+import { isPlanResumeBoundary, mergeAssistantHistory } from './composables/messageHistory.js'
 import { planTaskCards, planProductCards, planIntentCards, planOptionCards } from './composables/taskCardProjection.js'
 import { replaceAnchoredCards } from './composables/anchoredCards.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
@@ -273,8 +273,7 @@ function hasUnreceiptedPlan(id) {
   return !!(
     last &&
     last.role === 'assistant' &&
-    last.suspended &&
-    (last.tools?.items || []).some((item) => item.name === 'create_plan')
+    isPlanResumeBoundary(last)
   )
 }
 
@@ -599,7 +598,7 @@ function createStreamHandler(sessionId) {
       const last = list[lastIdx]
       if (last && last.role === 'assistant' && last.suspended) {
         // 建图挂起是流水线边界：按铃收尾在卡片之后另起气泡，不续写挂起气泡
-        const planResume = (last.tools?.items || []).some((item) => item.name === 'create_plan')
+        const planResume = isPlanResumeBoundary(last)
         if (planResume) {
           startNewAssistant(payload.id)
           cur().thinking.state = 'running'
