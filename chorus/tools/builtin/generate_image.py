@@ -101,5 +101,8 @@ class GenerateImageTool(Tool):
             arguments.get("size", "1024x1024"),
         )
         # 生图服务失败返 "Error: ..."，成功返 URL；失败不计结构单元
-        produced = 0 if url.startswith("Error:") else 1
-        return ToolRunResult(Reply(url), activity_meta={"url": url}, units_produced=produced)
+        is_error = url.startswith("Error:")
+        return ToolRunResult(
+            Reply(url), is_error=is_error, activity_meta={"url": url},
+            units_produced=0 if is_error else 1,
+        )

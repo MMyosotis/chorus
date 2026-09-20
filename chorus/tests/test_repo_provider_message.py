@@ -68,7 +68,7 @@ def test_replace_with_summary_clears_and_keeps_single_row():
 
 
 def test_message_service_dual_writes_and_rewrites_both_tables():
-    """新消息两表同标识双写，改写工具结果两表同步，前端与模型所见一致。"""
+    """工具结果原始表与模型现场分别保存，模型现场带语义标签。"""
     engine = fresh_engine()
     seed_session(engine)
     msg_repo = MessageRepository(engine)

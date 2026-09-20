@@ -28,5 +28,5 @@ class ListSkillTool(Tool):
         name = arguments.get("name", "")
         files = self._skill_loader.list_files(name)
         if files is None:
-            return ToolRunResult(Reply(f"Error: skill '{name}' not found"))
+            return ToolRunResult(Reply(f"Error: skill '{name}' not found"), is_error=True)
         return ToolRunResult(Reply("\n".join(files) or "(空技能包)"))

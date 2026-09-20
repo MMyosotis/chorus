@@ -349,7 +349,7 @@ def test_subagent_provider_messages_injects_digest_into_system():
     )
     msgs = strategy.provider_messages()
     system = msgs[0]["content"]
-    assert "## 创作者档案" in system
+    assert "<memory_summary>" in system
     assert "身份：程序员" in system
 
 

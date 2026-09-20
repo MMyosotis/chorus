@@ -6,9 +6,10 @@ from typing import Iterable
 from pydantic import BaseModel, Field, ValidationError
 
 from chorus.domain.bypass import BypassCaller, BypassScope
-from chorus.domain.intent import IntentState, intent_state_block
+from chorus.domain.intent import IntentState, render_intent_state
 from chorus.domain.log import get_logger
-from chorus.domain.message import Message, recent_chat_block
+from chorus.domain.message import Message, recent_chat_text
+from chorus.domain.prompt.assembly import tagged_block
 
 _logger = get_logger("domain.suggestion")
 
@@ -27,6 +28,9 @@ class _SuggestionsPayload(BaseModel):
 
 def build_suggestion_prompt(state: IntentState, messages: Iterable[Message]) -> str:
     """拼装旁路提示词：给每条完整输入配一个用于气泡展示的短标题。"""
+    intent_block = tagged_block(
+        "intent_state", f"当前意图状态：\n{render_intent_state(state)}",
+    )
     return (
         "你是图文创作助手的输入建议器。根据下方会话现状，替用户起草接下来最想发的 3 句话。\n"
         "要求：\n"
@@ -36,8 +40,8 @@ def build_suggestion_prompt(state: IntentState, messages: Iterable[Message]) -> 
         "- 结合会话进展判断内容：还没定主题就给创作方向，主题已定就给细化补充，成品已出就给修改迭代\n"
         "- 严格输出 3 条；只输出合法 JSON，不要 Markdown 代码块、编号或任何额外文字\n"
         "- JSON 格式必须为：{\"suggestions\":[{\"title\":\"...\",\"content\":\"...\"}]}\n\n"
-        f"{intent_state_block(state)}\n\n"
-        f"{recent_chat_block(messages)}"
+        f"{intent_block}\n\n"
+        f"{tagged_block('recent_chat', recent_chat_text(messages))}"
     )
 
 

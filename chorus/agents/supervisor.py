@@ -37,7 +37,7 @@ from chorus.services.session import SessionService
 from chorus.services.task import TaskService
 from chorus.services.trace import TraceService
 from chorus.tools import ToolDispatch
-from chorus.tools.framework import Suspend
+from chorus.tools.framework import Suspend, format_tool_result
 
 _SUPERVISOR_MAX_STEPS = 20
 
@@ -207,7 +207,7 @@ class SupervisorService:
             yield reject
             return
 
-        self._message.rewrite_last_tool_result(session_id, tool_name, result_text)
+        self._message.rewrite_last_tool_result(session_id, tool_name, format_tool_result(result_text))
         yield from self._run(session_id, None)
 
     def has_unreceipted_plan(self, session_id: str) -> bool:

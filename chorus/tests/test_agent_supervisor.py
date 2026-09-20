@@ -388,7 +388,7 @@ def test_provider_messages_injects_intent_block_before_last_user():
     )
     msgs = strategy.provider_messages()
     user_dicts = [m for m in msgs if m["role"] == "user"]
-    assert user_dicts[-1]["content"].startswith("<current_intent_state>")
+    assert user_dicts[-1]["content"].startswith("<intent_state>")
     assert "职场穿搭" in user_dicts[-1]["content"]
     assert "帮我写博文" in user_dicts[-1]["content"]
     # 临时拼接不入库，原始 user 消息正文保持不变
@@ -426,7 +426,7 @@ def test_provider_messages_injects_recall_before_intent_block():
     user_dicts = [m for m in msgs if m["role"] == "user"]
     content = user_dicts[-1]["content"]
     assert content.startswith("<recalled_memories>")
-    assert content.index("<recalled_memories>") < content.index("<current_intent_state>")
+    assert content.index("<recalled_memories>") < content.index("<intent_state>")
     assert "身份：程序员" in content
     assert "职场穿搭" in content
     assert "帮我写博文" in content
@@ -541,7 +541,7 @@ def test_resume_rewrites_receipt_and_locks():
     # 原工具结果被改写（同一行，不追加新 tool 消息），续跑补助手正文
     assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
     assert msgs[2].id == tool_msg_id
-    assert msgs[2].content == "创作流水线已被用户放弃，本次未交付成品"
+    assert msgs[2].content == "<tool_result>\n创作流水线已被用户放弃，本次未交付成品\n</tool_result>"
     assert msgs[3].content == "本次流水线已按你的要求收尾"
     # 回执已落：锁复位，挡重复按铃
     assert sup.has_unreceipted_plan(s.id) is False

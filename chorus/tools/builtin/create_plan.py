@@ -100,15 +100,15 @@ class CreatePlanTool(Tool):
         session_id = cast(str, ctx.session_id)
         blocked = self._intent_gate(session_id)
         if blocked:
-            return ToolRunResult(blocked)
+            return ToolRunResult(blocked, is_error=True)
         try:
             base_product_id = arguments.get("base_product_id")
             base_card = self._load_base_card(session_id, cast(str, base_product_id)) if base_product_id else None
             pairs = self._build_pairs(arguments, session_id, ctx.message_id, base_card)
         except (KeyError, TypeError, PydanticValidationError) as e:
-            return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"))
+            return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"), is_error=True)
         except ValidationError as e:
-            return ToolRunResult(Reply(e.correction))
+            return ToolRunResult(Reply(e.correction), is_error=True)
         self._persist(pairs)
         return ToolRunResult(self._finalize(pairs))
 

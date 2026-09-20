@@ -80,7 +80,7 @@ class PresentOptionsTool(Tool):
             raw_questions = arguments["questions"]
             questions = [self._build_question(raw) for raw in raw_questions]
         except (KeyError, TypeError, ValueError) as e:
-            return ToolRunResult(Reply(f"present_options 参数缺失或格式错: {e}"))
+            return ToolRunResult(Reply(f"present_options 参数缺失或格式错: {e}"), is_error=True)
 
         prompt = self._options.create(
             session_id=ctx.session_id,

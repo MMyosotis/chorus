@@ -1,4 +1,4 @@
-"""ToolOutcome 联合 + dispatch 分流契约：成功→Terminal/Reply 透传、意外异常→Reply 兜底。"""
+"""ToolOutcome 联合 + dispatch 分流契约：成功统一包结果块、意外异常→Reply 兜底。"""
 from __future__ import annotations
 
 from chorus.tools import Tool, ToolContext, ToolDispatch
@@ -40,6 +40,15 @@ class _BoomTool(Tool):
         raise RuntimeError("意外崩溃")
 
 
+class _ErrorTool(Tool):
+    name = "error_tool"
+    description = "d"
+    parameters = {"type": "object", "properties": {}}
+
+    def run(self, arguments, ctx):
+        return ToolRunResult(Reply("业务失败"), is_error=True)
+
+
 def _ctx():
     return ToolContext(session_id="s1")
 
@@ -49,7 +58,7 @@ def test_reply_dispatch_returns_reply_outcome():
     d = reg.dispatch(ToolCall(id="c1", name="reply_tool", arguments={}), _ctx())
     assert isinstance(d, DispatchResult)
     assert isinstance(d.outcome, Reply)
-    assert d.outcome.content == "回传内容"   # 内容在结果上，落库与 trace 共用
+    assert d.outcome.content == "<tool_result>\n回传内容\n</tool_result>"
     assert d.duration_ms >= 0
 
 
@@ -57,7 +66,13 @@ def test_suspend_dispatch_returns_suspend_outcome():
     reg = ToolDispatch([_SuspendTool()], _settings())
     d = reg.dispatch(ToolCall(id="c1", name="suspend_tool", arguments={}), _ctx())
     assert isinstance(d.outcome, Suspend)
-    assert d.outcome.content == "已执行"
+    assert d.outcome.content == "<tool_result>\n已执行\n</tool_result>"
+
+
+def test_dispatch_keeps_error_outcome_as_error_block():
+    reg = ToolDispatch([_ErrorTool()], _settings())
+    d = reg.dispatch(ToolCall(id="c1", name="error_tool", arguments={}), _ctx())
+    assert d.outcome.content == "<error>\n业务失败\n</error>"
 
 
 def test_unexpected_exception_falls_back_to_reply():
@@ -109,7 +124,7 @@ def test_generate_image_no_unit_on_error():
     ok_tool = GenerateImageTool(_Settings(), _stub_provider(_OkClient()))
     ok_res = ok_tool.run({"prompt": "暴雨"}, _ctx())
     assert ok_res.units_produced == 1
-    assert ok_res.outcome.content == "http://img/x.png"
+    assert ok_res.outcome.content == "<tool_result>\nhttp://img/x.png\n</tool_result>"
 
 
 def _stub_provider(client):

@@ -6,16 +6,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from chorus.domain.intent import IntentState, intent_state_block
+from chorus.domain.intent import IntentState, render_intent_state
 from chorus.domain.memory import (
     CreatorMemory,
     MemoryDigest,
-    render_digest_block,
-    render_recall_block,
+    render_digest,
+    render_recall,
 )
 from chorus.domain.prompt.assembly import (
     build_system_prompt,
     inject_user_blocks,
+    tagged_block,
 )
 from chorus.domain.task.profiles import AGENT_PROFILES
 
@@ -30,7 +31,7 @@ def _profiles_block() -> str:
 SYSTEM_PROMPT = (
     "你是一个多平台图文创作产品的主 Agent，首要职责是和用户对话、理解并细化用户意图，并在用户确认后编排创作任务。"
     "你不亲自执行业务--不搜索资料、不撰写正文、不生成配图，这些由你编排的子角色完成；你只做对话、意图细化与任务编排。"
-    "你需要自然语言回复用户，同时维护结构化的 current_intent_state。"
+    "你需要自然语言回复用户，同时维护结构化的 intent_state。"
     "只有当用户确认意图后，才调用 create_plan 创建任务。\n\n"
     "禁用任何 emoji 字符--产出话术、回复、产物文本一律纯文本，前端靠角色名与状态徽章表意。\n\n"
     "## 工具调用规范\n"
@@ -95,7 +96,10 @@ class SupervisorSystemInputs:
 
     def render_system_prompt(self) -> str:
         """拼接 supervisor 的 system 消息。"""
-        return build_system_prompt(SYSTEM_PROMPT, [render_digest_block(self.digest)])
+        digest = render_digest(self.digest)
+        return build_system_prompt(SYSTEM_PROMPT, [
+            tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None)
+        ])
 
 
 @dataclass(frozen=True)
@@ -107,7 +111,8 @@ class SupervisorUserInputs:
 
     def inject_user_context(self, msgs: list[dict]) -> None:
         """把 supervisor 的用户上下文注入末条用户消息前。"""
+        intent = render_intent_state(self.intent_state)
         inject_user_blocks(msgs, [
-            render_recall_block(self.memories),
-            intent_state_block(self.intent_state),
+            tagged_block("recalled_memories", render_recall(self.memories)),
+            tagged_block("intent_state", f"当前意图状态：\n{intent}"),
         ])

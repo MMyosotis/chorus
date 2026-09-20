@@ -7,12 +7,11 @@ from __future__ import annotations
 from typing import Optional
 
 
-def section(title: str, body: Optional[str], inline: bool = False) -> str:
-    """有正文则标题接正文成段，无正文返空串。"""
+def tagged_block(tag: str, body: Optional[str]) -> str:
+    """有正文则包成语义标签块，无正文返空串。"""
     if not body:
         return ""
-    separator = "" if inline else "\n"
-    return f"{title}{separator}{body}"
+    return f"<{tag}>\n{body}\n</{tag}>"
 
 
 def join_sections(sections: list[str]) -> str:

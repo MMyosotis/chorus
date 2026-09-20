@@ -9,7 +9,7 @@ from chorus.domain.memory.prompts import (
     build_extract_prompt,
     build_recall_prompt,
 )
-from chorus.domain.memory.render import render_digest_block, render_recall_block
+from chorus.domain.memory.render import render_digest, render_recall
 
 __all__ = [
     "CreatorMemory",
@@ -22,8 +22,8 @@ __all__ = [
     "build_consolidate_prompt",
     "build_extract_prompt",
     "build_recall_prompt",
-    "render_digest_block",
-    "render_recall_block",
+    "render_digest",
+    "render_recall",
     "memories_to_digest_entries",
     "visible_to_agent",
 ]

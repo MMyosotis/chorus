@@ -8,10 +8,28 @@ export const BYPASS_PURPOSE_LABELS = {
   memory_recall: '记忆召回',
 }
 
-const INJECTION_LABELS = { recalled_memories: '记忆召回', current_intent_state: '意图状态' }
-const INJECTION_PATTERN = /<(recalled_memories|current_intent_state)>[\s\S]*?<\/\1>/g
+const INJECTION_LABELS = {
+  memory_summary: '记忆摘要',
+  available_skills: '可用技能',
+  recalled_memories: '记忆召回',
+  intent_state: '意图状态',
+  role: '角色',
+  step_note: '本步交待',
+  intent: '创作意图',
+  base_card: '底稿',
+  dependency_artifacts: '前置产物',
+  prior_artifact: '上轮产物',
+  user_feedback: '用户反馈',
+  recent_chat: '近期对话',
+  error: '错误',
+}
+const INJECTION_PATTERN = new RegExp(
+  `<(${Object.keys(INJECTION_LABELS).join('|')})>[\\s\\S]*?<\\/\\1>`,
+  'g',
+)
+const TOOL_CONTENT_PATTERN = /^<(tool_result|error)>\s*([\s\S]*?)\s*<\/\1>$/
 
-export function parseUserContent(raw) {
+export function parseTaggedContent(raw) {
   const injections = []
   const text = raw.replace(INJECTION_PATTERN, (block) => {
     const tag = block.slice(1, block.indexOf('>'))
@@ -22,6 +40,11 @@ export function parseUserContent(raw) {
     return ''
   }).trim()
   return { text, injections }
+}
+
+export function displayToolContent(raw) {
+  if (typeof raw !== 'string') return raw
+  return raw.replace(TOOL_CONTENT_PATTERN, '$2')
 }
 
 export function messageText(message) {
@@ -84,7 +107,7 @@ export function buildUserInputs(traces) {
       return {
         created_at: trace.created_at || 0,
         source: trace.source || 'supervisor',
-        message: { key, ...parseUserContent(trace.payload?.content || '') },
+        message: { key, ...parseTaggedContent(trace.payload?.content || '') },
       }
     })
     .sort((a, b) => a.created_at - b.created_at)
@@ -195,7 +218,7 @@ export function resultTools(call) {
   return toolsFor(call)
     .filter((tool) => tool.result)
     .map((tool) => {
-      const content = tool.result.payload?.content
+      const content = displayToolContent(tool.result.payload?.content)
       return {
         id: tool.id,
         name: tool.name,
@@ -242,7 +265,7 @@ export function userInputFor(call) {
     if (message.role !== 'user') continue
     const raw = typeof message.content === 'string' ? message.content : shortJson(message.content)
     if (!raw) return null
-    const parsed = parseUserContent(raw)
+    const parsed = parseTaggedContent(raw)
     if (!parsed.text) return null
     return { key: `${index}:${raw}`, text: parsed.text, injections: parsed.injections }
   }

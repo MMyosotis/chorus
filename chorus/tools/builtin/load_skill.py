@@ -38,5 +38,5 @@ class LoadSkillTool(Tool):
         path = arguments.get("path") or "SKILL.md"
         content = self._skill_loader.read_file(name, path)
         if content is None:
-            return ToolRunResult(Reply(f"Error: skill file '{name}/{path}' not found"))
+            return ToolRunResult(Reply(f"Error: skill file '{name}/{path}' not found"), is_error=True)
         return ToolRunResult(Reply(content))

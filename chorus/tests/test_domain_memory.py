@@ -4,8 +4,8 @@ from __future__ import annotations
 from chorus.domain.memory import (
     CreatorMemory,
     MemoryDigest,
-    render_digest_block,
-    render_recall_block,
+    render_digest,
+    render_recall,
     visible_to_agent,
 )
 from chorus.domain.memory.models import MemoryDigestEntry
@@ -75,6 +75,8 @@ def test_recall_prompt_contains_task_hint_and_catalog():
     ]
     digest = MemoryDigest(entries=entries)
     prompt = build_recall_prompt(digest, "写一篇关于 AI 的小红书帖子")
+    assert "<memory_catalog>" in prompt
+    assert "<task_hint>" in prompt
     assert "写一篇关于 AI 的小红书帖子" in prompt
     assert "m1" in prompt
     assert "m2" in prompt
@@ -90,6 +92,8 @@ def test_extract_prompt_contains_reference_guide_and_history():
     ]
     existing = [_make_memory(description="已有：城市深圳")]
     prompt = build_extract_prompt(history, existing)
+    assert "<conversation_history>" in prompt
+    assert "<existing_memories>" in prompt
     assert "深圳的程序员" in prompt
     assert "reference" in prompt
     assert "visible_to" in prompt
@@ -102,6 +106,7 @@ def test_consolidate_prompt_contains_threshold_and_promotion():
         _make_memory(id="m2", description="记忆二", content="内容二"),
     ]
     prompt = build_consolidate_prompt(memories)
+    assert "<memory_catalog>" in prompt
     assert "20" in prompt
     assert "performance" in prompt
     assert "晋升" in prompt
@@ -112,17 +117,17 @@ def test_consolidate_prompt_contains_threshold_and_promotion():
     assert "记忆二" in prompt
 
 
-def test_render_digest_block_empty():
-    assert render_digest_block(MemoryDigest(entries=[])) == ""
+def test_render_digest_empty():
+    assert render_digest(MemoryDigest(entries=[])) == ""
 
 
-def test_render_digest_block_lists_entries():
+def test_render_digest_lists_entries():
     entries = [
         MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance"),
         MemoryDigestEntry(id="m2", description="文风：短句", platform=[], kind="reference"),
     ]
-    block = render_digest_block(MemoryDigest(entries=entries))
-    assert "## 创作者档案" in block
+    block = render_digest(MemoryDigest(entries=entries))
+    assert "<memory_summary>" not in block
     assert "身份：程序员" in block
     assert "小红书" in block
     assert "已验证" in block
@@ -130,18 +135,17 @@ def test_render_digest_block_lists_entries():
     assert "参考" in block
 
 
-def test_render_recall_block_empty():
-    assert render_recall_block([]) == ""
+def test_render_recall_empty():
+    assert render_recall([]) == ""
 
 
-def test_render_recall_block_wraps_memories():
+def test_render_recall_lists_memories():
     memories = [
         _make_memory(description="身份：程序员", content="深圳后端"),
         _make_memory(description="文风：短句", content="多短句少长句"),
     ]
-    block = render_recall_block(memories)
-    assert block.startswith("<recalled_memories>")
-    assert block.endswith("</recalled_memories>")
+    block = render_recall(memories)
+    assert "<recalled_memories>" not in block
     assert "身份：程序员" in block
     assert "深圳后端" in block
     assert "文风：短句" in block

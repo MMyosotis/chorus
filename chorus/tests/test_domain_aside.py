@@ -31,6 +31,7 @@ def test_generate_records_bypass_trace():
     payload = entries[0].payload
     assert payload.purpose == "aside"
     assert payload.status == "success"
+    assert "<task_description>" in payload.prompt
     assert payload.content == "我正在撰写正文"
 
 

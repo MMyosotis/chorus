@@ -60,7 +60,7 @@ class UpdateIntentStateTool(Tool):
         try:
             update = IntentStateUpdate(**arguments)
         except ValidationError as e:
-            return ToolRunResult(Reply(f"update_intent_state 参数格式错: {e}"))
+            return ToolRunResult(Reply(f"update_intent_state 参数格式错: {e}"), is_error=True)
 
         state = self._intent.update_from_tool(ctx.session_id, update)
         if state.intent_status == "ready_to_confirm":

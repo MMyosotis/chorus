@@ -14,7 +14,7 @@ from chorus.domain.message import (
     UserMessage,
     build_history_view,
     build_provider_messages,
-    recent_chat_block,
+    recent_chat_text,
     recent_history_lines,
 )
 
@@ -141,13 +141,13 @@ def test_recent_history_lines_empty_input():
     assert recent_history_lines([]) == []
 
 
-def test_recent_chat_block_wraps_lines_with_tags():
-    block = recent_chat_block([_user("想做骑行图文"), _assistant("好的")])
-    assert block == "<recent_chat>\n用户：想做骑行图文\n助手：好的\n</recent_chat>"
+def test_recent_chat_text_returns_lines_without_tags():
+    text = recent_chat_text([_user("想做骑行图文"), _assistant("好的")])
+    assert text == "用户：想做骑行图文\n助手：好的"
 
 
-def test_recent_chat_block_empty_conversation_uses_placeholder():
-    assert "还没有对话" in recent_chat_block([])
+def test_recent_chat_text_empty_conversation_uses_placeholder():
+    assert "还没有对话" in recent_chat_text([])
 
 
 def main():

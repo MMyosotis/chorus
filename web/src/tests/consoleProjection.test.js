@@ -6,6 +6,8 @@ import {
   buildSessionStats,
   buildTimeline,
   buildUserInputs,
+  displayToolContent,
+  parseTaggedContent,
   toolCallArguments,
 } from '../composables/consoleProjection.js'
 
@@ -141,4 +143,18 @@ test('toolCallArguments 美化 JSON 参数字符串并原样保留非 JSON', () 
   expect(parsed).toBe('{\n  "style": "治愈",\n  "image_count": 3\n}')
   expect(toolCallArguments({ function: { arguments: 'plain text' } })).toBe('plain text')
   expect(toolCallArguments({ function: {} })).toBe('')
+})
+
+test('parseTaggedContent 读取新的意图标签和子 agent 注入标签', () => {
+  const parsed = parseTaggedContent('<intent_state>状态</intent_state>用户输入<base_card>底稿</base_card>')
+  expect(parsed.text).toBe('用户输入')
+  expect(parsed.injections).toEqual([
+    { label: '意图状态', content: '状态' },
+    { label: '底稿', content: '底稿' },
+  ])
+})
+
+test('displayToolContent 去掉工具结果和错误标签', () => {
+  expect(displayToolContent('<tool_result>\n{"ok":true}\n</tool_result>')).toBe('{"ok":true}')
+  expect(displayToolContent('<error>\n失败\n</error>')).toBe('失败')
 })

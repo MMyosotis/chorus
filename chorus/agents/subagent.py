@@ -145,7 +145,8 @@ class SubagentLoopStrategy(LoopStrategy):
         self._progress_repo.set_signal(self.task.id, "刚才格式没对齐，重新理一理")
         if content:
             self.history.append(AssistantMessage.transient(self.task.session_id, content=content))
-        self.history.append(UserMessage.transient(self.task.session_id, content=f"{error.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。"))
+        correction = f"<error>\n{error.correction}\n若确无法完成，按失败块格式输出：# 失败\\n失败说明。\n</error>"
+        self.history.append(UserMessage.transient(self.task.session_id, content=correction))
         return LoopAction(LoopSignal.CONTINUE, [])
 
     def on_truncation_exhausted(self, ctx):

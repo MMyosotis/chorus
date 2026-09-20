@@ -33,7 +33,7 @@ class AsideGenerator:
         prompt = (
             f"你是{role}。请基于以下任务说明，用一句话（不超过20字）以第一人称描述你正在做什么，"
             "直白、功能性、不文艺、不画面感，仅返回这句话。\n\n"
-            f"{invoke[:500]}"
+            f"<task_description>\n{invoke[:500]}\n</task_description>"
         )
         try:
             raw = self._bypass.call(prompt, 512, "aside", scope)

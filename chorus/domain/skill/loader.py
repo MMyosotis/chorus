@@ -57,11 +57,11 @@ class SkillLoader:
         return target.read_text(encoding="utf-8")
 
     def format_hints(self) -> str:
-        """把摘要拼成 system prompt 技能段，无技能时返回空串。"""
+        """把技能摘要渲染成正文，无技能时返回空串。"""
         summaries = self.list_summaries()
         if not summaries:
             return ""
-        lines = ["## 可用技能"]
+        lines = []
         for skill in summaries:
             lines.append(f"- **{skill.name}**: {skill.description}")
         return "\n".join(lines)

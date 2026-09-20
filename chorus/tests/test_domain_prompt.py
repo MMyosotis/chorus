@@ -69,9 +69,9 @@ def test_subagent_system_prompt_includes_skill_and_digest():
     prompt = SubagentSystemInputs(
         agent_type="image", skill_loader=SkillLoader(skills_dir=tmp), digest=_empty_digest,
     ).render_system_prompt()
-    assert "可用技能" in prompt
+    assert "<available_skills>" in prompt
     assert "infographic" in prompt
-    assert prompt.count("## 可用技能") == 1
+    assert prompt.count("<available_skills>") == 1
 
 
 def test_image_prompt_caps_retry():
@@ -103,14 +103,14 @@ def test_postcard_prompt_guides_image_url():
 
 def test_memory_block_absent_without_digest():
     p = SupervisorSystemInputs(digest=_empty_digest).render_system_prompt()
-    assert "## 创作者档案" not in p
+    assert "<memory_summary>" not in p
 
 
 def test_memory_block_present_with_digest():
     entry = MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance")
     digest = MemoryDigest(entries=[entry])
     p = SupervisorSystemInputs(digest=digest).render_system_prompt()
-    assert "## 创作者档案" in p
+    assert "<memory_summary>" in p
     assert "身份：程序员" in p
     assert "小红书" in p
 
@@ -134,17 +134,17 @@ def test_render_skeleton_note_and_base_card():
     base_card = PostCard(markdown="---\ntitle: 夏日晚风\n---\n\n旧稿正文", meta={"title": "夏日晚风"})
     intent = Intent(topic="夏日晚风", image_count=1)
     skeleton = SkeletonInputs("idea", "标题整体保留，只微调语气", intent, base_card).render_skeleton()
-    assert "角色：选题官" in skeleton
-    assert "本步交待：标题整体保留，只微调语气" in skeleton
-    assert "底稿：" in skeleton
+    assert "<role>\n选题官\n</role>" in skeleton
+    assert "<step_note>\n标题整体保留，只微调语气\n</step_note>" in skeleton
+    assert "<base_card>" in skeleton
     assert "旧稿正文" in skeleton
     # 无交待：区块不出现，但底稿与意图仍在
     no_note = SkeletonInputs("finalize", "", intent, base_card).render_skeleton()
     assert "本步交待" not in no_note
-    assert "底稿" in no_note
+    assert "<base_card>" in no_note
     # 无底稿：底稿区块整段不出现
     fresh = SkeletonInputs("idea", "", Intent(topic="新篇", image_count=1), None).render_skeleton()
-    assert "底稿" not in fresh
+    assert "<base_card>" not in fresh
 
 
 def test_assemble_invoke_appends_sections_in_fixed_order():
@@ -154,8 +154,8 @@ def test_assemble_invoke_appends_sections_in_fixed_order():
         prior="上轮正文",
         feedback="改标题",
     ).assemble_invoke()
-    assert out.index("骨架") < out.index("前置产物") < out.index("上轮产物") < out.index("用户反馈")
-    assert "[文案官] 旧稿正文" in out
+    assert out.index("骨架") < out.index("<dependency_artifacts>") < out.index("<prior_artifact>") < out.index("<user_feedback>")
+    assert "[文案官]\n旧稿正文" in out
 
 
 def test_assemble_invoke_empty_sections_omitted():
@@ -165,8 +165,8 @@ def test_assemble_invoke_empty_sections_omitted():
     full = InvokeInputs(
         skeleton="骨架", dependencies=[("文案官", "正文")], feedback="改标题",
     ).assemble_invoke()
-    assert "上轮产物" not in full
-    assert "前置产物" in full and "用户反馈" in full
+    assert "<prior_artifact>" not in full
+    assert "<dependency_artifacts>" in full and "<user_feedback>" in full
 
 
 def main():

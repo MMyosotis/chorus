@@ -24,8 +24,8 @@ def build_recall_prompt(digest: MemoryDigest, task_hint: str) -> str:
     catalog = "\n".join(lines) if lines else "（暂无记忆）"
     return (
         "你是创作者记忆召回助手。以下是与当前任务可能相关的创作者记忆目录：\n\n"
-        f"{catalog}\n\n"
-        f"当前任务：{task_hint}\n\n"
+        f"<memory_catalog>\n{catalog}\n</memory_catalog>\n\n"
+        f"<task_hint>\n当前任务：\n{task_hint}\n</task_hint>\n\n"
         "请从中选出最相关的 5 条记忆，返回它们的 id 组成的 JSON 字符串数组，"
         "格式如 [\"id1\", \"id2\"]。performance 类（已验证）优先纳入。仅返回 JSON，不要其他文字。"
     )
@@ -38,10 +38,8 @@ def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) 
     existing_text = "\n".join(existing_lines) if existing_lines else "（暂无）"
     return (
         "你是创作者记忆提取助手。请从以下对话历史中提取关于这个创作者的长期记忆。\n\n"
-        "## 对话历史\n\n"
-        f"{history_text}\n\n"
-        "## 已有记忆（避免重复）\n\n"
-        f"{existing_text}\n\n"
+        f"<conversation_history>\n{history_text}\n</conversation_history>\n\n"
+        f"<existing_memories>\n已有记忆（避免重复）：\n{existing_text}\n</existing_memories>\n\n"
         "## 要求\n\n"
         "1. description 必须是简短标签，格式为「类型：要点」（如「偏好：第一人称口语化」「受众：大学生为主」），不得超过 20 字\n"
         "2. 只提取 reference 类（参考性）记忆：身份/边界/偏好/文风/选题模式/栏目骨架等\n"
@@ -69,7 +67,7 @@ def build_consolidate_prompt(memories: list[CreatorMemory]) -> str:
     catalog = "\n".join(lines) if lines else "（暂无）"
     return (
         "你是创作者记忆整理助手。以下是当前全部创作者记忆：\n\n"
-        f"{catalog}\n\n"
+        f"<memory_catalog>\n{catalog}\n</memory_catalog>\n\n"
         "请整理这些记忆：\n"
         "1. 合并重复条目\n"
         "2. 删除过时或矛盾的条目\n"

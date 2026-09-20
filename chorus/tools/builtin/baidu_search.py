@@ -80,7 +80,7 @@ class BaiduSearchTool(Tool):
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         query = (arguments.get("query") or "").strip()
         if not query:
-            return ToolRunResult(Reply("Error: query 不能为空"))
+            return ToolRunResult(Reply("Error: query 不能为空"), is_error=True)
         try:
             top_k = max(1, min(20, int(arguments.get("top_k", 8))))
         except (TypeError, ValueError):
@@ -88,7 +88,7 @@ class BaiduSearchTool(Tool):
 
         result = self._client.search(query, arguments.get("recency"), top_k)
         if isinstance(result, str):
-            return ToolRunResult(Reply(result))  # 错误文本，无结构化产物
+            return ToolRunResult(Reply(result), is_error=True)
         return ToolRunResult(
             Reply(_format_references(result)),
             activity_meta={"refs": _to_meta_refs(result)},

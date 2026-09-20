@@ -191,11 +191,10 @@ def recent_history_lines(messages: Iterable[Message], limit: int = 12, line_max:
     return lines
 
 
-def recent_chat_block(messages: Iterable[Message], limit: int = 12, line_max: int = 300) -> str:
-    """序列化近期对话为标签块，供旁路提示词携带；空会话给占位说明。"""
+def recent_chat_text(messages: Iterable[Message], limit: int = 12, line_max: int = 300) -> str:
+    """序列化近期对话正文，空会话给占位说明。"""
     lines = recent_history_lines(messages, limit, line_max)
-    body = "\n".join(lines) if lines else "（会话刚开始，还没有对话）"
-    return f"<recent_chat>\n{body}\n</recent_chat>"
+    return "\n".join(lines) if lines else "（会话刚开始，还没有对话）"
 
 
 def first_user_text(messages: Iterable[Message]) -> str:

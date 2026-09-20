@@ -56,7 +56,7 @@ def test_web_search_disabled_drops_baidu_search():
 
 
 def test_dispatch_normalizes_tool_run_result():
-    """工具返回 ToolRunResult → DispatchResult 透传 activity_meta。"""
+    """工具返回 ToolRunResult → DispatchResult 统一包装正文并透传 activity_meta。"""
     from chorus.tools.framework import DispatchResult, Reply, Tool, ToolContext, ToolRunResult
 
     class _MetaTool(Tool):
@@ -79,7 +79,7 @@ def test_dispatch_normalizes_tool_run_result():
     d1 = disp.dispatch(ToolCall(id="c1", name="baidu_search", arguments={}), ToolContext())
     assert isinstance(d1, DispatchResult)
     assert d1.activity_meta == {"refs": [{"title": "t"}]}
-    assert d1.outcome.content == "可见文本"
+    assert d1.outcome.content == "<tool_result>\n可见文本\n</tool_result>"
     d2 = disp.dispatch(ToolCall(id="c2", name="load_skill", arguments={}), ToolContext())
     assert d2.activity_meta is None  # 未带活动元数据，透传为空
 

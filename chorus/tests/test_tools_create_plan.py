@@ -144,9 +144,9 @@ def test_valid_base_product_id_freezes_draft_into_skeleton():
     contents = content_repo.load_many([t.id for t in tasks])
     for content in contents.values():
         assert "旧稿正文" in content.invoke_message
-        assert "底稿" in content.invoke_message
+        assert "<base_card>" in content.invoke_message
     idea_id = next(t.id for t in tasks if t.agent_type == "idea")
-    assert "本步交待：标题保留，只换语气" in contents[idea_id].invoke_message
+    assert "<step_note>\n标题保留，只换语气\n</step_note>" in contents[idea_id].invoke_message
 
 
 def test_resolve_external_delivers_finished_product():

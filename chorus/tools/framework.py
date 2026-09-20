@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Iterable, Literal, Optional
 
@@ -27,6 +27,16 @@ class ToolOutcome:
     content: str
 
 
+def format_tool_result(content: str) -> str:
+    """把正常工具正文包成工具结果块。"""
+    return f"<tool_result>\n{content}\n</tool_result>"
+
+
+def format_error(content: str) -> str:
+    """把错误正文包成错误块。"""
+    return f"<error>\n{content}\n</error>"
+
+
 @dataclass(frozen=True)
 class Reply(ToolOutcome):
     """回传型：内容作为工具结果回传模型，循环继续。"""
@@ -39,15 +49,16 @@ class Suspend(ToolOutcome):
 
 @dataclass(frozen=True)
 class ToolRunResult:
-    """工具运行的统一返回：走向（模型可见）与结构化产物（活动翻译层用）。
-
-    activity_meta 缺省为空，units_produced 声明本次贡献的结构单元数。
-    events 为随走向一并发出的伴随事件，由循环层 flush。
-    """
+    """工具运行的统一返回：构造时包裹模型可见正文，并携带活动产物。"""
     outcome: ToolOutcome
     activity_meta: Optional[dict] = None
     units_produced: int = 0
     events: tuple = ()
+    is_error: bool = False
+
+    def __post_init__(self):
+        formatter = format_error if self.is_error else format_tool_result
+        object.__setattr__(self, "outcome", replace(self.outcome, content=formatter(self.outcome.content)))
 
 
 @dataclass(frozen=True)
@@ -139,7 +150,7 @@ class ToolDispatch:
         tool = self._tools.get(call.name)
         if tool is None:
             return DispatchResult(
-                outcome=Reply(f"Error: unknown tool '{call.name}'"),
+                outcome=ToolRunResult(Reply(f"Error: unknown tool '{call.name}'"), is_error=True).outcome,
                 duration_ms=0, activity_meta=None, status="error",
             )
 
@@ -149,7 +160,7 @@ class ToolDispatch:
         except Exception as e:
             _logger.exception("tool execution failed", extra={"tool": call.name})
             return DispatchResult(
-                outcome=Reply(f"Error executing tool '{call.name}': {e}"),
+                outcome=ToolRunResult(Reply(f"Error executing tool '{call.name}': {e}"), is_error=True).outcome,
                 duration_ms=int((perf_counter() - start) * 1000),
                 activity_meta=None, status="error",
             )

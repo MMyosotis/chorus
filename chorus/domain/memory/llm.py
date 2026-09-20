@@ -58,7 +58,7 @@ class MemoryLLMService:
                 return parse(raw)
             except (ValueError, ValidationError) as exc:
                 _logger.debug("memory bypass %s parse failed, retry", label, exc_info=True)
-                correction = f"\n\n上次输出无法解析：{exc}。请只返回合法 JSON 数组，不要任何其他文字。"
+                correction = f"\n\n<error>\n上次输出无法解析：{exc}。请只返回合法 JSON 数组，不要任何其他文字。\n</error>"
                 last_exc = exc
             attempts += 1
 

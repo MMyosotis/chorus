@@ -55,7 +55,7 @@ def test_format_hints_renders_names_and_descriptions():
     _write_skill(tmp, "writer", "---\nname: writer\ndescription: 写文案\n---\nb")
     loader = SkillLoader(skills_dir=tmp)
     out = loader.format_hints()
-    assert "## 可用技能" in out
+    assert "<available_skills>" not in out
     assert "**infographic**: 做信息图" in out
     assert "**writer**: 写文案" in out
 

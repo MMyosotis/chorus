@@ -31,7 +31,8 @@ def test_list_skill_unknown_returns_error():
     tmp = Path(tempfile.mkdtemp())
     tool = ListSkillTool(SkillLoader(skills_dir=tmp))
     result = tool.run({"name": "nope"}, ToolContext())
-    assert result.outcome.content.startswith("Error:")
+    assert result.outcome.content.startswith("<error>")
+    assert "Error:" in result.outcome.content
 
 
 def main():

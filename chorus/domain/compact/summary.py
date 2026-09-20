@@ -31,7 +31,7 @@ class SummaryGenerationService:
     def summarize(self, messages: list[Message], scope: BypassScope) -> Optional[str]:
         lines = [msg.to_history_line() for msg in messages]
         conversation = "\n".join(lines)[:_SUMMARY_INPUT_MAX_CHARS]
-        prompt = f"{_SUMMARY_INSTRUCTION}\n\n{conversation}"
+        prompt = f"{_SUMMARY_INSTRUCTION}\n\n<conversation_history>\n{conversation}\n</conversation_history>"
         try:
             return self._bypass.call(prompt, _SUMMARY_MAX_TOKENS, "summary", scope)
         except Exception:

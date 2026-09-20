@@ -34,7 +34,7 @@ def _state(**fields):
 def test_build_prompt_contains_intent_and_history():
     state = _state(topic="城市骑行", intent_status="capturing")
     prompt = build_suggestion_prompt(state, [_user("想做骑行图文")])
-    assert "<current_intent_state>" in prompt
+    assert "<intent_state>" in prompt
     assert "城市骑行" in prompt
     assert '"intent_status": "capturing"' in prompt
     assert "用户：想做骑行图文" in prompt

@@ -47,7 +47,7 @@ class TitleGenerationService:
             return None
         prompt = (
             "请基于以下用户消息生成一个 5–12 字的中文标题，仅返回标题文本，不要标点和引号。\n\n"
-            f"用户：{user_text[:200]}"
+            f"<user_message>\n{user_text[:200]}\n</user_message>"
         )
         try:
             raw = self._bypass.call(prompt, 512, "title", scope)

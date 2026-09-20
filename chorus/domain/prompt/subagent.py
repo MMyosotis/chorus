@@ -13,14 +13,14 @@ from chorus.domain.intent import Intent
 from chorus.domain.memory import (
     CreatorMemory,
     MemoryDigest,
-    render_digest_block,
-    render_recall_block,
+    render_digest,
+    render_recall,
 )
 from chorus.domain.prompt.assembly import (
     build_system_prompt,
     inject_user_blocks,
     join_sections,
-    section,
+    tagged_block,
 )
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task.artifacts import PostCard
@@ -137,9 +137,10 @@ class SubagentSystemInputs:
 
     def render_system_prompt(self) -> str:
         """拼接子 agent 的 system 消息。"""
+        digest = render_digest(self.digest)
         return build_system_prompt(subagent_base(self.agent_type), [
-            self.skill_loader.format_hints(),
-            render_digest_block(self.digest),
+            tagged_block("available_skills", self.skill_loader.format_hints()),
+            tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None),
         ])
 
 
@@ -151,7 +152,7 @@ class SubagentUserInputs:
 
     def inject_user_context(self, msgs: list[dict]) -> None:
         """把子 agent 的用户上下文注入末条用户消息前。"""
-        inject_user_blocks(msgs, [render_recall_block(self.memories)])
+        inject_user_blocks(msgs, [tagged_block("recalled_memories", render_recall(self.memories))])
 
 
 @dataclass(frozen=True)
@@ -175,18 +176,17 @@ class SkeletonInputs:
 
     def render_skeleton(self) -> str:
         """建图时渲染并冻结骨架内容。"""
+        profile = AGENT_PROFILES[self.agent_type]
         intent_text = json.dumps(
-            self.intent.model_dump(mode="json"),
-            ensure_ascii=False,
-            indent=2,
+            self.intent.model_dump(mode="json"), ensure_ascii=False, indent=2,
         )
         sections = [
-            f"角色：{AGENT_PROFILES[self.agent_type].display_name}",
-            f"本步交待：{self.note}" if self.note else "",
-            f"创作意图：\n{intent_text}",
-            f"底稿：\n{self.base_card.markdown}" if self.base_card is not None else "",
+            tagged_block("role", profile.display_name),
+            tagged_block("step_note", self.note),
+            tagged_block("intent", intent_text),
+            tagged_block("base_card", f"已确认交付的成品：\n{self.base_card.markdown}" if self.base_card else None),
         ]
-        return "\n\n".join(section for section in sections if section)
+        return join_sections(sections)
 
 
 def build_task_content(task_id: str, skeleton: SkeletonInputs) -> TaskContent:
@@ -205,13 +205,13 @@ class InvokeInputs:
 
     def assemble_invoke(self) -> str:
         """按固定顺序拼接子 agent 首轮调用消息。"""
-        dependency_sections = [
-            section(f"[{role_name}] ", output, inline=True)
-            for role_name, output in self.dependencies
-        ]
+        dependency_text = "\n\n".join(
+            f"[{role_name}]\n{output}" for role_name, output in self.dependencies
+        )
+        dependency_text = f"上游已确认的产出：\n{dependency_text}" if dependency_text else None
         return join_sections([
             self.skeleton,
-            section("前置产物（上游已确认的产出）：", "\n".join(dependency_sections)),
-            section("上轮产物（被打回的草稿，据此改进，不要简单重复）：", self.prior),
-            section("用户反馈（据此改进）：", self.feedback),
+            tagged_block("dependency_artifacts", dependency_text),
+            tagged_block("prior_artifact", f"被打回的草稿，据此改进：\n{self.prior}" if self.prior else None),
+            tagged_block("user_feedback", f"用户反馈，据此改进：\n{self.feedback}" if self.feedback else None),
         ])

@@ -8,8 +8,9 @@ import {
   buildSessionStats,
   buildTimeline,
   buildUserInputs,
+  displayToolContent,
   messageText,
-  parseUserContent,
+  parseTaggedContent,
   shortJson,
   toolCallArguments,
   toolsFor,
@@ -130,7 +131,7 @@ const turnGroups = computed(() => {
 })
 
 function userParsed(message) {
-  return parseUserContent(messageText(message))
+  return parseTaggedContent(messageText(message))
 }
 
 function bypassPurposeLabel(purpose) {
@@ -147,7 +148,7 @@ function fmtTs(value) {
 }
 
 function historyPreview(message) {
-  if (message.role === 'user') return userParsed(message).text
+  if (message.role === 'user' || message.role === 'system') return userParsed(message).text
   if (message.role === 'assistant' && !message.content) {
     if (message.reasoning_content) return '无正文 · think'
     const count = (message.tool_calls || []).length
@@ -425,7 +426,7 @@ onBeforeUnmount(stopConsolePoll)
                           <span class="msg-preview">{{ historyPreview(message) }}</span>
                         </summary>
                         <div class="msg-detail">
-                          <template v-if="message.role === 'user' && userParsed(message).injections.length">
+                          <template v-if="(message.role === 'user' || message.role === 'system') && userParsed(message).injections.length">
                             <p class="msg-text">{{ userParsed(message).text }}</p>
                             <div class="context-tabs" role="tablist" aria-label="模型上下文">
                               <button
@@ -478,7 +479,7 @@ onBeforeUnmount(stopConsolePoll)
                             </template>
                           </template>
                           <template v-else>
-                            <pre v-if="messageText(message)">{{ messageText(message) }}</pre>
+                            <pre v-if="messageText(message)">{{ displayToolContent(messageText(message)) }}</pre>
                           </template>
                         </div>
                       </details>

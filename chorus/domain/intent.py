@@ -96,8 +96,7 @@ class IntentConfirmation(IntentSnapshot):
     created_at: float = Field(default_factory=time.time)
 
 
-def intent_state_block(state: IntentState) -> str:
-    """序列化意图快照为标签块，供 user 回合携带，每轮现拼不入库。"""
+def render_intent_state(state: IntentState) -> str:
+    """序列化意图快照正文，最终标签由提示词装配侧添加。"""
     payload = state.model_dump(mode="json", exclude={"session_id", "version", "updated_at"})
-    body = json.dumps(payload, ensure_ascii=False, indent=2)
-    return f"<current_intent_state>\n{body}\n</current_intent_state>"
+    return json.dumps(payload, ensure_ascii=False, indent=2)

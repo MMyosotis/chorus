@@ -1,14 +1,17 @@
 """压缩纯函数测试：token 估算、超长判定、微压缩换占位、摘要指令。"""
 from __future__ import annotations
 
+from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import (
     _SUMMARY_INSTRUCTION,
+    SummaryGenerationService,
     TOOL_PLACEHOLDER,
     apply_micro,
     estimate_tokens,
     is_context_overflow,
 )
 from chorus.domain.message import ToolMessage, UserMessage
+from chorus.tests._helpers import build_bypass_caller
 
 
 def _user(sid: str, content: str, created_at: float = 0.0) -> UserMessage:
@@ -66,6 +69,20 @@ def test_apply_micro_placeholder_not_reselected():
 def test_summary_instruction_avoids_memory_content():
     assert "另行注入" in _SUMMARY_INSTRUCTION
     assert "不要复述" in _SUMMARY_INSTRUCTION
+
+
+def test_summary_prompt_tags_history():
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    client.chat.completions.create.return_value = MagicMock(
+        usage=None, choices=[MagicMock(message=MagicMock(content="摘要"))],
+    )
+    caller, entries = build_bypass_caller(client)
+    SummaryGenerationService(caller).summarize(
+        [_user("1", "写一篇骑行文章")], BypassScope("s1"),
+    )
+    assert "<conversation_history>" in entries[0].payload.prompt
 
 
 def main():
