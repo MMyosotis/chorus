@@ -11,7 +11,7 @@ from chorus.domain.task.graph import TaskGraph, build_task_graph
 from chorus.domain.task.models import Task
 from chorus.domain.task.products import DeliveredProduct
 from chorus.domain.trace import ToolInvocation
-from chorus.domain.session_view import build_session_view
+from chorus.domain.session.view import build_session_view
 
 
 def _tool(name: str, arguments: dict | None = None) -> ToolInvocation:

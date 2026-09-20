@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chorus.domain.session_view import build_session_view
+from chorus.domain.session.view import build_session_view
 from chorus.services.intent_state import IntentStateService
 from chorus.services.message import MessageService
 from chorus.services.option import OptionPromptService
