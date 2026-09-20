@@ -23,7 +23,7 @@ from chorus.domain.prompt.assembly import (
     tagged_block,
 )
 from chorus.domain.task.artifacts import PostCard
-from chorus.domain.task.models import TaskContent
+from chorus.domain.task.models import AgentType, TaskContent
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 if TYPE_CHECKING:
@@ -115,7 +115,7 @@ _ROLE_RULES = {
 }
 
 
-def subagent_base(agent_type: str) -> str:
+def subagent_base(agent_type: AgentType) -> str:
     """按角色返回 system 基础文案。"""
     profile = AGENT_PROFILES[agent_type]
     return _BASE.format(
@@ -130,7 +130,7 @@ def subagent_base(agent_type: str) -> str:
 class SubagentSystemInputs:
     """子 agent 系统消息原料：角色、技能摘要与创作者档案摘要。"""
 
-    agent_type: str
+    agent_type: AgentType
     skill_hints: str
     digest: MemoryDigest
 
@@ -158,7 +158,7 @@ class SubagentUserInputs:
 class SkeletonInputs:
     """建图时冻进内容行的骨架原料：角色、交待、意图、底稿。"""
 
-    agent_type: str
+    agent_type: AgentType
     note: str
     intent: Intent
     base_card: Optional[PostCard] = None

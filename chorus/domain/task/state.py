@@ -8,24 +8,24 @@ from typing import Optional
 
 from chorus.domain.task.models import Task, TaskStatus
 
-ACTIVE_STATUSES: frozenset[str] = frozenset({
+ACTIVE_STATUSES: frozenset[TaskStatus] = frozenset({
     TaskStatus.PENDING,
     TaskStatus.RUNNING,
     TaskStatus.AWAITING_CONFIRM,
 })
-TERMINAL_STATUSES: frozenset[str] = frozenset({
+TERMINAL_STATUSES: frozenset[TaskStatus] = frozenset({
     TaskStatus.FINISHED,
     TaskStatus.FAILED,
     TaskStatus.CANCELLED,
 })
-CANCELLABLE_STATUSES: frozenset[str] = frozenset({
+CANCELLABLE_STATUSES: frozenset[TaskStatus] = frozenset({
     TaskStatus.PENDING,
     TaskStatus.RUNNING,
     TaskStatus.AWAITING_CONFIRM,
     TaskStatus.FAILED,
 })
 
-LEGAL_TRANSITIONS: set[tuple[str, str]] = {
+LEGAL_TRANSITIONS: set[tuple[TaskStatus, TaskStatus]] = {
     (TaskStatus.PENDING, TaskStatus.RUNNING),
     (TaskStatus.RUNNING, TaskStatus.AWAITING_CONFIRM),
     (TaskStatus.RUNNING, TaskStatus.FINISHED),
@@ -40,7 +40,7 @@ LEGAL_TRANSITIONS: set[tuple[str, str]] = {
 }
 
 
-def is_legal_transition(from_status: str, to_status: str) -> bool:
+def is_legal_transition(from_status: TaskStatus, to_status: TaskStatus) -> bool:
     """是否合法转移。终态不可再转移。"""
     return (from_status, to_status) in LEGAL_TRANSITIONS
 

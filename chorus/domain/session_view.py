@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated, Iterable, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -9,20 +10,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from chorus.domain.intent import IntentConfirmation, IntentState
 from chorus.domain.message import MessageView
 from chorus.domain.option import OptionPrompt
-from chorus.domain.task.graph import TaskGraph, TaskNodeView, dump_task_graph
+from chorus.domain.task.graph import (
+    TaskGraph,
+    TaskNodeResponse,
+    TaskNodeView,
+    build_task_node_response,
+    dump_task_graph,
+)
 from chorus.domain.task.products import DeliveredProduct
 from chorus.domain.task.profiles import AGENT_PROFILES
+from chorus.domain.task.models import AgentType, TaskStatus
 from chorus.domain.trace import ToolInvocation
 
-_TASK_STATE_LABELS = {
-    "running": "执行中",
-    "awaiting_confirm": "等待确认",
-    "failed": "需要处理",
-}
-_TASK_STATE_PRIORITY = {"failed": 0, "awaiting_confirm": 1, "running": 2}
-_AGENT_PRIORITY = {
-    agent_type: index
-    for index, agent_type in enumerate(("idea", "script", "image", "finalize"))
+_TASK_STATE_LABELS: dict[TaskStatus, str] = {
+    TaskStatus.RUNNING: "执行中",
+    TaskStatus.AWAITING_CONFIRM: "等待确认",
+    TaskStatus.FAILED: "需要处理",
 }
 
 
@@ -62,13 +65,7 @@ class AssistantBubble(_ViewEntry):
     tools: list[ToolInvocation]
     message_ids: list[str]
     recaps: list[Recap]
-    hil_suspended: bool = Field(exclude=True)
-    pending_tools: bool = Field(exclude=True)
-    plan_created: bool = Field(exclude=True)
-
-    @property
-    def suspended(self) -> bool:
-        return self.hil_suspended or self.pending_tools
+    suspended: bool
 
 
 TaskCardKind = Literal["confirmed", "running", "hil", "recovery"]
@@ -76,7 +73,7 @@ TaskCardKind = Literal["confirmed", "running", "hil", "recovery"]
 
 class TaskCard(_ViewEntry):
     kind: TaskCardKind
-    task: TaskNodeView
+    task: TaskNodeResponse
     anchor_message_id: Optional[str]
 
 
@@ -90,6 +87,72 @@ BubbleEntry = Annotated[
     Union[UserEntry, AssistantBubble, TaskCard, ProductCard],
     Field(discriminator="kind"),
 ]
+
+
+@dataclass(frozen=True)
+class _AssistantTurn:
+    message: MessageView
+    has_content: bool
+    suspended: bool
+    plan_created: bool
+
+
+@dataclass(frozen=True)
+class _BubbleState:
+    bubble: AssistantBubble
+    plan_created: bool
+    entry_index: int
+
+
+class _BubbleAccumulator:
+    """维护会话气泡装配过程的临时状态。"""
+
+    def __init__(self, suspended_anchors: set[str], plan_anchors: set[str]):
+        self._suspended_anchors = suspended_anchors
+        self._plan_anchors = plan_anchors
+        self._entries: list[BubbleEntry] = []
+        self._current: Optional[_BubbleState] = None
+
+    @property
+    def entries(self) -> list[BubbleEntry]:
+        return self._entries
+
+    def consume(self, message: MessageView) -> None:
+        if message.role == "assistant":
+            self._consume_assistant(message)
+            return
+        self._consume_user(message)
+
+    def _consume_user(self, message: MessageView) -> None:
+        self._entries.append(UserEntry(id=message.id, content=message.content))
+        self._current = None
+
+    def _consume_assistant(self, message: MessageView) -> None:
+        self._reset_plan_boundary()
+        turn = _classify_assistant_turn(message, self._suspended_anchors, self._plan_anchors)
+        if turn is not None:
+            self._accept_turn(turn)
+
+    def _reset_plan_boundary(self) -> None:
+        if _is_plan_boundary(self._current):
+            self._current = None
+
+    def _accept_turn(self, turn: _AssistantTurn) -> None:
+        current = self._current
+        if current is None:
+            self._start_new_bubble(turn)
+            return
+        self._merge_current_bubble(current, turn)
+
+    def _start_new_bubble(self, turn: _AssistantTurn) -> None:
+        current = _start_bubble(turn, len(self._entries))
+        self._entries.append(current.bubble)
+        self._current = current
+
+    def _merge_current_bubble(self, current: _BubbleState, turn: _AssistantTurn) -> None:
+        merged = _merge_bubble(current, turn)
+        self._entries[merged.entry_index] = merged.bubble
+        self._current = merged
 
 
 def dump_confirmation(confirmation: IntentConfirmation) -> dict:
@@ -120,21 +183,27 @@ def build_session_view(
     needs_resume: bool,
 ) -> dict:
     """聚合成前端一次渲染所需的全部结构，纯函数不碰库。"""
+
+    # 先把任务图转换成前端结构，并记录任务卡对应的消息锚点。
     graph_dump = dump_task_graph(graph)
-    plan_anchors = {node.message_id for node in graph.nodes if node.message_id}
-    entries = _build_bubbles(
-        messages,
-        _anchor_ids(confirmations),
-        _anchor_ids(prompts),
-        plan_anchors,
-    )
+    plan_anchors = {node.message_id for node in graph.nodes if node.message_id is not None}
+    suspended_anchors = _anchor_ids(confirmations) | _anchor_ids(prompts)
+
+    # 先按对话顺序合并消息，再把任务卡和成品卡插回对应位置。
+    entries = _build_bubbles(messages, suspended_anchors, plan_anchors)
     for card in _plan_cards(graph, products):
         _insert_anchored_card(entries, card)
-    _fold_recaps(entries, confirmations, prompts)
+
+    # 已回答的确认和选项折叠进原助手气泡，供前端回看。
+    _fold_confirmation_recaps(entries, confirmations)
+    _fold_option_recaps(entries, prompts)
+
+    # 开放门禁单独返回，阶段文案由当前门禁和任务状态共同派生。
     open_confirmation = next((item for item in confirmations if item.status == "open"), None)
     open_prompt = next((item for item in prompts if item.status == "open"), None)
+
     return {
-        "bubbles": [_dump_entry(entry) for entry in entries],
+        "bubbles": [entry.model_dump(mode="json") for entry in entries],
         "graph": graph_dump,
         "intent_state": intent_state.model_dump(mode="json"),
         "open_confirmation": dump_confirmation(open_confirmation) if open_confirmation else None,
@@ -146,161 +215,194 @@ def build_session_view(
 
 def _build_bubbles(
     messages: list[MessageView],
-    confirmation_anchors: set[str],
-    prompt_anchors: set[str],
+    suspended_anchors: set[str],
     plan_anchors: set[str],
 ) -> list[BubbleEntry]:
     """按对话顺序产出渲染条目：一次交互链路的助手轮次合并成单气泡。"""
-    entries: list[BubbleEntry] = []
-    current: Optional[AssistantBubble] = None
+    accumulator = _BubbleAccumulator(suspended_anchors, plan_anchors)
     for message in messages:
-        if message.role != "assistant":
-            entries.append(UserEntry(id=message.id, content=message.content))
-            current = None
-            continue
-        if _is_plan_boundary(current):
-            current = None
-        starts_bubble = current is None
-        current = _append_assistant_turn(
-            current,
-            message,
-            message.id in confirmation_anchors or message.id in prompt_anchors,
-            message.id in plan_anchors,
-        )
-        if current is None:
-            continue
-        if starts_bubble:
-            entries.append(current)
-        else:
-            entries[-1] = current
-    return entries
+        accumulator.consume(message)
+    return accumulator.entries
 
 
-def _append_assistant_turn(
-    current: Optional[AssistantBubble],
+def _classify_assistant_turn(
     message: MessageView,
-    hil_suspended: bool,
-    plan_created: bool,
-) -> Optional[AssistantBubble]:
+    suspended_anchors: set[str],
+    plan_anchors: set[str],
+) -> Optional[_AssistantTurn]:
+    """把有效助手消息转换为合并阶段需要的状态。"""
     has_content = bool(message.content and message.content.strip())
     has_tools = bool(message.tools)
     if not has_content and not has_tools:
-        return current
-    pending_tools = not has_content and has_tools
-    if current is None:
-        return AssistantBubble(
-            id=message.id,
-            content=message.content or "",
-            tools=list(message.tools),
-            message_ids=[message.id] if message.id else [],
-            recaps=[],
-            hil_suspended=hil_suspended,
-            pending_tools=pending_tools,
-            plan_created=plan_created,
-        )
-    separator = "\n\n" if current.content and has_content else ""
-    content = current.content + separator + (message.content if has_content else "")
-    message_ids = current.message_ids
+        return None
+    return _AssistantTurn(
+        message=message,
+        has_content=has_content,
+        suspended=(message.id in suspended_anchors or (not has_content and has_tools)),
+        plan_created=message.id in plan_anchors,
+    )
+
+
+def _start_bubble(turn: _AssistantTurn, entry_index: int) -> _BubbleState:
+    """从首条有效助手消息创建气泡状态。"""
+    message = turn.message
+    bubble = AssistantBubble(
+        id=message.id,
+        content=message.content or "",
+        tools=list(message.tools),
+        message_ids=[message.id] if message.id else [],
+        recaps=[],
+        suspended=turn.suspended,
+    )
+    return _BubbleState(
+        bubble=bubble,
+        plan_created=turn.plan_created,
+        entry_index=entry_index,
+    )
+
+
+def _merge_bubble(
+    current: _BubbleState,
+    turn: _AssistantTurn,
+) -> _BubbleState:
+    """把后续助手消息合并到当前气泡状态。"""
+    message = turn.message
+    separator = "\n\n" if current.bubble.content and turn.has_content else ""
+    content = current.bubble.content + separator + (message.content if turn.has_content else "")
+    message_ids = current.bubble.message_ids
     if message.id and message.id not in message_ids:
         message_ids = [*message_ids, message.id]
-    return current.model_copy(update={
-        "content": content,
-        "tools": [*current.tools, *message.tools],
-        "message_ids": message_ids,
-        "hil_suspended": hil_suspended,
-        "pending_tools": pending_tools,
-        "plan_created": current.plan_created or plan_created,
-    })
+    return _BubbleState(
+        bubble=current.bubble.model_copy(update={
+            "content": content,
+            "tools": [*current.bubble.tools, *message.tools],
+            "message_ids": message_ids,
+            "suspended": turn.suspended,
+        }),
+        plan_created=current.plan_created or turn.plan_created,
+        entry_index=current.entry_index,
+    )
 
 
-def _is_plan_boundary(bubble: Optional[AssistantBubble]) -> bool:
+def _is_plan_boundary(state: Optional[_BubbleState]) -> bool:
     """成功建图的待回执气泡是流水线边界。"""
-    return bool(bubble and bubble.suspended and bubble.plan_created)
+    return state is not None and state.bubble.suspended and state.plan_created
 
 
 def _anchor_ids(items: Iterable[Union[IntentConfirmation, OptionPrompt]]) -> set[str]:
     """留档记录锚定的助手消息标识集合，缺锚点的忽略。"""
-    return {item.message_id for item in items if item.message_id}
+    return {item.message_id for item in items if item.message_id is not None}
 
 
 def _plan_cards(graph: TaskGraph, products: list[DeliveredProduct]) -> list[Union[TaskCard, ProductCard]]:
     """任务图快照与成品清单投影成对话区卡片，顺序即插入顺序。"""
-    cards: list[Union[TaskCard, ProductCard]] = []
-    for node in graph.nodes:
-        if node.status == "finished" and node.agent_type != "finalize":
-            cards.append(_task_card("confirmed", node))
-    running = next((node for node in graph.nodes if node.status == "running"), None)
-    if running is not None:
-        cards.append(_task_card("running", running))
-    for node in graph.nodes:
-        if node.status == "awaiting_confirm":
-            cards.append(_task_card("hil", node))
-        elif node.status == "failed":
-            cards.append(_task_card("recovery", node))
-    cards.extend(
-        ProductCard(
-            id=f"product:{product.id}",
-            product=product,
-            anchor_message_id=product.message_id,
-        )
+    return [
+        *_confirmed_task_cards(graph.nodes),
+        *_running_task_cards(graph.nodes),
+        *_hil_task_cards(graph.nodes),
+        *_recovery_task_cards(graph.nodes),
+        *_product_cards(products),
+    ]
+
+
+def _confirmed_task_cards(nodes: list[TaskNodeView]) -> list[TaskCard]:
+    return [
+        _task_card("confirmed", node)
+        for node in nodes
+        if node.status == TaskStatus.FINISHED and node.agent_type != AgentType.FINALIZE
+    ]
+
+
+def _running_task_cards(nodes: list[TaskNodeView]) -> list[TaskCard]:
+    running = next((node for node in nodes if node.status == TaskStatus.RUNNING), None)
+    return [_task_card("running", running)] if running is not None else []
+
+
+def _hil_task_cards(nodes: list[TaskNodeView]) -> list[TaskCard]:
+    return [
+        _task_card("hil", node)
+        for node in nodes
+        if node.status == TaskStatus.AWAITING_CONFIRM
+    ]
+
+
+def _recovery_task_cards(nodes: list[TaskNodeView]) -> list[TaskCard]:
+    return [
+        _task_card("recovery", node)
+        for node in nodes
+        if node.status == TaskStatus.FAILED
+    ]
+
+
+def _product_cards(products: list[DeliveredProduct]) -> list[ProductCard]:
+    return [
+        ProductCard(id=f"product:{product.id}", product=product, anchor_message_id=product.message_id)
         for product in products
-        if product.message_id
-    )
-    return cards
+        if product.message_id is not None
+    ]
 
 
 def _task_card(kind: TaskCardKind, task: TaskNodeView) -> TaskCard:
     return TaskCard(
         kind=kind,
         id=f"{kind}:{task.id}",
-        task=task,
+        task=build_task_node_response(task),
         anchor_message_id=task.message_id,
     )
 
 
 def _find_bubble(entries: list[BubbleEntry], message_id: str) -> Optional[tuple[int, AssistantBubble]]:
     for index, entry in enumerate(entries):
-        if isinstance(entry, AssistantBubble) and message_id in entry.message_ids:
-            return index, entry
+        if not isinstance(entry, AssistantBubble) or message_id not in entry.message_ids:
+            continue
+        return index, entry
     return None
 
 
 def _insert_anchored_card(entries: list[BubbleEntry], card: Union[TaskCard, ProductCard]) -> None:
     """卡片插到锚点气泡之后，同锚卡片按投影顺序排列。"""
-    if not card.anchor_message_id:
+    anchor_message_id = card.anchor_message_id
+    if anchor_message_id is None:
         return
-    found = _find_bubble(entries, card.anchor_message_id)
+    found = _find_bubble(entries, anchor_message_id)
     if found is None:
         return
-    insert_index = found[0] + 1
-    while insert_index < len(entries):
-        candidate = entries[insert_index]
-        if not isinstance(candidate, (TaskCard, ProductCard)):
-            break
-        if candidate.anchor_message_id != card.anchor_message_id:
-            break
-        insert_index += 1
+    insert_index = _find_card_insert_index(entries, found[0], anchor_message_id)
     entries.insert(insert_index, card)
 
 
-def _fold_recaps(
-    entries: list[BubbleEntry],
-    confirmations: list[IntentConfirmation],
-    prompts: list[OptionPrompt],
-) -> None:
-    """已作答的意图确认与选项征询折进锚点气泡作回看条目。"""
+def _find_card_insert_index(entries: list[BubbleEntry], bubble_index: int, anchor_message_id: str) -> int:
+    insert_index = bubble_index + 1
+    while insert_index < len(entries) and _is_same_anchor_card(entries[insert_index], anchor_message_id):
+        insert_index += 1
+    return insert_index
+
+
+def _is_same_anchor_card(entry: BubbleEntry, anchor_message_id: str) -> bool:
+    return (
+        isinstance(entry, (TaskCard, ProductCard))
+        and entry.anchor_message_id == anchor_message_id
+    )
+
+
+def _fold_confirmation_recaps(entries: list[BubbleEntry], confirmations: list[IntentConfirmation]) -> None:
     for confirmation in confirmations:
-        if confirmation.status == "answered" and confirmation.message_id:
-            _append_recap(entries, confirmation.message_id, IntentRecap(
-                id=f"intent-confirm:{confirmation.confirmation_id}",
-                intent_state=dump_confirmation(confirmation),
-            ))
+        if confirmation.status != "answered" or confirmation.message_id is None:
+            continue
+        _append_recap(entries, confirmation.message_id, IntentRecap(
+            id=f"intent-confirm:{confirmation.confirmation_id}",
+            intent_state=dump_confirmation(confirmation),
+        ))
+
+
+def _fold_option_recaps(entries: list[BubbleEntry], prompts: list[OptionPrompt]) -> None:
     for prompt in prompts:
-        if prompt.status == "answered" and prompt.message_id:
-            _append_recap(entries, prompt.message_id, OptionRecap(
-                id=f"option:{prompt.prompt_id}",
-                option_prompt=dump_prompt(prompt),
-            ))
+        if prompt.status != "answered" or prompt.message_id is None:
+            continue
+        _append_recap(entries, prompt.message_id, OptionRecap(
+            id=f"option:{prompt.prompt_id}",
+            option_prompt=dump_prompt(prompt),
+        ))
 
 
 def _append_recap(entries: list[BubbleEntry], anchor: str, recap: Recap) -> None:
@@ -317,41 +419,35 @@ def _derive_stage(
     open_prompt: Optional[OptionPrompt],
 ) -> str:
     """从任务图快照与开放门禁派生会话阶段文案，门禁优先。"""
+    return (
+        _open_gate_stage(open_confirmation, open_prompt)
+        or _active_task_stage(tasks)
+        or ("已完成" if _has_finished_product(tasks) else None)
+        or "自由对话"
+    )
+
+
+def _open_gate_stage(open_confirmation: Optional[IntentConfirmation],
+    open_prompt: Optional[OptionPrompt],
+) -> Optional[str]:
     if open_prompt is not None:
         return "等待选择"
     if open_confirmation is not None:
         return "等待确认"
-    active = [task for task in tasks if task.status in _TASK_STATE_PRIORITY]
-    if active:
-        task = min(active, key=_stage_priority)
-        profile = AGENT_PROFILES.get(task.agent_type)
-        role = profile.display_name if profile else task.agent_type
-        return f"{role} · {_TASK_STATE_LABELS[task.status]}"
-    if any(task.status == "finished" and task.agent_type == "finalize" for task in tasks):
-        return "已完成"
-    return "自由对话"
+    return None
 
 
-def _stage_priority(task: TaskNodeView) -> tuple[int, int, str, str]:
-    return (
-        _TASK_STATE_PRIORITY[task.status],
-        _AGENT_PRIORITY.get(task.agent_type, len(_AGENT_PRIORITY)),
-        task.agent_type,
-        task.id,
+def _active_task_stage(tasks: list[TaskNodeView]) -> Optional[str]:
+    active = [task for task in tasks if task.is_stage_active()]
+    if not active:
+        return None
+    task = min(active, key=lambda task_node: task_node.stage_sort_key())
+    profile = AGENT_PROFILES[task.agent_type]
+    return f"{profile.display_name} · {_TASK_STATE_LABELS[task.status]}"
+
+
+def _has_finished_product(tasks: list[TaskNodeView]) -> bool:
+    return any(
+        task.status == TaskStatus.FINISHED and task.agent_type == AgentType.FINALIZE
+        for task in tasks
     )
-
-
-def _dump_entry(entry: BubbleEntry) -> dict:
-    if isinstance(entry, AssistantBubble):
-        data = entry.model_dump(mode="json")
-        data["suspended"] = entry.suspended
-        return data
-    if isinstance(entry, TaskCard):
-        data = entry.model_dump(mode="json", exclude={"task"})
-        data["task"] = dump_task_graph(TaskGraph(
-            pipeline_id=None,
-            active=False,
-            nodes=[entry.task],
-        ))["tasks"][0]
-        return data
-    return entry.model_dump(mode="json")

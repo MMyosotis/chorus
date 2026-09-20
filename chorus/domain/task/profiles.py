@@ -20,11 +20,12 @@ from chorus.domain.task.markdown import (
     parse_postcard_md,
     parse_script_md,
 )
+from chorus.domain.task.models import AgentType
 
 
 @dataclass(frozen=True)
 class AgentProfile:
-    agent_type: str
+    agent_type: AgentType
     display_name: str
     role_desc: str
     artifacts_schema: str
@@ -57,9 +58,9 @@ class AgentProfile:
             ) from e
 
 
-AGENT_PROFILES: dict[str, AgentProfile] = {
-    "idea": AgentProfile(
-        agent_type="idea",
+AGENT_PROFILES: dict[AgentType, AgentProfile] = {
+    AgentType.IDEA: AgentProfile(
+        agent_type=AgentType.IDEA,
         display_name="选题官",
         role_desc="调研热点、琢磨选题，给出候选标题与切入角度；只找选题方向，不备正文素材、不写正文、不出图",
         artifacts_schema="idea",
@@ -72,8 +73,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
             "composing": "正在撰写",
         },
     ),
-    "script": AgentProfile(
-        agent_type="script",
+    AgentType.SCRIPT: AgentProfile(
+        agent_type=AgentType.SCRIPT,
         display_name="文案官",
         role_desc="基于选题产物展开图文博文正文；只写正文，不重新选题、不出图",
         artifacts_schema="script",
@@ -86,8 +87,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
             "composing": "正在撰写",
         },
     ),
-    "image": AgentProfile(
-        agent_type="image",
+    AgentType.IMAGE: AgentProfile(
+        agent_type=AgentType.IMAGE,
         display_name="配图官",
         role_desc="按正文需要生成配图并配图注；只配图，不写正文、不重新选题",
         artifacts_schema="image",
@@ -100,8 +101,8 @@ AGENT_PROFILES: dict[str, AgentProfile] = {
             "composing": "正在撰写",
         },
     ),
-    "finalize": AgentProfile(
-        agent_type="finalize",
+    AgentType.FINALIZE: AgentProfile(
+        agent_type=AgentType.FINALIZE,
         display_name="排版官",
         role_desc="装配前三步原料成整棵 PostCard 成品，是唯一成品出口；不新增内容、不搜索",
         artifacts_schema="postcard",

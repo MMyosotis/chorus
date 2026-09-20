@@ -30,6 +30,7 @@ from chorus.domain.stream import silent_consume
 from chorus.config import TOOL_WHITELISTS
 from chorus.domain.task import (
     AGENT_PROFILES,
+    AgentType,
     AbandonError,
     Task,
     TaskContent,
@@ -49,7 +50,12 @@ from chorus.services.message import MessageService
 from chorus.tools import ToolDispatch
 
 _MAX_STEPS = 20
-_UNIT_MARKER = {"idea": "### ", "script": "## ", "finalize": "## "}
+_UNIT_MARKER: dict[AgentType, str | None] = {
+    AgentType.IDEA: "### ",
+    AgentType.SCRIPT: "## ",
+    AgentType.IMAGE: None,
+    AgentType.FINALIZE: "## ",
+}
 
 _logger = get_logger("subagent")
 
@@ -98,7 +104,7 @@ class SubagentLoopStrategy(LoopStrategy):
         return msgs
 
     def consume(self, stream):
-        marker = _UNIT_MARKER.get(self.task.agent_type)
+        marker = _UNIT_MARKER[self.task.agent_type]
         sink = ProgressSink(self.task.id, self._progress_repo, marker)
         return silent_consume(stream, on_token=sink.feed)
 

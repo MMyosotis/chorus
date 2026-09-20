@@ -5,8 +5,11 @@ from __future__ import annotations
 from chorus.domain.task.errors import AbandonError, ValidationError
 from chorus.domain.task.graph import (
     TaskGraph,
+    TaskNodeResponse,
     TaskNodeView,
+    TaskProgressResponse,
     build_task_graph,
+    build_task_node_response,
     dump_task_graph,
 )
 from chorus.domain.task.models import (
@@ -68,8 +71,10 @@ __all__ = [
     "TaskArtifacts",
     "TaskContent",
     "TaskGraph",
+    "TaskNodeResponse",
     "TaskNodeView",
     "TaskProgress",
+    "TaskProgressResponse",
     "TaskPlan",
     "TaskStatus",
     "PostCard",
@@ -86,6 +91,7 @@ __all__ = [
     "select_display_pipeline",
     "topological_order",
     "build_task_graph",
+    "build_task_node_response",
     "dump_progress",
     "dump_task_graph",
     "invoke_text",

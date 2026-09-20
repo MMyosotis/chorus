@@ -10,7 +10,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert
 
-from chorus.domain.task import TaskArtifacts
+from chorus.domain.task import AgentType, TaskArtifacts
 from chorus.domain.task.profiles import AGENT_PROFILES
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.models import TaskArtifactsRecord
@@ -18,11 +18,11 @@ from chorus.repo.models import TaskArtifactsRecord
 
 def _to_domain(r: TaskArtifactsRecord) -> TaskArtifacts:
     """按本行角色类型用注册表里的模型把 JSON 还原成强类型产物。"""
-    artifacts = AGENT_PROFILES[r.agent_type].build_artifacts(r.artifacts)
+    artifacts = AGENT_PROFILES[AgentType(r.agent_type)].build_artifacts(r.artifacts)
     return TaskArtifacts(task_id=r.task_id, artifacts=artifacts)
 
 
-def _from_domain(task_id: str, agent_type: str, artifacts: Any) -> TaskArtifactsRecord:
+def _from_domain(task_id: str, agent_type: AgentType, artifacts: Any) -> TaskArtifactsRecord:
     return TaskArtifactsRecord(
         task_id=task_id, agent_type=agent_type, artifacts=dataclasses.asdict(artifacts),
     )
@@ -30,7 +30,7 @@ def _from_domain(task_id: str, agent_type: str, artifacts: Any) -> TaskArtifacts
 
 class TaskArtifactsRepository(BaseRepository):
     @write
-    def upsert(self, db, task_id: str, agent_type: str, artifacts: Any) -> None:
+    def upsert(self, db, task_id: str, agent_type: AgentType, artifacts: Any) -> None:
         r = _from_domain(task_id, agent_type, artifacts)
         db.execute(
             insert(TaskArtifactsRecord)

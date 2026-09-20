@@ -10,7 +10,7 @@ from typing import Iterable, Optional
 from sqlalchemy import func, select, update
 
 from chorus.domain.log import get_logger
-from chorus.domain.task import Task
+from chorus.domain.task import Task, TaskStatus
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
 from chorus.repo.models import TaskRecord
@@ -55,7 +55,7 @@ class TaskRepository(BaseRepository):
         return _to_domain(r) if r else None
 
     @write
-    def transition(self, db, task_id: str, to_status: str) -> bool:
+    def transition(self, db, task_id: str, to_status: TaskStatus) -> bool:
         """状态翻转：直接设目标状态，更新时间自动刷新。返回是否命中行。"""
         result = db.execute(
             update(TaskRecord).where(TaskRecord.id == task_id)
@@ -70,7 +70,7 @@ class TaskRepository(BaseRepository):
         """scheduler 派发占槽：设为运行中并写归属与更新时间。"""
         result = db.execute(
             update(TaskRecord).where(TaskRecord.id == task_id)
-            .values(status="running", owner_id=now, updated_at=now)
+            .values(status=TaskStatus.RUNNING, owner_id=now, updated_at=now)
         )
         hit = result.rowcount > 0
         _logger.info("claim", extra={"task_id": task_id, "hit": hit})
@@ -84,7 +84,7 @@ class TaskRepository(BaseRepository):
         )
 
     @write
-    def cancel_pipeline(self, db, pipeline_id: str, statuses: Iterable[str]) -> int:
+    def cancel_pipeline(self, db, pipeline_id: str, statuses: Iterable[TaskStatus]) -> int:
         """批量取消非终态任务，返回受影响行数。状态集合由编排层传入。"""
         statuses = list(statuses)
         now = time.time()
@@ -94,14 +94,14 @@ class TaskRepository(BaseRepository):
                 TaskRecord.pipeline_id == pipeline_id,
                 TaskRecord.status.in_(statuses),
             )
-            .values(status="cancelled", updated_at=now)
+            .values(status=TaskStatus.CANCELLED, updated_at=now)
         )
         return result.rowcount
 
     @read
     def find_pending_with_deps(self, db) -> list[tuple[Task, list[Task]]]:
         """返回所有待执行任务及其依赖，调度判定交领域。"""
-        pending = db.scalars(select(TaskRecord).where(TaskRecord.status == "pending")).all()
+        pending = db.scalars(select(TaskRecord).where(TaskRecord.status == TaskStatus.PENDING)).all()
         result: list[tuple[Task, list[Task]]] = []
         for r in pending:
             task = _to_domain(r)
@@ -112,14 +112,14 @@ class TaskRepository(BaseRepository):
     def find_running_before(self, db, cutoff_ts: float) -> list[Task]:
         rs = db.scalars(
             select(TaskRecord).where(
-                TaskRecord.status == "running", TaskRecord.updated_at < cutoff_ts
+                TaskRecord.status == TaskStatus.RUNNING, TaskRecord.updated_at < cutoff_ts
             )
         ).all()
         return [_to_domain(r) for r in rs]
 
     @read
     def find_by_session_statuses(
-        self, db, session_id: str, statuses: Iterable[str]
+        self, db, session_id: str, statuses: Iterable[TaskStatus]
     ) -> list[Task]:
         statuses = list(statuses)
         rs = db.scalars(
@@ -143,7 +143,7 @@ class TaskRepository(BaseRepository):
 
     @read
     def count_by_session_statuses(
-        self, db, session_id: str, statuses: Iterable[str]
+        self, db, session_id: str, statuses: Iterable[TaskStatus]
     ) -> int:
         statuses = list(statuses)
         n = db.scalar(

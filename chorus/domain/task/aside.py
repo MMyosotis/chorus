@@ -3,21 +3,22 @@ from __future__ import annotations
 
 from chorus.domain.bypass import BypassCaller, BypassScope
 from chorus.domain.log import get_logger
+from chorus.domain.task.models import AgentType
 
 _logger = get_logger("domain.task.aside")
 
 _ASIDE_MAX_LEN = 30
-_ROLE_HINT = {
-    "idea": "选题官",
-    "script": "文案官",
-    "image": "配图官",
-    "finalize": "排版官",
+_ROLE_HINT: dict[AgentType, str] = {
+    AgentType.IDEA: "选题官",
+    AgentType.SCRIPT: "文案官",
+    AgentType.IMAGE: "配图官",
+    AgentType.FINALIZE: "排版官",
 }
-_DEFAULT_ASIDE = {
-    "idea": "我正在调研候选选题",
-    "script": "我正在撰写正文",
-    "image": "我正在生成配图",
-    "finalize": "我正在排版成品",
+_DEFAULT_ASIDE: dict[AgentType, str] = {
+    AgentType.IDEA: "我正在调研候选选题",
+    AgentType.SCRIPT: "我正在撰写正文",
+    AgentType.IMAGE: "我正在生成配图",
+    AgentType.FINALIZE: "我正在排版成品",
 }
 
 
@@ -27,9 +28,9 @@ class AsideGenerator:
     def __init__(self, bypass: BypassCaller):
         self._bypass = bypass
 
-    def generate(self, agent_type: str, invoke: str, scope: BypassScope) -> str:
-        fallback = _DEFAULT_ASIDE.get(agent_type, "我正在准备中")
-        role = _ROLE_HINT.get(agent_type, agent_type)
+    def generate(self, agent_type: AgentType, invoke: str, scope: BypassScope) -> str:
+        fallback = _DEFAULT_ASIDE[agent_type]
+        role = _ROLE_HINT[agent_type]
         prompt = (
             f"你是{role}。请基于以下任务说明，用一句话（不超过20字）以第一人称描述你正在做什么，"
             "直白、功能性、不文艺、不画面感，仅返回这句话。\n\n"

@@ -14,6 +14,7 @@ from chorus.domain.intent import Intent
 from chorus.domain.prompt import SkeletonInputs, build_task_content
 from chorus.domain.task import (
     CANCELLED_PIPELINE_RECEIPT,
+    AgentType,
     PostCard,
     StepSpec,
     TaskArtifacts,
@@ -109,7 +110,7 @@ class CreatePlanTool(Tool):
             base_product_id = arguments.get("base_product_id")
             base_card = self._load_base_card(session_id, cast(str, base_product_id)) if base_product_id else None
             pairs = self._build_pairs(arguments, session_id, ctx.message_id, base_card)
-        except (KeyError, TypeError, PydanticValidationError) as e:
+        except (KeyError, TypeError, ValueError, PydanticValidationError) as e:
             return ToolRunResult(Reply(f"create_plan 参数缺失或格式错: {e}"), is_error=True)
         except ValidationError as e:
             return ToolRunResult(Reply(e.correction), is_error=True)
@@ -145,7 +146,7 @@ class CreatePlanTool(Tool):
         """解析 steps、整份 intent 透传（不逐字段拆解）、校验，展开并渲染骨架内容行。"""
         intent = Intent.model_validate(arguments["intent"])
         steps = [
-            StepSpec(agent_type=step["agent_type"], deps=step.get("deps", []), note=step.get("note", ""))
+            StepSpec(agent_type=AgentType(step["agent_type"]), deps=step.get("deps", []), note=step.get("note", ""))
             for step in arguments["steps"]
         ]
         plan = TaskPlan(session_id=session_id, message_id=message_id, intent=intent, steps=steps, base_card=base_card)
@@ -172,7 +173,7 @@ class CreatePlanTool(Tool):
     def resolve_external(self, session_id: str, signal: str, payload: Optional[dict] = None) -> str:
         """图收敛后的回执：最近一张图成品完成则直给全文与成品标识，否则取消一句话。"""
         tasks = self._task_service.current_pipeline_tasks(session_id)
-        finalize_task = next((task for task in tasks if task.agent_type == "finalize"), None)
+        finalize_task = next((task for task in tasks if task.agent_type == AgentType.FINALIZE), None)
         if finalize_task is None or finalize_task.status != TaskStatus.FINISHED:
             return CANCELLED_PIPELINE_RECEIPT
         card = cast(PostCard, self._artifacts_repo.load(finalize_task.id).artifacts)

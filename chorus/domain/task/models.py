@@ -33,8 +33,8 @@ class Task:
     id: str
     session_id: str
     pipeline_id: str
-    agent_type: str
-    status: str
+    agent_type: AgentType
+    status: TaskStatus
     created_at: float
     updated_at: float
     # 触发建图的助手消息；由此计划产生的审核卡都以它为锚点。

@@ -9,7 +9,7 @@ from typing import Optional
 from chorus.domain.intent import Intent
 from chorus.domain.task.artifacts import PostCard
 from chorus.domain.task.errors import ValidationError
-from chorus.domain.task.models import Task, TaskStatus
+from chorus.domain.task.models import AgentType, Task, TaskStatus
 from chorus.domain.task.profiles import AGENT_PROFILES
 
 _MAX_STEPS = 20
@@ -19,7 +19,7 @@ _MAX_STEPS = 20
 class StepSpec:
     """建图前的单步规格，落库后依赖由索引解析为任务标识。"""
 
-    agent_type: str
+    agent_type: AgentType
     deps: list[int]
     note: str = ""
 
@@ -48,7 +48,7 @@ class TaskPlan:
         for index in range(len(self.steps)):
             self._validate_step(index)
 
-        if self.steps[-1].agent_type != "finalize":
+        if self.steps[-1].agent_type != AgentType.FINALIZE:
             raise ValidationError("末步非 finalize", "最后一个步骤必须是 finalize，它是唯一成品出口")
 
     def _validate_step(self, index: int) -> None:

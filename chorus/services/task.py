@@ -12,6 +12,7 @@ from chorus.domain.task import (
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
     DeliveredProduct,
+    AgentType,
     PostCard,
     Task,
     TaskGraph,
@@ -55,10 +56,10 @@ class TaskService:
         """确认推进：翻转待确认→完成，候选角色写回选中项（在翻转之后）。"""
         task = self._task_repo.get(task_id)
         self._task_repo.transition(task_id, TaskStatus.FINISHED)
-        if task.agent_type == "idea":
+        if task.agent_type == AgentType.IDEA:
             self._set_selected(task_id, task.agent_type, selected)
             self._memory.record_selection(task_id, task.agent_type)
-        elif task.agent_type == "finalize":
+        elif task.agent_type == AgentType.FINALIZE:
             self._memory.record_publication(task_id, task.agent_type)
         _logger.info("hil confirm", extra={"task_id": task_id, "selected": selected})
         return {"id": task_id, "status": TaskStatus.FINISHED}
@@ -128,7 +129,7 @@ class TaskService:
         ]
         return build_delivered_products(pairs)
 
-    def _set_selected(self, task_id: str, agent_type: str, selected: Optional[int]) -> None:
+    def _set_selected(self, task_id: str, agent_type: AgentType, selected: Optional[int]) -> None:
         """把选中候选写回候选角色产物（子 agent 已先落，必就绪）。"""
         art = self._artifacts_repo.load(task_id)
         idea = dataclasses.replace(art.artifacts, selected=selected)
