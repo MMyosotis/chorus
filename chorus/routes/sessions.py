@@ -181,6 +181,17 @@ def resume_session(
     return sse_stream(_resume_with_tool(session_id, "create_plan", "finish", intent, supervisor, tools))
 
 
+@router.get("/{session_id}/resume:status")
+def get_resume_status(
+    session_id: str,
+    session: SessionService = Depends(provide_session_service),
+    supervisor: SupervisorService = Depends(provide_supervisor_service),
+):
+    if not session.exists(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"resumable": supervisor.has_unreceipted_plan(session_id)}
+
+
 class OptionChooseAnswerRequest(BaseModel):
     signal: str
     custom_text: Optional[str] = None

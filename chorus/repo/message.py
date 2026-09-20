@@ -100,6 +100,16 @@ class MessageRepository(BaseRepository):
         return to_domain(r) if r else None
 
     @read
+    def get_last(self, db, session_id: str) -> Optional[Message]:
+        r = db.scalars(
+            select(MessageRecord)
+            .where(MessageRecord.session_id == session_id)
+            .order_by(MessageRecord.id.desc())
+            .limit(1)
+        ).first()
+        return to_domain(r) if r else None
+
+    @read
     def find_last_tool_by_name(self, db, session_id: str, name: str) -> Optional[ToolMessage]:
         r = db.scalars(
             select(MessageRecord)

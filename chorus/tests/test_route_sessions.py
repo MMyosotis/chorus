@@ -1,6 +1,6 @@
-"""sessions 路由 HTTP 适配测试：resume 端点的门禁映射。
+"""sessions 路由 HTTP 适配测试：resume 续跑端点与其状态查询的门禁映射。
 
-只断言适配行为（会话不存在→404 / 无未回执建图挂起→409），不测续跑业务；最小 app + 依赖注入 fake service，不起 lifespan。
+只断言适配行为（会话不存在→404 / 无未回执建图挂起→409 / 状态查询透传判定），不测续跑业务；最小 app + 依赖注入 fake service，不起 lifespan。
 """
 from __future__ import annotations
 
@@ -62,6 +62,24 @@ def test_resume_without_unreceipted_plan_409():
     )
     assert r.status_code == 409
     assert r.json()["detail"] == "no unreceipted plan to resume"
+
+
+def test_resume_status_session_not_found():
+    """会话不存在 → 404。"""
+    r = _client(FakeSessionService(set()), FakeSupervisorService(True)).get(
+        "/api/sessions/unknown/resume:status"
+    )
+    assert r.status_code == 404
+
+
+def test_resume_status_reflects_gate():
+    """收尾锁状态查询：透传后端判定，前端不再自带镜像判断。"""
+    for unreceipted in (True, False):
+        r = _client(FakeSessionService({"s1"}), FakeSupervisorService(unreceipted)).get(
+            "/api/sessions/s1/resume:status"
+        )
+        assert r.status_code == 200
+        assert r.json() == {"resumable": unreceipted}
 
 
 def main():

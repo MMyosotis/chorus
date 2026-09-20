@@ -116,6 +116,13 @@ export function resumeSession(id, onEvent) {
   return streamSessionEventSource(`${BASE}/${id}/resume`, { method: 'POST' }, onEvent)
 }
 
+export async function fetchResumeStatus(id) {
+  const res = await fetch(`${BASE}/${id}/resume:status`)
+  if (!res.ok) throw new Error(`resume status failed: ${res.status}`)
+  const data = await res.json()
+  return !!data.resumable
+}
+
 export async function fetchProducts(id) {
   const res = await fetch(`${BASE}/${id}/products`)
   if (res.status === 404) {

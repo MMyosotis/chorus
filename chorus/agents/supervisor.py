@@ -214,8 +214,7 @@ class SupervisorService:
         """收尾锁：末条消息是建图工具结果且无活跃任务，即确有未回执挂起。"""
         if self._task.count_active(session_id) > 0:
             return False
-        messages = self._message.list_messages(session_id)
-        last = messages[-1] if messages else None
+        last = self._message.get_last(session_id)
         return isinstance(last, ToolMessage) and last.name == "create_plan"
 
     def _admit(self, session_id: str) -> Optional[SseEvent]:

@@ -11,24 +11,6 @@ from chorus.domain.task.models import Task
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
-class ProductCandidate:
-    """成品列表的领域输入：任务行与对应成品卡。"""
-
-    task: Task
-    card: PostCard
-
-    def to_delivered_product(self) -> DeliveredProduct:
-        """把候选转换为成品列表项。"""
-        return DeliveredProduct(
-            id=self.task.id,
-            message_id=self.task.message_id,
-            title=self.card.meta.get("title", ""),
-            markdown=self.card.markdown,
-            created_at=self.task.created_at,
-        )
-
-
-@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class DeliveredProduct:
     """已交付成品的对外数据。"""
 
@@ -44,10 +26,16 @@ def select_delivered_tasks(tasks: Iterable[Task]) -> list[Task]:
     return [task for task in tasks if task.is_delivered()]
 
 
-def list_products(candidates: list[ProductCandidate]) -> list[DeliveredProduct]:
-    """把已筛好的成品候选按创建时间组装为清单。"""
-    ordered = sorted(candidates, key=lambda candidate: candidate.task.created_at)
-    return [candidate.to_delivered_product() for candidate in ordered]
+def build_delivered_products(pairs: list[tuple[Task, PostCard]]) -> list[DeliveredProduct]:
+    """把已筛好的任务与成品卡按创建时间组装为清单。"""
+    ordered = sorted(pairs, key=lambda pair: pair[0].created_at)
+    return [DeliveredProduct(
+        id=task.id,
+        message_id=task.message_id,
+        title=card.meta.get("title", ""),
+        markdown=card.markdown,
+        created_at=task.created_at,
+    ) for task, card in ordered]
 
 
 def format_product_list(products: list[DeliveredProduct]) -> str:
@@ -57,4 +45,15 @@ def format_product_list(products: list[DeliveredProduct]) -> str:
     return "\n".join(
         f"- {product.id} 《{product.title}》" if product.title else f"- {product.id}"
         for product in products
+    )
+
+
+CANCELLED_PIPELINE_RECEIPT = "创作流水线已被用户放弃，本次未交付成品"
+
+
+def render_delivery_receipt(task_id: str, card: PostCard) -> str:
+    """把已交付成品组装成喂给模型的收口回执。"""
+    return (
+        f"创作流水线已收口，成品标识={task_id}（标题：{card.meta['title']}），"
+        "成品全文已交付用户，内容如下：\n\n" + card.markdown
     )

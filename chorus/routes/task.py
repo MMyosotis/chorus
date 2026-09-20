@@ -1,6 +1,7 @@
 """任务资源路由：任务图查询与人工确认写操作。"""
 from __future__ import annotations
 
+import dataclasses
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -77,7 +78,8 @@ def list_products(
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"products": task.list_products(session_id)}
+    products = task.list_products(session_id)
+    return {"products": [dataclasses.asdict(product) for product in products]}
 
 
 @router.post("/sessions/{session_id}/pipeline:cancel")

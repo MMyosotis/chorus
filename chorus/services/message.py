@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from typing import Optional
+
 import time
 
 import uuid6
@@ -39,6 +41,9 @@ class MessageService:
 
     def list_messages(self, session_id: str) -> list[Message]:
         return self._msg_repo.list_by_session(session_id)
+
+    def get_last(self, session_id: str) -> Optional[Message]:
+        return self._msg_repo.get_last(session_id)
 
     def append_user_message(self, session_id: str, content: str) -> UserMessage:
         msg = UserMessage(

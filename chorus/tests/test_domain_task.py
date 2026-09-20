@@ -11,11 +11,11 @@ from chorus.domain.intent import Intent
 from chorus.domain.task import (
     ACTIVE_STATUSES,
     AGENT_PROFILES,
+    CANCELLED_PIPELINE_RECEIPT,
     CANCELLABLE_STATUSES,
     DeliveredProduct,
     LEGAL_TRANSITIONS,
     PostCard,
-    ProductCandidate,
     TERMINAL_STATUSES,
     Task,
     TaskPlan,
@@ -28,7 +28,8 @@ from chorus.domain.task import (
     format_product_list,
     invoke_text,
     is_legal_transition,
-    list_products,
+    build_delivered_products,
+    render_delivery_receipt,
     select_delivered_tasks,
     select_display_pipeline,
     select_pipeline_id,
@@ -72,14 +73,11 @@ def test_delivered_products_filter_and_format():
     script = _mk(TaskStatus.FINISHED, id="script", agent_type="script", created_at=3.0)
     tasks = [draft, script, later, first]
     assert [task.id for task in select_delivered_tasks(tasks)] == ["later", "first"]
-    candidates = [
-        ProductCandidate(
-            task=task,
-            card=PostCard(markdown=f"{task.id}正文", meta={"title": title}),
-        )
+    pairs = [
+        (task, PostCard(markdown=f"{task.id}正文", meta={"title": title}))
         for task, title in [(later, "后发"), (first, "先发")]
     ]
-    products = list_products(candidates)
+    products = build_delivered_products(pairs)
     assert isinstance(products[0], DeliveredProduct)
     assert [product.id for product in products] == ["first", "later"]
     assert format_product_list(products) == "- first 《先发》\n- later 《后发》"
@@ -331,6 +329,16 @@ def test_topological_order_ignores_external_dep():
     """依赖标识不在列表内（跨流水线）忽略，不阻塞排序。"""
     a = _task("a", ["外部id"])
     assert [t.id for t in topological_order([a])] == ["a"]
+
+
+def test_delivery_receipt_texts():
+    """收口回执：成品直给标识与全文，取消只给一句话。"""
+    card = PostCard(markdown="正文全文", meta={"title": "夏日晚风"})
+    assert render_delivery_receipt("t-final", card) == (
+        "创作流水线已收口，成品标识=t-final（标题：夏日晚风），"
+        "成品全文已交付用户，内容如下：\n\n正文全文"
+    )
+    assert CANCELLED_PIPELINE_RECEIPT == "创作流水线已被用户放弃，本次未交付成品"
 
 
 def main():

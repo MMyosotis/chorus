@@ -7,7 +7,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from chorus.domain.task import ValidationError
+from chorus.domain.task import DeliveredProduct, ValidationError
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.routes.task import router as task_router
 
@@ -133,12 +133,14 @@ def test_list_products_session_not_found():
 
 
 def test_list_products_ok():
-    """正常 → 200 + 成品清单透出。"""
+    """正常 → 200 + 成品领域对象在路由层转 dict 透出。"""
     task = FakeTaskService()
-    task.set("list_products", "s1", [{"id": "t-final", "title": "夏日晚风", "markdown": "正文", "created_at": 1.0}])
+    task.set("list_products", "s1", [DeliveredProduct(
+        id="t-final", message_id=None, title="夏日晚风", markdown="正文", created_at=1.0,
+    )])
     r = _client(FakeSessionService({"s1"}), task).get("/api/sessions/s1/products")
     assert r.status_code == 200
-    assert r.json() == {"products": [{"id": "t-final", "title": "夏日晚风", "markdown": "正文", "created_at": 1.0}]}
+    assert r.json() == {"products": [{"id": "t-final", "message_id": None, "title": "夏日晚风", "markdown": "正文", "created_at": 1.0}]}
 
 
 def test_edit_ok():

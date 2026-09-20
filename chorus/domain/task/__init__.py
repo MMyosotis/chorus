@@ -35,10 +35,11 @@ from chorus.domain.task.pipeline import (
     TaskPlan,
 )
 from chorus.domain.task.products import (
-    ProductCandidate,
+    CANCELLED_PIPELINE_RECEIPT,
     DeliveredProduct,
+    build_delivered_products,
     format_product_list,
-    list_products,
+    render_delivery_receipt,
     select_delivered_tasks,
 )
 from chorus.domain.task.profiles import AGENT_PROFILES, AgentProfile
@@ -72,8 +73,9 @@ __all__ = [
     "TaskPlan",
     "TaskStatus",
     "PostCard",
-    "ProductCandidate",
     "DeliveredProduct",
+    "CANCELLED_PIPELINE_RECEIPT",
+    "render_delivery_receipt",
     "AgentProfile",
     "AGENT_PROFILES",
     "ACTIVE_STATUSES",
@@ -88,7 +90,7 @@ __all__ = [
     "dump_task_graph",
     "invoke_text",
     "build_edited_artifacts",
-    "list_products",
+    "build_delivered_products",
     "format_product_list",
     "select_delivered_tasks",
     "select_pipeline_id",

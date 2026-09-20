@@ -13,6 +13,7 @@ from pydantic import ValidationError as PydanticValidationError
 from chorus.domain.intent import Intent
 from chorus.domain.prompt import SkeletonInputs, build_task_content
 from chorus.domain.task import (
+    CANCELLED_PIPELINE_RECEIPT,
     PostCard,
     StepSpec,
     TaskArtifacts,
@@ -20,12 +21,12 @@ from chorus.domain.task import (
     TaskStatus,
     ValidationError,
     format_product_list,
+    render_delivery_receipt,
 )
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.intent_state import IntentStateService
-from chorus.services.products import load_delivered_products
 from chorus.services.task import TaskService
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
@@ -133,7 +134,7 @@ class CreatePlanTool(Tool):
             loaded = cast(TaskArtifacts, self._artifacts_repo.load(base_product_id))
             return cast(PostCard, loaded.artifacts)
 
-        products = load_delivered_products(self._task_repo, self._artifacts_repo, session_id)
+        products = self._task_service.list_products(session_id)
         raise ValidationError(
             f"底稿标识无效: {base_product_id}",
             "底稿标识须是本会话已交付成品的排版任务 id。\n"
@@ -173,11 +174,6 @@ class CreatePlanTool(Tool):
         tasks = self._task_service.current_pipeline_tasks(session_id)
         finalize_task = next((task for task in tasks if task.agent_type == "finalize"), None)
         if finalize_task is None or finalize_task.status != TaskStatus.FINISHED:
-            return "创作流水线已被用户放弃，本次未交付成品"
-
+            return CANCELLED_PIPELINE_RECEIPT
         card = cast(PostCard, self._artifacts_repo.load(finalize_task.id).artifacts)
-        title = card.meta["title"]
-        return (
-            f"创作流水线已收口，成品标识={finalize_task.id}（标题：{title}），"
-            "成品全文已交付用户，内容如下：\n\n" + card.markdown
-        )
+        return render_delivery_receipt(finalize_task.id, card)

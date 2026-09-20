@@ -63,10 +63,20 @@ def test_assistant_reasoning_roundtrip_both_tables():
     assert rows[0].to_provider_dict()["reasoning_content"] == "想想"
 
 
+def test_get_last():
+    """取末条消息不拉全量：建图挂起判定只关心最后一条。"""
+    svc = _setup()
+    svc.append_user_message("s1", "hi")
+    svc.append_tool_message("s1", tool_call_id="c1", name="create_plan", content="等待计划完成")
+    last = svc.get_last("s1")
+    assert last.role == "tool" and last.name == "create_plan"
+
+
 def main():
     test_three_role_roundtrip()
     test_rewrite_last_tool_result()
     test_assistant_reasoning_roundtrip_both_tables()
+    test_get_last()
     print("\n全部用例通过")
 
 

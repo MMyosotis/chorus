@@ -13,6 +13,7 @@ import {
   fetchMessages,
   streamChat,
   resumeSession,
+  fetchResumeStatus,
   fetchProducts,
   suggestMessages,
   getIntentState,
@@ -262,24 +263,16 @@ async function loadProducts(id) {
   }
 }
 
-// 收尾锁镜像：尾部跳过虚拟卡后，末条真实消息为挂起助手气泡且带建图工具，任务图又已空闲
-function hasUnreceiptedPlan(id) {
-  const graph = taskPolling.getGraph(id)
-  if (graph?.active) return false
-  const list = messagesBySession[id] || []
-  let lastIdx = list.length - 1
-  while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
-  const last = list[lastIdx]
-  return !!(
-    last &&
-    last.role === 'assistant' &&
-    isPlanResumeBoundary(last)
-  )
-}
-
-// 按铃续跑：解开建图挂起让主编辑拿回执收尾，流结束后补拉成品重注卡片
+// 挂起建图续跑：判定交给后端收尾锁接口，确有未收口挂起才解开，流结束后补拉成品重注卡片
 async function ringResumeUnreceipted(sessionId) {
-  if (streamingBySession[sessionId] || !hasUnreceiptedPlan(sessionId)) return
+  if (streamingBySession[sessionId]) return
+  let resumable = false
+  try {
+    resumable = await fetchResumeStatus(sessionId)
+  } catch {
+    return
+  }
+  if (!resumable || streamingBySession[sessionId]) return
   await runAssistantStream(sessionId, (onEvent) => resumeSession(sessionId, onEvent))
   await loadProducts(sessionId)
   injectTaskCards(sessionId)

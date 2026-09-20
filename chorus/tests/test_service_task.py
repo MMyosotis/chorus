@@ -354,9 +354,9 @@ def test_list_products():
           PostCard(markdown="---\ntitle: 先发\n---\n\n先发正文", meta={"title": "先发"}))
     _seed("script", "script", "finished", 3.0, ScriptArtifacts(markdown="文案产物"))
     products = svc.list_products("s1")
-    assert [p["id"] for p in products] == ["first", "later"]  # 按创建先后
-    assert products[1]["title"] == "后发"
-    assert "后发正文" in products[1]["markdown"]
+    assert [product.id for product in products] == ["first", "later"]  # 按创建先后
+    assert products[1].title == "后发"
+    assert "后发正文" in products[1].markdown
 
 
 def main():

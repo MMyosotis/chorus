@@ -5,17 +5,21 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Optional
+from typing import Optional, cast
 
 from chorus.domain.task import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
+    DeliveredProduct,
+    PostCard,
     Task,
     TaskGraph,
     TaskStatus,
+    build_delivered_products,
     build_edited_artifacts,
     build_task_graph,
+    select_delivered_tasks,
     select_display_pipeline,
     select_pipeline_id,
 )
@@ -25,7 +29,6 @@ from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.memory import MemoryService
-from chorus.services.products import load_delivered_products
 from chorus.services.session import SessionService
 
 _logger = get_logger("service.task")
@@ -91,6 +94,7 @@ class TaskService:
         tasks = self.current_pipeline_tasks(session_id)
         if not tasks:
             return build_task_graph(None, [], {}, {}, {}, False)
+
         pipeline_id = tasks[0].pipeline_id
         if any(task.status in ACTIVE_STATUSES for task in tasks):
             # 渲染整图含已完成前序，否则成员会随完成逐个消失
@@ -113,10 +117,16 @@ class TaskService:
             return []
         return self._task_repo.find_by_pipeline(pipeline_id)
 
-    def list_products(self, session_id: str) -> list[dict]:
-        """已交付成品列表：本会话全部完成的排版任务，带全文/标题/标识/锚点。"""
-        products = load_delivered_products(self._task_repo, self._artifacts_repo, session_id)
-        return [dataclasses.asdict(product) for product in products]
+    def list_products(self, session_id: str) -> list[DeliveredProduct]:
+        """已交付成品清单：本会话全部完成的排版任务，带全文/标题/标识/锚点。"""
+        finished = self._task_repo.find_by_session_statuses(session_id, [TaskStatus.FINISHED])
+        delivered = select_delivered_tasks(finished)
+        artifacts_by_task = self._artifacts_repo.load_many([task.id for task in delivered])
+        pairs = [
+            (task, cast(PostCard, artifacts_by_task[task.id].artifacts))
+            for task in delivered
+        ]
+        return build_delivered_products(pairs)
 
     def _set_selected(self, task_id: str, agent_type: str, selected: Optional[int]) -> None:
         """把选中候选写回候选角色产物（子 agent 已先落，必就绪）。"""
@@ -128,10 +138,8 @@ class TaskService:
         """取本图所需产物/进度/内容，交领域聚合。拓扑序在领域内。"""
         ids = [task.id for task in tasks]
         return build_task_graph(
-            pipeline_id,
-            tasks,
+            pipeline_id, tasks,
             self._artifacts_repo.load_many(ids),
             self._progress_repo.load_many(ids),
-            self._content_repo.load_many(ids),
-            active,
+            self._content_repo.load_many(ids), active,
         )
