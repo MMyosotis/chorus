@@ -63,11 +63,10 @@ def _empty_graph():
     return build_task_graph(None, [], {}, {}, {}, False)
 
 
-def _view(messages, graph=None, products=None, confirmations=None, prompts=None, needs_resume=False):
+def _view(messages, graph=None, products=None, confirmations=None, prompts=None):
     return build_session_view(
         messages, graph if graph is not None else _empty_graph(),
         products or [], _state(), confirmations or [], prompts or [],
-        needs_resume=needs_resume,
     )
 
 
@@ -327,14 +326,13 @@ def test_answered_recaps_fold_into_anchor_bubble():
 
 
 def test_view_envelope_fields():
-    """信箱字段：意图状态、打开的门禁单、任务图、阶段与续跑判定。"""
+    """信箱字段：意图状态、打开的门禁单、任务图与阶段。"""
     messages = [_assistant("m1", "请确认。")]
     graph = build_task_graph("p1", [_task("t-idea", "idea", "running", "m1")], {}, {}, {}, True)
     out = _view(
         messages, graph=graph,
         confirmations=[_confirmation("c-open", "m1", status="open")],
         prompts=[_prompt("p-open", "m1", status="open")],
-        needs_resume=True,
     )
     assert out["intent_state"]["session_id"] == "s1"
     assert out["open_confirmation"]["confirmation_id"] == "c-open"
@@ -342,7 +340,6 @@ def test_view_envelope_fields():
     assert out["graph"]["pipeline_id"] == "p1"
     assert out["graph"]["active"] is True
     assert out["stage"] == "等待选择"
-    assert out["needs_resume"] is True
 
 
 def test_stage_gate_overrides_tasks():

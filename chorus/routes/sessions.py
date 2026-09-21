@@ -163,11 +163,10 @@ def get_session_view(
     session_id: str,
     session: SessionService = Depends(provide_session_service),
     view: SessionViewService = Depends(provide_session_view_service),
-    supervisor: SupervisorService = Depends(provide_supervisor_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return view.collect(session_id, needs_resume=supervisor.has_unreceipted_plan(session_id))
+    return view.collect(session_id)
 
 
 class OptionChooseAnswerRequest(BaseModel):

@@ -25,8 +25,6 @@ def build_session_view(
     intent_state: IntentState,
     confirmations: list[IntentConfirmation],
     prompts: list[OptionPrompt],
-    *,
-    needs_resume: bool,
 ) -> dict:
     """聚合成前端一次渲染所需的全部结构，纯函数不碰库。"""
 
@@ -55,5 +53,4 @@ def build_session_view(
         "open_confirmation": dump_confirmation(open_confirmation) if open_confirmation else None,
         "open_option_prompt": dump_prompt(open_prompt) if open_prompt else None,
         "stage": derive_stage(graph.nodes, open_confirmation, open_prompt),
-        "needs_resume": needs_resume,
     }

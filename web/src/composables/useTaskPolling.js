@@ -12,7 +12,6 @@ const pollingSession = ref(null)
 let timer = null
 let isStreamingFn = () => false
 let onViewFn = () => Promise.resolve()
-let onSettledFn = () => {}
 let lastErrorSignature = null
 
 export function useTaskPolling() {
@@ -20,10 +19,9 @@ export function useTaskPolling() {
     graphBySession,
     pollingSession,
 
-    configure({ isStreaming, onView, onSettled }) {
+    configure({ isStreaming, onView }) {
       isStreamingFn = isStreaming || isStreamingFn
       onViewFn = onView || onViewFn
-      onSettledFn = onSettled || onSettledFn
     },
 
     getGraph(sessionId) {
@@ -66,31 +64,20 @@ function stopInternal() {
   }
 }
 
-function isPipelineSettled(graph) {
-  const tasks = graph.tasks || []
-  // 全部终态且无失败/取消才视为收敛：失败与取消路径由取消回调直接按铃续跑
-  if (!tasks.length) return false
-  return tasks.every((task) => task.status === 'finished')
-}
-
 async function tick() {
   const sid = pollingSession.value
   if (!sid) return
   try {
     const view = await fetchSessionView(sid)
-    const wasActive = graphBySession[sid]?.active
     graphBySession[sid] = view.graph
     lastErrorSignature = null
     if (!isStreamingFn(sid)) {
       await onViewFn(sid, view)
     }
-    // 空闲即自停（含启动时就无活跃任务的会话）；仅从忙转闲才回调完成
+    // 空闲即自停（含启动时就无活跃任务的会话）
     if (!view.graph.active) {
       stopInternal()
       pollingSession.value = null
-      if (wasActive && isPipelineSettled(view.graph)) {
-        onSettledFn(sid)
-      }
     }
   } catch (error) {
     // 网络瞬时失败静默重试；后端错误去重暴露，不再无声吞掉

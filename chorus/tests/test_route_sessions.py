@@ -42,10 +42,10 @@ class FakeSessionViewService:
 
     def __init__(self, payload: dict):
         self._payload = payload
-        self.collected: list[tuple[str, bool]] = []
+        self.collected: list[str] = []
 
-    def collect(self, session_id: str, *, needs_resume: bool) -> dict:
-        self.collected.append((session_id, needs_resume))
+    def collect(self, session_id: str) -> dict:
+        self.collected.append(session_id)
         return dict(self._payload)
 
 
@@ -92,15 +92,15 @@ def test_session_view_not_found():
     assert view.collected == []
 
 
-def test_session_view_merges_needs_resume():
-    """视图端点把续跑判定作为收集参数传入并原样返回载荷。"""
-    view = FakeSessionViewService({"bubbles": [], "stage": "自由对话", "needs_resume": True})
+def test_session_view_returns_payload():
+    """视图端点返回收集服务的装配载荷。"""
+    view = FakeSessionViewService({"bubbles": [], "stage": "自由对话"})
     r = _client(FakeSessionService({"s1"}), FakeSupervisorService(True), view).get(
         "/api/sessions/s1/view"
     )
     assert r.status_code == 200
-    assert r.json() == {"bubbles": [], "stage": "自由对话", "needs_resume": True}
-    assert view.collected == [("s1", True)]
+    assert r.json() == {"bubbles": [], "stage": "自由对话"}
+    assert view.collected == ["s1"]
 
 
 def main():

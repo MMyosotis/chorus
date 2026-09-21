@@ -22,8 +22,8 @@ class SessionViewService:
         self._intent_state = intent_state
         self._option = option
 
-    def collect(self, session_id: str, *, needs_resume: bool) -> dict:
-        """取会话全量视图数据并装配成成品结构，续跑判定由编排方传入。"""
+    def collect(self, session_id: str) -> dict:
+        """取会话全量视图数据并装配成成品结构。"""
         return build_session_view(
             self._message.history_view(session_id),
             self._task.get_graph(session_id),
@@ -31,5 +31,4 @@ class SessionViewService:
             self._intent_state.get(session_id),
             self._intent_state.list_confirmations(session_id),
             self._option.list_by_session(session_id),
-            needs_resume=needs_resume,
         )

@@ -51,10 +51,9 @@ def _service(session_id: str = "s1"):
 def test_empty_session_view():
     """空会话给空对话结构，阶段自由对话，意图状态是占位。"""
     svc, *_ = _service()
-    view = svc.collect("s1", needs_resume=False)
+    view = svc.collect("s1")
     assert view["bubbles"] == []
     assert view["stage"] == "自由对话"
-    assert view["needs_resume"] is False
     assert view["graph"]["tasks"] == []
     assert view["intent_state"]["session_id"] == "s1"
     assert view["open_confirmation"] is None
@@ -67,7 +66,7 @@ def test_consecutive_assistant_messages_merge():
     message.append_user_message("s1", "写一篇夜骑笔记")
     message.append_assistant_message(AssistantMessage(id="m2", session_id="s1", created_at=0.0, content="第一段"))
     message.append_assistant_message(AssistantMessage(id="m3", session_id="s1", created_at=0.0, content="第二段"))
-    bubbles = svc.collect("s1", needs_resume=False)["bubbles"]
+    bubbles = svc.collect("s1")["bubbles"]
     assert len(bubbles) == 2
     assert bubbles[0]["role"] == "user"
     assert bubbles[1]["content"] == "第一段\n\n第二段"
@@ -92,7 +91,7 @@ def test_open_gate_records_and_awaiting_task():
         status="awaiting_confirm", dependencies=[], created_at=0.0, updated_at=0.0,
         message_id="m2",
     ))
-    view = svc.collect("s1", needs_resume=False)
+    view = svc.collect("s1")
     assert view["open_confirmation"]["message_id"] == "m2"
     assert view["open_option_prompt"]["message_id"] == "m2"
     bubbles = view["bubbles"]
@@ -113,7 +112,7 @@ def test_answered_option_prompt_folds_recap():
         OptionItem(signal="3", label="微博", description="热点讨论"),
     ])], message_id="m2")
     option.mark_answered("s1", [OptionAnswer(signal="1", label="小红书")])
-    bubbles = svc.collect("s1", needs_resume=False)["bubbles"]
+    bubbles = svc.collect("s1")["bubbles"]
     assert bubbles[1]["recaps"][0]["id"].startswith("option:")
     assert bubbles[1]["recaps"][0]["option_prompt"]["answers"][0]["label"] == "小红书"
 

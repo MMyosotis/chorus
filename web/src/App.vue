@@ -38,7 +38,6 @@ const intentStateBySession = reactive({})
 const intentConfirmationsBySession = reactive({})
 const optionPromptsBySession = reactive({})
 const stageBySession = reactive({})
-const needsResumeBySession = reactive({})
 const activeId = ref(null)
 const inputBarRef = ref(null)
 const leftRailOpen = ref(true)
@@ -185,7 +184,6 @@ function applyView(id, view) {
   intentConfirmationsBySession[id] = view.open_confirmation ? [view.open_confirmation] : []
   optionPromptsBySession[id] = view.open_option_prompt ? [view.open_option_prompt] : []
   stageBySession[id] = view.stage
-  needsResumeBySession[id] = view.needs_resume
   traceStore.loadFromServer(id)
 }
 
@@ -214,13 +212,6 @@ async function refreshView(id) {
     }
     return false
   }
-}
-
-// 挂起建图续跑：视图判定确有未回执挂起才按铃，流结束后重套视图收卡片
-async function ringResumeUnreceipted(sessionId) {
-  if (streamingBySession[sessionId] || !needsResumeBySession[sessionId]) return
-  await runAssistantStream(sessionId, (onEvent) => resumeSession(sessionId, onEvent))
-  await refreshView(sessionId)
 }
 
 let sessionSelectionToken = 0
@@ -258,20 +249,22 @@ async function selectSession(id) {
   if (selectionToken !== sessionSelectionToken) return
   await commitSessionSwitch(id, selectionToken)
   if (selectionToken !== sessionSelectionToken) return
-  // 开档补按：停摆中的挂起建图直接续跑，不阻塞切换
-  ringResumeUnreceipted(id)
 }
 
 taskPolling.configure({
   isStreaming: (sid) => !!streamingBySession[sid],
   onView: (sid, view) => applyView(sid, view),
-  onSettled: ringResumeUnreceipted,
 })
 
 function onHilConfirmed(taskId) {
   const sid = activeId.value
   if (!sid) return
+  const task = taskPolling.getGraph(sid)?.tasks.find((item) => item.id === taskId)
   taskPolling.refresh(sid)
+  // 成品确认即续跑：与意图确认/选项作答同一套续跑逻辑，单点触发
+  if (task?.agent_type === 'finalize') {
+    runAssistantStream(sid, (onEvent) => resumeSession(sid, onEvent)).then(() => refreshView(sid))
+  }
 }
 function onHilEdited(taskId) {
   const sid = activeId.value
@@ -285,9 +278,8 @@ function onHilRetried(taskId) {
   taskPolling.start(sid) // 重跑后重新轮询跟踪进度
 }
 async function onHilCancelled(sid) {
-  // 取消后失败停摆的流水线不会再有轮询回调，先拉一次视图供收敛与续跑判定，再直接按铃
+  // 取消后失败停摆的流水线不会再有轮询回调，先拉一次视图收敛卡片
   await taskPolling.start(sid)
-  ringResumeUnreceipted(sid)
 }
 
 async function onCreate() {
@@ -299,7 +291,6 @@ async function onCreate() {
     intentConfirmationsBySession[meta.id] = []
     optionPromptsBySession[meta.id] = []
     stageBySession[meta.id] = '自由对话'
-    needsResumeBySession[meta.id] = false
     activeId.value = meta.id
     return meta.id
   } catch (e) {
@@ -323,7 +314,6 @@ async function onDelete(id) {
   delete intentConfirmationsBySession[id]
   delete optionPromptsBySession[id]
   delete stageBySession[id]
-  delete needsResumeBySession[id]
   if (wasActive) {
     if (sessions.value.length > 0) {
       activeId.value = sessions.value[0].id
@@ -468,7 +458,7 @@ function createStreamHandler(sessionId) {
       while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
       const last = list[lastIdx]
       if (last && last.role === 'assistant' && last.suspended) {
-        // 建图挂起是流水线边界：按铃收尾在卡片之后另起气泡，不续写挂起气泡
+        // 建图挂起是流水线边界：回执续跑在卡片之后另起气泡，不续写挂起气泡
         const planResume = isPlanResumeBoundary(last)
         if (planResume) {
           startNewAssistant(payload.id)
@@ -735,9 +725,6 @@ onMounted(async () => {
               @hil-retried="onHilRetried"
               @hil-edited="onHilEdited"
               @hil-cancelled="onHilCancelled"
-              @intent-confirm="onIntentConfirm"
-              @intent-revise="onIntentRevise"
-              @option-choose="onOptionChoose"
               @starter-pick="onStarterPick"
             >
               <template #scroll-header>

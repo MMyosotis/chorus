@@ -1,4 +1,4 @@
-// useTaskPolling 单例轮询：切会话停旧、流式时跳过视图套用、全终态自停并回调、getGraph 默认 null。
+// useTaskPolling 单例轮询：切会话停旧、流式时跳过视图套用、全终态自停、getGraph 默认 null。
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 const fetchSessionView = vi.fn()
@@ -12,7 +12,6 @@ function view(active, tasks) {
     graph: { pipeline_id: 'p1', active, tasks: tasks || [] },
     intent_state: null,
     stage: '自由对话',
-    needs_resume: false,
   }
 }
 
@@ -26,7 +25,6 @@ describe('useTaskPolling', () => {
     polling.configure({
       isStreaming: () => false,
       onView: () => Promise.resolve(),
-      onSettled: () => {},
     })
   })
 
@@ -70,9 +68,7 @@ describe('useTaskPolling', () => {
     expect(polling.getGraph('s1').tasks).toHaveLength(1)
   })
 
-  it('pipeline 全部完成翻转 active 时自停并回调', async () => {
-    const settled = vi.fn()
-    polling.configure({ isStreaming: () => false, onView: () => Promise.resolve(), onSettled: settled })
+  it('pipeline 全部完成翻转 active 时自停', async () => {
     fetchSessionView.mockResolvedValueOnce(view(true, [{ agent_type: 'idea', status: 'running' }]))
     await polling.start('s1')
 
@@ -82,50 +78,16 @@ describe('useTaskPolling', () => {
     ]))
     await vi.advanceTimersToNextTimerAsync()
 
-    expect(settled).toHaveBeenCalledWith('s1')
     expect(polling.pollingSession.value).toBeNull()
   })
 
-  it('出现失败任务时不触发完成回调（取消路径由取消回调按铃）', async () => {
-    const settled = vi.fn()
-    polling.configure({ isStreaming: () => false, onView: () => Promise.resolve(), onSettled: settled })
-    fetchSessionView.mockResolvedValueOnce(view(true, [{ agent_type: 'idea', status: 'running' }]))
-    await polling.start('s1')
-
-    fetchSessionView.mockResolvedValueOnce(view(false, [
-      { agent_type: 'idea', status: 'finished' },
-      { agent_type: 'script', status: 'failed' },
-    ]))
-    await vi.advanceTimersToNextTimerAsync()
-
-    expect(settled).not.toHaveBeenCalled()
-  })
-
-  it('含已取消任务时不触发完成回调', async () => {
-    const settled = vi.fn()
-    polling.configure({ isStreaming: () => false, onView: () => Promise.resolve(), onSettled: settled })
-    fetchSessionView.mockResolvedValueOnce(view(true, [{ agent_type: 'idea', status: 'running' }]))
-    await polling.start('s1')
-
-    fetchSessionView.mockResolvedValueOnce(view(false, [
-      { agent_type: 'idea', status: 'finished' },
-      { agent_type: 'script', status: 'cancelled' },
-    ]))
-    await vi.advanceTimersToNextTimerAsync()
-
-    expect(settled).not.toHaveBeenCalled()
-  })
-
-  it('启动时已空闲则一轮后自停且不触发完成回调', async () => {
-    const settled = vi.fn()
-    polling.configure({ isStreaming: () => false, onView: () => Promise.resolve(), onSettled: settled })
+  it('启动时已空闲则一轮后自停', async () => {
     fetchSessionView.mockResolvedValue(view(false, [
       { agent_type: 'idea', status: 'finished' },
       { agent_type: 'finalize', status: 'finished' },
     ]))
     await polling.start('s1')
 
-    expect(settled).not.toHaveBeenCalled()
     expect(polling.pollingSession.value).toBeNull()
     fetchSessionView.mockClear()
     await vi.advanceTimersByTimeAsync(3000)
