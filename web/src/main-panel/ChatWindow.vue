@@ -19,7 +19,7 @@ const props = defineProps({
   intentState: { type: Object, default: null },
 })
 
-const emit = defineEmits(['hil-confirmed', 'hil-retried', 'hil-edited', 'hil-cancelled', 'intent-confirm', 'intent-revise', 'option-choose', 'starter-pick'])
+const emit = defineEmits(['hil-confirmed', 'hil-retried', 'hil-edited', 'hil-cancelled', 'starter-pick'])
 
 const STARTER_CARDS = [
   {
@@ -251,9 +251,6 @@ watch(
             :recaps="msg.recaps"
             :suspended="msg.suspended"
             :active="streaming && idx === displayMessages.length - 1 && msg.role === 'assistant'"
-            @intent-confirm="$emit('intent-confirm')"
-            @intent-revise="$emit('intent-revise')"
-            @option-choose="$emit('option-choose', $event)"
           />
         </div>
       </TransitionGroup>

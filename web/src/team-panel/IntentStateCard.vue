@@ -12,7 +12,7 @@ const STATUS_META = {
   needs_clarification: { label: '待补充', tone: 'attention' },
   ready_to_confirm: { label: '确认中', tone: 'ready' },
   confirmed: { label: '已确认', tone: 'ready' },
-  dispatched: { label: '执行中', tone: 'executing' },
+  dispatched: { label: '已交付', tone: 'muted' },
 }
 
 const statusMeta = computed(() => STATUS_META[status.value] || STATUS_META.empty)

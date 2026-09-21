@@ -342,7 +342,7 @@ async function saveCandidate() {
       </div>
     </div>
 
-    <footer class="actions" :class="{ folded: actionsFolded }" :inert="actionsFolded">
+    <footer v-if="!actionsFolded" class="actions">
       <div class="actions-frame">
         <Transition name="action-swap" mode="out-in">
           <div v-if="!revising" key="review" class="actions-group">
@@ -766,10 +766,6 @@ async function saveCandidate() {
   transition: grid-template-rows 280ms cubic-bezier(.22, .8, .25, 1);
 }
 
-.actions.folded {
-  grid-template-rows: 0fr;
-}
-
 .actions-frame {
   min-height: 0;
   display: flex;
@@ -777,17 +773,6 @@ async function saveCandidate() {
   justify-content: space-between;
   gap: 16px;
   margin-top: var(--ch-space-3);
-  opacity: 1;
-  transform: translateY(0);
-  transition: margin-top 280ms cubic-bezier(.22, .8, .25, 1),
-    opacity 180ms ease,
-    transform 280ms cubic-bezier(.22, .8, .25, 1);
-}
-
-.actions.folded .actions-frame {
-  margin-top: 0;
-  opacity: 0;
-  transform: translateY(8px);
 }
 
 .actions-group {

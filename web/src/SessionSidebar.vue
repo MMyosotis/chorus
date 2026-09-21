@@ -25,7 +25,11 @@ const emit = defineEmits(['select', 'create', 'delete', 'rename', 'collapse', 'm
 const searchText = ref('')
 const editingId = ref(null)
 const editingText = ref('')
-const inputRef = ref(null)
+const renameInputEl = ref(null)
+
+function setRenameInput(el) {
+  renameInputEl.value = el
+}
 const openMenuId = ref(null)
 const menuPosition = ref({ top: 0, left: 0 })
 const visiblePane = ref(props.settingsOpen ? 'settings' : props.memoryOpen ? 'memory' : props.consoleOpen ? 'trace' : 'sessions')
@@ -42,8 +46,8 @@ function startRename(session, event) {
   editingId.value = session.id
   editingText.value = session.title
   nextTick(() => {
-    inputRef.value?.focus()
-    inputRef.value?.select()
+    renameInputEl.value?.focus()
+    renameInputEl.value?.select()
   })
 }
 
@@ -202,7 +206,7 @@ onBeforeUnmount(() => {
             <div class="session-content">
               <input
                 v-if="editingId === session.id"
-                ref="inputRef"
+                :ref="setRenameInput"
                 v-model="editingText"
                 class="rename-input"
                 maxlength="60"
