@@ -56,7 +56,7 @@ def test_web_search_disabled_drops_baidu_search():
 
 
 def test_dispatch_normalizes_tool_run_result():
-    """工具返回 ToolRunResult → DispatchResult 统一包装正文并透传 activity_meta。"""
+    """工具返回 ToolRunResult → DispatchResult 统一包装正文并透传结构单元。"""
     from chorus.tools.framework import DispatchResult, Reply, Tool, ToolContext, ToolRunResult
 
     class _MetaTool(Tool):
@@ -64,7 +64,7 @@ def test_dispatch_normalizes_tool_run_result():
         description = "x"
         parameters = {"type": "object", "properties": {}}
         def run(self, arguments, ctx):
-            return ToolRunResult(Reply("可见文本"), activity_meta={"refs": [{"title": "t"}]})
+            return ToolRunResult(Reply("可见文本"), units_produced=2)
 
     class _BareTool(Tool):
         name = "load_skill"
@@ -78,10 +78,10 @@ def test_dispatch_normalizes_tool_run_result():
     from chorus.tools.models import ToolCall
     d1 = disp.dispatch(ToolCall(id="c1", name="baidu_search", arguments={}), ToolContext())
     assert isinstance(d1, DispatchResult)
-    assert d1.activity_meta == {"refs": [{"title": "t"}]}
+    assert d1.units_produced == 2
     assert d1.outcome.content == "<tool_result>\n可见文本\n</tool_result>"
     d2 = disp.dispatch(ToolCall(id="c2", name="load_skill", arguments={}), ToolContext())
-    assert d2.activity_meta is None  # 未带活动元数据，透传为空
+    assert d2.units_produced == 0  # 未声明结构单元，透传为零
 
 
 def main():

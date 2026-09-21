@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from chorus.domain.task import ValidationError
+from chorus.domain.task import ArtifactEdit, IdeaCandidate, ValidationError
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.services.session import SessionService
 from chorus.services.task import TaskService
@@ -22,9 +22,16 @@ class RetryRequest(BaseModel):
     feedback: str
 
 
+class EditCandidateRequest(BaseModel):
+    index: int
+    title: str
+    angle: str
+    reason: str
+
+
 class EditRequest(BaseModel):
     markdown: Optional[str] = None
-    candidates: Optional[list[dict]] = None
+    candidates: Optional[list[EditCandidateRequest]] = None
 
 
 @router.post("/tasks/{task_id}/confirm")
@@ -51,9 +58,15 @@ def edit_task(
     req: EditRequest,
     task: TaskService = Depends(provide_task_service),
 ):
-    payload = {"markdown": req.markdown, "candidates": req.candidates}
+    edit = ArtifactEdit(
+        markdown=req.markdown,
+        candidates=[
+            IdeaCandidate(index=c.index, title=c.title, angle=c.angle, reason=c.reason)
+            for c in req.candidates
+        ] if req.candidates else None,
+    )
     try:
-        return task.edit(task_id, payload)
+        return task.edit(task_id, edit)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=e.correction) from e
 

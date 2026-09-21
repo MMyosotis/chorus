@@ -14,6 +14,7 @@ from chorus.domain.intent import (
     IntentSnapshot,
     IntentState,
     IntentStateUpdate,
+    IntentStateView,
 )
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
@@ -41,12 +42,7 @@ class IntentStateService:
 
     def update_from_tool(self, session_id: str, update: IntentStateUpdate) -> IntentState:
         current = self.get(session_id)
-        state = IntentState(
-            session_id=session_id,
-            **update.model_dump(),
-            version=current.version + 1,
-            updated_at=time.time(),
-        )
+        state = IntentState.from_update(update, session_id=session_id, version=current.version + 1)
         self._repo.upsert(state)
         self._session.touch(session_id)
         return state
@@ -74,12 +70,8 @@ class IntentStateService:
         self, session_id: str, snapshot: IntentSnapshot, message_id: Optional[str] = None,
     ) -> IntentConfirmation:
         """待确认时固化一份意图快照留档，供作答后留痕。"""
-        fields = snapshot.model_dump(include=set(IntentSnapshot.model_fields))
-        confirmation = IntentConfirmation(
-            confirmation_id=str(uuid6.uuid7()),
-            session_id=session_id,
-            message_id=message_id,
-            **fields,
+        confirmation = IntentConfirmation.from_snapshot(
+            snapshot, confirmation_id=str(uuid6.uuid7()), session_id=session_id, message_id=message_id,
         )
         self._confirmation_repo.insert(confirmation)
         self._session.touch(session_id)
@@ -103,13 +95,8 @@ class IntentStateService:
         for tool_name in tool_names:
             if tool_name not in _EVENT_TOOL_NAMES:
                 continue
-            state = self.get(session_id).model_dump(mode="json")
-            if state.get("intent_status") != "ready_to_confirm":
-                events.append(IntentStateEvent(state=state))
-                continue
-            confirmation = self.get_open_confirmation(session_id)
-            if confirmation and confirmation.message_id == message_id:
-                state["confirmation_id"] = confirmation.confirmation_id
-                state["message_id"] = confirmation.message_id
-            events.append(IntentStateEvent(state=state))
+            state = self.get(session_id)
+            candidate = self.get_open_confirmation(session_id) if state.intent_status == "ready_to_confirm" else None
+            confirmation = candidate if candidate is not None and candidate.message_id == message_id else None
+            events.append(IntentStateEvent(state=IntentStateView.from_state(state, confirmation)))
         return events

@@ -4,7 +4,7 @@ from __future__ import annotations
 from chorus.domain.bypass import BypassScope
 from chorus.domain.log import get_logger
 from chorus.domain.memory.llm import MemoryLLMService
-from chorus.domain.memory.models import CreatorMemory, Kind, MemoryDigest, MemoryDigestEntry, MemoryDraft, MemoryRecall, draft_to_memory
+from chorus.domain.memory.models import CreatorMemory, Kind, MemoryDigest, MemoryDigestEntry, MemoryDraft, MemoryRecall
 from chorus.domain.memory.predicates import memories_to_digest_entries
 from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.message import MessageRepository
@@ -75,7 +75,7 @@ class MemoryService:
         if not drafts:
             _logger.debug("memory consolidate empty result, skip")
             return
-        memories = [draft_to_memory(draft) for draft in drafts]
+        memories = [CreatorMemory.from_draft(draft) for draft in drafts]
         self._repo.replace_all(memories)
         _logger.info("memory consolidate", extra={"before": len(all_memories), "after": len(memories)})
 
@@ -140,7 +140,7 @@ class MemoryService:
             platform=list(platform),
             visible_to=list(visible_to),
         )
-        memory = draft_to_memory(draft)
+        memory = CreatorMemory.from_draft(draft)
         self._repo.upsert(memory)
         return memory
 
@@ -171,4 +171,4 @@ class MemoryService:
         return memories_to_digest_entries(self._repo.list_all(), agent_type)
 
     def _store_draft(self, draft: MemoryDraft) -> None:
-        self._repo.upsert(draft_to_memory(draft))
+        self._repo.upsert(CreatorMemory.from_draft(draft))

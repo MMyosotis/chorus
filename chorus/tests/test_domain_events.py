@@ -22,7 +22,7 @@ from chorus.domain.events import (
     ToolResultEvent,
     TraceEvent,
 )
-from chorus.domain.trace import TracePhase
+from chorus.domain.trace import TracePhase, UserInput
 
 
 _FIXTURES = [
@@ -32,7 +32,7 @@ _FIXTURES = [
     (TokenEvent, {"content": "hi"}, "token"),
     (ToolCallEvent, {"id": "c1", "name": "gen", "arguments": {"a": 1}, "display": "生成"}, "tool_call"),
     (ToolResultEvent, {"tool_call_id": "c1", "name": "gen", "content": "ok", "duration_ms": 5}, "tool_result"),
-    (TraceEvent, {"phase": TracePhase.MODEL_REQUEST, "created_at": 1.0, "payload": {"k": "v"}}, "trace"),
+    (TraceEvent, {"phase": TracePhase.MODEL_REQUEST, "created_at": 1.0, "payload": UserInput(content="hi")}, "trace"),
     (TitleUpdateEvent, {"id": "s1", "title": "夏日晚风"}, "title_update"),
     (DoneEvent, {}, "done"),
     (ErrorEvent, {"content": "炸了"}, "error"),
@@ -84,7 +84,7 @@ def test_busy_event_carries_content():
 
 
 def test_trace_event_phase_serializes_as_enum_value():
-    ev = TraceEvent(phase=TracePhase.TOOL_CALL, created_at=2.5, payload={})
+    ev = TraceEvent(phase=TracePhase.TOOL_CALL, created_at=2.5, payload=UserInput(content="hi"))
     dump = ev.model_dump()
     assert dump["phase"] == TracePhase.TOOL_CALL
     j = ev.model_dump_json()

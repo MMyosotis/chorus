@@ -357,8 +357,8 @@ def test_update_intent_state_ready_to_confirm_finishes():
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]
     intent_event = next(event for event in events if event.type == "intent_state")
-    assert intent_event.state["message_id"] == msgs[1].id
-    assert intent_event.state["confirmation_id"]
+    assert intent_event.state.message_id == msgs[1].id
+    assert intent_event.state.confirmation_id
     assert msgs[1].content is None
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "update_intent_state"

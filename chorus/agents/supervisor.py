@@ -196,7 +196,7 @@ class SupervisorService:
             phase=TracePhase.USER_INPUT,
             message_id=message.id,
             created_at=created_at,
-            payload=payload.model_dump(),
+            payload=payload,
         )
 
 

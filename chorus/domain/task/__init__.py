@@ -9,7 +9,6 @@ from chorus.domain.task.graph import (
     TaskNodeView,
     TaskProgressResponse,
     build_task_graph,
-    build_task_node_response,
     dump_task_graph,
 )
 from chorus.domain.task.models import (
@@ -19,11 +18,13 @@ from chorus.domain.task.models import (
     TaskStatus,
 )
 from chorus.domain.task.artifacts import (
+    ArtifactEdit,
     IdeaArtifacts,
     IdeaCandidate,
     ImageArtifacts,
     ImageItem,
     PostCard,
+    PostCardMeta,
     ScriptArtifacts,
     TaskArtifacts,
     invoke_text,
@@ -78,6 +79,8 @@ __all__ = [
     "TaskPlan",
     "TaskStatus",
     "PostCard",
+    "PostCardMeta",
+    "ArtifactEdit",
     "DeliveredProduct",
     "CANCELLED_PIPELINE_RECEIPT",
     "render_delivery_receipt",
@@ -91,7 +94,6 @@ __all__ = [
     "select_display_pipeline",
     "topological_order",
     "build_task_graph",
-    "build_task_node_response",
     "dump_progress",
     "dump_task_graph",
     "invoke_text",

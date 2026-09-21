@@ -25,13 +25,13 @@ class SettingsService:
         self._repo.set("image_test_mode", "true" if enabled else "false")
 
     def get_chat_model(self) -> str:
-        return self._repo.get("chat_model") or CHAT_MODELS[0]["model_name"]
+        return self._repo.get("chat_model") or CHAT_MODELS[0].model_name
 
     def set_chat_model(self, value: str) -> None:
         self._repo.set("chat_model", value)
 
     def get_image_model(self) -> str:
-        return self._repo.get("image_model") or IMAGE_MODELS[0]["model_name"]
+        return self._repo.get("image_model") or IMAGE_MODELS[0].model_name
 
     def set_image_model(self, value: str) -> None:
         self._repo.set("image_model", value)

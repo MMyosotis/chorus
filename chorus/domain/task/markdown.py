@@ -1,36 +1,44 @@
-"""Markdown 产出解析：把 Mistune AST 还原成四角色的产物字典。"""
+"""Markdown 产出解析：把 Mistune AST 还原成四角色的产物对象。"""
 from __future__ import annotations
 
 import re
-from functools import wraps
-from typing import Any, cast
+from functools import partial
+from typing import Any, Callable, TypeVar, cast
 
 import mistune
 from mistune.renderers.markdown import MarkdownRenderer
 
+from chorus.domain.task.artifacts import (
+    IdeaArtifacts,
+    IdeaCandidate,
+    ImageArtifacts,
+    ImageItem,
+    PostCard,
+    PostCardMeta,
+    ScriptArtifacts,
+)
 from chorus.domain.task.errors import AbandonError, ValidationError
 
 
 Token = dict[str, Any]
 
+_Artifacts = TypeVar("_Artifacts")
+
 # 失败块：模型主动声明本步放弃，分隔后为失败说明
 _ABANDON_RE = re.compile(r"^\s*#\s*失败[\s:：]+(?P<reason>.+)\s*$", re.DOTALL)
 
 
-def _detect_abandon(body: str) -> str | None:
-    """命中失败块则返回失败说明，否则 None。失败块优先于结构解析。"""
-    match = _ABANDON_RE.match(body)
-    return match.group("reason") if match else None
-
-
-def _abandon_aware(parser):
+def _abandon_aware(parser: Callable[[str], _Artifacts]) -> Callable[[str], _Artifacts]:
     """先判失败块再走结构解析，统一放弃通道。"""
-    @wraps(parser)
-    def _parse(body: str) -> dict[str, Any]:
-        if (reason := _detect_abandon(body)) is not None:
-            raise AbandonError(reason)
-        return parser(body)
-    return _parse
+    return partial(_parse_abandon_first, parser)
+
+
+def _parse_abandon_first(parser: Callable[[str], _Artifacts], body: str) -> _Artifacts:
+    """命中失败块抛放弃异常，否则交给原解析器。"""
+    match = _ABANDON_RE.match(body)
+    if match is not None:
+        raise AbandonError(match.group("reason"))
+    return parser(body)
 
 
 def _parse_markdown(body: str) -> list[Token]:
@@ -58,7 +66,7 @@ def _parse_list_item(token: Token) -> str:
     return _render_inline(children[0].get("children", []))
 
 
-def _parse_idea_candidate(index: int, heading: Token, details: Token) -> dict[str, Any]:
+def _parse_idea_candidate(index: int, heading: Token, details: Token) -> IdeaCandidate:
     """把三级标题和详情列表还原成选题候选。"""
     valid_heading = heading["type"] == "heading" and heading["attrs"]["level"] == 3
     if not valid_heading or details["type"] != "list":
@@ -69,25 +77,25 @@ def _parse_idea_candidate(index: int, heading: Token, details: Token) -> dict[st
     if not valid_items:
         raise ValidationError("候选字段格式错误", "每个候选只保留 - 视角：和 - 理由：两项")
 
-    candidate = {
-        "index": index,
-        "title": _render_inline(heading.get("children", [])),
-        "angle": items[0].removeprefix("视角：").strip(),
-        "reason": items[1].removeprefix("理由：").strip(),
-    }
-    if not all((candidate["title"], candidate["angle"], candidate["reason"])):
+    candidate = IdeaCandidate(
+        index=index,
+        title=_render_inline(heading.get("children", [])),
+        angle=items[0].removeprefix("视角：").strip(),
+        reason=items[1].removeprefix("理由：").strip(),
+    )
+    if not all((candidate.title, candidate.angle, candidate.reason)):
         raise ValidationError("候选内容不完整", "每个候选都必须包含非空的标题、视角和理由")
     return candidate
 
 
-def _extract_images(token: Token) -> list[dict[str, str]]:
+def _extract_images(token: Token) -> list[ImageItem]:
     """递归抽取 AST 中的图片节点。"""
-    found: list[dict[str, str]] = []
+    found: list[ImageItem] = []
     if token.get("type") == "image":
-        found.append({
-            "url": token.get("attrs", {}).get("url", ""),
-            "caption": _render_inline(token.get("children", [])),
-        })
+        found.append(ImageItem(
+            url=token.get("attrs", {}).get("url", ""),
+            caption=_render_inline(token.get("children", [])),
+        ))
     for child in token.get("children", []):
         found.extend(_extract_images(child))
     return found
@@ -142,35 +150,35 @@ def _reject_h1(tokens: list[Token], *, label: str) -> None:
 
 
 @_abandon_aware
-def parse_script_md(body: str) -> dict[str, Any]:
+def parse_script_md(body: str) -> ScriptArtifacts:
     """解析文案官的标准 markdown 正文。"""
     front_lines, rest = _split_front_matter(body)
     _require_front_matter_title(front_lines, label="文案")
     _reject_h1(_parse_markdown(rest), label="文案")
-    return {"markdown": body}
+    return ScriptArtifacts(markdown=body)
 
 
 @_abandon_aware
-def parse_idea_md(body: str) -> dict[str, Any]:
+def parse_idea_md(body: str) -> IdeaArtifacts:
     """解析选题官按三级标题分组的候选。"""
     pairs = _pair_tokens(_parse_markdown(body), "每个候选使用 ### 标题，后跟视角和理由列表")
     candidates = [_parse_idea_candidate(index, *pair) for index, pair in enumerate(pairs)]
-    return {"candidates": candidates, "selected": None}
+    return IdeaArtifacts(candidates=candidates, selected=None)
 
 
 @_abandon_aware
-def parse_image_md(body: str) -> dict[str, Any]:
+def parse_image_md(body: str) -> ImageArtifacts:
     """解析配图官的标准 markdown 图片。"""
-    images: list[dict[str, str]] = []
+    images: list[ImageItem] = []
     for token in _parse_markdown(body):
         images.extend(_extract_images(token))
-    if not any(image["url"] for image in images):
+    if not any(image.url for image in images):
         raise ValidationError("配图 url 缺失", "至少一张图填入 generate_image 返回的 url")
-    return {"images": images}
+    return ImageArtifacts(images=images)
 
 
 @_abandon_aware
-def parse_postcard_md(body: str) -> dict[str, Any]:
+def parse_postcard_md(body: str) -> PostCard:
     """解析排版官的成品 markdown 与资源引用元数据。"""
     front_lines, rest = _split_front_matter(body)
     preview = _take_field(front_lines, "preview_ref")
@@ -182,7 +190,7 @@ def parse_postcard_md(body: str) -> dict[str, Any]:
     remaining = [line for line in front_lines if not line.startswith(("preview_ref:", "stylesheet_ref:"))]
     markdown = _join_front_matter(remaining, rest)
     _reject_h1(_parse_markdown(rest), label="成品")
-    return {
-        "markdown": markdown,
-        "meta": {"preview_ref": preview, "stylesheet_ref": stylesheet, "title": title},
-    }
+    return PostCard(
+        markdown=markdown,
+        meta=PostCardMeta(preview_ref=preview, stylesheet_ref=stylesheet, title=title),
+    )

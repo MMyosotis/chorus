@@ -5,19 +5,19 @@
 
 from __future__ import annotations
 
+from chorus.tools.clients.baidu_search import BaiduSearchClient, BaiduSearchError, SearchRef
 from chorus.tools.framework import Reply, Tool, ToolContext, ToolRunResult
-from chorus.tools.clients.baidu_search import BaiduSearchClient
 
 
-def _format_references(refs: list[dict]) -> str:
+def _format_references(refs: list[SearchRef]) -> str:
     if not refs:
         return "(没有找到相关搜索结果)"
     lines: list[str] = []
     for i, ref in enumerate(refs, 1):
-        title = (ref.get("title") or "").strip() or "(无标题)"
-        url = (ref.get("url") or "").strip()
-        date = (ref.get("date") or "").strip()
-        anchor = (ref.get("web_anchor") or "").strip()
+        title = (ref.title or "").strip() or "(无标题)"
+        url = (ref.url or "").strip()
+        date = (ref.date or "").strip()
+        anchor = (ref.web_anchor or "").strip()
         content = (ref.get("content") or "").strip().replace("\n", " ")
         if len(content) > 400:
             content = content[:400] + "…"
@@ -25,17 +25,6 @@ def _format_references(refs: list[dict]) -> str:
         meta = f"  ({' · '.join(meta_parts)})" if meta_parts else ""
         lines.append(f"[{i}] {title}{meta}\n    URL: {url}\n    摘要: {content or '(无摘要)'}")
     return "\n".join(lines)
-
-
-def _to_meta_refs(refs: list[dict]) -> list[dict]:
-    return [
-        {
-            "title": (ref.get("title") or "").strip() or "(无标题)",
-            "url": (ref.get("url") or "").strip(),
-            "snippet": (ref.get("content") or "").strip().replace("\n", " ")[:400],
-        }
-        for ref in refs
-    ]
 
 
 class BaiduSearchTool(Tool):
@@ -86,10 +75,8 @@ class BaiduSearchTool(Tool):
         except (TypeError, ValueError):
             top_k = 8
 
-        result = self._client.search(query, arguments.get("recency"), top_k)
-        if isinstance(result, str):
-            return ToolRunResult(Reply(result), is_error=True)
-        return ToolRunResult(
-            Reply(_format_references(result)),
-            activity_meta={"refs": _to_meta_refs(result)},
-        )
+        try:
+            refs = self._client.search(query, arguments.get("recency"), top_k)
+        except BaiduSearchError as e:
+            return ToolRunResult(Reply(str(e)), is_error=True)
+        return ToolRunResult(Reply(_format_references(refs)))

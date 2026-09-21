@@ -16,6 +16,7 @@ from chorus.domain.task import (
     DeliveredProduct,
     LEGAL_TRANSITIONS,
     PostCard,
+    PostCardMeta,
     TERMINAL_STATUSES,
     Task,
     TaskPlan,
@@ -56,11 +57,11 @@ def _mk(status, deps=None, **kw):
 def test_postcard_contract():
     card = PostCard(
         markdown="---\ntitle: 夏日晚风\n---\n\n一段文字\n\n![图注](http://x/b.jpg)",
-        meta={"preview_ref": "a/b", "stylesheet_ref": "a/c", "title": "夏日晚风"},
+        meta=PostCardMeta(preview_ref="a/b", stylesheet_ref="a/c", title="夏日晚风"),
     )
     assert card.markdown.startswith("---\ntitle: 夏日晚风")
-    assert card.meta["preview_ref"] == "a/b"
-    assert card.meta["title"] == "夏日晚风"
+    assert card.meta.preview_ref == "a/b"
+    assert card.meta.title == "夏日晚风"
 
 
 def test_delivered_products_filter_and_format():
@@ -229,7 +230,7 @@ def test_invoke_text_markdown_bodies_return_raw():
     # markdown 本体给原文，不带 JSON 壳与转义
     script = ScriptArtifacts(markdown="第一行\n第二行")
     assert invoke_text(script) == "第一行\n第二行"
-    card = PostCard(markdown="# 标题\n正文", meta={"title": "标题"})
+    card = PostCard(markdown="# 标题\n正文", meta=PostCardMeta(title="标题"))
     assert invoke_text(card) == "# 标题\n正文"
 
 
@@ -262,8 +263,8 @@ def test_parse_output_finalize_postcard():
                "summary: 摘要\ntags: [夏天]\n"
                "---\n\n一段正文")
     artifacts = AGENT_PROFILES["finalize"].parse_output(content)
-    assert artifacts.meta["title"] == "夏日晚风"
-    assert artifacts.meta["preview_ref"] == "web-blog/preview/desktop.html"
+    assert artifacts.meta.title == "夏日晚风"
+    assert artifacts.meta.preview_ref == "web-blog/preview/desktop.html"
 
 
 def test_parse_output_abandon_block_raises():

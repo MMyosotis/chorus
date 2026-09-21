@@ -145,10 +145,7 @@ class CreatePlanTool(Tool):
     def _build_pairs(self, arguments: dict, session_id: str, message_id: Optional[str], base_card: Optional[PostCard]):
         """解析 steps、整份 intent 透传（不逐字段拆解）、校验，展开并渲染骨架内容行。"""
         intent = Intent.model_validate(arguments["intent"])
-        steps = [
-            StepSpec(agent_type=AgentType(step["agent_type"]), deps=step.get("deps", []), note=step.get("note", ""))
-            for step in arguments["steps"]
-        ]
+        steps = [StepSpec.from_tool_payload(step) for step in arguments["steps"]]
         plan = TaskPlan(session_id=session_id, message_id=message_id, intent=intent, steps=steps, base_card=base_card)
         return [
             (task, build_task_content(task.id, SkeletonInputs.from_plan(plan, step)))

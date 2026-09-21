@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Callable, Type
 
+from pydantic import TypeAdapter
 from pydantic import ValidationError as PydValidationError
 
 from chorus.domain.task.artifacts import (
@@ -23,6 +25,11 @@ from chorus.domain.task.markdown import (
 from chorus.domain.task.models import AgentType
 
 
+@lru_cache(maxsize=None)
+def _artifacts_adapter(model: Type[Any]) -> TypeAdapter:
+    return TypeAdapter(model)
+
+
 @dataclass(frozen=True)
 class AgentProfile:
     agent_type: AgentType
@@ -38,19 +45,14 @@ class AgentProfile:
         """按活动态取本角色台词，未声明则空。"""
         return self.activity_lines.get(kind, "")
 
-    def build_artifacts(self, raw: Any) -> Any:
-        """把原始数据按本角色的产物形状还原成对象。"""
-        return self.artifacts_model(**raw)
+    def hydrate_artifacts(self, raw: dict) -> Any:
+        """把落库 JSON 按本角色产物模型还原成对象。"""
+        return _artifacts_adapter(self.artifacts_model).validate_python(raw)
 
     def parse_output(self, content: str) -> Any:
-        """按角色解析 Markdown 正文，并校验还原成产物对象。"""
-        raw = self.artifacts_parser(content)
-        return self._validate_artifacts(raw)
-
-    def _validate_artifacts(self, artifacts: Any) -> Any:
-        """用本角色模型构造即校验，失败转异常并附修正提示。"""
+        """按角色解析 Markdown 正文还原成产物对象，失败附修正提示。"""
         try:
-            return self.build_artifacts(artifacts)
+            return self.artifacts_parser(content)
         except PydValidationError as e:
             raise ValidationError(
                 f"ARTIFACTS 校验失败: {e}",

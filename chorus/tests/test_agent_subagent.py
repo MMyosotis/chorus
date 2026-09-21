@@ -178,7 +178,7 @@ def test_subagent_finalize_awaiting_confirm():
     sub = _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_repo, client)
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.AWAITING_CONFIRM
-    assert art_repo.load("t1").artifacts.meta["title"] == "夏日晚风"
+    assert art_repo.load("t1").artifacts.meta.title == "夏日晚风"
 
 
 def test_subagent_react_with_tool():

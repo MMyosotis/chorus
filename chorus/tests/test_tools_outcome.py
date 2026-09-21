@@ -101,12 +101,13 @@ def test_format_display_known_tool():
 
 
 def test_generate_image_no_unit_on_error():
-    """生图失败（client 返 Error:）不计结构单元，成功才 +1。"""
+    """生图失败（client 抛专用异常）不计结构单元，成功才 +1。"""
     from chorus.tools.builtin.generate_image import GenerateImageTool
+    from chorus.tools.clients.ark_image import ArkImageError
 
     class _FailClient:
         def generate(self, prompt, model_id, size):
-            return "Error: 图像服务返回 HTTP 404"
+            raise ArkImageError("图像服务返回 HTTP 404")
 
     class _OkClient:
         def generate(self, prompt, model_id, size):
@@ -119,7 +120,7 @@ def test_generate_image_no_unit_on_error():
     fail_tool = GenerateImageTool(_Settings(), _stub_provider(_FailClient()))
     fail_res = fail_tool.run({"prompt": "暴雨"}, _ctx())
     assert fail_res.units_produced == 0
-    assert "Error:" in fail_res.outcome.content
+    assert "图像服务返回 HTTP 404" in fail_res.outcome.content
 
     ok_tool = GenerateImageTool(_Settings(), _stub_provider(_OkClient()))
     ok_res = ok_tool.run({"prompt": "暴雨"}, _ctx())

@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from chorus.domain.memory.models import Kind
+from chorus.domain.memory.models import CreatorMemory, Kind
 from chorus.routes.providers import provide_memory_service
 from chorus.services.memory import MemoryService
 
@@ -19,6 +19,11 @@ class MemoryView(BaseModel):
     platform: list[str]
     visible_to: list[str]
     created_at: float
+
+    @classmethod
+    def from_memory(cls, memory: CreatorMemory) -> "MemoryView":
+        """从记忆条目构造传输视图。"""
+        return cls(**memory.model_dump())
 
 
 class CreateRequest(BaseModel):
@@ -37,13 +42,9 @@ class UpdateRequest(BaseModel):
     kind: Kind
 
 
-def _to_view(memory) -> MemoryView:
-    return MemoryView(**memory.model_dump())
-
-
 @router.get("")
 def list_memories(memory: MemoryService = Depends(provide_memory_service)):
-    return {"memories": [_to_view(item) for item in memory.list_all()]}
+    return {"memories": [MemoryView.from_memory(item) for item in memory.list_all()]}
 
 
 @router.post("")
@@ -51,7 +52,7 @@ def create_memory(req: CreateRequest, memory: MemoryService = Depends(provide_me
     created = memory.create_memory(
         req.description, req.content, req.platform, req.visible_to, req.kind,
     )
-    return _to_view(created)
+    return MemoryView.from_memory(created)
 
 
 @router.put("/{memory_id}")
@@ -67,7 +68,7 @@ def put_memory(
     )
     if updated is None:
         raise HTTPException(status_code=404, detail="memory not found")
-    return _to_view(updated)
+    return MemoryView.from_memory(updated)
 
 
 @router.delete("/{memory_id}")

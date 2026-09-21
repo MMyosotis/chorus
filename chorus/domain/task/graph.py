@@ -80,6 +80,22 @@ class TaskProgressResponse(BaseModel):
     activity_detail: str = ""
     activity_line: Optional[str] = Field(default=None, exclude_if=lambda value: value is None)
 
+    @classmethod
+    def from_progress(cls, progress: TaskProgress, agent_type: AgentType) -> "TaskProgressResponse":
+        """从运行期进度构造传输模型，并补充活动台词。"""
+        profile = AGENT_PROFILES[agent_type]
+        return cls(
+            task_id=progress.task_id,
+            composing_chars=progress.composing_chars,
+            composing_units=progress.composing_units,
+            composing_label=progress.composing_label,
+            last_signal=progress.last_signal,
+            aside=progress.aside,
+            activity_kind=progress.activity_kind,
+            activity_detail=progress.activity_detail,
+            activity_line=profile.activity_line(progress.activity_kind),
+        )
+
 
 class TaskNodeResponse(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -92,6 +108,20 @@ class TaskNodeResponse(BaseModel):
     progress: Optional[TaskProgressResponse] = None
     artifacts: Optional[Union[IdeaArtifacts, ScriptArtifacts, ImageArtifacts, PostCard]] = None
     error: Optional[str] = None
+
+    @classmethod
+    def from_view(cls, node: TaskNodeView) -> "TaskNodeResponse":
+        """从图节点构造前端传输模型。"""
+        return cls(
+            id=node.id,
+            message_id=node.message_id,
+            agent_type=node.agent_type,
+            status=node.status,
+            updated_at=node.updated_at,
+            progress=TaskProgressResponse.from_progress(node.progress, node.agent_type) if node.progress else None,
+            artifacts=node.artifacts,
+            error=node.error,
+        )
 
 
 def build_task_graph(
@@ -123,45 +153,10 @@ def build_task_graph(
     return TaskGraph(pipeline_id=pipeline_id, active=active, nodes=nodes)
 
 
-def build_task_node_response(node: TaskNodeView) -> TaskNodeResponse:
-    """把任务节点转换为前端传输模型。"""
-    progress = _build_progress_response(node.progress, node.agent_type) if node.progress else None
-    return TaskNodeResponse(
-        id=node.id,
-        message_id=node.message_id,
-        agent_type=node.agent_type,
-        status=node.status,
-        updated_at=node.updated_at,
-        progress=progress,
-        artifacts=node.artifacts,
-        error=node.error,
-    )
-
-
 def dump_task_graph(graph: TaskGraph) -> dict:
     """序列化为前端传输结构。"""
     return {
         "pipeline_id": graph.pipeline_id,
         "active": graph.active,
-        "tasks": [build_task_node_response(node).model_dump(mode="json") for node in graph.nodes],
+        "tasks": [TaskNodeResponse.from_view(node).model_dump(mode="json") for node in graph.nodes],
     }
-
-
-def _build_progress_response(
-    progress: TaskProgress,
-    agent_type: AgentType,
-) -> TaskProgressResponse:
-    """把任务进度转换为传输模型，并补充活动台词。"""
-    profile = AGENT_PROFILES[agent_type]
-    activity_line = profile.activity_line(progress.activity_kind)
-    return TaskProgressResponse(
-        task_id=progress.task_id,
-        composing_chars=progress.composing_chars,
-        composing_units=progress.composing_units,
-        composing_label=progress.composing_label,
-        last_signal=progress.last_signal,
-        aside=progress.aside,
-        activity_kind=progress.activity_kind,
-        activity_detail=progress.activity_detail,
-        activity_line=activity_line,
-    )

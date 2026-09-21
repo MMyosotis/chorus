@@ -302,7 +302,7 @@ def test_tool_without_units_not_counted():
     )
     call = ToolCall(id="c1", name="baidu_search", arguments={"query": "咖啡"})
     progress_repo.set_composing_units("t1", 0)
-    strategy.after_dispatch(call, DispatchResult(Reply("结果"), 10, activity_meta={"refs": []}))
+    strategy.after_dispatch(call, DispatchResult(Reply("结果"), 10))
     assert progress_repo.load("t1").composing_units == 0
 
 

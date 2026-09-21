@@ -1,11 +1,11 @@
 """意图确认留档表：每次待确认挂起单一行，存意图快照与作答状态。"""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import select
 
-from chorus.domain.intent import IntentConfirmation, IntentConfirmationAnswer, IntentSnapshot
+from chorus.domain.intent import IntentConfirmation, IntentConfirmationAnswer
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.mapping import shared_fields
 from chorus.repo.models import IntentConfirmationRecord
@@ -19,12 +19,9 @@ def _to_domain(r: IntentConfirmationRecord) -> IntentConfirmation:
 
 
 def _from_domain(c: IntentConfirmation) -> IntentConfirmationRecord:
-    snapshot = c.model_dump(include=set(IntentSnapshot.model_fields), mode="json")
-    if c.answer:
-        snapshot["answer"] = c.answer.model_dump(mode="json", exclude_none=True)
     return IntentConfirmationRecord(
         **shared_fields(c, IntentConfirmationRecord),
-        snapshot=snapshot,
+        snapshot=c.snapshot_fields(),
     )
 
 
@@ -68,7 +65,6 @@ class IntentConfirmationRepository(BaseRepository):
         ).first()
         if record is None:
             return
-        snapshot: dict[str, Any] = dict(record.snapshot)
-        snapshot["answer"] = answer.model_dump(mode="json", exclude_none=True)
-        record.snapshot = snapshot
+        confirmation = _to_domain(record).model_copy(update={"answer": answer})
+        record.snapshot = confirmation.snapshot_fields()
         record.status = "answered"

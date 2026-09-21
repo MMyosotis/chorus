@@ -1,13 +1,29 @@
-"""百度搜索客户端，只负责真实接口调用。成功返原始结果，失败返错误文本由工具层区分。"""
+"""百度搜索客户端，只负责真实接口调用；失败抛专用异常由工具层转写回执。"""
 
 from __future__ import annotations
 
 import json
-from typing import Optional, Union
+from typing import Optional
+
+from pydantic import BaseModel
 from urllib import error as urlerror
 from urllib import request as urlrequest
 
 _RECENCY_VALUES = {"week", "month", "semiyear", "year"}
+
+
+class SearchRef(BaseModel):
+    """百度搜索返回的单条网页参考资料。"""
+
+    title: Optional[str] = None
+    url: Optional[str] = None
+    date: Optional[str] = None
+    web_anchor: Optional[str] = None
+    content: Optional[str] = None
+
+
+class BaiduSearchError(Exception):
+    """百度搜索接口调用失败。"""
 
 
 class BaiduSearchClient:
@@ -15,7 +31,7 @@ class BaiduSearchClient:
         self._api_key = api_key
         self._base_url = base_url
 
-    def search(self, query: str, recency: Optional[str], top_k: int) -> Union[list[dict], str]:
+    def search(self, query: str, recency: Optional[str], top_k: int) -> list[SearchRef]:
         payload: dict = {
             "messages": [{"role": "user", "content": query}],
             "search_source": "baidu_search_v2",
@@ -37,11 +53,11 @@ class BaiduSearchClient:
             with urlrequest.urlopen(req, timeout=60) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urlerror.HTTPError as e:
-            return f"Error: 百度搜索服务返回 HTTP {e.code}"
+            raise BaiduSearchError(f"百度搜索服务返回 HTTP {e.code}") from e
         except Exception as e:
-            return f"Error: 百度搜索请求失败: {type(e).__name__}"
+            raise BaiduSearchError(f"百度搜索请求失败: {type(e).__name__}") from e
 
         code = data.get("code")
         if isinstance(code, int) and code not in (0, 200):
-            return f"Error: 百度搜索返回业务错误 code={code}"
-        return data.get("references") or []
+            raise BaiduSearchError(f"百度搜索返回业务错误 code={code}")
+        return [SearchRef.model_validate(item) for item in (data.get("references") or [])]

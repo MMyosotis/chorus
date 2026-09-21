@@ -2,17 +2,12 @@
 
 from __future__ import annotations
 
-from chorus.domain.intent import IntentConfirmation, IntentState
+from chorus.domain.intent import IntentConfirmation, IntentConfirmationView, IntentState
 from chorus.domain.message import MessageView
-from chorus.domain.option import OptionPrompt
+from chorus.domain.option import OptionPrompt, OptionPromptView
 from chorus.domain.session.bubbles import anchor_ids, build_bubbles
 from chorus.domain.session.cards import insert_anchored_card, plan_cards
-from chorus.domain.session.recaps import (
-    dump_confirmation,
-    dump_prompt,
-    fold_confirmation_recaps,
-    fold_option_recaps,
-)
+from chorus.domain.session.recaps import fold_confirmation_recaps, fold_option_recaps
 from chorus.domain.session.stage import derive_stage
 from chorus.domain.task.graph import TaskGraph, dump_task_graph
 from chorus.domain.task.products import DeliveredProduct
@@ -50,7 +45,13 @@ def build_session_view(
         "bubbles": [entry.model_dump(mode="json") for entry in entries],
         "graph": graph_dump,
         "intent_state": intent_state.model_dump(mode="json"),
-        "open_confirmation": dump_confirmation(open_confirmation) if open_confirmation else None,
-        "open_option_prompt": dump_prompt(open_prompt) if open_prompt else None,
+        "open_confirmation": (
+            IntentConfirmationView.from_confirmation(open_confirmation).model_dump(mode="json")
+            if open_confirmation else None
+        ),
+        "open_option_prompt": (
+            OptionPromptView.from_prompt(open_prompt).model_dump(mode="json")
+            if open_prompt else None
+        ),
         "stage": derive_stage(graph.nodes, open_confirmation, open_prompt),
     }

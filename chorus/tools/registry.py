@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from chorus.config import BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL
+from chorus.config import BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL, IMAGE_MODELS
 from chorus.domain.skill import SkillLoader
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
@@ -38,7 +38,7 @@ def build_tool_dispatch(
     option_service: OptionPromptService,
 ) -> ToolDispatch:
     """装配默认工具调度器。工具内部胶水内化于此，外界只暴露跨层依赖。"""
-    image_models = ImageModelProvider(settings_service)
+    image_models = ImageModelProvider(settings_service, IMAGE_MODELS)
     baidu_client = BaiduSearchClient(BAIDU_SEARCH_API_KEY, BAIDU_SEARCH_BASE_URL)
     return ToolDispatch([
         LoadSkillTool(skill_loader),

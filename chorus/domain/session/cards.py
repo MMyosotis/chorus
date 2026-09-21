@@ -14,8 +14,8 @@ from chorus.domain.session.entries import (
 )
 from chorus.domain.task.graph import (
     TaskGraph,
+    TaskNodeResponse,
     TaskNodeView,
-    build_task_node_response,
 )
 from chorus.domain.task.models import AgentType, TaskStatus
 from chorus.domain.task.products import DeliveredProduct
@@ -73,7 +73,7 @@ def _task_card(kind: TaskCardKind, task: TaskNodeView) -> TaskCard:
     return TaskCard(
         kind=kind,
         id=f"{kind}:{task.id}",
-        task=build_task_node_response(task),
+        task=TaskNodeResponse.from_view(task),
         anchor_message_id=task.message_id,
     )
 

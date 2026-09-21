@@ -8,11 +8,13 @@ import pytest
 
 from chorus.domain.session import Session
 from chorus.domain.task import (
+    ArtifactEdit,
     IdeaArtifacts,
     IdeaCandidate,
     ImageArtifacts,
     ImageItem,
     PostCard,
+    PostCardMeta,
     ScriptArtifacts,
     Task,
     TaskContent,
@@ -144,7 +146,7 @@ def test_edit_script_updates_artifacts():
     _mk(task_repo, content_repo, "t1", "script", "awaiting_confirm")
     art_repo = TaskArtifactsRepository(_engine_of(task_repo))
     art_repo.upsert("t1", "script", ScriptArtifacts(markdown="原文"))
-    res = svc.edit("t1", {"markdown": "改后正文"})
+    res = svc.edit("t1", ArtifactEdit(markdown="改后正文"))
     assert res["status"] == "awaiting_confirm"
     got = art_repo.load("t1")
     assert got.artifacts.markdown == "改后正文"
@@ -155,11 +157,11 @@ def test_edit_finalize_preserves_meta():
     svc, task_repo, content_repo = _setup()
     _mk(task_repo, content_repo, "t1", "finalize", "awaiting_confirm")
     art_repo = TaskArtifactsRepository(_engine_of(task_repo))
-    art_repo.upsert("t1", "finalize", PostCard(markdown="原文", meta={"preview_ref": "a/b"}))
-    svc.edit("t1", {"markdown": "改后正文"})
+    art_repo.upsert("t1", "finalize", PostCard(markdown="原文", meta=PostCardMeta(preview_ref="a/b")))
+    svc.edit("t1", ArtifactEdit(markdown="改后正文"))
     got = art_repo.load("t1")
     assert got.artifacts.markdown == "改后正文"
-    assert got.artifacts.meta == {"preview_ref": "a/b"}
+    assert got.artifacts.meta == PostCardMeta(preview_ref="a/b")
 
 
 def test_edit_idea_updates_candidates_keeps_selected():
@@ -174,10 +176,10 @@ def test_edit_idea_updates_candidates_keeps_selected():
         ],
         selected=1,
     ))
-    payload = {"candidates": [
-        {"index": 0, "title": "新一", "angle": "a", "reason": "r"},
-        {"index": 1, "title": "新二", "angle": "a", "reason": "r"},
-    ]}
+    payload = ArtifactEdit(candidates=[
+        IdeaCandidate(index=0, title="新一", angle="a", reason="r"),
+        IdeaCandidate(index=1, title="新二", angle="a", reason="r"),
+    ])
     svc.edit("t1", payload)
     got = art_repo.load("t1")
     assert got.artifacts.candidates[1].title == "新二"
@@ -192,7 +194,7 @@ def test_edit_rejected_for_image():
         "t1", "image", ImageArtifacts(images=[ImageItem(url="http://x/1.jpg")]),
     )
     with pytest.raises(ValidationError):
-        svc.edit("t1", {"markdown": "x"})
+        svc.edit("t1", ArtifactEdit(markdown="x"))
 
 
 def test_get_graph_active():

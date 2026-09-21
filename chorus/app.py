@@ -14,6 +14,7 @@ from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
 from chorus.config import (
+    CHAT_MODELS,
     DATA_DIR,
     LOG_BACKUP_COUNT,
     LOG_CLEANUP_INTERVAL,
@@ -86,7 +87,7 @@ def create_app() -> FastAPI:
     session_service = SessionService(session_repo)
     trace_service = TraceService(trace_repo)
 
-    chat_models = ChatModelProvider(settings_service)
+    chat_models = ChatModelProvider(settings_service, CHAT_MODELS)
     # 旁路 LLM 共用固定型号:标题生成 / agent 旁白 / 记忆提取整理 / 历史摘要 / 输入建议,不随用户当前对话设置变动
     bypass_entry = chat_models.bypass_entry()
     bypass_caller = BypassCaller(

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 
+from chorus.domain.task.artifacts import IdeaCandidate, ImageItem
 from chorus.domain.task.errors import ValidationError
 from chorus.domain.task.markdown import (
     parse_script_md,
@@ -14,7 +15,7 @@ from chorus.domain.task.progress import UnitCounter
 def test_parse_script_md_returns_markdown():
     body = "---\ntitle: 阳台上的光\n---\n\n阳台上的光，是慢慢挪过来的。\n\n- 粗陶杯\n- 粗砂糖\n\n> 秋天不是用来赶的。"
     out = parse_script_md(body)
-    assert out["markdown"] == body
+    assert out.markdown == body
 
 
 def test_parse_script_md_requires_front_matter_title_and_rejects_h1():
@@ -34,16 +35,16 @@ def test_parse_script_md_empty_body_raises():
 def test_parse_idea_md_candidates():
     body = "### 阳台上的慢时光\n- 视角：物候\n- 理由：以光线挪动串起时间\n\n### 一杯仪式感\n- 视角：器物\n- 理由：器物即情绪"
     out = parse_idea_md(body)
-    assert out["selected"] is None
-    assert len(out["candidates"]) == 2
-    assert out["candidates"][0] == {"index": 0, "title": "阳台上的慢时光", "angle": "物候", "reason": "以光线挪动串起时间"}
-    assert out["candidates"][1]["index"] == 1
+    assert out.selected is None
+    assert len(out.candidates) == 2
+    assert out.candidates[0] == IdeaCandidate(index=0, title="阳台上的慢时光", angle="物候", reason="以光线挪动串起时间")
+    assert out.candidates[1].index == 1
 
 
 def test_parse_image_md_captions():
     body = "![阳台俯拍](http://x/a.png)\n\n![侧拍暖光](http://x/b.png)"
     out = parse_image_md(body)
-    assert out["images"] == [{"url": "http://x/a.png", "caption": "阳台俯拍"}, {"url": "http://x/b.png", "caption": "侧拍暖光"}]
+    assert out.images == [ImageItem(url="http://x/a.png", caption="阳台俯拍"), ImageItem(url="http://x/b.png", caption="侧拍暖光")]
 
 
 def test_parse_image_md_all_empty_url_raises():
@@ -70,15 +71,15 @@ def test_parse_postcard_md_strips_refs_to_meta():
             "## 关于这杯\n\n阳台上的光。\n\n"
             "> 秋天不是用来赶的。\n\n![俯拍](http://x/2.png)")
     out = parse_postcard_md(body)
-    assert out["meta"]["preview_ref"] == "web-blog/preview/desktop.html"
-    assert out["meta"]["stylesheet_ref"] == "web-blog/preview/desktop.css"
-    assert out["meta"]["title"] == "秋日阳台"
-    assert "preview_ref" not in out["markdown"]
-    assert "stylesheet_ref" not in out["markdown"]
-    assert "summary: 一句话摘要" in out["markdown"]
-    assert "tags: [秋日, 阳台]" in out["markdown"]
-    assert "title: 秋日阳台" in out["markdown"]
-    assert "![俯拍](http://x/2.png)" in out["markdown"]
+    assert out.meta.preview_ref == "web-blog/preview/desktop.html"
+    assert out.meta.stylesheet_ref == "web-blog/preview/desktop.css"
+    assert out.meta.title == "秋日阳台"
+    assert "preview_ref" not in out.markdown
+    assert "stylesheet_ref" not in out.markdown
+    assert "summary: 一句话摘要" in out.markdown
+    assert "tags: [秋日, 阳台]" in out.markdown
+    assert "title: 秋日阳台" in out.markdown
+    assert "![俯拍](http://x/2.png)" in out.markdown
 
 
 def test_parse_postcard_md_image_with_alt():
@@ -86,8 +87,8 @@ def test_parse_postcard_md_image_with_alt():
     body = ("---\ntitle: t\npreview_ref: a/b\nstylesheet_ref: a/c\nsummary: s\ntags: [x]\n---\n\n"
             "![俯拍](http://x/3.png)")
     out = parse_postcard_md(body)
-    assert out["meta"]["title"] == "t"
-    assert "![俯拍](http://x/3.png)" in out["markdown"]
+    assert out.meta.title == "t"
+    assert "![俯拍](http://x/3.png)" in out.markdown
 
 
 def test_parse_postcard_md_requires_refs():

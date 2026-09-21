@@ -7,6 +7,10 @@ from urllib import error as urlerror
 from urllib import request as urlrequest
 
 
+class ArkImageError(Exception):
+    """图像生成接口调用失败。"""
+
+
 class ArkImageClient:
     def __init__(self, api_key: str, base_url: str):
         self._api_key = api_key
@@ -34,10 +38,12 @@ class ArkImageClient:
             with urlrequest.urlopen(req, timeout=120) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urlerror.HTTPError as e:
-            return f"Error: 图像服务返回 HTTP {e.code}"
+            raise ArkImageError(f"图像服务返回 HTTP {e.code}") from e
         except Exception as e:
-            return f"Error: 图像请求失败: {type(e).__name__}"
+            raise ArkImageError(f"图像请求失败: {type(e).__name__}") from e
 
         items = data.get("data") or []
         img_url = items[0].get("url") if items else ""
-        return img_url or "Error: 图像服务未返回图片"
+        if not img_url:
+            raise ArkImageError("图像服务未返回图片")
+        return img_url

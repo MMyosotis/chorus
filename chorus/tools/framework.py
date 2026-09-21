@@ -49,9 +49,8 @@ class Suspend(ToolOutcome):
 
 @dataclass(frozen=True)
 class ToolRunResult:
-    """工具运行的统一返回：构造时包裹模型可见正文，并携带活动产物。"""
+    """工具运行的统一返回：构造时包裹模型可见正文。"""
     outcome: ToolOutcome
-    activity_meta: Optional[dict] = None
     units_produced: int = 0
     events: tuple = ()
     is_error: bool = False
@@ -66,7 +65,6 @@ class DispatchResult:
     """派发返回：走向、耗时与结构化产物。"""
     outcome: ToolOutcome
     duration_ms: int
-    activity_meta: Optional[dict] = None
     units_produced: int = 0
     events: tuple = ()
     status: Literal["success", "error"] = "success"
@@ -83,7 +81,7 @@ class ToolContext:
 class Tool(ABC):
     name: str = ""
     description: str = ""
-    parameters: dict = {}
+    parameters: dict
     running_label: Optional[str] = None
     activity_kind: str = ""
     activity_detail_arg: str = ""
@@ -151,7 +149,7 @@ class ToolDispatch:
         if tool is None:
             return DispatchResult(
                 outcome=ToolRunResult(Reply(f"Error: unknown tool '{call.name}'"), is_error=True).outcome,
-                duration_ms=0, activity_meta=None, status="error",
+                duration_ms=0, status="error",
             )
 
         start = perf_counter()
@@ -162,12 +160,11 @@ class ToolDispatch:
             return DispatchResult(
                 outcome=ToolRunResult(Reply(f"Error executing tool '{call.name}': {e}"), is_error=True).outcome,
                 duration_ms=int((perf_counter() - start) * 1000),
-                activity_meta=None, status="error",
+                status="error",
             )
         return DispatchResult(
             outcome=raw.outcome,
             duration_ms=int((perf_counter() - start) * 1000),
-            activity_meta=raw.activity_meta,
             units_produced=raw.units_produced,
             events=raw.events,
         )

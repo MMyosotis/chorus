@@ -15,7 +15,7 @@ from chorus.agents.scheduler import TaskScheduler
 from chorus.agents.subagent import SubAgentService
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.skill import SkillLoader
-from chorus.domain.task import ACTIVE_STATUSES, TaskStatus
+from chorus.domain.task import ACTIVE_STATUSES, ArtifactEdit, IdeaCandidate, TaskStatus
 from chorus.hooks import HookRegistry, TraceEmitter
 from chorus.repo.engine import build_engine
 from chorus.repo.intent_confirmation import IntentConfirmationRepository
@@ -235,9 +235,9 @@ def test_edit_flows_to_downstream():
     assert task_repo.get(idea.id).status == TaskStatus.AWAITING_CONFIRM
 
     # 编辑选中候选的标题，再确认
-    task_service.edit(idea.id, {"candidates": [
-        {"index": 0, "title": "手改标题", "angle": "清凉", "reason": "应季"},
-    ]})
+    task_service.edit(idea.id, ArtifactEdit(candidates=[
+        IdeaCandidate(index=0, title="手改标题", angle="清凉", reason="应季"),
+    ]))
     task_service.confirm(idea.id, selected=0)
 
     scheduler._tick()

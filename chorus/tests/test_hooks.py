@@ -22,6 +22,7 @@ from chorus.repo.trace import TraceRepository
 from chorus.services.message import MessageService
 from chorus.services.session import SessionService
 from chorus.services.trace import TraceService
+from chorus.tools.models import ToolCall
 from chorus.tests._helpers import build_compact_service, fresh_engine, seed_session
 
 
@@ -81,7 +82,7 @@ def test_trace_propagates_subagent_source_and_task_id():
     assert ev.type == "trace"
     assert ev.phase is TracePhase.MODEL_REQUEST
     assert ev.message_id == "m1"
-    assert ev.payload["model"] == "fake-model"
+    assert ev.payload.model == "fake-model"
     # source/task_id 传播到持久化 trace（事件本身不载这两个字段）
     entry = trace_svc.list_traces("s1")[0]
     assert entry.source == "subagent"
@@ -107,7 +108,7 @@ def test_trace_tool_result_payload_from_result_object():
     emitter = TraceEmitter(trace_svc, _StubDispatcher())
     ctx = AgentContext(session_id="s1", chat_model="test-model", source="subagent", task_id="t1")
     ctx.turn.message_id = "m1"
-    call = {"id": "call-1", "name": "search", "arguments": {"q": "x"}}
+    call = ToolCall(id="call-1", name="search", arguments={"q": "x"})
     result = types.SimpleNamespace(
         outcome=types.SimpleNamespace(content="结果"), duration_ms=42, status="error",
     )
@@ -117,11 +118,11 @@ def test_trace_tool_result_payload_from_result_object():
     assert len(events) == 1
     ev = events[0]
     assert ev.phase is TracePhase.TOOL_RESULT
-    assert ev.payload["tool_call_id"] == "call-1"
-    assert ev.payload["name"] == "search"
-    assert ev.payload["content"] == "结果"
-    assert ev.payload["duration_ms"] == 42
-    assert ev.payload["status"] == "error"
+    assert ev.payload.tool_call_id == "call-1"
+    assert ev.payload.name == "search"
+    assert ev.payload.content == "结果"
+    assert ev.payload.duration_ms == 42
+    assert ev.payload.status == "error"
     assert trace_svc.list_traces("s1")[0].source == "subagent"
 
 

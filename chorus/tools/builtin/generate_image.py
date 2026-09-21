@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Protocol
 
-from chorus.config import IMAGE_MODELS
+from chorus.config import IMAGE_MODELS, ImageModelConfig
 from chorus.services.settings import SettingsService
-from chorus.tools.clients.ark_image import ArkImageClient
+from chorus.tools.clients.ark_image import ArkImageClient, ArkImageError
 from chorus.tools.framework import Reply, Tool, ToolContext, ToolRunResult
 
 _FAKE_URL = "https://gips2.baidu.com/it/u=195724436,3554684702&fm=3028&app=3028&f=JPEG&fmt=auto?w=1280&h=960"
@@ -27,26 +27,25 @@ class ImageModelEntry:
     model_id: str
 
 
-def _build_ark(model: dict) -> ImageClient:
-    options = model["options"]
-    return ArkImageClient(os.environ.get(options["api_key_env"], ""), options["base_url"])
+def _build_ark(model: ImageModelConfig) -> ImageClient:
+    options = model.options
+    return ArkImageClient(os.environ.get(options.api_key_env, ""), options.base_url)
 
 
 _BUILDERS = {"ark": _build_ark}
 
 
 class ImageModelProvider:
-    def __init__(self, settings_service: SettingsService, image_models: Optional[list[dict]] = None):
+    def __init__(self, settings_service: SettingsService, image_models: list[ImageModelConfig]):
         self._settings = settings_service
         self._entries: dict[str, ImageModelEntry] = {
-            model["model_name"]: self._build_entry(model)
-            for model in (image_models or IMAGE_MODELS)
+            model.model_name: self._build_entry(model) for model in image_models
         }
 
     @staticmethod
-    def _build_entry(model: dict) -> ImageModelEntry:
-        builder = _BUILDERS[model["provider"]]
-        return ImageModelEntry(client=builder(model), model_id=model["options"]["model_id"])
+    def _build_entry(model: ImageModelConfig) -> ImageModelEntry:
+        builder = _BUILDERS[model.provider]
+        return ImageModelEntry(client=builder(model), model_id=model.options.model_id)
 
     def build_entry(self, model_name: str) -> ImageModelEntry:
         return self._entries[model_name]
@@ -93,16 +92,14 @@ class GenerateImageTool(Tool):
 
     def run(self, arguments: dict, ctx: ToolContext) -> ToolRunResult:
         if self._settings.get_image_test_mode():
-            return ToolRunResult(Reply(_FAKE_URL), activity_meta={"url": _FAKE_URL}, units_produced=1)
+            return ToolRunResult(Reply(_FAKE_URL), units_produced=1)
         entry = self._provider.get_entry()
-        url = entry.client.generate(
-            arguments.get("prompt", ""),
-            entry.model_id,
-            arguments.get("size", "1024x1024"),
-        )
-        # 生图服务失败返 "Error: ..."，成功返 URL；失败不计结构单元
-        is_error = url.startswith("Error:")
-        return ToolRunResult(
-            Reply(url), is_error=is_error, activity_meta={"url": url},
-            units_produced=0 if is_error else 1,
-        )
+        try:
+            url = entry.client.generate(
+                arguments.get("prompt", ""),
+                entry.model_id,
+                arguments.get("size", "1024x1024"),
+            )
+        except ArkImageError as e:
+            return ToolRunResult(Reply(str(e)), is_error=True, units_produced=0)
+        return ToolRunResult(Reply(url), units_produced=1)

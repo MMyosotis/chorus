@@ -18,7 +18,7 @@ from chorus.repo.models import TaskArtifactsRecord
 
 def _to_domain(r: TaskArtifactsRecord) -> TaskArtifacts:
     """按本行角色类型用注册表里的模型把 JSON 还原成强类型产物。"""
-    artifacts = AGENT_PROFILES[AgentType(r.agent_type)].build_artifacts(r.artifacts)
+    artifacts = AGENT_PROFILES[AgentType(r.agent_type)].hydrate_artifacts(r.artifacts)
     return TaskArtifacts(task_id=r.task_id, artifacts=artifacts)
 
 

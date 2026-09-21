@@ -58,3 +58,38 @@ class OptionPrompt(OptionPromptDef):
     status: OptionStatus = "open"
     answers: list[OptionAnswer] = Field(default_factory=list)
     created_at: float = Field(default_factory=time.time)
+
+    def prompt_fields(self) -> dict:
+        """落库提问列的内容：提问定义加已作答时的作答记录。"""
+        fields = self.model_dump(include=set(OptionPromptDef.model_fields), mode="json")
+        if self.answers:
+            fields["answers"] = [answer.model_dump(mode="json", exclude_none=True) for answer in self.answers]
+        return fields
+
+
+class OptionAnswerView(OptionAnswer):
+    """作答的传输视图：未填的补充说明不出场。"""
+
+    custom_text: Optional[str] = Field(default=None, exclude_if=lambda v: v is None)
+
+
+class OptionPromptView(OptionPromptDef):
+    """选项征询单的传输视图：不带会话归属，空锚点不出场。"""
+
+    prompt_id: str
+    message_id: Optional[str] = Field(default=None, exclude_if=lambda v: v is None)
+    status: OptionStatus = "open"
+    answers: list[OptionAnswerView] = Field(default_factory=list)
+    created_at: float = Field(default_factory=time.time)
+
+    @classmethod
+    def from_prompt(cls, prompt: OptionPrompt) -> "OptionPromptView":
+        """从征询单构造传输视图。"""
+        return cls.model_validate({
+            **prompt.model_dump(include=set(OptionPromptDef.model_fields)),
+            "prompt_id": prompt.prompt_id,
+            "message_id": prompt.message_id,
+            "status": prompt.status,
+            "answers": [OptionAnswerView.model_validate(answer.model_dump()) for answer in prompt.answers],
+            "created_at": prompt.created_at,
+        })

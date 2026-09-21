@@ -64,11 +64,20 @@ class ImageArtifacts:
 
 
 @pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class PostCardMeta:
+    """成品卡剥离的资源引用元数据，空默认容忍历史落库行。"""
+
+    preview_ref: str = ""
+    stylesheet_ref: str = ""
+    title: str = ""
+
+
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
 class PostCard:
     """成品卡片：标准 markdown 正文 + 剥离的资源引用元数据。"""
 
     markdown: str
-    meta: dict[str, Any] = Field(default_factory=dict)
+    meta: PostCardMeta = Field(default_factory=PostCardMeta)
 
 
 @singledispatch
@@ -87,25 +96,32 @@ def _postcard_text(artifacts: PostCard) -> str:
     return artifacts.markdown
 
 
+@pydataclass(config=ConfigDict(frozen=True, extra="forbid"))
+class ArtifactEdit:
+    """人工编辑载荷：按产物类型各取所需字段。"""
+
+    candidates: Optional[list[IdeaCandidate]] = None
+    markdown: Optional[str] = None
+
+
 @singledispatch
-def build_edited_artifacts(current: Any, payload: dict) -> Any:
+def build_edited_artifacts(current: Any, edit: ArtifactEdit) -> Any:
     """人工编辑载荷按产物类型合成新产物，未注册的类型拒绝编辑。"""
     raise ValidationError("该角色产物不支持编辑", "只有选题、文案与成品可人工编辑")
 
 
 @build_edited_artifacts.register
-def _idea_edit(current: IdeaArtifacts, payload: dict) -> IdeaArtifacts:
+def _idea_edit(current: IdeaArtifacts, edit: ArtifactEdit) -> IdeaArtifacts:
     """选题编辑候选字段，选中项保持。"""
-    candidates = [IdeaCandidate(**item) for item in payload["candidates"]]
-    return IdeaArtifacts(candidates=candidates, selected=current.selected)
+    return IdeaArtifacts(candidates=list(edit.candidates), selected=current.selected)
 
 
 @build_edited_artifacts.register
-def _script_edit(current: ScriptArtifacts, payload: dict) -> ScriptArtifacts:
-    return ScriptArtifacts(markdown=payload["markdown"])
+def _script_edit(current: ScriptArtifacts, edit: ArtifactEdit) -> ScriptArtifacts:
+    return ScriptArtifacts(markdown=edit.markdown)
 
 
 @build_edited_artifacts.register
-def _postcard_edit(current: PostCard, payload: dict) -> PostCard:
+def _postcard_edit(current: PostCard, edit: ArtifactEdit) -> PostCard:
     """成品编辑只换正文，资源元数据保留。"""
-    return PostCard(markdown=payload["markdown"], meta=current.meta)
+    return PostCard(markdown=edit.markdown, meta=current.meta)

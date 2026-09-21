@@ -23,6 +23,11 @@ class StepSpec:
     deps: list[int]
     note: str = ""
 
+    @classmethod
+    def from_tool_payload(cls, step: dict) -> "StepSpec":
+        """从建图工具入参构造步骤规格。"""
+        return cls(agent_type=AgentType(step["agent_type"]), deps=step.get("deps", []), note=step.get("note", ""))
+
 
 @dataclass
 class TaskPlan:

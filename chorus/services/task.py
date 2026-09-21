@@ -11,6 +11,7 @@ from chorus.domain.task import (
     ACTIVE_STATUSES,
     CANCELLABLE_STATUSES,
     TERMINAL_STATUSES,
+    ArtifactEdit,
     DeliveredProduct,
     AgentType,
     PostCard,
@@ -64,11 +65,11 @@ class TaskService:
         _logger.info("hil confirm", extra={"task_id": task_id, "selected": selected})
         return {"id": task_id, "status": TaskStatus.FINISHED}
 
-    def edit(self, task_id: str, payload: dict) -> dict:
+    def edit(self, task_id: str, edit: ArtifactEdit) -> dict:
         """人工编辑产物：按产物类型校验合成，落库。"""
         task = self._task_repo.get(task_id)
         art = self._artifacts_repo.load(task_id)
-        artifacts = build_edited_artifacts(art.artifacts, payload)
+        artifacts = build_edited_artifacts(art.artifacts, edit)
         self._artifacts_repo.upsert(task_id, task.agent_type, artifacts=artifacts)
         _logger.info("hil edit", extra={"task_id": task_id, "agent_type": task.agent_type})
         return {"id": task_id, "status": task.status}

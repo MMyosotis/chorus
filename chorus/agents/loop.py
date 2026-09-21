@@ -156,9 +156,7 @@ class AgentLoop:
             id=accumulator.id, name=accumulator.name,
             arguments=parse_tool_arguments(accumulator.arguments),
         )
-        call_view = {"id": call.id, "name": call.name, "arguments": call.arguments}
-
-        list(self._hooks.trigger("PreToolUse", ctx, call_view))
+        list(self._hooks.trigger("PreToolUse", ctx, call))
         strategy.before_dispatch(call)
         yield ToolCallEvent(
             id=call.id, name=call.name, arguments=call.arguments,
@@ -171,5 +169,5 @@ class AgentLoop:
             tool_call_id=call.id, name=call.name,
             content=result.outcome.content, duration_ms=result.duration_ms,
         )
-        list(self._hooks.trigger("PostToolUse", ctx, call_view, result))
+        list(self._hooks.trigger("PostToolUse", ctx, call, result))
         return call, result

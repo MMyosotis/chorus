@@ -32,7 +32,7 @@ def build_delivered_products(pairs: list[tuple[Task, PostCard]]) -> list[Deliver
     return [DeliveredProduct(
         id=task.id,
         message_id=task.message_id,
-        title=card.meta.get("title", ""),
+        title=card.meta.title,
         markdown=card.markdown,
         created_at=task.created_at,
     ) for task, card in ordered]
@@ -54,6 +54,6 @@ CANCELLED_PIPELINE_RECEIPT = "创作流水线已被用户放弃，本次未交�
 def render_delivery_receipt(task_id: str, card: PostCard) -> str:
     """把已交付成品组装成喂给模型的收口回执。"""
     return (
-        f"创作流水线已收口，成品标识={task_id}（标题：{card.meta['title']}），"
+        f"创作流水线已收口，成品标识={task_id}（标题：{card.meta.title}），"
         "成品全文已交付用户，内容如下：\n\n" + card.markdown
     )

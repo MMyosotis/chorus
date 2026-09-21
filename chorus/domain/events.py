@@ -6,7 +6,9 @@ from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chorus.domain.trace import TracePhase
+from chorus.domain.intent import IntentStateView
+from chorus.domain.option import OptionQuestion
+from chorus.domain.trace import TracePayload, TracePhase
 
 
 class _EventBase(BaseModel):
@@ -57,7 +59,7 @@ class TraceEvent(_EventBase):
     task_id: Optional[str] = None
     source: str = "supervisor"
     created_at: float
-    payload: dict
+    payload: TracePayload
 
 
 class TitleUpdateEvent(_EventBase):
@@ -86,14 +88,14 @@ class BusyEvent(_EventBase):
 
 class IntentStateEvent(_EventBase):
     type: Literal["intent_state"] = "intent_state"
-    state: dict
+    state: IntentStateView
 
 
 class OptionPromptEvent(_EventBase):
     type: Literal["option_prompt"] = "option_prompt"
     prompt_id: str
     message_id: Optional[str] = None
-    questions: list[dict]
+    questions: list[OptionQuestion]
 
 
 SseEvent = Annotated[

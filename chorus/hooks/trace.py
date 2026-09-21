@@ -18,6 +18,7 @@ from chorus.domain.trace import (
 )
 from chorus.services.trace import TraceService
 from chorus.tools import ToolDispatch
+from chorus.tools.models import ToolCall
 
 
 class TraceEmitter:
@@ -35,16 +36,16 @@ class TraceEmitter:
     def after_model_response(self, ctx: AgentContext) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.MODEL_RESPONSE, self._response_payload(ctx))]
 
-    def on_tool_call(self, ctx: AgentContext, call: dict) -> Iterable[SseEvent]:
+    def on_tool_call(self, ctx: AgentContext, call: ToolCall) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.TOOL_CALL, TraceToolCall(
-            tool_call_id=call["id"], name=call["name"], arguments=call["arguments"],
-            display=self._dispatcher.format_display(call["name"], call["arguments"]),
-            running_label=self._dispatcher.running_label(call["name"]),
+            tool_call_id=call.id, name=call.name, arguments=call.arguments,
+            display=self._dispatcher.format_display(call.name, call.arguments),
+            running_label=self._dispatcher.running_label(call.name),
         ))]
 
-    def on_tool_result(self, ctx: AgentContext, call: dict, result: Any) -> Iterable[SseEvent]:
+    def on_tool_result(self, ctx: AgentContext, call: ToolCall, result: Any) -> Iterable[SseEvent]:
         return [self._emit(ctx, TracePhase.TOOL_RESULT, TraceToolResult(
-            tool_call_id=call["id"], name=call["name"],
+            tool_call_id=call.id, name=call.name,
             content=result.outcome.content, duration_ms=result.duration_ms,
             status=result.status,
         ))]
@@ -61,7 +62,7 @@ class TraceEmitter:
         return TraceEvent(
             phase=phase, message_id=ctx.turn.message_id or None,
             task_id=ctx.task_id, source=ctx.source, created_at=created_at,
-            payload=payload.model_dump(),
+            payload=payload,
         )
 
     @staticmethod

@@ -71,6 +71,26 @@ class IntentState(IntentSnapshot):
     version: int = 0
     updated_at: float = Field(default_factory=time.time)
 
+    @classmethod
+    def from_update(cls, update: IntentStateUpdate, *, session_id: str, version: int) -> "IntentState":
+        """从工具提交的完整快照构造会话状态，会话归属与版本由服务侧给定。"""
+        return cls.model_validate({**update.model_dump(), "session_id": session_id, "version": version})
+
+
+class IntentStateView(IntentState):
+    """意图状态的传输视图：待确认时携带触发留档的锚点字段。"""
+
+    confirmation_id: Optional[str] = Field(default=None, exclude_if=lambda v: v is None)
+    message_id: Optional[str] = Field(default=None, exclude_if=lambda v: v is None)
+
+    @classmethod
+    def from_state(cls, state: IntentState, confirmation: Optional["IntentConfirmation"] = None) -> "IntentStateView":
+        """从会话状态构造传输视图，传入留档则携带其锚点。"""
+        fields = state.model_dump()
+        if confirmation is not None:
+            fields.update(confirmation_id=confirmation.confirmation_id, message_id=confirmation.message_id)
+        return cls.model_validate(fields)
+
 
 ConfirmationStatus = Literal["open", "answered"]
 
@@ -94,6 +114,46 @@ class IntentConfirmation(IntentSnapshot):
     status: ConfirmationStatus = "open"
     answer: Optional[IntentConfirmationAnswer] = None
     created_at: float = Field(default_factory=time.time)
+
+    @classmethod
+    def from_snapshot(
+        cls, snapshot: IntentSnapshot, *, confirmation_id: str, session_id: str,
+        message_id: Optional[str] = None,
+    ) -> "IntentConfirmation":
+        """固化一份意图快照为待确认留档。"""
+        fields = snapshot.model_dump(include=set(IntentSnapshot.model_fields))
+        fields.update(confirmation_id=confirmation_id, session_id=session_id, message_id=message_id)
+        return cls.model_validate(fields)
+
+    def snapshot_fields(self) -> dict:
+        """落库快照列的内容：意图快照加已作答时的作答记录。"""
+        fields = self.model_dump(include=set(IntentSnapshot.model_fields), mode="json")
+        if self.answer:
+            fields["answer"] = self.answer.model_dump(mode="json", exclude_none=True)
+        return fields
+
+
+class IntentConfirmationView(IntentSnapshot):
+    """意图确认留档的传输视图：不带会话归属，空锚点与空作答不出场。"""
+
+    confirmation_id: str
+    message_id: Optional[str] = Field(default=None, exclude_if=lambda v: v is None)
+    status: ConfirmationStatus = "open"
+    answer: Optional[IntentConfirmationAnswer] = Field(default=None, exclude_if=lambda v: v is None)
+    created_at: float = Field(default_factory=time.time)
+
+    @classmethod
+    def from_confirmation(cls, confirmation: IntentConfirmation) -> "IntentConfirmationView":
+        """从留档构造传输视图。"""
+        fields = confirmation.model_dump(include=set(IntentSnapshot.model_fields))
+        fields.update(
+            confirmation_id=confirmation.confirmation_id,
+            message_id=confirmation.message_id,
+            status=confirmation.status,
+            answer=confirmation.answer,
+            created_at=confirmation.created_at,
+        )
+        return cls.model_validate(fields)
 
 
 def render_intent_state(state: IntentState) -> str:

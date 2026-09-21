@@ -90,7 +90,7 @@ class PresentOptionsTool(Tool):
         event = OptionPromptEvent(
             prompt_id=prompt.prompt_id,
             message_id=prompt.message_id,
-            questions=[question.model_dump() for question in prompt.questions],
+            questions=prompt.questions,
         )
         return ToolRunResult(
             Suspend(f"已向用户征询选择（{len(questions)} 项），等待用户完成作答。"),
@@ -110,9 +110,7 @@ class PresentOptionsTool(Tool):
             )
             receipt = f"{question.question}：{custom_text}"
         else:
-            label = next(
-                option.label for option in question.options if option.signal == submitted_signal
-            )
+            label = next(option.label for option in question.options if option.signal == submitted_signal)
             answer = OptionAnswer(signal=submitted_signal, label=label)
             receipt = f"{question.question}：{label}"
         return answer, receipt

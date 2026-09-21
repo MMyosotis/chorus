@@ -10,6 +10,7 @@ from chorus.domain.task import (
     ImageArtifacts,
     ImageItem,
     PostCard,
+    PostCardMeta,
     ScriptArtifacts,
     Task,
 )
@@ -125,7 +126,7 @@ def test_roundtrip_postcard():
     repo = TaskArtifactsRepository(engine)
     card = PostCard(
         markdown="---\ntitle: 夏日晚风\n---\n\n一段正文\n\n![封](http://x/a.jpg)",
-        meta={"preview_ref": "a/b", "stylesheet_ref": "a/c", "title": "夏日晚风"},
+        meta=PostCardMeta(preview_ref="a/b", stylesheet_ref="a/c", title="夏日晚风"),
     )
     repo.upsert("tf", "finalize", card)
     got = repo.load("tf")

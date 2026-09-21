@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.bypass import BypassScope
-from chorus.domain.events import IntentStateEvent
+from chorus.domain.events import IntentStateEvent, TraceEvent
+from chorus.domain.intent import IntentStateView
 from chorus.domain.trace import TraceEntry
 from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.routes.providers import (
@@ -109,7 +110,7 @@ def _resume_with_tool(
 ) -> Iterator[str]:
     """外部信号解开挂起的工具：让工具翻状态拿回执文案，再续跑 loop。"""
     result_text = tools.get_tool(tool_name).resolve_external(session_id, signal)
-    yield sse(IntentStateEvent(state=intent.get(session_id).model_dump(mode="json")))
+    yield sse(IntentStateEvent(state=IntentStateView.from_state(intent.get(session_id))))
     for event in supervisor.resume(session_id, tool_name, result_text):
         yield sse(event)
 
@@ -211,12 +212,8 @@ def choose_option(
 
 
 def _trace_to_dict(entry: TraceEntry) -> dict:
-    return {
-        "type": "trace",
-        "phase": entry.phase.value,
-        "message_id": entry.message_id,
-        "task_id": entry.task_id,
-        "source": entry.source,
-        "created_at": entry.created_at,
-        "payload": entry.payload.model_dump(),
-    }
+    return TraceEvent(
+        phase=entry.phase, message_id=entry.message_id,
+        task_id=entry.task_id, source=entry.source,
+        created_at=entry.created_at, payload=entry.payload,
+    ).model_dump(mode="json")

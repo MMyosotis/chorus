@@ -54,7 +54,7 @@ class _SpyDispatcher:
     """桩化派发器：恒返回传走向，展示文案给最小实现。"""
 
     def dispatch(self, call, ctx):
-        return DispatchResult(outcome=Reply("ok"), duration_ms=1, activity_meta=None)
+        return DispatchResult(outcome=Reply("ok"), duration_ms=1)
 
     def format_display(self, name, arguments):
         return name
