@@ -1,6 +1,6 @@
 """SSE 事件 sealed 联合断言：type 判别 / 序列化往返 / 必填校验 / BusyEvent 契约。
 
-11 种事件各持唯一 type 字面量、frozen + extra=forbid、JSON 经联合类型往返、缺必填抛错。
+12 种事件各持唯一 type 字面量、frozen + extra=forbid、JSON 经联合类型往返、缺必填抛错。
 BusyEvent 携带 content（业务忙非错误，supervisor 创作准入拒绝时回传）。
 """
 from __future__ import annotations
@@ -8,11 +8,15 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
+from chorus.domain.intent import IntentConfirmationView, IntentStateView
+from chorus.domain.option import OptionQuestion, OptionPromptView
 from chorus.domain.events import (
     BusyEvent,
     DoneEvent,
     ErrorEvent,
+    IntentStateEvent,
     MessageStartEvent,
+    OptionPromptEvent,
     ReasoningDoneEvent,
     ReasoningEvent,
     SseEvent,
@@ -20,9 +24,7 @@ from chorus.domain.events import (
     TokenEvent,
     ToolCallEvent,
     ToolResultEvent,
-    TraceEvent,
 )
-from chorus.domain.trace import TracePhase, UserInput
 
 
 _FIXTURES = [
@@ -32,11 +34,12 @@ _FIXTURES = [
     (TokenEvent, {"content": "hi"}, "token"),
     (ToolCallEvent, {"id": "c1", "name": "gen", "arguments": {"a": 1}, "display": "生成"}, "tool_call"),
     (ToolResultEvent, {"tool_call_id": "c1", "name": "gen", "content": "ok", "duration_ms": 5}, "tool_result"),
-    (TraceEvent, {"phase": TracePhase.MODEL_REQUEST, "created_at": 1.0, "payload": UserInput(content="hi")}, "trace"),
     (TitleUpdateEvent, {"id": "s1", "title": "夏日晚风"}, "title_update"),
     (DoneEvent, {}, "done"),
     (ErrorEvent, {"content": "炸了"}, "error"),
     (BusyEvent, {"content": "创作中"}, "busy"),
+    (IntentStateEvent, {"state": IntentStateView(session_id="s1", image_count=0)}, "intent_state"),
+    (OptionPromptEvent, {"prompt": OptionPromptView(prompt_id="p1", questions=[OptionQuestion(question="选哪个", options=[])])}, "option_prompt"),
 ]
 
 
@@ -67,6 +70,10 @@ def test_required_fields_enforced():
         MessageStartEvent()  # 缺标识
     with pytest.raises(ValidationError):
         ToolCallEvent(id="c1", name="gen", display="x")  # 缺参数
+    with pytest.raises(ValidationError):
+        IntentStateEvent()  # 缺状态
+    with pytest.raises(ValidationError):
+        OptionPromptEvent()  # 缺征询单
 
 
 def test_frozen_and_extra_forbidden():
@@ -83,19 +90,28 @@ def test_busy_event_carries_content():
     assert ev.content == "该会话有创作任务进行中"
 
 
-def test_trace_event_phase_serializes_as_enum_value():
-    ev = TraceEvent(phase=TracePhase.TOOL_CALL, created_at=2.5, payload=UserInput(content="hi"))
-    dump = ev.model_dump()
-    assert dump["phase"] == TracePhase.TOOL_CALL
-    j = ev.model_dump_json()
-    assert '"tool_call"' in j
-
-
 def test_tool_call_event_optional_running_label():
     ev = ToolCallEvent(id="c1", name="gen", arguments={}, display="x")
     assert ev.running_label is None  # 可选字段默认 None
     ev2 = ToolCallEvent(id="c1", name="gen", arguments={}, display="x", running_label="运行中")
     assert ev2.running_label == "运行中"
+
+
+def test_message_start_resume_boundary_defaults_off():
+    assert MessageStartEvent(id="m1").resume_boundary is False
+    assert MessageStartEvent(id="m1", resume_boundary=True).resume_boundary is True
+
+
+def test_intent_state_optional_confirmation():
+    state = IntentStateView(session_id="s1", image_count=0)
+    assert IntentStateEvent(state=state).confirmation is None
+    attached = IntentStateEvent(
+        state=state,
+        confirmation=IntentConfirmationView(confirmation_id="c1", image_count=0, created_at=1.0),
+    )
+    assert attached.confirmation == IntentConfirmationView(
+        confirmation_id="c1", image_count=0, created_at=1.0,
+    )
 
 
 def main():

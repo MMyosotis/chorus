@@ -1,7 +1,9 @@
 """任务图视图值对象：拓扑序聚合 + 序列化，纯数据形状不碰数据库。"""
 from __future__ import annotations
 
-from typing import Optional, Union
+import re
+from functools import singledispatch
+from typing import Any, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.dataclasses import dataclass as pydataclass
@@ -31,6 +33,15 @@ _STAGE_AGENT_PRIORITY: dict[AgentType, int] = {
         AgentType.IMAGE,
         AgentType.FINALIZE,
     ))
+}
+
+_OUTPUT_ORDER: tuple[AgentType, ...] = (AgentType.IDEA, AgentType.SCRIPT, AgentType.IMAGE, AgentType.FINALIZE)
+_H2_RE = re.compile(r"(?m)^##\s")
+_EMPTY_OUTPUT_FIELDS: dict[AgentType, dict] = {
+    AgentType.IDEA: {"title": ""},
+    AgentType.SCRIPT: {"char_count": 0, "block_count": 0},
+    AgentType.IMAGE: {"image_count": 0},
+    AgentType.FINALIZE: {"title": ""},
 }
 
 
@@ -159,4 +170,58 @@ def dump_task_graph(graph: TaskGraph) -> dict:
         "pipeline_id": graph.pipeline_id,
         "active": graph.active,
         "tasks": [TaskNodeResponse.from_view(node).model_dump(mode="json") for node in graph.nodes],
+        "outputs": _output_rows(graph),
     }
+
+
+@singledispatch
+def _artifact_fields(artifacts: Any) -> dict:
+    """按产物类型汇总产出段字段。"""
+    raise NotImplementedError
+
+
+@_artifact_fields.register
+def _idea_fields(artifacts: IdeaArtifacts) -> dict:
+    candidate = artifacts.selected_candidate()
+    return {"title": candidate.title if candidate else ""}
+
+
+@_artifact_fields.register
+def _script_fields(artifacts: ScriptArtifacts) -> dict:
+    return {
+        "char_count": len(artifacts.markdown),
+        "block_count": len(_H2_RE.findall(artifacts.markdown)),
+    }
+
+
+@_artifact_fields.register
+def _image_fields(artifacts: ImageArtifacts) -> dict:
+    return {"image_count": len(artifacts.images)}
+
+
+@_artifact_fields.register
+def _postcard_fields(artifacts: PostCard) -> dict:
+    return {"title": artifacts.meta.title}
+
+
+def _first_finished_by_agent(graph: TaskGraph) -> dict[AgentType, TaskNodeView]:
+    """各角色首条完成任务，保持图内出现顺序。"""
+    first_finished: dict[AgentType, TaskNodeView] = {}
+    for node in graph.nodes:
+        if node.status != TaskStatus.FINISHED:
+            continue
+        first_finished.setdefault(node.agent_type, node)
+    return first_finished
+
+
+def _output_rows(graph: TaskGraph) -> list[dict]:
+    """创作产出段成品行：各角色首条完成任务按流水线顺序投影。"""
+    first_finished = _first_finished_by_agent(graph)
+    rows = []
+    for agent_type in _OUTPUT_ORDER:
+        node = first_finished.get(agent_type)
+        if node is None:
+            continue
+        fields = _artifact_fields(node.artifacts) if node.artifacts is not None else _EMPTY_OUTPUT_FIELDS[agent_type]
+        rows.append({"kind": agent_type.value, "task_id": node.id, **fields})
+    return rows

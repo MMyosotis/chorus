@@ -10,34 +10,18 @@ from typing import cast
 from sqlalchemy import delete, select
 
 from chorus.domain.trace import (
-    BypassCall,
     MessageTrace,
-    ModelRequest,
-    ModelResponse,
     TraceEntry,
     TracePhase,
-    TracePayload,
-    TraceToolCall,
-    TraceToolResult,
-    UserInput,
-    aggregate_trace,
+    PAYLOAD_BY_PHASE,
 )
+from chorus.domain.trace.aggregation import aggregate_trace
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.models import TraceRecord
 
-_PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
-    TracePhase.USER_INPUT: UserInput,
-    TracePhase.MODEL_REQUEST: ModelRequest,
-    TracePhase.MODEL_RESPONSE: ModelResponse,
-    TracePhase.TOOL_CALL: TraceToolCall,
-    TracePhase.TOOL_RESULT: TraceToolResult,
-    TracePhase.BYPASS_CALL: BypassCall,
-}
-
-
 def _to_domain(r: TraceRecord) -> TraceEntry:
     phase = TracePhase(r.phase)
-    payload = _PAYLOAD_BY_PHASE[phase](**r.payload_json)
+    payload = PAYLOAD_BY_PHASE[phase](**r.payload_json)
     return TraceEntry(
         id=r.id, session_id=r.session_id, message_id=r.message_id, task_id=r.task_id,
         source=r.source or "supervisor", phase=phase, created_at=r.created_at, payload=payload,

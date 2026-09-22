@@ -9,9 +9,8 @@ from pydantic import BaseModel
 
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.bypass import BypassScope
-from chorus.domain.events import IntentStateEvent, TraceEvent
+from chorus.domain.events import IntentStateEvent
 from chorus.domain.intent import IntentStateView
-from chorus.domain.trace import TraceEntry
 from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.routes.providers import (
     provide_intent_state_service,
@@ -22,7 +21,7 @@ from chorus.routes.providers import (
     provide_suggestion_service,
     provide_supervisor_service,
     provide_tool_dispatch,
-    provide_trace_service,
+    provide_trace_view_service,
 )
 from chorus.routes.sse import sse, sse_stream
 from chorus.services.intent_state import IntentStateService
@@ -30,7 +29,7 @@ from chorus.services.message import MessageService
 from chorus.services.option import OptionPromptService
 from chorus.services.session import SessionService
 from chorus.services.session_view import SessionViewService
-from chorus.services.trace import TraceService
+from chorus.services.trace_view import TraceViewService
 from chorus.tools import ToolDispatch
 
 router = APIRouter(prefix="/api/sessions")
@@ -75,15 +74,16 @@ def rename_session(session_id: str, req: RenameRequest, session: SessionService 
     return {"id": renamed.id, "title": renamed.title, "created_at": renamed.created_at, "updated_at": renamed.updated_at}
 
 
-@router.get("/{session_id}/traces")
-def get_traces(
+@router.get("/{session_id}/traces/view")
+def get_trace_view(
     session_id: str,
+    agent: Optional[str] = None,
     session: SessionService = Depends(provide_session_service),
-    trace: TraceService = Depends(provide_trace_service),
+    view: TraceViewService = Depends(provide_trace_view_service),
 ):
     if not session.exists(session_id):
         raise HTTPException(status_code=404, detail="session not found")
-    return {"traces": [_trace_to_dict(entry) for entry in trace.list_traces(session_id)]}
+    return view.collect(session_id, agent_key=agent)
 
 
 @router.post("/{session_id}/suggestions")
@@ -209,11 +209,3 @@ def choose_option(
     if open_prompt is None:
         raise HTTPException(status_code=409, detail="option prompt not open")
     return sse_stream(_resume_option(session_id, req, supervisor, tools))
-
-
-def _trace_to_dict(entry: TraceEntry) -> dict:
-    return TraceEvent(
-        phase=entry.phase, message_id=entry.message_id,
-        task_id=entry.task_id, source=entry.source,
-        created_at=entry.created_at, payload=entry.payload,
-    ).model_dump(mode="json")

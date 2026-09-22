@@ -19,6 +19,7 @@ from chorus.domain.prompt import (
     SupervisorSystemInputs,
     subagent_base,
 )
+from chorus.domain.prompt.assembly import parse_tagged_content
 from chorus.domain.skill import SkillLoader
 from chorus.domain.task import PostCard
 
@@ -167,6 +168,17 @@ def test_assemble_invoke_empty_sections_omitted():
     ).assemble_invoke()
     assert "<prior_artifact>" not in full
     assert "<dependency_artifacts>" in full and "<user_feedback>" in full
+
+
+def test_parse_tagged_content_extracts_known_injections():
+    # 已知标签还原段清单并剥离正文，未知标签原样保留
+    text, injections = parse_tagged_content("<intent_state>状态</intent_state>用户输入<base_card>底稿</base_card>")
+    assert text == "用户输入"
+    assert [(seg.label, seg.content) for seg in injections] == [("意图状态", "状态"), ("底稿", "底稿")]
+
+    raw, injections = parse_tagged_content("<error>x</error>正文")
+    assert raw == "<error>x</error>正文"
+    assert injections == []
 
 
 def main():

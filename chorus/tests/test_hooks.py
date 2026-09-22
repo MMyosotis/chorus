@@ -75,19 +75,14 @@ def test_trace_propagates_subagent_source_and_task_id():
     ctx.turn.message_id = "m1"
     ctx.chat_model = "fake-model"
 
-    events = list(emitter.before_model_request(ctx))
+    emitter.before_model_request(ctx)
 
-    assert len(events) == 1
-    ev = events[0]
-    assert ev.type == "trace"
-    assert ev.phase is TracePhase.MODEL_REQUEST
-    assert ev.message_id == "m1"
-    assert ev.payload.model == "fake-model"
-    # source/task_id 传播到持久化 trace（事件本身不载这两个字段）
     entry = trace_svc.list_traces("s1")[0]
+    assert entry.phase is TracePhase.MODEL_REQUEST
+    assert entry.payload.model == "fake-model"
+    assert entry.message_id == "m1"
     assert entry.source == "subagent"
     assert entry.task_id == "t1"
-    assert entry.message_id == "m1"
 
 
 def test_trace_default_supervisor_when_ctx_unset():
@@ -96,7 +91,7 @@ def test_trace_default_supervisor_when_ctx_unset():
     ctx = AgentContext(session_id="s1", chat_model="test-model")               # 默认 source="supervisor", task_id=None
     ctx.chat_model = "fake-model"
 
-    list(emitter.before_model_request(ctx))
+    emitter.before_model_request(ctx)
 
     entry = trace_svc.list_traces("s1")[0]
     assert entry.source == "supervisor"
@@ -113,17 +108,16 @@ def test_trace_tool_result_payload_from_result_object():
         outcome=types.SimpleNamespace(content="结果"), duration_ms=42, status="error",
     )
 
-    events = list(emitter.on_tool_result(ctx, call, result))
+    emitter.on_tool_result(ctx, call, result)
 
-    assert len(events) == 1
-    ev = events[0]
-    assert ev.phase is TracePhase.TOOL_RESULT
-    assert ev.payload.tool_call_id == "call-1"
-    assert ev.payload.name == "search"
-    assert ev.payload.content == "结果"
-    assert ev.payload.duration_ms == 42
-    assert ev.payload.status == "error"
-    assert trace_svc.list_traces("s1")[0].source == "subagent"
+    entry = trace_svc.list_traces("s1")[0]
+    assert entry.phase is TracePhase.TOOL_RESULT
+    assert entry.payload.tool_call_id == "call-1"
+    assert entry.payload.name == "search"
+    assert entry.payload.content == "结果"
+    assert entry.payload.duration_ms == 42
+    assert entry.payload.status == "error"
+    assert entry.source == "subagent"
 
 
 def test_trace_response_includes_usage_and_configured_cost():

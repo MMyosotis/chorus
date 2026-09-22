@@ -1,10 +1,50 @@
 """提示词装配机制：条件成段、系统段拼接、条件段注入末条用户消息。
 
 各位置具体拼了哪些段，见 prompt/subagent.py 与 prompt/supervisor.py。
+注入段标签是装配与反解共用的词表，控制台视图靠它还原段清单。
 """
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from typing import Optional
+
+INJECTION_LABELS = {
+    "memory_summary": "记忆摘要",
+    "available_skills": "可用技能",
+    "recalled_memories": "记忆召回",
+    "intent_state": "意图状态",
+    "recent_chat": "近期对话",
+    "role": "角色",
+    "step_note": "本步交待",
+    "intent": "创作意图",
+    "base_card": "底稿",
+    "dependency_artifacts": "前置产物",
+    "prior_artifact": "上轮产物",
+    "user_feedback": "用户反馈",
+}
+
+_INJECTION_PATTERN = re.compile(
+    f"<({'|'.join(INJECTION_LABELS)})>([\\s\\S]*?)</\\1>"
+)
+
+
+@dataclass(frozen=True)
+class TaggedSegment:
+    """注入段：中文标签与剥离标签后的正文。"""
+
+    label: str
+    content: str
+
+
+def parse_tagged_content(raw: str) -> tuple[str, list[TaggedSegment]]:
+    """反解 tagged_block：返回剥离注入段后的正文与按出现顺序的段清单。"""
+    segments = [
+        TaggedSegment(INJECTION_LABELS[match.group(1)], match.group(2).strip())
+        for match in _INJECTION_PATTERN.finditer(raw)
+    ]
+    text = _INJECTION_PATTERN.sub("", raw).strip()
+    return text, segments
 
 
 def tagged_block(tag: str, body: Optional[str]) -> str:

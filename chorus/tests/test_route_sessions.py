@@ -13,6 +13,7 @@ from chorus.routes.providers import (
     provide_session_view_service,
     provide_supervisor_service,
     provide_tool_dispatch,
+    provide_trace_view_service,
 )
 from chorus.routes.sessions import router as sessions_router
 
@@ -49,10 +50,23 @@ class FakeSessionViewService:
         return dict(self._payload)
 
 
+class FakeTraceViewService:
+    """路由仅用到轨迹视图收集，返回固定载荷并记录调用。"""
+
+    def __init__(self, payload: dict):
+        self._payload = payload
+        self.collected: list[tuple[str, str | None]] = []
+
+    def collect(self, session_id: str, agent_key: str | None = None) -> dict:
+        self.collected.append((session_id, agent_key))
+        return dict(self._payload)
+
+
 def _client(
     session: FakeSessionService,
     supervisor: FakeSupervisorService,
     view: FakeSessionViewService | None = None,
+    trace_view: FakeTraceViewService | None = None,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(sessions_router)
@@ -62,6 +76,7 @@ def _client(
     app.dependency_overrides[provide_supervisor_service] = lambda: supervisor
     app.dependency_overrides[provide_tool_dispatch] = lambda: None
     app.dependency_overrides[provide_session_view_service] = lambda: view or FakeSessionViewService({})
+    app.dependency_overrides[provide_trace_view_service] = lambda: trace_view or FakeTraceViewService({})
     return TestClient(app)
 
 
@@ -101,6 +116,30 @@ def test_session_view_returns_payload():
     assert r.status_code == 200
     assert r.json() == {"bubbles": [], "stage": "自由对话"}
     assert view.collected == ["s1"]
+
+
+def test_trace_view_not_found():
+    """会话不存在 → 404，不触达轨迹视图收集。"""
+    trace_view = FakeTraceViewService({"agents": [], "stats": None, "turns": []})
+    r = _client(FakeSessionService(set()), FakeSupervisorService(False), trace_view=trace_view).get(
+        "/api/sessions/unknown/traces/view"
+    )
+    assert r.status_code == 404
+    assert trace_view.collected == []
+
+
+def test_trace_view_passes_agent_filter():
+    """轨迹视图端点把 agent 过滤键传入收集并原样返回载荷。"""
+    payload = {"agents": [{"key": "supervisor", "label": "主编"}], "stats": None, "turns": []}
+    trace_view = FakeTraceViewService(payload)
+    client = _client(FakeSessionService({"s1"}), FakeSupervisorService(False), trace_view=trace_view)
+    r = client.get("/api/sessions/s1/traces/view", params={"agent": "task:t1"})
+    assert r.status_code == 200
+    assert r.json() == payload
+    assert trace_view.collected == [("s1", "task:t1")]
+
+    client.get("/api/sessions/s1/traces/view")
+    assert trace_view.collected[-1] == ("s1", None)
 
 
 def main():

@@ -64,13 +64,17 @@ def test_success_returns_suspend_with_event_and_persists():
     assert len(res.events) == 1
     event = res.events[0]
     assert isinstance(event, OptionPromptEvent)
-    assert event.message_id == "m-option"
-    assert [question.question for question in event.questions] == ["选哪个方向", "选什么风格"]
-    assert [option.label for option in event.questions[0].options] == ["咖啡馆探店", "居家咖啡器具", "咖啡豆产地游"]
-    assert event.questions[0].options[0].signal == "0"
-    prompt = option.get_open("s1")
-    assert prompt is not None
+    prompt = event.prompt
     assert prompt.message_id == "m-option"
+    assert prompt.status == "open"
+    assert [question.question for question in prompt.questions] == ["选哪个方向", "选什么风格"]
+    assert [option.label for option in prompt.questions[0].options] == ["咖啡馆探店", "居家咖啡器具", "咖啡豆产地游"]
+    assert prompt.questions[0].options[0].signal == "0"
+    # 事件携带的是落库征询单成品，与开放查询同构
+    stored = option.get_open("s1")
+    assert stored is not None
+    assert stored.message_id == "m-option"
+    assert prompt.prompt_id == stored.prompt_id
 
 
 def test_missing_args_returns_reply():

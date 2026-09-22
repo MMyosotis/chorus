@@ -36,16 +36,16 @@ export async function renameSession(id, title) {
   return res.json()
 }
 
-export async function fetchTraces(id) {
-  const res = await fetch(`${BASE}/${id}/traces`)
+export async function fetchTraceView(id, agent) {
+  const query = agent && agent !== 'all' ? `?agent=${encodeURIComponent(agent)}` : ''
+  const res = await fetch(`${BASE}/${id}/traces/view${query}`)
   if (res.status === 404) {
     const err = new Error('session not found')
     err.status = 404
     throw err
   }
-  if (!res.ok) throw new Error(`traces failed: ${res.status}`)
-  const data = await res.json()
-  return data.traces || []
+  if (!res.ok) throw new Error(`trace view failed: ${res.status}`)
+  return res.json()
 }
 
 export function confirmIntent(id, onEvent) {

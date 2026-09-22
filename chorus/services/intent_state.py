@@ -11,6 +11,7 @@ from chorus.domain.events import IntentStateEvent
 from chorus.domain.intent import (
     IntentConfirmation,
     IntentConfirmationAnswer,
+    IntentConfirmationView,
     IntentSnapshot,
     IntentState,
     IntentStateUpdate,
@@ -90,7 +91,7 @@ class IntentStateService:
     def events_for_turn(
         self, session_id: str, message_id: str, tool_names: Iterable[str],
     ) -> list[IntentStateEvent]:
-        """生成本轮意图工具完成后应推送的状态事件。"""
+        """生成本轮意图工具完成后应推送的状态事件，待确认门开启时随事件携带确认留档。"""
         events = []
         for tool_name in tool_names:
             if tool_name not in _EVENT_TOOL_NAMES:
@@ -98,5 +99,8 @@ class IntentStateService:
             state = self.get(session_id)
             candidate = self.get_open_confirmation(session_id) if state.intent_status == "ready_to_confirm" else None
             confirmation = candidate if candidate is not None and candidate.message_id == message_id else None
-            events.append(IntentStateEvent(state=IntentStateView.from_state(state, confirmation)))
+            events.append(IntentStateEvent(
+                state=IntentStateView.from_state(state, confirmation),
+                confirmation=(IntentConfirmationView.from_confirmation(confirmation) if confirmation else None),
+            ))
         return events

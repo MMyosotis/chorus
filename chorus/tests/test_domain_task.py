@@ -23,6 +23,7 @@ from chorus.domain.task import (
     TaskProgress,
     TaskStatus,
     StepSpec,
+    TaskArtifacts,
     ValidationError,
     build_task_graph,
     dump_task_graph,
@@ -167,6 +168,55 @@ def test_activity_line_injected_into_graph():
     idea_prog = TaskProgress(task_id="idea", activity_kind="thinking")
     idea_graph = build_task_graph("p", [idea_task], {}, {"idea": idea_prog}, {}, True)
     assert dump_task_graph(idea_graph)["tasks"][0]["progress"]["activity_line"] == "正在梳理选题"
+
+
+def _arts(task_id: str, artifacts) -> TaskArtifacts:
+    return TaskArtifacts(task_id=task_id, artifacts=artifacts)
+
+
+def test_output_rows_project_finished_summary():
+    """创作产出段成品行：只取各角色首条完成任务，按流水线顺序带汇总字段。"""
+    tasks = [
+        _mk("finished", id="d", agent_type="finalize"),
+        _mk("finished", id="a", agent_type="idea"),
+        _mk("running", id="r", agent_type="script"),
+        _mk("finished", id="c", agent_type="image"),
+        _mk("finished", id="b", agent_type="script"),
+    ]
+    arts = {
+        "d": _arts("d", PostCard(markdown="---\ntitle: 终稿\n---\n\n正文", meta={"title": "终稿"})),
+        "a": _arts("a", IdeaArtifacts(candidates=[
+            IdeaCandidate(index=0, title="甲标题", angle="视角", reason="理由"),
+            IdeaCandidate(index=1, title="乙标题", angle="视角", reason="理由"),
+        ], selected=1)),
+        "c": _arts("c", ImageArtifacts(images=[ImageItem(url="u1"), ImageItem(url="u2")])),
+        "b": _arts("b", ScriptArtifacts(markdown="## 一\n\n正文\n\n## 二\n\n## 三")),
+    }
+    data = dump_task_graph(build_task_graph("p", tasks, arts, {}, {}, True))
+    assert data["outputs"] == [
+        {"kind": "idea", "task_id": "a", "title": "乙标题"},
+        {"kind": "script", "task_id": "b", "char_count": len("## 一\n\n正文\n\n## 二\n\n## 三"), "block_count": 3},
+        {"kind": "image", "task_id": "c", "image_count": 2},
+        {"kind": "finalize", "task_id": "d", "title": "终稿"},
+    ]
+
+
+def test_output_rows_fallbacks():
+    """选题未选中落首个候选，产物缺席行保留且字段留空。"""
+    tasks = [
+        _mk("finished", id="a", agent_type="idea"),
+        _mk("finished", id="b", agent_type="script"),
+    ]
+    arts = {
+        "a": _arts("a", IdeaArtifacts(candidates=[
+            IdeaCandidate(index=0, title="甲标题", angle="视角", reason="理由"),
+        ])),
+    }
+    data = dump_task_graph(build_task_graph("p", tasks, arts, {}, {}, True))
+    assert data["outputs"] == [
+        {"kind": "idea", "task_id": "a", "title": "甲标题"},
+        {"kind": "script", "task_id": "b", "char_count": 0, "block_count": 0},
+    ]
 
 
 def test_validate_steps_ok():

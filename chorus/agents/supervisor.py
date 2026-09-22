@@ -18,7 +18,6 @@ from chorus.domain.events import (
     MessageStartEvent,
     SseEvent,
     SuspendEvent,
-    TraceEvent,
 )
 from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import is_context_overflow
@@ -51,7 +50,7 @@ class SupervisorLoopStrategy(LoopStrategy):
 
     def __init__(self, session_id, message_service, session_service, hooks,
                  intent_state: IntentStateService,
-                 memory: MemoryRecall, compact: CompactService):
+                 memory: MemoryRecall, compact: CompactService, resume_boundary: bool = False):
         self.session_id = session_id
         self._message = message_service
         self._session = session_service
@@ -59,11 +58,12 @@ class SupervisorLoopStrategy(LoopStrategy):
         self._intent_state = intent_state
         self._recall = memory
         self._compact = compact
+        self._resume_boundary = resume_boundary
         self._reactive_done = False
         self.retry_requested = False
 
     def message_start(self, ctx):
-        return [MessageStartEvent(id=ctx.turn.message_id)]
+        return [MessageStartEvent(id=ctx.turn.message_id, resume_boundary=self._resume_boundary)]
 
     def provider_messages(self):
         system_inputs = SupervisorSystemInputs(digest=self._recall.digest)
@@ -179,24 +179,17 @@ class SupervisorService:
 
         message = self._message.append_user_message(session_id, user_message)
         self._session.touch(session_id)
-        yield from self._emit_user_input(message)
+        self._trace_user_input(message)
         yield from self._run(session_id, user_message)
 
-    def _emit_user_input(self, message: UserMessage) -> Iterator[SseEvent]:
-        """落用户输入轨迹并发对应事件，复用消息时间戳保证排在召回之前。"""
-        payload = UserInput(content=message.content)
-        created_at = self._trace.add_trace(
+    def _trace_user_input(self, message: UserMessage) -> None:
+        """落用户输入轨迹，复用消息时间戳保证排在召回之前。"""
+        self._trace.add_trace(
             session_id=message.session_id,
             message_id=message.id,
             phase=TracePhase.USER_INPUT,
-            payload=payload,
+            payload=UserInput(content=message.content),
             created_at=message.created_at,
-        )
-        yield TraceEvent(
-            phase=TracePhase.USER_INPUT,
-            message_id=message.id,
-            created_at=created_at,
-            payload=payload,
         )
 
 
@@ -207,8 +200,10 @@ class SupervisorService:
             yield reject
             return
 
+        # 建图挂起是流水线边界：先于改写判定，事件里标注给前端另起新气泡
+        boundary = self.has_unreceipted_plan(session_id)
         self._message.rewrite_last_tool_result(session_id, tool_name, format_tool_result(result_text))
-        yield from self._run(session_id, None)
+        yield from self._run(session_id, None, resume_boundary=boundary)
 
     def has_unreceipted_plan(self, session_id: str) -> bool:
         """收尾锁：末条消息是建图工具结果且无活跃任务，即确有未回执挂起。"""
@@ -224,7 +219,7 @@ class SupervisorService:
             return BusyEvent(content="该会话有创作任务进行中，请等待完成")
         return None
 
-    def _run(self, session_id: str, user_message) -> Iterator[SseEvent]:
+    def _run(self, session_id: str, user_message, *, resume_boundary: bool = False) -> Iterator[SseEvent]:
         """共用续跑内核：取模型、构造上下文与策略、跑 loop。"""
         entry = self._models.get_entry()
         schemas = self._tools.select_schemas(TOOL_WHITELISTS["supervisor"])
@@ -239,6 +234,7 @@ class SupervisorService:
             intent_state=self._intent_state,
             memory=memory,
             compact=self._compact,
+            resume_boundary=resume_boundary,
         )
 
         yield from self._run_with_retry(ctx, entry, strategy)

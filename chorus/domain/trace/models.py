@@ -6,9 +6,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Iterable, Literal, Optional, Union
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -140,6 +139,15 @@ TracePayload = Union[
     BypassCall,
 ]
 
+PAYLOAD_BY_PHASE: dict[TracePhase, type[TracePayload]] = {
+    TracePhase.USER_INPUT: UserInput,
+    TracePhase.MODEL_REQUEST: ModelRequest,
+    TracePhase.MODEL_RESPONSE: ModelResponse,
+    TracePhase.TOOL_CALL: TraceToolCall,
+    TracePhase.TOOL_RESULT: TraceToolResult,
+    TracePhase.BYPASS_CALL: BypassCall,
+}
+
 
 class TraceEntry(BaseModel):
     """traces 表的一行。"""
@@ -164,57 +172,3 @@ class MessageTrace(BaseModel):
     message_id: str
     thinking: list[ThinkingSegment] = Field(default_factory=list)
     tools: list[ToolInvocation] = Field(default_factory=list)
-
-
-@dataclass
-class _FoldState:
-    """聚合过程的累积状态。"""
-
-    thinking: list[ThinkingSegment] = field(default_factory=list)
-    tools: dict[str, ToolInvocation] = field(default_factory=dict)
-
-
-def _fold_response(payload: ModelResponse, acc: _FoldState) -> None:
-    acc.thinking.extend(payload.thinking_segments)
-
-
-def _fold_tool_call(payload: TraceToolCall, acc: _FoldState) -> None:
-    acc.tools[payload.tool_call_id] = ToolInvocation(
-        tool_call_id=payload.tool_call_id, name=payload.name,
-        arguments=payload.arguments, display=payload.display,
-        duration_ms=0, content="",
-    )
-
-
-def _fold_tool_result(payload: TraceToolResult, acc: _FoldState) -> None:
-    skeleton = acc.tools.setdefault(
-        payload.tool_call_id,
-        ToolInvocation(
-            tool_call_id=payload.tool_call_id, name=payload.name,
-            arguments={}, display="", duration_ms=0, content="",
-        ),
-    )
-    acc.tools[payload.tool_call_id] = skeleton.model_copy(
-        update={"duration_ms": payload.duration_ms, "content": payload.content},
-    )
-
-
-_FOLDERS: dict[type[TracePayload], Callable[..., None]] = {
-    ModelResponse: _fold_response,
-    TraceToolCall: _fold_tool_call,
-    TraceToolResult: _fold_tool_result,
-}
-
-
-def aggregate_trace(message_id: str, entries: Iterable[TraceEntry]) -> MessageTrace:
-    """从轨迹行重建思考与工具摘要：按载荷类型查注册表分派。"""
-    acc = _FoldState()
-    for entry in entries:
-        fn = _FOLDERS.get(type(entry.payload))
-        if fn is not None:
-            fn(entry.payload, acc)
-    return MessageTrace(
-        message_id=message_id,
-        thinking=acc.thinking,
-        tools=list(acc.tools.values()),
-    )

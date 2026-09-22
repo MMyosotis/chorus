@@ -20,7 +20,6 @@ import {
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
-import { isPlanResumeBoundary } from './composables/messageHistory.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import MemoryPanel from './main-panel/MemoryPanel.vue'
 
@@ -138,8 +137,8 @@ function collapseSidebar() {
   leftRailOpen.value = false
 }
 
-function onArtifactFocus(task) {
-  chatWindowRef.value?.scrollToTask(task?.id)
+function onArtifactFocus(taskId) {
+  chatWindowRef.value?.scrollToTask(taskId)
 }
 
 const messages = computed(() => messagesBySession[activeId.value] || [])
@@ -172,7 +171,6 @@ function makeEmptyAssistant(id) {
     tools: { state: 'idle', items: [] },
     created_at: Date.now() / 1000,
     id: id || null,
-    messageIds: id ? [id] : [],
     suspended: false,
   }
 }
@@ -184,7 +182,6 @@ function applyView(id, view) {
   intentConfirmationsBySession[id] = view.open_confirmation ? [view.open_confirmation] : []
   optionPromptsBySession[id] = view.open_option_prompt ? [view.open_option_prompt] : []
   stageBySession[id] = view.stage
-  traceStore.loadFromServer(id)
 }
 
 async function refreshView(id) {
@@ -387,17 +384,9 @@ function createStreamHandler(sessionId) {
     list.push(makeEmptyAssistant(id))
     assistantIdx = list.length - 1
   }
-  // 流式写入按 { state, items } 结构改工具与思考态，视图气泡的工具是数组，接管前归一一次
-  function asStreamingBubble(bubble) {
-    if (Array.isArray(bubble.tools)) {
-      bubble.tools = { state: 'idle', items: bubble.tools }
-      bubble.thinking = bubble.thinking || { state: 'idle' }
-    }
-    return bubble
-  }
   function ensureAssistant() {
     if (!cur()) startNewAssistant()
-    return asStreamingBubble(cur())
+    return cur()
   }
   function finalizeCurrent() {
     // 收尾前把队列剩余字一次性吐出，避免最后几个字丢失或拖到流结束
@@ -421,33 +410,22 @@ function createStreamHandler(sessionId) {
   }
 
   const onEvent = (payload) => {
-    // trace 事件直接入 store，不走气泡逻辑
-    if (payload.type === 'trace') {
-      traceStore.addTrace(sessionId, payload)
-      return
-    }
     if (payload.type === 'intent_state') {
       intentStateBySession[sessionId] = payload.state
-      if (payload.state?.intent_status === 'ready_to_confirm') {
+      // 确认门开启时后端随事件下发确认留档成品，与会话视图同构
+      if (payload.confirmation) {
         const confirmations = intentConfirmationsBySession[sessionId] || (intentConfirmationsBySession[sessionId] = [])
         const openIdx = confirmations.findIndex((confirmation) => confirmation.status === 'open')
-        const confirmation = { ...payload.state, status: 'open' }
-        if (openIdx >= 0) confirmations.splice(openIdx, 1, confirmation)
-        else confirmations.push(confirmation)
+        if (openIdx >= 0) confirmations.splice(openIdx, 1, payload.confirmation)
+        else confirmations.push(payload.confirmation)
       }
       return
     }
     if (payload.type === 'option_prompt') {
       const prompts = optionPromptsBySession[sessionId] || (optionPromptsBySession[sessionId] = [])
       const openIdx = prompts.findIndex((prompt) => prompt.status === 'open')
-      const prompt = {
-        prompt_id: payload.prompt_id,
-        message_id: payload.message_id,
-        questions: payload.questions,
-        status: 'open',
-      }
-      if (openIdx >= 0) prompts.splice(openIdx, 1, prompt)
-      else prompts.push(prompt)
+      if (openIdx >= 0) prompts.splice(openIdx, 1, payload.prompt)
+      else prompts.push(payload.prompt)
       return
     }
 
@@ -458,15 +436,13 @@ function createStreamHandler(sessionId) {
       while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
       const last = list[lastIdx]
       if (last && last.role === 'assistant' && last.suspended) {
-        // 建图挂起是流水线边界：回执续跑在卡片之后另起气泡，不续写挂起气泡
-        const planResume = isPlanResumeBoundary(last)
-        if (planResume) {
+        // 建图挂起是流水线边界，后端在事件里标注：另起新气泡，不续写挂起气泡
+        if (payload.resume_boundary) {
           startNewAssistant(payload.id)
           cur().thinking.state = 'running'
           return
         }
         assistantIdx = lastIdx
-        asStreamingBubble(last)
         last.suspended = false
         // 每轮请求一开始就展示同一条气泡内的过程提示；工具状态会在调用时覆盖它。
         last.thinking.state = 'running'
@@ -683,7 +659,6 @@ onMounted(async () => {
       :selected-memory-id="activeMemory?.id || null"
       :console-open="consoleOpen"
       :trace-store="traceStore"
-      :task-graph="activeGraph"
       :expanded="leftRailOpen || settingsOpen || memoryOpen || consoleOpen"
       @select="selectSession"
       @create="onCreate"

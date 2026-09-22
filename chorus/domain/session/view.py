@@ -7,10 +7,34 @@ from chorus.domain.message import MessageView
 from chorus.domain.option import OptionPrompt, OptionPromptView
 from chorus.domain.session.bubbles import anchor_ids, build_bubbles
 from chorus.domain.session.cards import insert_anchored_card, plan_cards
+from chorus.domain.session.entries import AssistantBubble, BubbleEntry
 from chorus.domain.session.recaps import fold_confirmation_recaps, fold_option_recaps
 from chorus.domain.session.stage import derive_stage
 from chorus.domain.task.graph import TaskGraph, dump_task_graph
 from chorus.domain.task.products import DeliveredProduct
+from chorus.domain.trace import ToolInvocation
+
+
+def _dump_tool(tool: ToolInvocation) -> dict:
+    """工具项对齐流式字段：以 id 标识调用，留档项已配对无运行标签。"""
+    return {
+        "id": tool.tool_call_id,
+        "name": tool.name,
+        "arguments": tool.arguments,
+        "display": tool.display,
+        "duration_ms": tool.duration_ms,
+        "content": tool.content,
+    }
+
+
+def dump_entry(entry: BubbleEntry) -> dict:
+    """条目传输结构：助手气泡的工具与思考态对齐流式气泡形状，接管零转换。"""
+    dump = entry.model_dump(mode="json")
+    if not isinstance(entry, AssistantBubble):
+        return dump
+    dump["thinking"] = {"state": "idle", "items": []}
+    dump["tools"] = {"state": "idle", "items": [_dump_tool(tool) for tool in entry.tools]}
+    return dump
 
 
 def build_session_view(
@@ -42,7 +66,7 @@ def build_session_view(
     open_prompt = next((item for item in prompts if item.status == "open"), None)
 
     return {
-        "bubbles": [entry.model_dump(mode="json") for entry in entries],
+        "bubbles": [dump_entry(entry) for entry in entries],
         "graph": graph_dump,
         "intent_state": intent_state.model_dump(mode="json"),
         "open_confirmation": (

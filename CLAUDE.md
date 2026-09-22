@@ -217,7 +217,6 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 | `token` | 流式正文文本片段，归属到当前气泡 |
 | `tool_call` | 模型请求调用工具（`id`, `name`, `arguments`, `display`） |
 | `tool_result` | 工具执行结果（`tool_call_id`, `name`, `content`, `duration_ms`） |
-| `trace` | trace 控制台事件（`phase`, `message_id`, `task_id`, `source`, `ts`, `payload`） |
 | `title_update` | 首轮自动生成的会话标题（`id`, `title`），仅触发一次 |
 | `done` | 对话回合结束（正常文本回复结束即发，无额外字段） |
 | `error` | 异常信息（`SupervisorLoopStrategy.on_error` 已 append 一条 `[Error]` 占位消息关闭本轮--失败轮 assistant 本就未入库，库内干净，不截断历史） |

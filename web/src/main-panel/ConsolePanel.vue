@@ -1,141 +1,24 @@
 <script setup>
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { ChevronDown, PanelLeft } from '@lucide/vue'
-import {
-  BYPASS_PURPOSE_LABELS,
-  buildBypassCalls,
-  buildModelCalls,
-  buildSessionStats,
-  buildTimeline,
-  buildUserInputs,
-  displayToolContent,
-  messageText,
-  parseTaggedContent,
-  shortJson,
-  toolCallArguments,
-  toolsFor,
-} from '../composables/consoleProjection.js'
-import { ROLE_FULL, ROLE_LABELS, ROLE_SHORT } from '../team-panel/roleMeta.js'
 
 const props = defineProps({
   activeId: { type: String, default: null },
   traceStore: { type: Object, required: true },
-  taskGraph: { type: Object, default: null },
   open: { type: Boolean, default: false },
 })
 const emit = defineEmits(['close'])
 
-const traces = computed(() => props.traceStore.getTraces(props.activeId))
-
-const taskById = computed(() => new Map(
-  (props.taskGraph?.tasks || []).map((task) => [task.id, task]),
-))
-
-function roleFor(source, taskId) {
-  if (source === 'supervisor' || !source) return { key: 'supervisor', label: '主编' }
-  if (source === 'scheduler') return { key: 'scheduler', label: '调度' }
-  const task = taskById.value.get(taskId)
-  return {
-    key: `task:${taskId || '?'}`,
-    label: ROLE_SHORT[task?.agent_type] || '子代理',
-  }
-}
-
-function agentNameFor(source, taskId) {
-  if (source === 'supervisor' || !source) return ROLE_LABELS.chief
-  if (source === 'scheduler') return '调度器'
-  const task = taskById.value.get(taskId)
-  return task?.display_name || task?.agent_name || ROLE_FULL[task?.agent_type] || '子代理'
-}
-
-const modelCalls = computed(() => buildModelCalls(traces.value))
-
-const bypassCalls = computed(() => buildBypassCalls(traces.value))
-
-const userInputs = computed(() => buildUserInputs(traces.value))
-
-const toolMetaById = computed(() => {
-  const meta = new Map()
-  for (const call of modelCalls.value) {
-    for (const trace of call.toolResults.values()) {
-      meta.set(trace.payload?.tool_call_id, trace.payload)
-    }
-  }
-  return meta
-})
-
-const agents = computed(() => {
-  const seen = new Map()
-  for (const call of [...modelCalls.value, ...bypassCalls.value]) {
-    const role = roleFor(call.source, call.task_id)
-    if (!seen.has(role.key)) seen.set(role.key, role)
-  }
-  return [...seen.values()]
-})
+const view = computed(() => props.traceStore.getView(props.activeId))
+const agents = computed(() => view.value?.agents || [])
+const stats = computed(() => view.value?.stats || null)
+const turns = computed(() => view.value?.turns || [])
 
 const activeAgent = ref('all')
-watch(() => props.activeId, () => { activeAgent.value = 'all' })
 
-const visibleCalls = computed(() => {
-  if (activeAgent.value === 'all') return modelCalls.value
-  return modelCalls.value.filter((call) => roleFor(call.source, call.task_id).key === activeAgent.value)
-})
-
-const visibleBypass = computed(() => {
-  if (activeAgent.value === 'all') return bypassCalls.value
-  return bypassCalls.value.filter((call) => roleFor(call.source, call.task_id).key === activeAgent.value)
-})
-
-const visibleUserInputs = computed(() => {
-  if (activeAgent.value === 'all') return userInputs.value
-  return userInputs.value.filter((item) => roleFor(item.source, null).key === activeAgent.value)
-})
-
-const timelineAll = computed(() => buildTimeline(modelCalls.value, bypassCalls.value, userInputs.value, roleFor))
-
-const timeline = computed(() => {
-  if (activeAgent.value === 'all') return timelineAll.value
-  return buildTimeline(visibleCalls.value, visibleBypass.value, visibleUserInputs.value, roleFor)
-})
-
-const sessionStats = computed(() => buildSessionStats(
-  modelCalls.value,
-  bypassCalls.value,
-  timelineAll.value.filter((item) => item.kind === 'loop').at(-1)?.turn || 0,
-))
-
-const turnGroups = computed(() => {
-  const groups = []
-  for (const item of timeline.value) {
-    if (!groups.length || groups.at(-1).turn !== item.turn) {
-      groups.push({ turn: item.turn, items: [], start: item.created_at, end: item.created_at })
-    }
-    const group = groups.at(-1)
-    group.items.push(item)
-    let end = item.created_at
-    if (item.kind === 'loop') end += (item.call.response?.payload?.duration_ms || 0) / 1000
-    if (item.kind === 'bypass') end += (item.item.payload?.duration_ms || 0) / 1000
-    group.end = Math.max(group.end, end)
-  }
-  for (const group of groups) {
-    group.callCount = group.items.filter((entry) => entry.kind === 'loop').length
-    group.toolCount = group.items.filter((entry) => entry.kind === 'toolback').reduce((sum, entry) => sum + entry.tools.length, 0)
-    group.durationMs = (group.end - group.start) * 1000
-    const loop = group.items.find((entry) => entry.kind === 'loop')
-    const bypassItem = group.items.find((entry) => entry.kind === 'bypass')
-    group.agentName = loop
-      ? agentNameFor(loop.call.source, loop.call.task_id)
-      : (bypassItem ? agentNameFor(bypassItem.item.source, bypassItem.item.task_id) : '—')
-  }
-  return groups
-})
-
-function userParsed(message) {
-  return parseTaggedContent(messageText(message))
-}
-
-function bypassPurposeLabel(purpose) {
-  return BYPASS_PURPOSE_LABELS[purpose] || purpose || '旁路调用'
+function selectAgent(key) {
+  activeAgent.value = key
+  reload()
 }
 
 function fmtTs(value) {
@@ -145,26 +28,6 @@ function fmtTs(value) {
   const mm = String(date.getMinutes()).padStart(2, '0')
   const ss = String(date.getSeconds()).padStart(2, '0')
   return `${hh}:${mm}:${ss}`
-}
-
-function historyPreview(message) {
-  if (message.role === 'user' || message.role === 'system') return userParsed(message).text
-  if (message.role === 'assistant' && !message.content) {
-    if (message.reasoning_content) return '无正文 · think'
-    const count = (message.tool_calls || []).length
-    if (count) return `无正文 · ${count} 个工具调用`
-  }
-  if (message.role === 'tool') {
-    const meta = toolMetaById.value.get(message.tool_call_id)
-    if (meta) return meta.name
-  }
-  return messageText(message)
-}
-
-function messageRoleLabel(role) {
-  if (role === 'system') return 'sys'
-  if (role === 'assistant') return 'ass'
-  return role || 'message'
 }
 
 function fmtSeconds(totalMs) {
@@ -188,24 +51,13 @@ function fmtCost(value) {
   return `¥${Number(value).toFixed(4)}`
 }
 
-function callStatus(call) {
-  if (!call.response) return 'pending'
-  return call.response.payload?.status || 'success'
+function shortJson(value) {
+  return JSON.stringify(value, null, 2)
 }
 
-function callStatusLabel(call) {
-  return ({ success: '成功', error: '失败', pending: '进行中' })[callStatus(call)]
-}
-
-function thinkingTotal(segments) {
-  return segments.reduce((sum, segment) => sum + (segment.duration_ms || 0), 0)
-}
-
-function hasAnyOutput(call) {
-  const response = call.response?.payload
-  return Boolean(response?.content)
-    || (response?.tool_calls || []).length > 0
-    || (response?.thinking_segments || []).length > 0
+function previewText(value, max = 96) {
+  if (typeof value !== 'string') return ''
+  return value.length > max ? `${value.slice(0, max)}…` : value
 }
 
 const rawViews = reactive({})
@@ -227,19 +79,19 @@ function selectContextTab(key, index) {
   contextTabs[key] = activeContextTab(key) === index ? null : index
 }
 
-function previewText(value, max = 96) {
-  if (typeof value !== 'string') return ''
-  return value.length > max ? `${value.slice(0, max)}…` : value
-}
-
 const CONSOLE_POLL = 1500
 let consoleTimer = null
 
+function reload() {
+  props.traceStore.refresh(props.activeId, activeAgent.value)
+}
+
 function startConsolePoll() {
-  if (consoleTimer || !props.activeId) return
-  props.traceStore.pollFromServer(props.activeId)
+  if (!props.open || !props.activeId) return
+  reload()
+  if (consoleTimer) return
   consoleTimer = setInterval(() => {
-    if (props.activeId) props.traceStore.pollFromServer(props.activeId)
+    if (props.open && props.activeId) reload()
   }, CONSOLE_POLL)
 }
 
@@ -254,9 +106,12 @@ watch(() => props.open, (isOpen) => {
   else stopConsolePoll()
 }, { immediate: true })
 watch(() => props.activeId, (sessionId) => {
-  if (!props.open || !sessionId) return
-  props.traceStore.clearTrace(sessionId)
-  props.traceStore.loadFromServer(sessionId)
+  activeAgent.value = 'all'
+  if (!sessionId) {
+    stopConsolePoll()
+    return
+  }
+  startConsolePoll()
 })
 onBeforeUnmount(stopConsolePoll)
 </script>
@@ -272,59 +127,59 @@ onBeforeUnmount(stopConsolePoll)
 
     <section class="trace-body">
       <div v-if="agents.length" class="context-tabs agent-tabs">
-        <button type="button" :class="{ active: activeAgent === 'all' }" @click="activeAgent = 'all'">全部</button>
-        <button v-for="agent in agents" :key="agent.key" type="button" :class="{ active: activeAgent === agent.key }" @click="activeAgent = agent.key">{{ agent.label }}</button>
+        <button type="button" :class="{ active: activeAgent === 'all' }" @click="selectAgent('all')">全部</button>
+        <button v-for="agent in agents" :key="agent.key" type="button" :class="{ active: activeAgent === agent.key }" @click="selectAgent(agent.key)">{{ agent.label }}</button>
       </div>
-      <div v-if="!timeline.length" class="empty-hint">暂无执行轨迹。发送一条消息后，这里会展示模型调用过程。</div>
+      <div v-if="!turns.length" class="empty-hint">暂无执行轨迹。发送一条消息后，这里会展示模型调用过程。</div>
 
-      <div v-if="sessionStats" class="session-overview">
+      <div v-if="stats" class="session-overview">
         <h3 class="overview-title">会话总览</h3>
         <div class="overview-grid">
-          <span class="overview-item"><span class="overview-label">总耗时</span><span class="overview-value">{{ fmtDuration(sessionStats.durationMs) }}</span></span>
-          <span class="overview-item"><span class="overview-label">对话轮次</span><span class="overview-value">{{ sessionStats.turnCount }} 轮</span></span>
-          <span class="overview-item"><span class="overview-label">模型调用</span><span class="overview-value">{{ sessionStats.callCount }} 次</span></span>
-          <span class="overview-item"><span class="overview-label">工具执行</span><span class="overview-value">{{ sessionStats.toolCount }} 次</span></span>
-          <span class="overview-item"><span class="overview-label">旁路调用</span><span class="overview-value">{{ sessionStats.bypassCount }} 次</span></span>
-          <span class="overview-item"><span class="overview-label">总费用</span><span class="overview-value">{{ sessionStats.costCny != null ? fmtCost(sessionStats.costCny) : '未配置' }}</span></span>
-          <span class="overview-item"><span class="overview-label">输入 Token</span><span class="overview-value">{{ fmtTokens(sessionStats.inputTokens) }}</span></span>
-          <span class="overview-item"><span class="overview-label">输出 Token</span><span class="overview-value">{{ fmtTokens(sessionStats.outputTokens) }}</span></span>
-          <span class="overview-item"><span class="overview-label">Token 总计</span><span class="overview-value">{{ fmtTokens(sessionStats.totalTokens) }}</span></span>
+          <span class="overview-item"><span class="overview-label">总耗时</span><span class="overview-value">{{ fmtDuration(stats.duration_ms) }}</span></span>
+          <span class="overview-item"><span class="overview-label">对话轮次</span><span class="overview-value">{{ stats.turn_count }} 轮</span></span>
+          <span class="overview-item"><span class="overview-label">模型调用</span><span class="overview-value">{{ stats.call_count }} 次</span></span>
+          <span class="overview-item"><span class="overview-label">工具执行</span><span class="overview-value">{{ stats.tool_count }} 次</span></span>
+          <span class="overview-item"><span class="overview-label">旁路调用</span><span class="overview-value">{{ stats.bypass_count }} 次</span></span>
+          <span class="overview-item"><span class="overview-label">总费用</span><span class="overview-value">{{ stats.cost_cny != null ? fmtCost(stats.cost_cny) : '未配置' }}</span></span>
+          <span class="overview-item"><span class="overview-label">输入 Token</span><span class="overview-value">{{ fmtTokens(stats.input_tokens) }}</span></span>
+          <span class="overview-item"><span class="overview-label">输出 Token</span><span class="overview-value">{{ fmtTokens(stats.output_tokens) }}</span></span>
+          <span class="overview-item"><span class="overview-label">Token 总计</span><span class="overview-value">{{ fmtTokens(stats.total_tokens) }}</span></span>
         </div>
       </div>
 
-      <details v-for="group in turnGroups" :key="group.turn" class="turn-group" open>
+      <details v-for="group in turns" :key="group.turn" class="turn-group" open>
         <summary>
           <span v-if="group.turn" class="turn-index">{{ group.turn }}</span>
           <span class="turn-title">{{ group.turn ? `第 ${group.turn} 轮对话` : '旁路调用' }}</span>
-          <span class="turn-agent">{{ group.agentName }}</span>
-          <span class="turn-meta">{{ fmtDuration(group.durationMs) }} · {{ fmtTs(group.start) }}</span>
+          <span class="turn-agent">{{ group.agent_name }}</span>
+          <span class="turn-meta">{{ fmtDuration(group.duration_ms) }} · {{ fmtTs(group.start_at) }}</span>
           <ChevronDown class="block-caret" aria-hidden="true" />
         </summary>
         <div class="turn-items">
-          <template v-for="(item, itemIndex) in group.items" :key="`${item.kind}:${item.created_at}:${item.role?.key || item.message?.key || item.item?.key || itemIndex}`">
+          <template v-for="(item, itemIndex) in group.items" :key="`${item.kind}:${item.created_at}:${item.key || itemIndex}`">
             <details v-if="item.kind === 'user'" class="trace-block type-user">
               <summary>
                 <span class="block-head">
                   <span class="block-pill">用户输入</span>
                   <ChevronDown class="block-caret end-caret" aria-hidden="true" />
                 </span>
-                <span class="block-main">{{ item.message.text }}</span>
+                <span class="block-main">{{ item.text }}</span>
               </summary>
-              <div v-if="item.message.injections.length" class="user-detail">
+              <div v-if="item.injections.length" class="user-detail">
                 <div class="user-context-head">
                   <div class="context-tabs user-context-tabs" role="tablist" aria-label="模型上下文">
                     <button
-                      v-for="(injection, index) in item.message.injections"
+                      v-for="(injection, index) in item.injections"
                       :key="index"
                       type="button"
                       role="tab"
-                      :aria-selected="activeContextTab(item.message.key) === index"
-                      :class="{ active: activeContextTab(item.message.key) === index }"
-                      @click="selectContextTab(item.message.key, index)"
+                      :aria-selected="activeContextTab(item.key) === index"
+                      :class="{ active: activeContextTab(item.key) === index }"
+                      @click="selectContextTab(item.key, index)"
                     >{{ injection.label }}</button>
                   </div>
                 </div>
-                <pre v-if="activeContextTab(item.message.key) !== null" class="context-content">{{ item.message.injections[activeContextTab(item.message.key)].content }}</pre>
+                <pre v-if="activeContextTab(item.key) !== null" class="context-content">{{ item.injections[activeContextTab(item.key)].content }}</pre>
               </div>
             </details>
 
@@ -343,7 +198,7 @@ onBeforeUnmount(stopConsolePoll)
                     <summary>
                       <code class="tool-name">{{ tool.name }}</code>
                       <span class="tool-result-meta">
-                        <span class="tool-status" :class="`status-${tool.status}`">{{ tool.status === 'error' ? '失败' : '成功' }}</span>
+                        <span class="tool-status" :class="`status-${tool.status}`">{{ tool.status_label }}</span>
                         <small class="tool-duration">{{ fmtDuration(tool.duration_ms) }}</small>
                       </span>
                       <ChevronDown class="block-caret" aria-hidden="true" />
@@ -358,17 +213,17 @@ onBeforeUnmount(stopConsolePoll)
               <summary>
                 <span class="block-head">
                   <span class="block-pill">旁路调用</span>
-                  <span class="bypass-purpose">{{ bypassPurposeLabel(item.item.payload.purpose) }}</span>
-                  <span class="call-status" :class="`status-${item.item.payload.status || 'success'}`">{{ item.item.payload.status === 'error' ? '失败' : '成功' }}</span>
-                  <span v-if="item.item.payload.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.item.payload.duration_ms) }}</span>
-                  <ChevronDown :class="['block-caret', { 'end-caret': item.item.payload.duration_ms == null }]" aria-hidden="true" />
+                  <span class="bypass-purpose">{{ item.purpose_label }}</span>
+                  <span class="call-status" :class="`status-${item.status}`">{{ item.status_label }}</span>
+                  <span v-if="item.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.duration_ms) }}</span>
+                  <ChevronDown :class="['block-caret', { 'end-caret': item.duration_ms == null }]" aria-hidden="true" />
                 </span>
                 <span class="call-metrics">
-                  <span class="call-model"><span>模型：{{ item.item.payload.model || '—' }}</span><span>思考：—</span></span>
+                  <span class="call-model"><span>模型：{{ item.model || '—' }}</span><span>思考：—</span></span>
                   <span class="call-usage">
-                    <span>输入：{{ item.item.payload.usage ? fmtTokens(item.item.payload.usage.input_tokens) : '—' }}</span>
-                    <span>输出：{{ item.item.payload.usage ? fmtTokens(item.item.payload.usage.output_tokens) : '—' }}</span>
-                    <span>额度：{{ item.item.payload.cost_cny != null ? fmtCost(item.item.payload.cost_cny) : '未配置' }}</span>
+                    <span>输入：{{ item.usage ? fmtTokens(item.usage.input_tokens) : '—' }}</span>
+                    <span>输出：{{ item.usage ? fmtTokens(item.usage.output_tokens) : '—' }}</span>
+                    <span>额度：{{ item.cost_cny != null ? fmtCost(item.cost_cny) : '未配置' }}</span>
                   </span>
                 </span>
               </summary>
@@ -377,18 +232,18 @@ onBeforeUnmount(stopConsolePoll)
                 <section class="region">
                   <header class="region-head">
                     <strong>请求</strong>
-                    <small>{{ item.item.payload.model || '—' }} · 上限 {{ item.item.payload.max_tokens }} token</small>
+                    <small>{{ item.model || '—' }} · 上限 {{ item.max_tokens }} token</small>
                   </header>
-                  <pre class="bypass-prompt">{{ item.item.payload.prompt }}</pre>
+                  <pre class="bypass-prompt">{{ item.prompt }}</pre>
                 </section>
 
                 <section class="region">
                   <header class="region-head">
                     <strong>响应</strong>
-                    <small v-if="item.item.payload.usage">输入 {{ fmtTokens(item.item.payload.usage.input_tokens) }} · 输出 {{ fmtTokens(item.item.payload.usage.output_tokens) }}<template v-if="item.item.payload.cost_cny != null"> · 额度 {{ fmtCost(item.item.payload.cost_cny) }}</template></small>
+                    <small v-if="item.usage">输入 {{ fmtTokens(item.usage.input_tokens) }} · 输出 {{ fmtTokens(item.usage.output_tokens) }}<template v-if="item.cost_cny != null"> · 额度 {{ fmtCost(item.cost_cny) }}</template></small>
                   </header>
-                  <pre v-if="item.item.payload.status === 'error'" class="bypass-error">{{ item.item.payload.error || '调用失败' }}</pre>
-                  <pre v-else class="bypass-content">{{ item.item.payload.content || '（无输出）' }}</pre>
+                  <pre v-if="item.status === 'error'" class="bypass-error">{{ item.error || '调用失败' }}</pre>
+                  <pre v-else class="bypass-content">{{ item.content || '（无输出）' }}</pre>
                 </section>
               </div>
             </details>
@@ -397,16 +252,16 @@ onBeforeUnmount(stopConsolePoll)
               <summary>
                 <span class="block-head">
                   <span class="block-pill">模型输出</span>
-                  <span class="call-status" :class="`status-${callStatus(item.call)}`">{{ callStatusLabel(item.call) }}</span>
-                  <span v-if="item.call.response?.payload?.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.call.response.payload.duration_ms) }}</span>
+                  <span class="call-status" :class="`status-${item.status}`">{{ item.status_label }}</span>
+                  <span v-if="item.duration_ms != null" class="block-time">耗时 {{ fmtDuration(item.duration_ms) }}</span>
                   <ChevronDown class="block-caret" aria-hidden="true" />
                 </span>
                 <span class="call-metrics">
-                  <span class="call-model"><span>模型：{{ item.call.request.payload?.model || '—' }}</span><span>思考：{{ (item.call.response?.payload?.thinking_segments || []).length ? fmtSecondsZh(thinkingTotal(item.call.response.payload.thinking_segments)) : '—' }}</span></span>
+                  <span class="call-model"><span>模型：{{ item.model || '—' }}</span><span>思考：{{ (item.response?.thinking_segments || []).length ? fmtSecondsZh(item.thinking_ms) : '—' }}</span></span>
                   <span class="call-usage">
-                    <span>输入：{{ item.call.response?.payload?.usage ? fmtTokens(item.call.response.payload.usage.input_tokens) : '—' }}</span>
-                    <span>输出：{{ item.call.response?.payload?.usage ? fmtTokens(item.call.response.payload.usage.output_tokens) : '—' }}</span>
-                    <span>额度：{{ item.call.response?.payload?.cost_cny != null ? fmtCost(item.call.response.payload.cost_cny) : '未配置' }}</span>
+                    <span>输入：{{ item.usage ? fmtTokens(item.usage.input_tokens) : '—' }}</span>
+                    <span>输出：{{ item.usage ? fmtTokens(item.usage.output_tokens) : '—' }}</span>
+                    <span>额度：{{ item.cost_cny != null ? fmtCost(item.cost_cny) : '未配置' }}</span>
                   </span>
                 </span>
               </summary>
@@ -415,36 +270,36 @@ onBeforeUnmount(stopConsolePoll)
                 <section class="region">
                   <header class="region-head">
                     <strong>请求</strong>
-                    <button class="raw-toggle" :class="{ active: isRawView(item.call.key, 'request') }" type="button" :aria-label="isRawView(item.call.key, 'request') ? '返回请求详情' : '查看请求原始 JSON'" @click="toggleRawView(item.call.key, 'request')">{{ isRawView(item.call.key, 'request') ? '返回详情' : '原始 JSON' }}</button>
+                    <button class="raw-toggle" :class="{ active: isRawView(item.key, 'request') }" type="button" :aria-label="isRawView(item.key, 'request') ? '返回请求详情' : '查看请求原始 JSON'" @click="toggleRawView(item.key, 'request')">{{ isRawView(item.key, 'request') ? '返回详情' : '原始 JSON' }}</button>
                   </header>
-                  <pre v-if="isRawView(item.call.key, 'request')" class="raw-json">{{ shortJson(item.call.request.payload) }}</pre>
+                  <pre v-if="isRawView(item.key, 'request')" class="raw-json">{{ shortJson(item.request.raw) }}</pre>
                   <template v-else>
                     <div class="msg-list">
-                      <details v-for="(message, index) in item.call.request.payload?.messages || []" :key="index" class="msg-row">
+                      <details v-for="(message, index) in item.request.messages" :key="index" class="msg-row">
                         <summary>
-                          <span class="msg-role" :class="`role-${message.role || 'message'}`">{{ messageRoleLabel(message.role) }}</span>
-                          <span class="msg-preview">{{ historyPreview(message) }}</span>
+                          <span class="msg-role" :class="`role-${message.role}`">{{ message.role_label }}</span>
+                          <span class="msg-preview">{{ message.preview }}</span>
                         </summary>
                         <div class="msg-detail">
-                          <template v-if="(message.role === 'user' || message.role === 'system') && userParsed(message).injections.length">
-                            <p class="msg-text">{{ userParsed(message).text }}</p>
+                          <template v-if="(message.role === 'user' || message.role === 'system') && message.injections.length">
+                            <p class="msg-text">{{ message.text }}</p>
                             <div class="context-tabs" role="tablist" aria-label="模型上下文">
                               <button
-                                v-for="(injection, injectIndex) in userParsed(message).injections"
+                                v-for="(injection, injectIndex) in message.injections"
                                 :key="injectIndex"
                                 type="button"
                                 role="tab"
-                                :aria-selected="activeContextTab(`${item.call.key}:${index}`) === injectIndex"
-                                :class="{ active: activeContextTab(`${item.call.key}:${index}`) === injectIndex }"
-                                @click="selectContextTab(`${item.call.key}:${index}`, injectIndex)"
+                                :aria-selected="activeContextTab(`${item.key}:${index}`) === injectIndex"
+                                :class="{ active: activeContextTab(`${item.key}:${index}`) === injectIndex }"
+                                @click="selectContextTab(`${item.key}:${index}`, injectIndex)"
                               >{{ injection.label }}</button>
                             </div>
-                            <pre v-if="activeContextTab(`${item.call.key}:${index}`) !== null" class="context-content">{{ userParsed(message).injections[activeContextTab(`${item.call.key}:${index}`)].content }}</pre>
+                            <pre v-if="activeContextTab(`${item.key}:${index}`) !== null" class="context-content">{{ message.injections[activeContextTab(`${item.key}:${index}`)].content }}</pre>
                           </template>
                           <template v-else-if="message.role === 'assistant'">
-                            <pre v-if="messageText(message)">{{ messageText(message) }}</pre>
+                            <pre v-if="message.content">{{ message.content }}</pre>
                             <div
-                              v-if="message.reasoning_content || (message.tool_calls || []).length"
+                              v-if="message.reasoning_content || message.tool_calls.length"
                               class="context-tabs mono-tabs"
                               role="tablist"
                               aria-label="思考与工具调用"
@@ -453,42 +308,42 @@ onBeforeUnmount(stopConsolePoll)
                                 v-if="message.reasoning_content"
                                 type="button"
                                 role="tab"
-                                :aria-selected="activeContextTab(`${item.call.key}:${index}`) === 0"
-                                :class="{ active: activeContextTab(`${item.call.key}:${index}`) === 0 }"
-                                @click="selectContextTab(`${item.call.key}:${index}`, 0)"
+                                :aria-selected="activeContextTab(`${item.key}:${index}`) === 0"
+                                :class="{ active: activeContextTab(`${item.key}:${index}`) === 0 }"
+                                @click="selectContextTab(`${item.key}:${index}`, 0)"
                               >think</button>
                               <button
-                                v-for="(toolCall, toolIndex) in message.tool_calls || []"
+                                v-for="(toolCall, toolIndex) in message.tool_calls"
                                 :key="toolCall.id"
                                 type="button"
                                 role="tab"
-                                :aria-selected="activeContextTab(`${item.call.key}:${index}`) === toolIndex + 1"
-                                :class="{ active: activeContextTab(`${item.call.key}:${index}`) === toolIndex + 1 }"
-                                @click="selectContextTab(`${item.call.key}:${index}`, toolIndex + 1)"
-                              >{{ toolCall.function?.name }}</button>
+                                :aria-selected="activeContextTab(`${item.key}:${index}`) === toolIndex + 1"
+                                :class="{ active: activeContextTab(`${item.key}:${index}`) === toolIndex + 1 }"
+                                @click="selectContextTab(`${item.key}:${index}`, toolIndex + 1)"
+                              >{{ toolCall.name }}</button>
                             </div>
                             <pre
-                              v-if="message.reasoning_content && activeContextTab(`${item.call.key}:${index}`) === 0"
+                              v-if="message.reasoning_content && activeContextTab(`${item.key}:${index}`) === 0"
                               class="context-content"
                             >{{ message.reasoning_content }}</pre>
-                            <template v-for="(toolCall, toolIndex) in message.tool_calls || []" :key="toolCall.id">
+                            <template v-for="(toolCall, toolIndex) in message.tool_calls" :key="toolCall.id">
                               <pre
-                                v-if="activeContextTab(`${item.call.key}:${index}`) === toolIndex + 1"
+                                v-if="activeContextTab(`${item.key}:${index}`) === toolIndex + 1"
                                 class="context-content"
-                              >{{ toolCallArguments(toolCall) }}</pre>
+                              >{{ toolCall.args_pretty }}</pre>
                             </template>
                           </template>
                           <template v-else>
-                            <pre v-if="messageText(message)">{{ displayToolContent(messageText(message)) }}</pre>
+                            <pre v-if="message.content">{{ message.content }}</pre>
                           </template>
                         </div>
                       </details>
                     </div>
-                    <details v-if="(item.call.request.payload?.tools || []).length" class="schema-list">
-                      <summary>工具定义 · {{ item.call.request.payload.tools.length }}<ChevronDown class="block-caret" aria-hidden="true" /></summary>
-                      <div v-for="tool in item.call.request.payload.tools" :key="tool.function?.name" class="schema-row">
-                        <code>{{ tool.function?.name }}</code>
-                        <span>{{ tool.function?.description }}</span>
+                    <details v-if="item.request.tools.length" class="schema-list">
+                      <summary>工具定义 · {{ item.request.tools.length }}<ChevronDown class="block-caret" aria-hidden="true" /></summary>
+                      <div v-for="tool in item.request.tools" :key="tool.name" class="schema-row">
+                        <code>{{ tool.name }}</code>
+                        <span>{{ tool.description }}</span>
                       </div>
                     </details>
                   </template>
@@ -497,42 +352,42 @@ onBeforeUnmount(stopConsolePoll)
                 <section class="region">
                   <header class="region-head">
                     <strong>响应</strong>
-                    <button class="raw-toggle" :class="{ active: isRawView(item.call.key, 'response') }" type="button" :disabled="!item.call.response" :aria-label="isRawView(item.call.key, 'response') ? '返回响应详情' : '查看响应原始 JSON'" @click="toggleRawView(item.call.key, 'response')">{{ isRawView(item.call.key, 'response') ? '返回详情' : '原始 JSON' }}</button>
+                    <button class="raw-toggle" :class="{ active: isRawView(item.key, 'response') }" type="button" :disabled="!item.response" :aria-label="isRawView(item.key, 'response') ? '返回响应详情' : '查看响应原始 JSON'" @click="toggleRawView(item.key, 'response')">{{ isRawView(item.key, 'response') ? '返回详情' : '原始 JSON' }}</button>
                   </header>
-                  <p v-if="!item.call.response" class="pending-hint">模型请求已发出，等待响应…</p>
-                  <pre v-else-if="isRawView(item.call.key, 'response')" class="raw-json">{{ shortJson(item.call.response.payload) }}</pre>
+                  <p v-if="!item.response" class="pending-hint">模型请求已发出，等待响应…</p>
+                  <pre v-else-if="isRawView(item.key, 'response')" class="raw-json">{{ shortJson(item.response.raw) }}</pre>
                   <template v-else>
-                    <div v-if="hasAnyOutput(item.call)" class="part-list">
-                      <details v-if="(item.call.response.payload?.thinking_segments || []).length" class="part-row">
+                    <div v-if="item.has_output" class="part-list">
+                      <details v-if="item.response.thinking_segments.length" class="part-row">
                         <summary>
                           <span class="part-tag tag-thinking">think</span>
-                          <span class="part-desc">{{ previewText(item.call.response.payload.thinking_segments.map((segment) => segment.text).join(' '), 72) }}</span>
+                          <span class="part-desc">{{ previewText(item.response.thinking_segments.map((segment) => segment.text).join(' '), 72) }}</span>
                           <ChevronDown class="block-caret" aria-hidden="true" />
                         </summary>
                         <div class="part-body">
-                          <div v-for="(segment, index) in item.call.response.payload.thinking_segments" :key="index" class="think-seg">
+                          <div v-for="(segment, index) in item.response.thinking_segments" :key="index" class="think-seg">
                             <pre>{{ segment.text }}</pre>
                           </div>
                         </div>
                       </details>
-                      <details v-if="item.call.response.payload?.content" class="part-row">
+                      <details v-if="item.response.content" class="part-row">
                         <summary>
                           <span class="part-tag tag-content">正文</span>
-                          <span class="part-desc">{{ previewText(item.call.response.payload.content, 72) }}</span>
+                          <span class="part-desc">{{ previewText(item.response.content, 72) }}</span>
                           <ChevronDown class="block-caret" aria-hidden="true" />
                         </summary>
                         <div class="part-body">
-                          <p class="part-text">{{ item.call.response.payload.content }}</p>
+                          <p class="part-text">{{ item.response.content }}</p>
                         </div>
                       </details>
-                      <details v-for="tool in toolsFor(item.call)" :key="tool.id" class="part-row">
+                      <details v-for="tool in item.response.tools" :key="tool.id" class="part-row">
                         <summary>
                           <span class="part-tag tag-call">call</span>
                           <code class="part-tool-name">{{ tool.name }}</code>
                           <ChevronDown class="block-caret" aria-hidden="true" />
                         </summary>
                         <div class="part-body">
-                          <pre class="part-code">{{ shortJson(tool.arguments) }}</pre>
+                          <pre class="part-code">{{ tool.arguments_pretty }}</pre>
                         </div>
                       </details>
                     </div>

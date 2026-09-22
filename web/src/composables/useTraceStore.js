@@ -1,59 +1,23 @@
-// trace 单例 store：跨组件共享，按会话聚合 trace 事件。
-// 数据全部来自后端 SQLite——进会话拉历史，流式时追加 SSE 推送的事件。
+// trace 视图单例 store：按会话缓存后端成品视图，控制台打开时整表拉取。
 
 import { reactive } from 'vue'
 
-import { fetchTraces } from '../api.js'
+import { fetchTraceView } from '../api.js'
 
-const tracesBySession = reactive({})
-const loadedSessions = new Set()
+const viewsBySession = reactive({})
 
 export function useTraceStore() {
   return {
-    tracesBySession,
+    viewsBySession,
 
-    addTrace(sessionId, item) {
-      if (!sessionId) return
-      const list = tracesBySession[sessionId] || (tracesBySession[sessionId] = [])
-      list.push(item)
+    getView(sessionId) {
+      return viewsBySession[sessionId] || null
     },
 
-    clearTrace(sessionId) {
-      if (!sessionId) return
-      tracesBySession[sessionId] = []
-      loadedSessions.delete(sessionId)
-    },
-
-    getTraces(sessionId) {
-      return tracesBySession[sessionId] || []
-    },
-
-    async loadFromServer(sessionId) {
-      if (!sessionId || loadedSessions.has(sessionId)) return
-      try {
-        const list = await fetchTraces(sessionId)
-        tracesBySession[sessionId] = Array.isArray(list) ? list : []
-        loadedSessions.add(sessionId)
-      } catch {
-        tracesBySession[sessionId] = tracesBySession[sessionId] || []
-      }
-    },
-
-    async pollFromServer(sessionId) {
-      // 重复拉取并按时间与来源去重合并
+    async refresh(sessionId, agentKey) {
       if (!sessionId) return
       try {
-        const list = await fetchTraces(sessionId)
-        const cur = tracesBySession[sessionId] || (tracesBySession[sessionId] = [])
-        const seen = new Set(cur.map((trace) => `${trace.created_at}|${trace.phase}|${trace.source || ''}|${trace.message_id || ''}|${trace.task_id || ''}|${trace.payload?.purpose || ''}`))
-        for (const trace of list) {
-          const key = `${trace.created_at}|${trace.phase}|${trace.source || ''}|${trace.message_id || ''}|${trace.task_id || ''}|${trace.payload?.purpose || ''}`
-          if (!seen.has(key)) {
-            cur.push(trace)
-            seen.add(key)
-          }
-        }
-        loadedSessions.add(sessionId)
+        viewsBySession[sessionId] = await fetchTraceView(sessionId, agentKey)
       } catch {
         // 忽略，下轮重试
       }

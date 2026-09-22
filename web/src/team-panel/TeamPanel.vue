@@ -14,6 +14,7 @@ const props = defineProps({
 defineEmits(['focus-task'])
 
 const tasks = computed(() => props.graph?.tasks || [])
+const outputs = computed(() => props.graph?.outputs || [])
 </script>
 
 <template>
@@ -26,7 +27,7 @@ const tasks = computed(() => props.graph?.tasks || [])
         <div class="section-divider" aria-hidden="true"></div>
         <PipelineTimeline :tasks="tasks" :chief-working="chiefWorking" />
         <div class="section-divider" aria-hidden="true"></div>
-        <ArtifactsCard :tasks="tasks" @focus-task="$emit('focus-task', $event)" />
+        <ArtifactsCard :outputs="outputs" @focus-task="$emit('focus-task', $event)" />
       </div>
     </div>
   </aside>

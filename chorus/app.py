@@ -65,6 +65,7 @@ from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
 from chorus.services.task_lease import LeaseGuard
 from chorus.services.trace import TraceService
+from chorus.services.trace_view import TraceViewService
 from chorus.startup import run_startup
 from chorus.tools import build_tool_dispatch
 
@@ -121,6 +122,7 @@ def create_app() -> FastAPI:
         memory_service=memory_service,
     )
     session_view_service = SessionViewService(message_service, task_service, intent_state_service, option_service)
+    trace_view_service = TraceViewService(trace_service, task_service)
 
     tool_dispatcher = build_tool_dispatch(
         settings_service, task_repo, task_service, task_content_repo, task_artifacts_repo,
@@ -175,6 +177,7 @@ def create_app() -> FastAPI:
     app.state.supervisor_service = supervisor_service
     app.state.task_service = task_service
     app.state.session_view_service = session_view_service
+    app.state.trace_view_service = trace_view_service
     app.state.scheduler = scheduler
     app.state.settings_service = settings_service
     app.state.tool_dispatch = tool_dispatcher

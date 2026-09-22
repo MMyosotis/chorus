@@ -152,15 +152,6 @@ const displayMessages = computed(() =>
   props.messages.filter((message, index) => !isBlankShell(message, index))
 )
 
-// 视图气泡的工具是数组、无思考态，流式气泡是 { state, items } 包裹，渲染前统一包一层
-function wrapTools(tools) {
-  if (Array.isArray(tools)) return { state: 'idle', items: tools }
-  return tools || { state: 'idle', items: [] }
-}
-function wrapState(state) {
-  return state || { state: 'idle' }
-}
-
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
 onUnmounted(() => window.removeEventListener('scroll', onScroll))
 
@@ -168,7 +159,7 @@ watch(
   () => ({
     structure: props.messages.map((m, idx) => messageKey(m, idx)).join('|'),
     content: props.messages.map((m) => {
-      const tItems = Array.isArray(m.tools) ? m.tools : (m.tools?.items || [])
+      const tItems = m.tools?.items || []
       const toolsSig = tItems
         .map((t) => `${t.content?.length ?? 0}:${t.duration_ms ?? ''}`)
         .join(',')
@@ -246,8 +237,8 @@ watch(
             v-else
             :role="msg.role"
             :content="msg.content || ''"
-            :thinking="wrapState(msg.thinking)"
-            :tools="wrapTools(msg.tools)"
+            :thinking="msg.thinking"
+            :tools="msg.tools"
             :recaps="msg.recaps"
             :suspended="msg.suspended"
             :active="streaming && idx === displayMessages.length - 1 && msg.role === 'assistant'"

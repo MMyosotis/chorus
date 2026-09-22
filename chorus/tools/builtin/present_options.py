@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from chorus.domain.events import OptionPromptEvent
-from chorus.domain.option import OptionAnswer, OptionQuestion
+from chorus.domain.option import OptionAnswer, OptionPromptView, OptionQuestion
 from chorus.services.option import OptionPromptService
 from chorus.tools.framework import Reply, Suspend, Tool, ToolContext, ToolRunResult
 
@@ -87,11 +87,7 @@ class PresentOptionsTool(Tool):
             questions=questions,
             message_id=ctx.message_id,
         )
-        event = OptionPromptEvent(
-            prompt_id=prompt.prompt_id,
-            message_id=prompt.message_id,
-            questions=prompt.questions,
-        )
+        event = OptionPromptEvent(prompt=OptionPromptView.from_prompt(prompt))
         return ToolRunResult(
             Suspend(f"已向用户征询选择（{len(questions)} 项），等待用户完成作答。"),
             events=(event,),

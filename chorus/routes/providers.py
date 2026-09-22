@@ -18,7 +18,7 @@ from chorus.services.session import SessionService
 from chorus.services.session_view import SessionViewService
 from chorus.services.settings import SettingsService
 from chorus.services.task import TaskService
-from chorus.services.trace import TraceService
+from chorus.services.trace_view import TraceViewService
 from chorus.tools import ToolDispatch
 
 _T = TypeVar("_T")
@@ -33,7 +33,6 @@ def _provider(attr: str, cls: type[_T]) -> Callable[[Request], _T]:
 
 provide_session_service = _provider("session_service", SessionService)
 provide_message_service = _provider("message_service", MessageService)
-provide_trace_service = _provider("trace_service", TraceService)
 provide_intent_state_service = _provider("intent_state_service", IntentStateService)
 provide_option_service = _provider("option_service", OptionPromptService)
 provide_settings_service = _provider("settings_service", SettingsService)
@@ -41,6 +40,7 @@ provide_memory_service = _provider("memory_service", MemoryService)
 provide_supervisor_service = _provider("supervisor_service", SupervisorService)
 provide_task_service = _provider("task_service", TaskService)
 provide_session_view_service = _provider("session_view_service", SessionViewService)
+provide_trace_view_service = _provider("trace_view_service", TraceViewService)
 provide_scheduler = _provider("scheduler", TaskScheduler)
 provide_tool_dispatch = _provider("tool_dispatch", ToolDispatch)
 provide_skill_loader = _provider("skill_loader", SkillLoader)

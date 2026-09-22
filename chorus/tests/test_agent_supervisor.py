@@ -130,7 +130,7 @@ def test_only_reply():
     s = session_svc.create("test")
     events = list(sup.stream(s.id, "hi"))
     types_seq = [e.type for e in events]
-    assert types_seq[:2] == ["trace", "message_start"]
+    assert types_seq[0] == "message_start"
     assert "token" in types_seq
     assert types_seq[-1] == "done"
     msgs = msg_svc.list_messages(s.id)
@@ -309,6 +309,12 @@ def test_update_intent_state_does_not_finish():
     # 两轮两个 message_start：工具不杀轮次，靠下一轮纯文本结束
     assert types_seq.count("message_start") == 2
     assert types_seq[-1] == "done"
+    # 普通发话流不标注流水线边界
+    assert all(e.resume_boundary is False for e in events if e.type == "message_start")
+    # 意图工具返 Reply 时状态事件不携带确认留档
+    intent_event = next(e for e in events if e.type == "intent_state")
+    assert intent_event.state.intent_status == "empty"
+    assert intent_event.confirmation is None
     # 历史：user + assistant(文本+tool_calls) + tool + assistant(纯文本)
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool", "assistant"]
@@ -357,8 +363,12 @@ def test_update_intent_state_ready_to_confirm_finishes():
     msgs = msg_svc.list_messages(s.id)
     assert [m.role for m in msgs] == ["user", "assistant", "tool"]
     intent_event = next(event for event in events if event.type == "intent_state")
+    # 状态视图带确认锚点，留档成品随事件整体下发
     assert intent_event.state.message_id == msgs[1].id
     assert intent_event.state.confirmation_id
+    assert intent_event.confirmation.message_id == msgs[1].id
+    assert intent_event.confirmation.confirmation_id
+    assert intent_event.confirmation.intent_status == "ready_to_confirm"
     assert msgs[1].content is None
     assert len(msgs[1].tool_calls) == 1
     assert msgs[1].tool_calls[0].name == "update_intent_state"
@@ -535,7 +545,9 @@ def test_resume_rewrites_receipt_and_locks():
     assert sup.has_unreceipted_plan(s.id) is True
     tool_msg_id = msg_svc.list_messages(s.id)[-1].id
 
-    list(sup.resume(s.id, "create_plan", "创作流水线已被用户放弃，本次未交付成品"))
+    resume_events = list(sup.resume(s.id, "create_plan", "创作流水线已被用户放弃，本次未交付成品"))
+    # 建图挂起续跑由后端标注流水线边界，前端据此另起新气泡
+    assert next(e for e in resume_events if e.type == "message_start").resume_boundary is True
 
     msgs = msg_svc.list_messages(s.id)
     # 原工具结果被改写（同一行，不追加新 tool 消息），续跑补助手正文

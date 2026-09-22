@@ -87,7 +87,10 @@ def test_tool_turn_without_content_hosts_following_text():
     ])
     assert len(out) == 1
     assert out[0]["content"] == "结果"
-    assert [tool["name"] for tool in out[0]["tools"]] == ["baidu_search"]
+    assert out[0]["thinking"] == {"state": "idle", "items": []}
+    assert out[0]["tools"]["state"] == "idle"
+    assert [tool["name"] for tool in out[0]["tools"]["items"]] == ["baidu_search"]
+    assert out[0]["tools"]["items"][0]["id"] == "call-baidu_search"
     assert out[0]["suspended"] is False
 
 
@@ -100,7 +103,7 @@ def test_user_message_breaks_merge_keeps_suspended_host():
     ])
     assert len(out) == 3
     assert out[0]["suspended"] is True
-    assert out[0]["tools"][0]["name"] == "baidu_search"
+    assert out[0]["tools"]["items"][0]["name"] == "baidu_search"
     assert out[1]["role"] == "user"
     assert out[1]["content"] == "插话"
     assert out[2]["content"] == "回复"
@@ -114,7 +117,7 @@ def test_following_turns_merge_content_and_tools():
     ])
     assert len(out) == 1
     assert out[0]["content"] == "首段\n\n次段"
-    assert [tool["name"] for tool in out[0]["tools"]] == ["a", "b"]
+    assert [tool["name"] for tool in out[0]["tools"]["items"]] == ["a", "b"]
 
 
 def test_option_host_anchor_merges_follow_ups():
@@ -131,7 +134,7 @@ def test_option_host_anchor_merges_follow_ups():
     assert len(out) == 2
     assert out[1]["id"] == "direction-choice"
     assert out[1]["content"] == "请选择一个方向。\n\n已选生活感悟，接下来补充平台。\n\n请选择发布平台。"
-    assert [tool["name"] for tool in out[1]["tools"]] == [
+    assert [tool["name"] for tool in out[1]["tools"]["items"]] == [
         "present_options", "update_intent_state", "present_options",
     ]
     assert out[1]["suspended"] is True
@@ -148,7 +151,7 @@ def test_failed_option_call_leaves_no_open_host():
     ])
     assert len(out) == 2
     assert "抱歉，刚才工具调用参数没填全" in out[1]["content"]
-    assert [tool["name"] for tool in out[1]["tools"]] == ["present_options"]
+    assert [tool["name"] for tool in out[1]["tools"]["items"]] == ["present_options"]
 
 
 def test_tail_tool_turn_merges_into_current_bubble():
@@ -160,7 +163,7 @@ def test_tail_tool_turn_merges_into_current_bubble():
     ])
     assert len(out) == 2
     assert out[1]["content"] == "答"
-    assert [tool["name"] for tool in out[1]["tools"]] == ["a", "tail"]
+    assert [tool["name"] for tool in out[1]["tools"]["items"]] == ["a", "tail"]
 
 
 def test_tool_turn_without_content_stays_suspended():
@@ -173,7 +176,7 @@ def test_tool_turn_without_content_stays_suspended():
     assert out[0]["role"] == "user"
     assert out[1]["content"] == ""
     assert out[1]["suspended"] is True
-    assert out[1]["tools"][0]["name"] == "only_tool"
+    assert out[1]["tools"]["items"][0]["name"] == "only_tool"
 
 
 def test_tool_turn_after_user_starts_new_segment():
@@ -185,11 +188,11 @@ def test_tool_turn_after_user_starts_new_segment():
     ])
     assert len(out) == 3
     assert out[0]["content"] == "答"
-    assert [tool["name"] for tool in out[0]["tools"]] == ["a"]
+    assert [tool["name"] for tool in out[0]["tools"]["items"]] == ["a"]
     assert out[1]["role"] == "user"
     assert out[2]["content"] == ""
     assert out[2]["suspended"] is True
-    assert [tool["name"] for tool in out[2]["tools"]] == ["b"]
+    assert [tool["name"] for tool in out[2]["tools"]["items"]] == ["b"]
 
 
 def test_plan_boundary_splits_closing_turn():
@@ -238,10 +241,10 @@ def test_merge_splits_at_user_messages():
     ])
     assert len(out) == 3
     assert out[0]["content"] == "首答"
-    assert [tool["name"] for tool in out[0]["tools"]] == ["a", "b"]
+    assert [tool["name"] for tool in out[0]["tools"]["items"]] == ["a", "b"]
     assert out[1]["role"] == "user"
     assert out[2]["content"] == "再答"
-    assert [tool["name"] for tool in out[2]["tools"]] == ["c", "d"]
+    assert [tool["name"] for tool in out[2]["tools"]["items"]] == ["c", "d"]
 
 
 def test_cards_planned_by_status_and_anchored_after_host():

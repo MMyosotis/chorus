@@ -1,11 +1,10 @@
-"""观测钩子：在模型调用与工具执行前后写轨迹并发出事件。"""
+"""观测钩子：在模型调用与工具执行前后写轨迹。"""
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from typing import Any
 
 from chorus.agents.runtime import AgentContext
-from chorus.domain.events import SseEvent, TraceEvent
 from chorus.domain.stream import parse_tool_arguments
 from chorus.domain.trace import (
     ModelRequest,
@@ -26,42 +25,37 @@ class TraceEmitter:
         self._trace = trace_service
         self._dispatcher = dispatcher
 
-    def before_model_request(self, ctx: AgentContext) -> Iterable[SseEvent]:
-        return [self._emit(ctx, TracePhase.MODEL_REQUEST, ModelRequest(
+    def before_model_request(self, ctx: AgentContext) -> None:
+        self._emit(ctx, TracePhase.MODEL_REQUEST, ModelRequest(
             model=ctx.chat_model,
             messages=ctx.turn.provider_messages,
             tools=ctx.tool_schemas,
-        ))]
+        ))
 
-    def after_model_response(self, ctx: AgentContext) -> Iterable[SseEvent]:
-        return [self._emit(ctx, TracePhase.MODEL_RESPONSE, self._response_payload(ctx))]
+    def after_model_response(self, ctx: AgentContext) -> None:
+        self._emit(ctx, TracePhase.MODEL_RESPONSE, self._response_payload(ctx))
 
-    def on_tool_call(self, ctx: AgentContext, call: ToolCall) -> Iterable[SseEvent]:
-        return [self._emit(ctx, TracePhase.TOOL_CALL, TraceToolCall(
+    def on_tool_call(self, ctx: AgentContext, call: ToolCall) -> None:
+        self._emit(ctx, TracePhase.TOOL_CALL, TraceToolCall(
             tool_call_id=call.id, name=call.name, arguments=call.arguments,
             display=self._dispatcher.format_display(call.name, call.arguments),
             running_label=self._dispatcher.running_label(call.name),
-        ))]
+        ))
 
-    def on_tool_result(self, ctx: AgentContext, call: ToolCall, result: Any) -> Iterable[SseEvent]:
-        return [self._emit(ctx, TracePhase.TOOL_RESULT, TraceToolResult(
+    def on_tool_result(self, ctx: AgentContext, call: ToolCall, result: Any) -> None:
+        self._emit(ctx, TracePhase.TOOL_RESULT, TraceToolResult(
             tool_call_id=call.id, name=call.name,
             content=result.outcome.content, duration_ms=result.duration_ms,
             status=result.status,
-        ))]
+        ))
 
-    def _emit(self, ctx: AgentContext, phase: TracePhase, payload: TracePayload) -> SseEvent:
-        created_at = self._trace.add_trace(
+    def _emit(self, ctx: AgentContext, phase: TracePhase, payload: TracePayload) -> None:
+        self._trace.add_trace(
             session_id=ctx.session_id,
             message_id=ctx.turn.message_id or None,
             source=ctx.source,
             task_id=ctx.task_id,
             phase=phase,
-            payload=payload,
-        )
-        return TraceEvent(
-            phase=phase, message_id=ctx.turn.message_id or None,
-            task_id=ctx.task_id, source=ctx.source, created_at=created_at,
             payload=payload,
         )
 

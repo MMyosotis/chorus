@@ -1,16 +1,11 @@
 <script setup>
-import { computed } from 'vue'
 import { Archive, ChevronRight, FileCode2, Image, Lightbulb } from '@lucide/vue'
-import { planArtifacts } from '../composables/artifactsProjection.js'
 import { ROLE_LABELS } from './roleMeta.js'
 
-const props = defineProps({ tasks: { type: Array, default: () => [] } })
+const props = defineProps({ outputs: { type: Array, default: () => [] } })
 const emit = defineEmits(['focus-task'])
 
-const rows = computed(() => planArtifacts(props.tasks))
-const hasRows = computed(() => rows.value.length > 0)
-
-function focusTask(row) { emit('focus-task', row.task) }
+function focusRow(row) { emit('focus-task', row.task_id) }
 </script>
 
 <template>
@@ -19,15 +14,15 @@ function focusTask(row) { emit('focus-task', row.task) }
       <h2 id="artifacts-title">创作产出</h2>
     </header>
 
-    <p v-if="!hasRows" class="artifacts-empty">尚无产出，创作开始后这里会汇总每步成果</p>
+    <p v-if="!outputs.length" class="artifacts-empty">尚无产出，创作开始后这里会汇总每步成果</p>
 
     <TransitionGroup v-else name="artifact-row" tag="ul" class="artifacts-list">
-      <li v-for="row in rows" :key="row.kind">
+      <li v-for="row in outputs" :key="row.kind">
         <button
           type="button"
           class="artifact-row"
           :aria-label="`跳转到${ROLE_LABELS[row.kind]}卡片`"
-          @click="focusTask(row)"
+          @click="focusRow(row)"
         >
           <span class="artifact-icon" aria-hidden="true">
             <Lightbulb v-if="row.kind === 'idea'" />
@@ -43,11 +38,11 @@ function focusTask(row) { emit('focus-task', row.task) }
             </p>
 
             <p v-else-if="row.kind === 'script'" class="artifact-text">
-              {{ row.charCount }} 字 · {{ row.blockCount }} 段
+              {{ row.char_count }} 字 · {{ row.block_count }} 段
             </p>
 
             <template v-else-if="row.kind === 'image'">
-              <p class="artifact-text">{{ row.images.length }} 张配图</p>
+              <p class="artifact-text">{{ row.image_count }} 张配图</p>
             </template>
 
             <template v-else-if="row.kind === 'finalize'">
