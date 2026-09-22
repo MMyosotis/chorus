@@ -57,45 +57,56 @@ class _Turn:
 
 @dataclass
 class _TurnBuilder:
-    """收集完整轮组，首轮建立时接纳此前的旁路。"""
+    """收集完整轮组，旁路缓冲到下一边界再归属：开新轮充当前导，续轮与下条输入冲进当时轮。"""
 
     _turns: list[_Turn] = field(default_factory=list)
     _current: Optional[_Turn] = None
-    _leading_bypasses: list[Bypass] = field(default_factory=list)
+    _pending_bypasses: list[Bypass] = field(default_factory=list)
 
     def add(self, item: _TimelineItem) -> None:
         if isinstance(item, UserInputItem):
+            self._flush_bypasses_to_current()
             self._open_turn(item)
             return
         if isinstance(item, Bypass):
-            items = self._current.items if self._current is not None else self._leading_bypasses
-            items.append(item)
+            self._pending_bypasses.append(item)
             return
         current = self._current
         if current is None or not current.accepts_call(item):
             current = self._open_turn(user_input_for(item.request, item.created_at))
+        current.items.extend(self._pending_bypasses)
+        self._pending_bypasses.clear()
         current.items.append(item)
+
+    def _flush_bypasses_to_current(self) -> None:
+        """下条输入前的待归属旁路冲进当时轮，无当前轮留给开新轮作前导。"""
+        if self._current is None:
+            return
+        self._current.items.extend(self._pending_bypasses)
+        self._pending_bypasses.clear()
 
     def _open_turn(self, user: Optional[UserInputItem]) -> _Turn:
         turn: _Turn = _Turn(
             number=len(self._turns) + _FIRST_TURN_NUMBER,
-            user=user, items=list(self._leading_bypasses),
+            user=user, items=list(self._pending_bypasses),
         )
+        self._pending_bypasses.clear()
         self._current = turn
-        self._leading_bypasses = []
         self._turns.append(turn)
         return turn
 
     def finish(self) -> list[_Turn]:
         if self._turns:
+            self._current.items.extend(self._pending_bypasses)
+            self._pending_bypasses.clear()
             return self._turns
-        if self._leading_bypasses:
-            return [_Turn(number=_BYPASS_ONLY_TURN_NUMBER, items=list(self._leading_bypasses))]
+        if self._pending_bypasses:
+            return [_Turn(number=_BYPASS_ONLY_TURN_NUMBER, items=list(self._pending_bypasses))]
         return []
 
 
 def _split_turns(calls: list[Call], bypasses: list[Bypass], users: list[UserInputItem],) -> list[_Turn]:
-    """按输入与调用边界构建轮组，首轮前的旁路并入首轮。"""
+    """按输入与调用边界构建轮组，旁路缓冲归属到所属边界。"""
     builder = _TurnBuilder()
     for item in sorted([*calls, *bypasses, *users], key=_event_sort_key):
         builder.add(item)
@@ -130,6 +141,25 @@ def _project_item_rows(
     return rows
 
 
+def _user_row(turn: _Turn) -> UserRow:
+    """显式输入行的注入分栏：轨迹无注入段时从轮内首调请求消息回取。"""
+    item = turn.user
+    if not item.injections and turn.first_call is not None:
+        item = _with_backfilled_injections(turn) or item
+    return UserRow(turn=turn.number, created_at=item.created_at, item=item)
+
+
+def _with_backfilled_injections(turn: _Turn) -> Optional[UserInputItem]:
+    """从轮内首调请求回溯注入段，保留显式输入的键、时间与正文。"""
+    parsed = user_input_for(turn.first_call.request, turn.user.created_at)
+    if parsed is None:
+        return None
+    return UserInputItem(
+        key=turn.user.key, created_at=turn.user.created_at,
+        text=turn.user.text, injections=parsed.injections,
+    )
+
+
 def _project_rows(
     turn: _Turn,
     executions_by_id: dict[str, ToolExecution],
@@ -138,8 +168,7 @@ def _project_rows(
     """用户行固定在轮首，其余条目保持轮内顺序。"""
     rows: list[TimelineRow] = []
     if turn.user is not None:
-        user_row = UserRow(turn=turn.number, created_at=turn.user.created_at, item=turn.user)
-        rows.append(user_row)
+        rows.append(_user_row(turn))
 
     for item in turn.items:
         item_rows = _project_item_rows(

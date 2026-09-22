@@ -102,8 +102,8 @@ def test_bypass_before_first_turn_joins_it():
     assert view["stats"]["turn_count"] == 1
 
 
-def test_bypass_between_and_after_turns_inherit_turn():
-    """轮间与收尾后的旁路各继承当时轮次。"""
+def test_bypass_between_turns_follows_next_boundary():
+    """轮间旁路跟随下一边界：开新轮的调用将其作为轮内前导，收尾旁路冲进当前轮。"""
     entries = [
         _request(2, "m1", [{"role": "user", "content": "问一"}]),
         _response(3, "m1"),
@@ -114,9 +114,39 @@ def test_bypass_between_and_after_turns_inherit_turn():
     ]
     view = build_trace_view(entries, {})
     assert [group["turn"] for group in view["turns"]] == [1, 2]
-    assert _kinds(view) == ["user", "loop", "bypass", "user", "loop", "bypass"]
-    assert view["turns"][0]["items"][2]["purpose_label"] == "历史摘要"
-    assert view["turns"][1]["items"][2]["purpose_label"] == "生成标题"
+    assert _kinds(view) == ["user", "loop", "user", "bypass", "loop", "bypass"]
+    assert view["turns"][1]["items"][1]["purpose_label"] == "历史摘要"
+    assert view["turns"][1]["items"][3]["purpose_label"] == "生成标题"
+
+
+def test_bypass_before_next_user_input_stays_in_previous_turn():
+    """收尾期旁路（如标题生成）在下一条用户输入前落前一轮。"""
+    entries = [
+        _request(1, "m1", [{"role": "user", "content": "问一"}]),
+        _response(2, "m1"),
+        _bypass(2.5, "title"),
+        _entry(TracePhase.USER_INPUT, 3, UserInput(content="问二"), message_id="u2"),
+        _request(4, "m2", [{"role": "user", "content": "问二"}]),
+    ]
+    view = build_trace_view(entries, {})
+    assert [group["turn"] for group in view["turns"]] == [1, 2]
+    assert _kinds(view) == ["user", "loop", "bypass", "user", "loop"]
+
+
+def test_bypass_before_subagent_first_call_joins_new_turn():
+    """上一轮收尾与子任务首调之间的旁路（如任务旁白）归子任务开的新轮。"""
+    entries = [
+        _request(1, "m1", [{"role": "user", "content": "问"}]),
+        _response(2, "m1"),
+        _bypass(2.5, "aside"),
+        _request(3, "m2", [{"role": "user", "content": "<step_note>写稿</step_note>\n任务"}], task_id="t1"),
+        _response(4, "m2"),
+    ]
+    view = build_trace_view(entries, {"t1": AgentType.IDEA})
+    assert [group["turn"] for group in view["turns"]] == [1, 2]
+    assert _kinds(view) == ["user", "loop", "user", "bypass", "loop"]
+    assert view["turns"][1]["items"][1]["purpose_label"] == "任务旁白"
+    assert view["turns"][1]["agent_name"] == "选题官"
 
 
 def test_bypass_only_keeps_turn_zero():
@@ -291,6 +321,20 @@ def test_explicit_user_input_uses_real_time_and_parses_injections():
     user = view["turns"][0]["items"][0]
     assert user["created_at"] == 1
     assert user["text"] == "真实输入"
+    assert user["injections"] == [{"label": "记忆摘要", "content": "摘要"}]
+
+
+def test_explicit_input_injections_backfilled_from_first_call():
+    """显式输入轨迹存原文无注入段时，分栏从轮内首调请求消息回取。"""
+    entries = [
+        _entry(TracePhase.USER_INPUT, 1, UserInput(content="问"), message_id="u1"),
+        _request(2, "m1", [{"role": "user", "content": "<memory_summary>摘要</memory_summary>\n问"}]),
+        _response(3, "m1"),
+    ]
+    view = build_trace_view(entries, {})
+    user = view["turns"][0]["items"][0]
+    assert user["created_at"] == 1
+    assert user["text"] == "问"
     assert user["injections"] == [{"label": "记忆摘要", "content": "摘要"}]
 
 
