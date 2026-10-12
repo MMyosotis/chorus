@@ -66,14 +66,8 @@ const imageItems = computed(() =>
   (props.tools.items || []).filter((it) => it.name === 'generate_image')
 )
 
-const planItems = computed(() =>
-  (props.tools.items || []).filter(
-    (it) => it.name === 'output_plan' && it.duration_ms != null
-  )
-)
-
 const hideBody = computed(() =>
-  props.suspended && !props.content && !planItems.value.length
+  props.suspended && !props.content
 )
 
 const showActions = computed(() =>
@@ -168,14 +162,6 @@ function closePreview() {
     </div>
     <div :class="['bubble', role, { bare: bareMode }]">
       <div v-if="!hideBody" :class="role === 'user' ? 'u-body' : 'a-body'">
-        <div v-if="planItems.length" class="plan-list">
-          <div v-for="(item, idx) in planItems" :key="`plan-${idx}`" class="plan-card">
-            <div class="plan-header">执行计划</div>
-            <ol class="plan-steps">
-              <li v-for="(step, i) in (item.arguments?.steps || [])" :key="i">{{ step }}</li>
-            </ol>
-          </div>
-        </div>
         <div v-if="content" class="text" v-html="formattedContent"></div>
       </div>
 
@@ -515,45 +501,6 @@ function closePreview() {
 
 @keyframes status-shimmer {
   to { background-position: -200% 0; }
-}
-
-.plan-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.plan-card {
-  margin: 0 0 var(--ch-space-4);
-  padding: var(--ch-space-3) 0;
-  border-top: 1px solid var(--ch-divider-subtle);
-  border-bottom: 1px solid var(--ch-divider-subtle);
-  background: transparent;
-}
-.plan-card:last-child {
-  margin-bottom: 0;
-}
-
-.plan-header {
-  font-family: var(--ch-font-sans);
-  font-weight: 600;
-  font-size: var(--ch-text-sm);
-  color: var(--ch-text-secondary);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin-bottom: var(--ch-space-3);
-  line-height: 1.5;
-}
-
-.plan-steps {
-  margin: 0;
-  padding-left: var(--ch-space-4);
-  color: var(--ch-text);
-  font-size: var(--ch-text-md);
-  line-height: 1.75;
-}
-
-.plan-steps li {
-  margin: 8px 0;
 }
 
 .image-list {

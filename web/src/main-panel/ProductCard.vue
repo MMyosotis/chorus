@@ -8,7 +8,7 @@ const emit = defineEmits(['preview'])
 
 const card = computed(() => ({
   markdown: props.product.markdown,
-  meta: { title: props.product.title },
+  meta: props.product.meta,
 }))
 </script>
 

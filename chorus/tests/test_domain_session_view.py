@@ -9,6 +9,7 @@ from chorus.domain.message import MessageView
 from chorus.domain.option import OptionItem, OptionPrompt, OptionQuestion
 from chorus.domain.task.graph import TaskGraph, build_task_graph
 from chorus.domain.task.models import Task
+from chorus.domain.task.artifacts import PostCardMeta
 from chorus.domain.task.products import DeliveredProduct
 from chorus.domain.trace import ToolInvocation
 from chorus.domain.session.view import build_session_view
@@ -289,7 +290,8 @@ def test_product_cards_carry_delivered_content():
     """成品卡使用独立契约承载交付全文，不伪造任务。"""
     messages = [_assistant("anchor-msg", "成品交付。")]
     graph = build_task_graph("p1", [_task("t-final", "finalize", "finished", "anchor-msg")], {}, {}, {}, False)
-    products = [DeliveredProduct(id="t-final", message_id="anchor-msg", title="夜骑指南", markdown="# 夜骑", created_at=0.0)]
+    products = [DeliveredProduct(id="t-final", message_id="anchor-msg", title="夜骑指南", markdown="# 夜骑", created_at=0.0,
+                                 meta=PostCardMeta(preview_ref="xiaohongshu/preview/desktop.html", stylesheet_ref="xiaohongshu/preview/desktop.css", title="夜骑指南"))]
     bubbles = _view(messages, graph=graph, products=products)["bubbles"]
     product_cards = [entry for entry in bubbles if entry["kind"] == "product"]
     assert len(product_cards) == 1
@@ -301,6 +303,11 @@ def test_product_cards_carry_delivered_content():
         "title": "夜骑指南",
         "markdown": "# 夜骑",
         "created_at": 0.0,
+        "meta": {
+            "preview_ref": "xiaohongshu/preview/desktop.html",
+            "stylesheet_ref": "xiaohongshu/preview/desktop.css",
+            "title": "夜骑指南",
+        },
     }
 
 

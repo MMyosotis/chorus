@@ -6,7 +6,7 @@ from typing import Iterable, Optional
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass as pydataclass
 
-from chorus.domain.task.artifacts import PostCard
+from chorus.domain.task.artifacts import PostCard, PostCardMeta
 from chorus.domain.task.models import Task
 
 
@@ -19,6 +19,7 @@ class DeliveredProduct:
     title: str
     markdown: str
     created_at: float
+    meta: PostCardMeta
 
 
 def select_delivered_tasks(tasks: Iterable[Task]) -> list[Task]:
@@ -35,6 +36,7 @@ def build_delivered_products(pairs: list[tuple[Task, PostCard]]) -> list[Deliver
         title=card.meta.title,
         markdown=card.markdown,
         created_at=task.created_at,
+        meta=card.meta,
     ) for task, card in ordered]
 
 
