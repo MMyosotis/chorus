@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify'
 import HilRecap from './HilRecap.vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
 import { resolveActivityState } from '../composables/messageActivity.js'
+import { shouldUseBareMode } from '../composables/messageBubble.js'
 
 const props = defineProps({
   role: { type: String, required: true },
@@ -37,9 +38,7 @@ const formattedContent = computed(() => {
   return DOMPurify.sanitize(html)
 })
 
-const bareMode = computed(() =>
-  props.role === 'assistant' && !props.content && (props.active || props.recaps.length > 0)
-)
+const bareMode = computed(() => shouldUseBareMode(props))
 
 const activityState = computed(() => resolveActivityState(props))
 

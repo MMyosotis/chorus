@@ -680,7 +680,7 @@ async function saveCandidate() {
 
 .images {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(480px, 40%), 1fr));
   align-items: start;
   gap: var(--ch-space-3);
 }
@@ -693,6 +693,8 @@ async function saveCandidate() {
 .images img {
   display: block;
   width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
   border-radius: var(--ch-radius-list);
 }
 
@@ -731,6 +733,10 @@ async function saveCandidate() {
 .feedback.folded .feedback-body {
   opacity: 0;
   transform: translateY(8px);
+}
+
+@media (max-width: 700px) {
+  .images { grid-template-columns: 1fr; }
 }
 
 .feedback label {

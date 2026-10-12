@@ -2,8 +2,12 @@
 import { computed } from 'vue'
 import AgentAvatar from '../team-panel/AgentAvatar.vue'
 import { ROLE_FULL } from '../team-panel/roleMeta.js'
+import { visibleComposingUnits } from '../composables/taskProgress.js'
 
-const props = defineProps({ task: { type: Object, required: true } })
+const props = defineProps({
+  task: { type: Object, required: true },
+  targetUnits: { type: Number, default: 0 },
+})
 
 const CN_NUM = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
 function toCN(n) {
@@ -35,7 +39,11 @@ const activitySuffix = computed(() => {
 })
 
 const chars = computed(() => prog.value.composing_chars || 0)
-const units = computed(() => prog.value.composing_units || 0)
+const units = computed(() => visibleComposingUnits(
+  agentType.value,
+  prog.value.composing_units || 0,
+  props.targetUnits,
+))
 const unitLabel = computed(() => prog.value.composing_label || '')
 const hasOutput = computed(() => chars.value > 0 || units.value > 0)
 const unitCountText = computed(() => (units.value ? String(units.value) : ''))

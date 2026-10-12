@@ -20,6 +20,7 @@ import {
 } from './api.js'
 import { useTraceStore } from './composables/useTraceStore.js'
 import { useTaskPolling } from './composables/useTaskPolling.js'
+import { findLastConversationEntryIndex } from './composables/messageStream.js'
 import TeamPanel from './team-panel/TeamPanel.vue'
 import MemoryPanel from './main-panel/MemoryPanel.vue'
 
@@ -431,9 +432,8 @@ function createStreamHandler(sessionId) {
 
     if (payload.type === 'message_start') {
       finalizeCurrent()
-      // resume 续写挂起气泡：跳过尾部注入卡（确认卡/阶段卡），最近一条真实消息若为挂起助手气泡则复用
-      let lastIdx = list.length - 1
-      while (lastIdx >= 0 && list[lastIdx].kind) lastIdx--
+      // resume 续写挂起气泡：跳过尾部虚拟卡，最近一条真实消息若为挂起助手气泡则复用
+      const lastIdx = findLastConversationEntryIndex(list)
       const last = list[lastIdx]
       if (last && last.role === 'assistant' && last.suspended) {
         // 建图挂起是流水线边界，后端在事件里标注：另起新气泡，不续写挂起气泡
@@ -541,6 +541,7 @@ function createStreamHandler(sessionId) {
 
 async function runAssistantStream(sessionId, streamFactory) {
   streamingBySession[sessionId] = true
+  chatWindowRef.value?.followBottom('smooth')
   const handler = createStreamHandler(sessionId)
   const { done } = streamFactory(handler.onEvent)
   await done

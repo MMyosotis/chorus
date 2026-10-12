@@ -103,7 +103,7 @@ const excerpt = computed(() => {
   transition: border-color var(--ch-duration-fast) var(--ch-ease), background var(--ch-duration-fast) var(--ch-ease), transform var(--ch-duration-fast) var(--ch-ease);
 }
 .artifact-card:focus-visible { outline: 0; }
-.ac-cover { width: 240px; aspect-ratio: 4 / 3; object-fit: cover; flex-shrink: 0; border-radius: var(--ch-radius-card); }
+.ac-cover { width: 192px; aspect-ratio: 1 / 1; object-fit: cover; flex-shrink: 0; border-radius: var(--ch-radius-card); }
 .ac-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .ac-title { display: block; color: var(--ch-text); font-size: 20px; font-weight: 600; line-height: 1.3; }
 .ac-excerpt {

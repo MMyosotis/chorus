@@ -220,7 +220,11 @@ watch(
           </div>
           <ConfirmedCard v-else-if="msg.kind === 'confirmed'" :task="msg.task" @preview-task="openPreview" />
           <ProductCard v-else-if="msg.kind === 'product'" :product="msg.product" @preview="openPreview" />
-          <RunningPanel v-else-if="msg.kind === 'running'" :task="msg.task" />
+          <RunningPanel
+            v-else-if="msg.kind === 'running'"
+            :task="msg.task"
+            :target-units="intentState?.image_count || 0"
+          />
           <div v-else-if="msg.kind === 'recovery'" class="recovery-panel">
             <header class="task-turn-head">
               <AgentAvatar :agent-type="msg.task.agent_type" status="finished" :size="36" />
