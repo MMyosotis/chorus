@@ -1,6 +1,8 @@
 """压缩纯函数测试：token 估算、超长判定、微压缩换占位、摘要指令。"""
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 from chorus.domain.bypass import BypassScope
 from chorus.domain.compact import (
     _SUMMARY_INSTRUCTION,
@@ -72,8 +74,6 @@ def test_summary_instruction_avoids_memory_content():
 
 
 def test_summary_prompt_tags_history():
-    from unittest.mock import MagicMock
-
     client = MagicMock()
     client.chat.completions.create.return_value = MagicMock(
         usage=None, choices=[MagicMock(message=MagicMock(content="摘要"))],

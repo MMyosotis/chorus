@@ -1,4 +1,4 @@
-"""上下文压缩：微压缩换占位、摘要覆写，另附估算与超长判定。"""
+"""上下文压缩纯机制：微压缩换占位、摘要生成、估算与超长判定。"""
 from chorus.domain.compact.micro import TOOL_PLACEHOLDER, apply_micro
 from chorus.domain.compact.summary import SummaryGenerationService, _SUMMARY_INSTRUCTION
 from chorus.domain.compact.tokens import COMPACT_THRESHOLD_TOKENS, estimate_tokens, is_context_overflow

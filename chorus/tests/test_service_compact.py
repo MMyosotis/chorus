@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid6
 
 import chorus.services.compact as compact_mod
+from chorus.domain.compact import estimate_tokens
 from chorus.domain.message import AssistantMessage, Message, ToolMessage, UserMessage
 from chorus.repo.message import MessageRepository
 from chorus.repo.provider_message import ProviderMessageRepository
@@ -11,12 +12,15 @@ from chorus.services.compact import CompactService
 from chorus.tests._helpers import build_compact_service, fresh_engine, seed_session
 
 
-class _LowThreshold:
-    """把阈值临时压到极小，触发摘要分支。"""
+class _Threshold:
+    """把阈值临时定到指定值，驱动不同的压缩分支。"""
+
+    def __init__(self, value: int):
+        self._value = value
 
     def __enter__(self):
         self._saved = compact_mod.COMPACT_THRESHOLD_TOKENS
-        compact_mod.COMPACT_THRESHOLD_TOKENS = 1
+        compact_mod.COMPACT_THRESHOLD_TOKENS = self._value
         return self
 
     def __exit__(self, *exc):
@@ -74,7 +78,7 @@ def test_ensure_active_compacts_and_persists_summary_row():
     for idx in range(4):
         msg = UserMessage(id=str(uuid6.uuid7()), session_id="s1", created_at=float(idx), content=f"第{idx}条")
         _append_both(msg_repo, provider_repo, msg)
-    with _LowThreshold():
+    with _Threshold(1):
         active = compact.ensure_active("s1")
     # 现场只剩摘要行（普通用户消息），原表四条原文一字不动
     assert [m.role for m in active] == ["user"]
@@ -87,7 +91,7 @@ def test_service_restarts_stateless():
     engine, msg_repo, provider_repo, compact = _build()
     _append_both(msg_repo, provider_repo, UserMessage(
         id=str(uuid6.uuid7()), session_id="s1", created_at=0.0, content="旧消息"))
-    with _LowThreshold():
+    with _Threshold(1):
         compact.ensure_active("s1")
     _append_both(msg_repo, provider_repo, UserMessage(
         id=str(uuid6.uuid7()), session_id="s1", created_at=9.0, content="新消息"))
@@ -101,7 +105,7 @@ def test_ensure_active_reuses_summary_without_recompacting():
     engine, msg_repo, provider_repo, compact = _build()
     _append_both(msg_repo, provider_repo, UserMessage(
         id=str(uuid6.uuid7()), session_id="s1", created_at=0.0, content="旧消息"))
-    with _LowThreshold():
+    with _Threshold(1):
         compact.ensure_active("s1")
     summary_id = provider_repo.list_by_session("s1")[0].id
     _append_both(msg_repo, provider_repo, UserMessage(
@@ -112,10 +116,50 @@ def test_ensure_active_reuses_summary_without_recompacting():
     assert active[-1].content == "新消息"
 
 
-def test_micro_elides_old_tools_in_place_keeping_pairs():
+def _over_for_micro_only(provider_repo) -> "_Threshold":
+    """阈值定到「现在超、微压缩后必低于」，单测微压缩分支而不触发摘要。"""
+    estimate = estimate_tokens(provider_repo.list_by_session("s1"))
+    return _Threshold(estimate - 1)
+
+
+def test_compact_history_skips_below_threshold():
+    """内存历史没超阈值原样返回，一行不压。"""
+    _, _, _, compact = _build()
+    msgs = [_tool_msg(f"call-{idx}", "x" * 200) for idx in range(3)]
+    assert compact.compact_history(msgs) == msgs
+
+
+def test_compact_history_elides_when_over_threshold():
+    """内存历史超阈值换占位，只到微压缩为止，不触摘要。"""
+    _, _, _, compact = _build()
+    msgs = [_tool_msg(f"call-{idx}", "x" * 200) for idx in range(4)]
+    with _Threshold(estimate_tokens(msgs) - 1):
+        marked = compact.compact_history(msgs)
+    assert marked[0].content == "[旧工具结果已省略]"
+    assert all(m.content == "x" * 200 for m in marked[1:])
+
+
+def _tool_msg(call_id: str, content: str) -> ToolMessage:
+    return ToolMessage(
+        id=f"t-{call_id}", session_id="s1", created_at=0.0,
+        tool_call_id=call_id, name="baidu_search", content=content,
+    )
+
+
+def test_micro_skipped_below_threshold():
+    """没超阈值一行不压：现场表与原表同文，小体量工具结果原样保留。"""
     engine, msg_repo, provider_repo, compact = _build()
     _seed_rounds(msg_repo, provider_repo, 5)
     active = compact.ensure_active("s1")
+    assert [m.content for m in active] == [m.content for m in provider_repo.list_by_session("s1")]
+    assert all(m.content == "x" * 300 for m in active if m.role == "tool")
+
+
+def test_micro_elides_old_tools_in_place_keeping_pairs():
+    engine, msg_repo, provider_repo, compact = _build()
+    _seed_rounds(msg_repo, provider_repo, 5)
+    with _over_for_micro_only(provider_repo):
+        active = compact.ensure_active("s1")
     # 最近 3 条工具结果保留全文，更早两条现场表正文已换成占位；原表原文一字未改
     stored_tools = [m for m in msg_repo.list_by_session("s1") if m.role == "tool"]
     assert all(m.content == "x" * 300 for m in stored_tools)
@@ -132,7 +176,8 @@ def test_repeated_ensure_active_stays_stable_with_paired_tools():
     """长会话连调多次现场不漂移，且不残留没有工具调用与之对应的孤立结果。"""
     engine, msg_repo, provider_repo, compact = _build()
     _seed_rounds(msg_repo, provider_repo, 25)
-    runs = [compact.ensure_active("s1") for _ in range(3)]
+    with _over_for_micro_only(provider_repo):
+        runs = [compact.ensure_active("s1") for _ in range(3)]
     assert [len(active) for active in runs] == [len(runs[0])] * 3
     for active in runs:
         offered = {call.id for msg in active if msg.role == "assistant" for call in msg.tool_calls}
@@ -144,7 +189,7 @@ def test_summary_supersedes_elided_tools():
     engine, msg_repo, provider_repo, compact = _build()
     _seed_rounds(msg_repo, provider_repo, 5)
     compact.ensure_active("s1")
-    with _LowThreshold():
+    with _Threshold(1):
         active = compact.ensure_active("s1")
     assert [m.role for m in active] == ["user"]
     assert all(m.content == "x" * 300 for m in msg_repo.list_by_session("s1") if m.role == "tool")

@@ -159,6 +159,7 @@ def _build_assembly():
         skill_loader,
         stub_memory_service(),
         lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
+        compact=build_compact_service(engine),
     )
 
     scheduler = TaskScheduler(

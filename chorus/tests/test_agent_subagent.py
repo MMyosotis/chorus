@@ -136,6 +136,7 @@ def _build_subagent(engine, msg_svc, trace_svc, task_repo, art_repo, content_rep
         _provider, loop, status_gen, SkillLoader(skills_dir=Path("/nonexistent-skills")),
         stub_memory_service(),
         lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
+        compact=build_compact_service(engine),
     )
 
 
@@ -319,6 +320,7 @@ def test_subagent_provider_messages_injects_recall():
         skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=None,
         memory=MemoryRecall(items=recalled),
+        compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
     user_msgs = [m for m in msgs if m["role"] == "user"]
@@ -346,6 +348,7 @@ def test_subagent_provider_messages_injects_digest_into_system():
         skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=None,
         memory=MemoryRecall(digest=digest),
+        compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
     system = msgs[0]["content"]

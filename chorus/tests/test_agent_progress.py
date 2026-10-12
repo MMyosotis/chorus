@@ -110,6 +110,7 @@ def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, conte
         SkillLoader(skills_dir=Path("/nonexistent-skills")),
         stub_memory_service(),
         lease=LeaseGuard(task_repo, art_repo, content_repo, progress_repo),
+        compact=build_compact_service(engine),
     )
 
 
@@ -277,6 +278,7 @@ def test_image_after_dispatch_counts_units():
         skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=ToolDispatch([], _stub_settings()),
         memory=MemoryRecall(),
+        compact=build_compact_service(engine),
     )
     call = ToolCall(id="c1", name="generate_image", arguments={"prompt": "窗边咖啡"})
     strategy.after_dispatch(call, DispatchResult(Reply("http://x"), 10, units_produced=1))
@@ -299,6 +301,7 @@ def test_tool_without_units_not_counted():
         skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
         tool_dispatch=ToolDispatch([], _stub_settings()),
         memory=MemoryRecall(),
+        compact=build_compact_service(engine),
     )
     call = ToolCall(id="c1", name="baidu_search", arguments={"query": "咖啡"})
     progress_repo.set_composing_units("t1", 0)

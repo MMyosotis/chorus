@@ -10,7 +10,6 @@ from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
 from chorus.agents.runtime import AgentContext, LoopAction, LoopSignal
 from chorus.domain.bypass import BypassScope
-from chorus.domain.compact import apply_micro
 from chorus.domain.message import (
     AssistantMessage,
     Message,
@@ -42,6 +41,7 @@ from chorus.repo.task import TaskRepository
 from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.services.memory import MemoryService
+from chorus.services.compact import CompactService
 from chorus.services.task_lease import LeaseGuard
 from chorus.repo.task_content import TaskContentRepository
 from chorus.agents.chat_model import ChatModelProvider
@@ -63,7 +63,7 @@ class SubagentLoopStrategy(LoopStrategy):
 
     def __init__(self, *, task, owner_id, profile, invoke,
                  task_repo, progress_repo, lease, skill_hints, tool_dispatch,
-                 memory: MemoryRecall):
+                 memory: MemoryRecall, compact: CompactService):
         self.task = task
         self.owner_id = owner_id
         self.profile = profile
@@ -75,6 +75,7 @@ class SubagentLoopStrategy(LoopStrategy):
         self._tool_dispatch = tool_dispatch
         self._produced_units = 0
         self._recall = memory
+        self._compact = compact
 
     def before_turn(self):
         self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
@@ -116,8 +117,8 @@ class SubagentLoopStrategy(LoopStrategy):
             ToolMessage.transient(session_id, tool_call_id=call.id, name=call.name, content=dispatch.outcome.content)
             for call, dispatch in pairs
         )
-        # 内存历史不进库，微压缩自己走一遍，不经压缩编排服务
-        self.history, _ = apply_micro(self.history)
+        # 内存历史不进库，统一走压缩编排服务（只到微压缩为止）
+        self.history = self._compact.compact_history(self.history)
         return LoopAction(LoopSignal.CONTINUE, [])
 
     def after_text(self, ctx, result):
@@ -175,6 +176,7 @@ class SubAgentService:
         skill_loader: SkillLoader,
         memory_service: MemoryService,
         lease: LeaseGuard,
+        compact: CompactService,
     ):
         self._message = message_service
         self._task_repo = task_repo
@@ -188,6 +190,7 @@ class SubAgentService:
         self._skill = skill_loader
         self._memory = memory_service
         self._lease = lease
+        self._compact = compact
 
     def run(self, task_id: str) -> None:
         """后台线程入口，跑 ReAct 写库，异常转失败。"""
@@ -231,6 +234,7 @@ class SubAgentService:
             skill_hints=self._skill.format_hints(),
             tool_dispatch=self._tools,
             memory=memory,
+            compact=self._compact,
         )
 
         list(self._loop.run(ctx, entry=entry, strategy=strategy))

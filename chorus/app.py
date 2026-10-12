@@ -156,6 +156,7 @@ def create_app() -> FastAPI:
         agent_loop, aside_generator, skill_loader,
         memory_service=memory_service,
         lease=lease_guard,
+        compact=compact_service,
     )
     scheduler = TaskScheduler(
         task_repo, subagent_service.run, session_service,
