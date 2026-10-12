@@ -20,9 +20,6 @@ web/playwright-report/
 /.playwright-mcp/
 /.mcp.json
 
-# docs
-/docs
-
 # chorus
 /data/
 .env
