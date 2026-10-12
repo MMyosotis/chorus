@@ -152,6 +152,10 @@ def test_agent_profiles_registry():
     # 展示名非空
     for p in AGENT_PROFILES.values():
         assert p.display_name
+    # 进度单元语义随档案：文本角色流式标记计数，配图不数输出行
+    unit_markers = {"idea": "### ", "script": "## ", "image": None, "finalize": "## "}
+    for at, marker in unit_markers.items():
+        assert AGENT_PROFILES[at].unit_marker == marker
 
 
 def test_activity_line_injected_into_graph():

@@ -1,4 +1,4 @@
-"""角色档案注册表：四子角色的展示名、职责、入场台词、产物模型与产物解析。
+"""角色档案注册表：四子角色的展示名、职责、入场台词、产物模型、产物解析与进度单元语义。
 新增角色只需加一条档案，文案禁 emoji，切段校验还原随档案内聚。"""
 from __future__ import annotations
 
@@ -40,6 +40,7 @@ class AgentProfile:
     artifacts_model: Type[Any]
     artifacts_parser: Callable[[str], Any]
     composing_label: str
+    unit_marker: str | None = None
     activity_lines: dict = field(default_factory=dict)
 
     def activity_line(self, kind: str) -> str:
@@ -71,6 +72,7 @@ AGENT_PROFILES: dict[AgentType, AgentProfile] = {
         artifacts_model=IdeaArtifacts,
         artifacts_parser=parse_idea_md,
         composing_label="个候选",
+        unit_marker="### ",
         activity_lines={
             "thinking": "正在梳理选题",
             "searching": "正在搜索",
@@ -86,6 +88,7 @@ AGENT_PROFILES: dict[AgentType, AgentProfile] = {
         artifacts_model=ScriptArtifacts,
         artifacts_parser=parse_script_md,
         composing_label="段",
+        unit_marker="## ",
         activity_lines={
             "thinking": "正在构思文案",
             "searching": "正在搜索",
@@ -116,6 +119,7 @@ AGENT_PROFILES: dict[AgentType, AgentProfile] = {
         artifacts_model=PostCard,
         artifacts_parser=parse_postcard_md,
         composing_label="节",
+        unit_marker="## ",
         activity_lines={
             "thinking": "正在梳理结构",
             "composing": "正在撰写",
