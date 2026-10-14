@@ -32,7 +32,7 @@ def build_recall_prompt(digest: MemoryDigest, task_hint: str) -> str:
 
 
 def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) -> str:
-    """对话历史 + 已有目录，要求提取新的参考记忆，由模型判定可见角色。"""
+    """对话历史 + 已有目录，要求模型提取记忆并判定类型与可见角色。"""
     history_text = _history_to_text(history)
     existing_lines = [f"- {mem.description}" for mem in existing]
     existing_text = "\n".join(existing_lines) if existing_lines else "（暂无）"
@@ -42,12 +42,13 @@ def build_extract_prompt(history: list[Message], existing: list[CreatorMemory]) 
         f"<existing_memories>\n已有记忆（避免重复）：\n{existing_text}\n</existing_memories>\n\n"
         "## 要求\n\n"
         "1. description 必须是简短标签，格式为「类型：要点」（如「偏好：第一人称口语化」「受众：大学生为主」），不得超过 20 字\n"
-        "2. 只提取 reference 类（参考性）记忆：身份/边界/偏好/文风/选题模式/栏目骨架等\n"
-        "3. 没有新信息，或新信息已被已有记忆覆盖时，返回空数组 []\n"
-        "4. 返回 JSON 数组，每条包含 description, content, platform, visible_to\n"
-        "5. platform 用字符串数组，空数组 [] 表示通用，否则如 [\"小红书\"]\n"
-        "6. visible_to 用字符串数组，空数组 [] 表示全员可见，否则填可见角色（supervisor/idea/script/image/finalize）\n"
-        "7. 仅返回 JSON，不要其他文字"
+        "2. 根据对话证据判断 kind，只能是 reference 或 performance。reference 记录用户过去的具体选择或行为，作为历史参考；performance 记录能确认的稳定事实或模式\n"
+        "3. 单次选题或主题选择只记为 reference，例如写明‘用户本次选择了某题材’，不要推断成用户偏好。只有用户明确告知，或多次历史记录相互印证时，才能记为 performance；证据不足时记为 reference\n"
+        "4. 没有新信息，或新信息已被已有记忆覆盖时，返回空数组 []\n"
+        "5. 返回 JSON 数组，每条包含 kind, description, content, platform, visible_to\n"
+        "6. platform 用字符串数组，空数组 [] 表示通用，否则如 [\"小红书\"]\n"
+        "7. visible_to 用字符串数组，空数组 [] 表示全员可见，否则填可见角色（supervisor/idea/script/image/finalize）\n"
+        "8. 仅返回 JSON，不要其他文字"
     )
 
 
@@ -71,7 +72,7 @@ def build_consolidate_prompt(memories: list[CreatorMemory]) -> str:
         "请整理这些记忆：\n"
         "1. 合并重复条目\n"
         "2. 删除过时或矛盾的条目\n"
-        "3. 把已被发布作品验证、可作为长期范本的 reference 晋升为 performance；其余保持 reference\n"
+        "3. 只有用户明确告知，或多次历史记录相互印证，才能把 reference 晋升为 performance；单次选择或行为继续作为历史参考，不要据此推断稳定偏好；证据不足时保持 reference\n"
         "4. 整理到 20 条以内\n"
         "5. description 统一改写为「类型：要点」格式，不得超过 20 字\n"
         "6. 合并多条时取来源里最新的时间；未合并的保留原时间；created_at 原样抄回\n"
