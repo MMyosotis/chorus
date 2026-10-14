@@ -20,6 +20,7 @@ uv sync                                              # 安装依赖
 
 # 意图链路端到端（真实 LLM 跑创作场景，验证拦截续跑 + intent_states 表写入 + 卡片数据）
 .venv/bin/python scripts/e2e_intent_test.py
+# scripts/ 下另有 6 个同族 e2e_*.py（http-sse / 选题 / 选项 / 进度 / 技能 / 标题），均临时库隔离
 
 # 一键跑全部自动化测试（逐模块裸跑；也可 `.venv/bin/python -m pytest chorus/tests/`）
 .venv/bin/python -m chorus.tests
@@ -59,15 +60,15 @@ cd web && npm run e2e                  # Playwright 冒烟（web/e2e/，需前�
 | `config.py` | 从 `.env` 读取配置常量（含 `DATA_DIR`、三张模型表、调度参数），纯静态值；`SKILLS_DIR` 在 `domain/skill/loader.py`（围绕 skill 概念，SkillLoader 默认扫描目录） |
 | `app.py` | FastAPI 应用工厂 `create_app()`：内联装配所有 Repository / Service / Tool / Hook / 三 Agent / Scheduler（构造器注入，中间对象为局部变量），HTTP 需要的 service 挂 `app.state`；CORS、注册路由、副作用经 `_build_lifespan` |
 | `startup.py` | `run_startup(session_service, scheduler)`：装配后的启动副作用——会话元数据加载、scheduler.start()（技能扫描在 `SkillLoader` 构造时完成，设置回灌在 `SettingsService` 构造时完成） |
-| `domain/` | 领域层，**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作 + 围绕该概念的基础设施型 service：`session`/`session_view`(会话视图装配纯函数：助手轮次合并成气泡、任务虚拟卡锚点插入、留档回看折叠、信箱与阶段派生)/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`，支持 `progress`/`plan` 等 subtype)/`trace`(多来源：supervisor/subagent/scheduler，靠 `message_id` 与 `task_id` 关联)/`skill`/`events`(SSE sealed 联合)/`log`(分级日志薄封装 + 按层命名取 logger)/`intent`(会话级意图状态机：IntentState + IntentStatus empty→capturing→…→dispatched + derive_next_action status→next_action 派生不模型填 + IntentStatePatch)/`option`(会话级选项征询：主 agent 出选择题，作答后续跑 loop)/`bypass`(旁路非流式单轮调用，关思考)/`suggestion`(输入建议生成)/`memory`(创作者记忆包：模型 + 召回/提取/整理 prompt + 渲染)/`title`/`stream`(`consume_stream` supervisor 用 / `silent_consume` subagent 用 / `drain_stream` 复用 + `StreamResult`)/`compact`(包：`micro` 旧工具结果换占位 / `summary` SummaryGenerationService 摘要生成 / `tokens` 估算与超长判定)/`prompt`(按 agent 纵向聚合，打开一个模块即见该 agent 全部拼装位置：`assembly` 纯机制 build_system_prompt/inject_user_blocks；`subagent` 子 agent 角色基础文案、技能段、首轮消息骨架 render_skeleton 与四段 assemble_invoke；`supervisor` 主调度基础文案与其专属的意图快照、成品清单段；召回记忆段两边共用，直接取 domain.memory 的渲染函数)/`task`(单一概念内聚为包：`models` Task(带 can_schedule)/TaskContent 内容行 + `pipeline` StepSpec/TaskPlan(构造即校验，expand 产任务与步骤规格配对，不碰库) + `artifacts` 四角色产物模型/PostCard 成品契约/invoke_text 喂回文本 + `state` LEGAL_TRANSITIONS/topological_order + `profiles` AGENT_PROFILES + AgentProfile.parse_output + `markdown` Mistune AST 产物解析 + `graph` 任务图视图聚合/序列化 + `progress` 运行期进度快照值对象(TaskProgress/dump_progress) + `aside`(旁白生成) + `errors`) |
+| `domain/` | 领域层，**按业务概念扁平组织**，每个模块同放该概念的数据模型 + 纯操作 + 围绕该概念的基础设施型 service：`session`/`session_view`(会话视图装配纯函数：助手轮次合并成气泡、任务虚拟卡锚点插入、留档回看折叠、信箱与阶段派生)/`message`(sealed 联合 + `to_provider_dict()`/`build_provider_messages`/`build_history_view`，支持 `progress`/`plan` 等 subtype)/`trace`(包：多来源轨迹靠 `message_id` 与 `task_id` 关联，聚合配对产出控制台与消息轨迹视图)/`skill`/`events`(SSE sealed 联合)/`log`(分级日志薄封装 + 按层命名取 logger)/`intent`(会话级意图状态机：IntentState + IntentStatus empty→capturing→…→dispatched + derive_next_action status→next_action 派生不模型填 + IntentStatePatch)/`option`(会话级选项征询：主 agent 出选择题，作答后续跑 loop)/`bypass`(旁路非流式单轮调用，关思考)/`suggestion`(输入建议生成)/`memory`(创作者记忆包：模型 + 召回/提取/整理 prompt + 渲染)/`title`/`stream`(`consume_stream` supervisor 用 / `silent_consume` subagent 用 / `drain_stream` 复用 + `StreamResult`)/`compact`(包：`micro` 旧工具结果换占位 / `summary` SummaryGenerationService 摘要生成 / `tokens` 估算与超长判定)/`prompt`(按 agent 纵向聚合，打开一个模块即见该 agent 全部拼装位置：`assembly` 纯机制 build_system_prompt/inject_user_blocks；`subagent` 子 agent 角色基础文案、技能段、首轮消息骨架 render_skeleton 与四段 assemble_invoke；`supervisor` 主调度基础文案与其专属的意图快照、成品清单段；召回记忆段两边共用，直接取 domain.memory 的渲染函数)/`task`(单一概念内聚为包：`models` Task(带 can_schedule)/TaskContent 内容行 + `pipeline` StepSpec/TaskPlan(构造即校验，expand 产任务与步骤规格配对，不碰库) + `artifacts` 四角色产物模型/PostCard 成品契约/invoke_text 喂回文本 + `state` LEGAL_TRANSITIONS/topological_order + `profiles` AGENT_PROFILES + AgentProfile.parse_output + `markdown` Mistune AST 产物解析 + `graph` 任务图视图聚合/序列化 + `products` 已交付成品筛选/组装/清单规则 + `progress` 运行期进度快照值对象(TaskProgress/dump_progress) + `aside`(旁白生成) + `errors`) |
 | `tools/` | 工具子系统（领域模型 + 框架，但因规模大而独立成顶层包）：`models` 纯模型 ToolSchema/ToolCall/ToolResult + `framework` select_schemas_by_names 与 Tool/ToolContext/ToolDispatch（登记+查 schema+派发） + `builtin/`(7 工具：load_skill / list_skill / generate_image / baidu_search / create_plan / present_options / update_intent_state) + `clients/`(ark_image / baidu_search 外部依赖封装)。**所有工具（含 create_plan）经 `ToolDispatch` 统一登记/派发**，schema 按 `config.TOOL_WHITELISTS` 白名单暴露给各 agent。依赖 `domain/skill` 与 `services`（如生图模型选择查 SettingsService），单向，不反向被依赖 |
 | `agents/` | **三 loop 编排层**（取数据→调 domain/LLM/工具→存数据 + agent loop 流程控制）：`supervisor`(SupervisorService SSE 流式，建图/only_reply 路由，原 ChatService 迁入改造)、`subagent`(SubAgentService 后台线程 ReAct，写库不连 SSE)、`scheduler`(TaskScheduler 守护线程轮询派发 + zombie 回收，裸线程派发（无并发上限）)、`loop`(AgentLoop 共享 kernel + `LoopStrategy` 协议 + `dispatch_tool_calls`，supervisor/subagent 共用)、`runtime`(AgentContext/TurnState/LoopOutcome/LoopSignal/LoopAction 运行时脚手架)、`truncation`(TruncationGuard 截断恢复组件)、`chat_model`(ChatModelProvider.get_entry 取当前对话模型，子 agent 与 supervisor 同走)、`progress_sink`(ProgressSink 流式正文进度快照写入器，逐字累计节流覆盖写)。`__init__.py` 用 PEP 562 `__getattr__` 懒加载打破循环 import |
 | `repo/` | 各表唯一 SQL 入口（不持锁/缓存/业务校验、事务边界=方法边界每方法一事务不跨表、不硬编码业务状态集合）：`engine`(Engine 装配 + 建连 PRAGMA)、`models`(SQLAlchemy 2 declarative Record 定义)、`base`(BaseRepository 收 Engine 注入与短 Session 事务样板 + `@read`/`@write` 装饰器自动开 Session 注入 db 决定是否提交)、`mapping`(Record↔domain 同名字段投影)、`session`/`message`/`trace`/`settings`/`task`/`task_artifacts`/`task_progress`/`task_content`/`intent_state`/`intent_confirmation`/`option`/`creator_memory` |
-| `services/` | 应用 / HIL 编排层（取数据→调 domain→存数据）：`session`(会话元数据 CRUD + 标题归一)、`session_view`(会话视图收集，聚合各服务数据喂领域装配)、`message`(消息/trace 编排 + `build_provider_messages` 唯一构建点)、`compact`(模型现场表唯一维护者：微压缩换占位 + 超阈值摘要整段覆写)、`trace`(TraceService 编排 TraceRepository)、`settings`、`task`(HIL confirm/retry/cancel_pipeline + get_graph)、`intent_state`(意图状态读写 + 版本号 + 确认门禁)、`option`(选项征询：提问单创建/查询/作答翻转)、`memory`(创作者记忆编排：召回/提取/整理/HIL 三钩点，开关关闭全短路)、`task_lease`(任务租约守卫：终态写入前校验归属，防陈旧线程残留孤儿产物)。**无 agent loop**——loop 已下沉到 `agents/`；纯领域逻辑在 `domain/`，单概念 infra service（skill/title/suggestion/memory 等）在 `domain/`，工具在 `tools/` |
+| `services/` | 应用 / HIL 编排层（取数据→调 domain→存数据）：`session`(会话元数据 CRUD + 标题归一)、`session_view`(会话视图收集，聚合各服务数据喂领域装配)、`message`(消息/trace 编排 + `build_provider_messages` 唯一构建点)、`compact`(模型现场表唯一维护者：微压缩换占位 + 超阈值摘要整段覆写)、`trace`(TraceService 编排 TraceRepository)、`settings`、`task`(HIL confirm/retry/cancel_pipeline + get_graph)、`intent_state`(意图状态读写 + 版本号 + 确认门禁)、`option`(选项征询：提问单创建/查询/作答翻转)、`memory`(创作者记忆编排：召回/提取/整理/HIL 三钩点，开关关闭全短路)、`task_lease`(任务租约守卫：终态写入前校验归属，防陈旧线程残留孤儿产物)、`trace_view`(轨迹视图服务：取会话轨迹与任务图喂领域装配出成品视图)。**无 agent loop**——loop 已下沉到 `agents/`；纯领域逻辑在 `domain/`，单概念 infra service（skill/title/suggestion/memory 等）在 `domain/`，工具在 `tools/` |
 | `hooks/` | CC 式扁平注册表：`registry`(HookRegistry `event -> list[callable]` + `trigger` fail-open 分发，5 个事件点 BeforeModelRequest/AfterModelResponse/PreToolUse/PostToolUse/Stop) + 3 个 handler（`trace` TraceEmitter 观测 / `title` TitlePostProcessor 标题收尾 / `memory` MemoryExtractor 记忆提取，后两者挂 Stop 且绑 `source=supervisor`）。**无 Hook ABC / HookBundle / HookManager 胶水**。load-bearing 收尾（轮首气泡 message_start、异常占位消息）不进 hook，归各自 `LoopStrategy` |
 | `routes/` | HTTP 路由 + `providers.py`(Depends 注入入口)：`sessions`(CRUD + 会话视图 + traces 视图 + 续跑/意图确认/选项作答入口 + suggestions 输入建议)、`memory`(创作者记忆 CRUD)、`chat`(SSE 流式)、`task`(HIL 写：任务确认/重跑/编辑 + 流水线取消)、`settings`(/api/debug/test-mode + /api/settings 模型选项)、`skills`(技能子文件读取，前端拉渲染外壳)、`sse`(SSE 序列化与流式响应包装) |
 | `resources/skills/` | 技能 markdown（frontmatter: name/description/tags） |
-| `tests/` | 自动化测试（前缀分组：`test_domain_*`/`test_repo_*`/`test_service_*`/`test_agent_*`/`test_tools_*`/`test_route_*`/`test_integration_*`/`test_hooks_*`/`test_app_*`，共 54 模块），共享工具 `_helpers.py`，一键入口 `__main__.py` |
+| `tests/` | 自动化测试（前缀分组：`test_domain_*`/`test_repo_*`/`test_service_*`/`test_agent_*`/`test_tools_*`/`test_route_*`/`test_integration_*`/`test_hooks_*`/`test_app_*`，共 55 模块），共享工具 `_helpers.py`，一键入口 `__main__.py` |
 | `scripts/e2e_intent_test.py` | 意图链路端到端（真实 LLM 跑创作场景，验证拦截续跑 + intent_states 表写入 + 卡片数据），非自动化测试 |
 
 ### 三 Loop 架构 (`agents/`)
@@ -154,6 +155,7 @@ App.vue（三栏 + 多会话状态 + 会话视图轮询编排）
 │   │   ├── MessageBubble.vue（单条气泡，user 右对齐；assistant 含 thinking/tools 折叠 + 主文本）
 │   │   ├── HilCard.vue（awaiting_confirm 候选/预览/缩略图 + 确认/重跑/放弃）
 │   │   ├── ArtifactCard.vue（postcard 成品卡片，markdown 渲染走 composables/renderPostCard）
+│   │   ├── ProductCard.vue（已交付成品卡片）
 │   │   ├── ConfirmedCard.vue（已确认任务回看）
 │   │   └── RecoveryCard.vue（异常/中断恢复引导）
 │   ├── RunningPanel.vue（任务图运行进度，原 ProgressBanner）
@@ -175,14 +177,16 @@ App.vue（三栏 + 多会话状态 + 会话视图轮询编排）
 │   └── roleMeta.js（status->徽章/标签映射集中处）
 ├── SettingsPanel.vue（modal：对话/生图模型 + 联网搜索开关）
 ├── MemoryBrowser.vue（创作者记忆浏览/管理浮层）
+├── dev/FlowReviewHarness.vue（开发期流程审阅挂件）
+├── directives/tip.js（tip 自定义指令）
 ├── api.js（fetch 抽离：sessions CRUD + 会话视图/traces + 流式对话与续跑/意图确认/选项作答 + 模型选项 + HIL 写操作）
 └── composables/
     ├── useTaskPolling.js（每会话会话视图轮询：任务图始终同步，流式时跳过整体套用，全终态自停）
     ├── useTraceStore.js（trace 单例 store，按会话聚合）
+    ├── messageStream.js（SSE 流事件归入会话条目流 + 虚拟卡片锚点判定）
+    ├── messageBubble.js（气泡裸模式判定：无正文但活跃/有回看/挂起的 assistant 条目）
+    ├── taskProgress.js（任务进度单元展示裁剪：image 角色产出按目标封顶）
     ├── renderPostCard.js（PostCard 成品 markdown 渲染单一来源）
-    ├── messageHistory.js（建图挂起气泡判定，供流式接管时复用挂起气泡）
-    ├── artifactsProjection.js（任务图快照到右栏创作产出段投影）
-    ├── consoleProjection.js（trace 控制台旁路调用/注入段的标签与分组投影）
     ├── bindShell.js（mustache 风格槽位绑定）
     └── messageActivity.js（assistant 活跃度判定）
 ```
@@ -203,9 +207,9 @@ App.vue（三栏 + 多会话状态 + 会话视图轮询编排）
 - `thinking.items[i] = { text, duration_ms }`，`reasoning` token 持续追加到当前段，`reasoning_done` 写 `duration_ms`。
 - `tools.items[i] = { id, name, arguments, duration_ms, content, display }`，`tool_result` 经 `id` 匹配回 `tool_call`。
 - 流式期间 `message_start`：先把上一轮 running 收尾；当前气泡还没产出 `content` 则复用它（让本轮 thinking/tools 累积进同一气泡），否则 push 新气泡——避免"只有思考/工具、无正文"的空壳气泡合并到下一个有正文的气泡。
-- 会话视图气泡的 `tools` 是数组、流式 handler 期望 `{ state, items }`——形状边界在两处收口：`App.vue asStreamingBubble`（流式接管前包装视图气泡）与 `ChatWindow wrapTools/wrapState`（渲染前包装）。`isPlanResumeBoundary` 判定建图挂起气泡，供流式接管复用（过渡态，阶段二后端出气泡策略后删）。
+- 会话视图气泡的 `tools` 是数组、流式 handler 期望 `{ state, items }`——形状边界在两处收口：`App.vue asStreamingBubble`（流式接管前包装视图气泡）与 `ChatWindow wrapTools/wrapState`（渲染前包装）。
 
-SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）。Vite 开发代理 `/api` → `http://localhost:8000`。单测 vitest（`web/src/tests/`，7 个 `.test.js`，覆盖纯逻辑 composables 与投影函数），E2E Playwright（`web/e2e/`，需前后端已启动）；门 = `npm run build` + `npm run test` + 后端回归 + TestClient lifespan。
+SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）。Vite 开发代理 `/api` → `http://localhost:8000`。单测 vitest（`web/src/tests/`，7 个 `.test.js`，覆盖纯逻辑 composables 与 roleMeta 投影），E2E Playwright（`web/e2e/`，需前后端已启动）；门 = `npm run build` + `npm run test` + 后端回归 + TestClient lifespan。
 
 ### SSE 事件类型
 
@@ -243,7 +247,7 @@ SSE 解析用 `fetch` + `ReadableStream`（不用 EventSource，因为 POST）�
 - `test_domain_intent.py` — 意图状态机：IntentStatus 流转 / derive_next_action status->next_action 派生 / IntentStatePatch
 - `test_domain_option.py` — 选项征询：提问单创建与作答翻转
 - `test_domain_prompt.py` — 提示词装配：supervisor / subagent 基础文案锚点（create_plan、profiles、产出协议、禁 emoji、失败块）/ 技能段 gating / 系统段拼接与末条用户消息注入（缺料整段缺席、多轮不累积）/ 首轮消息骨架与四段固定顺序
-- `test_domain_aside.py` / `test_domain_suggestion.py` / `test_domain_memory.py` / `test_domain_log.py` / `test_domain_markdown.py` / `test_domain_stream.py` / `test_domain_message.py` / `test_domain_title.py` / `test_domain_events.py` / `test_domain_skill.py` — 各 domain 纯函数 smoke（旁白 / 输入建议 / 记忆 / 日志 / markdown 渲染 / 流消费 / 消息 / 标题 / 事件 / 技能）
+- `test_domain_aside.py` / `test_domain_suggestion.py` / `test_domain_memory.py` / `test_domain_log.py` / `test_domain_markdown.py` / `test_domain_stream.py` / `test_domain_message.py` / `test_domain_title.py` / `test_domain_events.py` / `test_domain_skill.py` / `test_domain_bypass.py` / `test_domain_trace_view.py` — 各 domain 纯函数 smoke（旁白 / 输入建议 / 记忆 / 日志 / markdown 渲染 / 流消费 / 消息 / 标题 / 事件 / 技能 / 旁路调用 / trace 视图装配）
 - `test_domain_session_view.py` — 会话视图装配纯函数：气泡归并 / 信箱与阶段派生（门禁优先）/ 虚拟卡锚点 / 留档回看折叠 / 视图封套字段
 - `test_domain_compact.py` — 压缩纯函数：微压缩换占位与稳定性 / token 估算 / 超长判定 / 摘要指令
 - `test_repo_connection.py` / `test_repo_message.py` / `test_repo_provider_message.py` / `test_repo_trace.py` / `test_repo_task.py` / `test_repo_task_artifacts.py` / `test_repo_task_progress.py` / `test_repo_task_content.py` / `test_repo_intent_state.py` / `test_repo_intent_confirmation.py` / `test_repo_option.py` / `test_repo_creator_memory.py` — 各 repo 的 smoke test（哑查询 / cancel_pipeline / 多来源 trace / 意图状态与确认留档 / 选项留档 / 记忆留档等）
