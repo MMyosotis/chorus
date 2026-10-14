@@ -109,12 +109,16 @@ def test_cancel_pipeline():
 
 def test_touch_updated_at():
     repo, _ = _repo()
-    repo.insert(_mk("a", status="running", updated_at=10.0))
-    repo.touch_updated_at("a")
+    repo.insert(_mk("a", status="running", updated_at=10.0, owner_id=100.0))
+    assert repo.touch_updated_at("a", 100.0) is True
     got = repo.get("a")
     assert got.updated_at > 10.0  # 已更新为当前时间
+    # 归属漂移或任务不再运行时不续心跳
+    assert repo.touch_updated_at("a", 999.0) is False
+    repo.transition("a", "cancelled")
+    assert repo.touch_updated_at("a", 100.0) is False
     # 不存在的 task 静默无操作（不抛）
-    repo.touch_updated_at("nope")
+    assert repo.touch_updated_at("nope", 100.0) is False
 
 
 def main():

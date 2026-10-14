@@ -192,7 +192,7 @@ def test_progress_fail_signal_on_exception():
 
 
 def test_lease_drift_at_max_steps_skips_fail():
-    """撞步数上限前归属漂移 -> 租约拦下失败写入：不翻 failed、不写失败信号。"""
+    """归属漂移后旧 subagent 在下一轮退出：不继续调用模型，也不写失败状态。"""
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
     pairs = [(lambda: _takeover(task_repo), _tool_call_stream("c0"))]
@@ -202,6 +202,7 @@ def test_lease_drift_at_max_steps_skips_fail():
     sub.run("t1")
     assert task_repo.get("t1").status == TaskStatus.RUNNING
     assert progress_repo.load("t1").last_signal != "这步失败了"
+    assert len(client._pairs) == _MAX_STEPS
 
 
 def test_lease_takeover_prevents_stale_finalize():

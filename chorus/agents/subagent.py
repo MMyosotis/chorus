@@ -78,9 +78,8 @@ class SubagentLoopStrategy(LoopStrategy):
         self._compact = compact
 
     def before_turn(self):
-        self._task_repo.touch_updated_at(self.task.id)  # 心跳防僵死
-        latest = self._task_repo.get(self.task.id)
-        if latest is None or latest.status != TaskStatus.RUNNING:
+        # 原子确认任务仍在运行且仍归当前 worker，再刷新心跳；失去归属即退出。
+        if not self._task_repo.touch_updated_at(self.task.id, self.owner_id):
             _logger.info("cooperative cancel, early exit", extra={"task_id": self.task.id})
             return False
         self._progress_repo.set_activity(self.task.id, "thinking")

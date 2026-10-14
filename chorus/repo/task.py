@@ -77,11 +77,18 @@ class TaskRepository(BaseRepository):
         return hit
 
     @write
-    def touch_updated_at(self, db, task_id: str) -> None:
-        """心跳：直接更新时间，不走翻转不校验状态，防僵死误杀。"""
-        db.execute(
-            update(TaskRecord).where(TaskRecord.id == task_id).values(updated_at=time.time())
+    def touch_updated_at(self, db, task_id: str, owner_id: Optional[float]) -> bool:
+        """心跳：只有当前执行者仍持有运行中任务时才更新时间。"""
+        result = db.execute(
+            update(TaskRecord)
+            .where(
+                TaskRecord.id == task_id,
+                TaskRecord.status == TaskStatus.RUNNING,
+                TaskRecord.owner_id == owner_id,
+            )
+            .values(updated_at=time.time())
         )
+        return result.rowcount > 0
 
     @write
     def cancel_pipeline(self, db, pipeline_id: str, statuses: Iterable[TaskStatus]) -> int:
