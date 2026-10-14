@@ -14,7 +14,6 @@ from chorus.domain.memory import (
     render_recall,
 )
 from chorus.domain.prompt.assembly import (
-    build_system_prompt,
     inject_user_blocks,
     tagged_block,
 )
@@ -89,30 +88,19 @@ SYSTEM_PROMPT = (
 
 
 @dataclass(frozen=True)
-class SupervisorSystemInputs:
-    """supervisor 系统消息原料：创作者档案摘要。"""
-
-    digest: MemoryDigest
-
-    def render_system_prompt(self) -> str:
-        """拼接 supervisor 的 system 消息。"""
-        digest = render_digest(self.digest)
-        return build_system_prompt(SYSTEM_PROMPT, [
-            tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None)
-        ])
-
-
-@dataclass(frozen=True)
 class SupervisorUserInputs:
-    """supervisor 用户消息原料：意图快照与召回记忆。"""
+    """supervisor 用户消息原料：档案摘要、召回记忆与意图快照。"""
 
     intent_state: IntentState
     memories: list[CreatorMemory] = field(default_factory=list)
+    digest: MemoryDigest = field(default_factory=MemoryDigest)
 
     def inject_user_context(self, msgs: list[dict]) -> None:
-        """把 supervisor 的用户上下文注入末条用户消息前。"""
+        """把 supervisor 的用户上下文注入末条用户消息前；稳定段靠前，保前缀缓存。"""
+        digest = render_digest(self.digest)
         intent = render_intent_state(self.intent_state)
         inject_user_blocks(msgs, [
+            tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None),
             tagged_block("recalled_memories", render_recall(self.memories)),
             tagged_block("intent_state", f"当前意图状态：\n{intent}"),
         ])

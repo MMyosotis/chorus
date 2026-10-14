@@ -12,11 +12,11 @@ from chorus.domain.intent import Intent
 from chorus.domain.memory import MemoryDigest
 from chorus.domain.memory.models import CreatorMemory, MemoryDigestEntry
 from chorus.domain.prompt import (
+    SYSTEM_PROMPT,
     InvokeInputs,
     SkeletonInputs,
     SubagentSystemInputs,
     SubagentUserInputs,
-    SupervisorSystemInputs,
     subagent_base,
 )
 from chorus.domain.prompt.assembly import parse_tagged_content
@@ -25,7 +25,6 @@ from chorus.domain.task import PostCard
 
 
 _empty_loader = SkillLoader(skills_dir=Path("/nonexistent-skills"))
-_empty_digest = MemoryDigest()
 
 
 def test_subagent_prompts():
@@ -53,13 +52,13 @@ def test_subagent_prompt_guides_list_before_load():
 
 
 def test_supervisor_prompt_has_profiles():
-    p = SupervisorSystemInputs(digest=_empty_digest).render_system_prompt()
+    p = SYSTEM_PROMPT
     assert "create_plan" in p
     assert "finalize" in p
     assert "选题官" in p
 
 
-def test_subagent_system_prompt_includes_skill_and_digest():
+def test_subagent_system_prompt_includes_skill():
     tmp = Path(tempfile.mkdtemp())
     skill_dir = tmp / "infographic"
     skill_dir.mkdir(parents=True)
@@ -68,7 +67,7 @@ def test_subagent_system_prompt_includes_skill_and_digest():
         encoding="utf-8",
     )
     prompt = SubagentSystemInputs(
-        agent_type="image", skill_hints=SkillLoader(skills_dir=tmp).format_hints(), digest=_empty_digest,
+        agent_type="image", skill_hints=SkillLoader(skills_dir=tmp).format_hints(),
     ).render_system_prompt()
     assert "<available_skills>" in prompt
     assert "infographic" in prompt
@@ -103,17 +102,25 @@ def test_postcard_prompt_guides_image_url():
 
 
 def test_memory_block_absent_without_digest():
-    p = SupervisorSystemInputs(digest=_empty_digest).render_system_prompt()
-    assert "<memory_summary>" not in p
+    msgs = [{"role": "user", "content": "原始指令"}]
+    SubagentUserInputs().inject_user_context(msgs)
+    assert "<memory_summary>" not in msgs[0]["content"]
 
 
 def test_memory_block_present_with_digest():
     entry = MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance")
     digest = MemoryDigest(entries=[entry])
-    p = SupervisorSystemInputs(digest=digest).render_system_prompt()
-    assert "<memory_summary>" in p
-    assert "身份：程序员" in p
-    assert "小红书" in p
+    memory = CreatorMemory(
+        id="m2", description="偏好：简洁", content="正文",
+        platform=[], visible_to=[], kind="reference", created_at=0.0,
+    )
+    msgs = [{"role": "user", "content": "原始指令"}]
+    SubagentUserInputs(digest=digest, memories=[memory]).inject_user_context(msgs)
+    content = msgs[0]["content"]
+    assert "<memory_summary>" in content
+    assert "身份：程序员" in content
+    assert "小红书" in content
+    assert content.index("<memory_summary>") < content.index("<recalled_memories>")
 
 
 def test_inject_user_blocks_repeat_not_accumulate():

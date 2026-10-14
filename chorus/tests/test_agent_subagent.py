@@ -329,8 +329,8 @@ def test_subagent_provider_messages_injects_recall():
     assert "骨架：主题=测试" in user_msgs[0]["content"]
 
 
-def test_subagent_provider_messages_injects_digest_into_system():
-    """记忆摘要进子 agent 系统提示词。"""
+def test_subagent_provider_messages_injects_digest_into_user():
+    """记忆摘要注到子 agent 用户消息前，不进系统提示词（system 静态保前缀缓存）。"""
     from chorus.agents.subagent import SubagentLoopStrategy
     from chorus.domain.memory.models import MemoryDigestEntry
     from chorus.domain.task import AGENT_PROFILES
@@ -351,9 +351,10 @@ def test_subagent_provider_messages_injects_digest_into_system():
         compact=build_compact_service(engine),
     )
     msgs = strategy.provider_messages()
-    system = msgs[0]["content"]
-    assert "<memory_summary>" in system
-    assert "身份：程序员" in system
+    assert "<memory_summary>" not in msgs[0]["content"]
+    user_msg = next(m for m in msgs if m["role"] == "user")
+    assert "<memory_summary>" in user_msg["content"]
+    assert "身份：程序员" in user_msg["content"]
 
 
 def test_subagent_truncation_escalates_and_retries():

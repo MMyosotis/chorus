@@ -128,30 +128,32 @@ def subagent_base(agent_type: AgentType) -> str:
 
 @dataclass(frozen=True)
 class SubagentSystemInputs:
-    """子 agent 系统消息原料：角色、技能摘要与创作者档案摘要。"""
+    """子 agent 系统消息原料：角色与技能摘要。"""
 
     agent_type: AgentType
     skill_hints: str
-    digest: MemoryDigest
 
     def render_system_prompt(self) -> str:
         """拼接子 agent 的 system 消息。"""
-        digest = render_digest(self.digest)
         return build_system_prompt(subagent_base(self.agent_type), [
             tagged_block("available_skills", self.skill_hints),
-            tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None),
         ])
 
 
 @dataclass(frozen=True)
 class SubagentUserInputs:
-    """子 agent 用户消息原料：当前召回的记忆。"""
+    """子 agent 用户消息原料：档案摘要与当前召回的记忆。"""
 
     memories: list[CreatorMemory] = field(default_factory=list)
+    digest: MemoryDigest = field(default_factory=MemoryDigest)
 
     def inject_user_context(self, msgs: list[dict]) -> None:
-        """把子 agent 的用户上下文注入末条用户消息前。"""
-        inject_user_blocks(msgs, [tagged_block("recalled_memories", render_recall(self.memories))])
+        """把子 agent 的用户上下文注入末条用户消息前；稳定段靠前，保前缀缓存。"""
+        digest = render_digest(self.digest)
+        inject_user_blocks(msgs, [
+            tagged_block("memory_summary", f"创作者档案摘要：\n{digest}" if digest else None),
+            tagged_block("recalled_memories", render_recall(self.memories)),
+        ])
 
 
 @dataclass(frozen=True)

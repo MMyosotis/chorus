@@ -89,9 +89,11 @@ class SubagentLoopStrategy(LoopStrategy):
         system_inputs = SubagentSystemInputs(
             agent_type=self.task.agent_type,
             skill_hints=self._skill_hints,
-            digest=self._recall.digest,
         )
-        user_inputs = SubagentUserInputs(memories=self._recall.items)
+        user_inputs = SubagentUserInputs(
+            digest=self._recall.digest,
+            memories=self._recall.items,
+        )
         msgs = build_provider_messages(system_inputs.render_system_prompt(), self.history)
         user_inputs.inject_user_context(msgs)
         return msgs

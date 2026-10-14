@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     )
     from chorus.domain.prompt.supervisor import (
         SYSTEM_PROMPT,
-        SupervisorSystemInputs,
         SupervisorUserInputs,
     )
 
@@ -38,7 +37,6 @@ __all__ = [
     "inject_user_blocks",
     "parse_tagged_content",
     "subagent_base",
-    "SupervisorSystemInputs",
     "SupervisorUserInputs",
     "tagged_block",
 ]
@@ -67,9 +65,6 @@ def __getattr__(name: str):
     if name == "subagent_base":
         from chorus.domain.prompt.subagent import subagent_base
         return subagent_base
-    if name == "SupervisorSystemInputs":
-        from chorus.domain.prompt.supervisor import SupervisorSystemInputs
-        return SupervisorSystemInputs
     if name == "SupervisorUserInputs":
         from chorus.domain.prompt.supervisor import SupervisorUserInputs
         return SupervisorUserInputs

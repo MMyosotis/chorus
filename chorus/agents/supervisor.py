@@ -24,7 +24,7 @@ from chorus.domain.compact import is_context_overflow
 from chorus.domain.log import get_logger
 from chorus.domain.memory import MemoryRecall
 from chorus.domain.message import AssistantMessage, ToolCallSpec, ToolMessage, UserMessage
-from chorus.domain.prompt.supervisor import SupervisorSystemInputs, SupervisorUserInputs
+from chorus.domain.prompt.supervisor import SYSTEM_PROMPT, SupervisorUserInputs
 from chorus.domain.stream import consume_stream
 from chorus.domain.trace import TracePhase, UserInput
 from chorus.hooks import HookRegistry
@@ -66,12 +66,12 @@ class SupervisorLoopStrategy(LoopStrategy):
         return [MessageStartEvent(id=ctx.turn.message_id, resume_boundary=self._resume_boundary)]
 
     def provider_messages(self):
-        system_inputs = SupervisorSystemInputs(digest=self._recall.digest)
         user_inputs = SupervisorUserInputs(
+            digest=self._recall.digest,
             memories=self._recall.items,
             intent_state=self._intent_state.get(self.session_id),
         )
-        msgs = self._message.build_provider_messages(self.session_id, system_inputs.render_system_prompt())
+        msgs = self._message.build_provider_messages(self.session_id, SYSTEM_PROMPT)
         user_inputs.inject_user_context(msgs)
         return msgs
 
