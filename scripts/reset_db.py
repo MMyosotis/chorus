@@ -4,6 +4,11 @@ demo 项目结构变动时直接重建（不保留旧数据）；正常运行不
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from chorus.config import DATA_DIR
 from chorus.repo.engine import build_engine
 from chorus.repo.models import Base
