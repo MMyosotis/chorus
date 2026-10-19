@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from chorus.domain.task import ACTIVE_STATUSES, CANCELLABLE_STATUSES, PostCard, Task
+from chorus.domain.task import ACTIVE_STATUSES, CANCELLABLE_STATUSES, PostCard, Task, TaskStatus
 from chorus.repo.task import TaskRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
@@ -169,7 +169,7 @@ def test_resolve_external_delivers_finished_product():
     assert isinstance(tool.run(_args(), ctx).outcome, Suspend)
     tasks = repo.find_by_session_statuses("s1", ACTIVE_STATUSES)
     finalize_id = next(t.id for t in tasks if t.agent_type == "finalize")
-    repo.transition(finalize_id, "finished")
+    repo.transition(finalize_id, "finished", expected_status=TaskStatus.PENDING)
     art_repo.upsert(finalize_id, "finalize", PostCard(
         markdown="---\ntitle: 夏日晚风\n---\n\n成品正文",
         meta={"title": "夏日晚风"},

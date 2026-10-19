@@ -100,7 +100,7 @@ def _setup():
 def _mk_task(task_repo, content_repo, agent_type="idea", status="running", deps=None):
     t = Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
-        status=status, dependencies=deps or [],
+        status=status, owner_id="owner-a", dependencies=deps or [],
         created_at=0.0, updated_at=0.0,
     )
     task_repo.insert(t)
@@ -249,7 +249,7 @@ def _tool_call_stream(call_id):
 
 def _drift_to(task_repo, tid, to_status="pending"):
     def _side():
-        task_repo.transition(tid, to_status)
+        task_repo.transition(tid, to_status, expected_status=TaskStatus.RUNNING)
     return _side
 
 
@@ -314,7 +314,7 @@ def test_subagent_provider_messages_injects_recall():
         )
     ]
     strategy = SubagentLoopStrategy(
-        task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
+        task=task, owner_id="owner-a", profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),
@@ -342,7 +342,7 @@ def test_subagent_provider_messages_injects_digest_into_user():
         MemoryDigestEntry(id="m1", description="身份：程序员", platform=["小红书"], kind="performance")
     ])
     strategy = SubagentLoopStrategy(
-        task=task, owner_id=None, profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
+        task=task, owner_id="owner-a", profile=AGENT_PROFILES["idea"], invoke="骨架：主题=测试",
         task_repo=task_repo, progress_repo=TaskProgressRepository(engine),
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
         skill_hints=SkillLoader(skills_dir=Path("/nonexistent-skills")).format_hints(),

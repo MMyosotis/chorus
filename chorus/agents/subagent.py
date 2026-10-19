@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from typing import Optional, cast
+from typing import cast
 
 from chorus.agents.loop import AgentLoop, LoopStrategy
 from chorus.agents.progress_sink import ProgressSink
@@ -61,7 +61,7 @@ class SubagentLoopStrategy(LoopStrategy):
 
     max_steps = _MAX_STEPS
 
-    def __init__(self, *, task, owner_id, profile, invoke,
+    def __init__(self, *, task, owner_id: str, profile, invoke,
                  task_repo, progress_repo, lease, skill_hints, tool_dispatch,
                  memory: MemoryRecall, compact: CompactService):
         self.task = task
@@ -94,6 +94,8 @@ class SubagentLoopStrategy(LoopStrategy):
             digest=self._recall.digest,
             memories=self._recall.items,
         )
+        # 与 supervisor 一样，在每次请求模型前检查并压缩历史。
+        self.history = self._compact.compact_history(self.history)
         msgs = build_provider_messages(system_inputs.render_system_prompt(), self.history)
         user_inputs.inject_user_context(msgs)
         return msgs
@@ -118,8 +120,6 @@ class SubagentLoopStrategy(LoopStrategy):
             ToolMessage.transient(session_id, tool_call_id=call.id, name=call.name, content=dispatch.outcome.content)
             for call, dispatch in pairs
         )
-        # 内存历史不进库，统一走压缩编排服务（只到微压缩为止）
-        self.history = self._compact.compact_history(self.history)
         return LoopAction(LoopSignal.CONTINUE, [])
 
     def after_text(self, ctx, result):
@@ -198,12 +198,13 @@ class SubAgentService:
         task = cast(Task, self._task_repo.get(task_id))
         content = cast(TaskContent, self._content_repo.load(task_id))
         try:
+            # 运行中任务必经占槽写入归属，此处必非空
             self._run_loop(task, content, task.owner_id)
         except Exception as e:
             _logger.exception("subagent failed", extra={"task_id": task_id})
             self._lease.fail(task, str(e), task.owner_id)
 
-    def _run_loop(self, task: Task, content: TaskContent, owner_id: Optional[float]) -> None:
+    def _run_loop(self, task: Task, content: TaskContent, owner_id: str) -> None:
         # 入口租约校验，被回收重抢则放弃
         if not self._lease.valid(task.id, owner_id):
             _logger.info("entry lease invalid, abort", extra={"task_id": task.id})

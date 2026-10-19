@@ -103,7 +103,7 @@ class TaskScheduler:
         if not task.can_schedule(deps):
             return
 
-        # 占槽：设为运行中并写租约归属，行已不存在则跳过
+        # 占槽：只有任务仍待执行才写归属；已被其他调度器领取则跳过
         if not self._task_repo.claim(task.id, time.time()):
             return
 
@@ -123,8 +123,15 @@ class TaskScheduler:
     def _reclaim_zombies(self) -> None:
         """回收运行且心跳超时的任务，翻为失败交人工重跑。"""
         now = time.time()
-        for task in self._task_repo.find_running_before(now - self._zombie_timeout):
-            self._task_repo.transition(task.id, TaskStatus.FAILED)
+        cutoff = now - self._zombie_timeout
+        for task in self._task_repo.find_running_before(cutoff):
+            # 只有任务仍在运行且心跳仍超时，才标记为失败。
+            if not self._task_repo.transition_if_stale(
+                task.id, TaskStatus.FAILED,
+                expected_status=TaskStatus.RUNNING,
+                updated_before=cutoff,
+            ):
+                continue
             self._content_repo.set_error(task.id, "运行超时未响应")
             self._progress_repo.set_signal(task.id, "这步失败了")
             _logger.warning("zombie reclaim", extra={"session_id": task.session_id, "task_id": task.id})

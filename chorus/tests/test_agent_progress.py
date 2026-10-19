@@ -114,7 +114,7 @@ def _build(engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, conte
     )
 
 
-def _mk_task(task_repo, content_repo, owner_id=100.0, status="running", agent_type="idea"):
+def _mk_task(task_repo, content_repo, owner_id="owner-a", status="running", agent_type="idea"):
     task = Task(
         id="t1", session_id="s1", pipeline_id="p1", agent_type=agent_type,
         status=status, dependencies=[],
@@ -140,8 +140,8 @@ def _image_md():
 
 
 def _takeover(task_repo):
-    """新 worker 抢占：僵死回收 + 重派，状态回 running 但归属漂移到 999。"""
-    task_repo.transition("t1", TaskStatus.PENDING)
+    """新 worker 抢占：僵死回收 + 重派，状态回 running 且归属标识改变。"""
+    task_repo.transition("t1", TaskStatus.PENDING, expected_status=TaskStatus.RUNNING)
     task_repo.claim("t1", 999.0)
 
 
@@ -237,13 +237,13 @@ def test_finalize_drift_writes_no_terminal():
     """排版轮被取消 -> 租约校验状态非 running 即早退：不落产物。"""
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo)
-    task_repo.transition("t1", "cancelled")
+    task_repo.transition("t1", "cancelled", expected_status=TaskStatus.RUNNING)
     # cancelled->pending 不合法，直接重置为 running 以便进入循环
     with engine.begin() as db:
-        db.execute(text("UPDATE tasks SET status='running', owner_id=100.0 WHERE id='t1'"))
+        db.execute(text("UPDATE tasks SET status='running', owner_id='owner-a' WHERE id='t1'"))
 
     def _cancel():
-        task_repo.transition("t1", TaskStatus.CANCELLED)
+        task_repo.transition("t1", TaskStatus.CANCELLED, expected_status=TaskStatus.RUNNING)
 
     client = _SideClient([
         (_cancel, FakeStream([({"content": _idea_md()}, "stop")])),
@@ -272,7 +272,7 @@ def test_image_after_dispatch_counts_units():
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     strategy = SubagentLoopStrategy(
-        task=task_repo.get("t1"), owner_id=100.0,
+        task=task_repo.get("t1"), owner_id="owner-a",
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),
@@ -295,7 +295,7 @@ def test_tool_without_units_not_counted():
     engine, msg_svc, trace_svc, task_repo, art_repo, progress_repo, content_repo = _setup()
     _mk_task(task_repo, content_repo, agent_type="image")
     strategy = SubagentLoopStrategy(
-        task=task_repo.get("t1"), owner_id=100.0,
+        task=task_repo.get("t1"), owner_id="owner-a",
         profile=AGENT_PROFILES["image"], invoke="骨架",
         task_repo=task_repo, progress_repo=progress_repo,
         lease=types.SimpleNamespace(finalize=lambda *a: None, fail=lambda *a: None),

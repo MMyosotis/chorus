@@ -28,7 +28,7 @@ from chorus.repo.task_progress import TaskProgressRepository
 from chorus.repo.task_artifacts import TaskArtifactsRepository
 from chorus.repo.task_content import TaskContentRepository
 from chorus.services.session import SessionService
-from chorus.services.task import TaskService
+from chorus.services.task import TaskService, TaskStateConflict
 from chorus.tests._helpers import fresh_engine, seed_session, stub_memory_service
 
 
@@ -96,6 +96,18 @@ def test_retry_from_failed():
     res = svc.retry("t1", feedback="重试")
     assert res["status"] == TaskStatus.PENDING
     assert task_repo.get("t1").status == TaskStatus.PENDING
+
+
+def test_stale_hil_actions_do_not_change_cancelled_task():
+    svc, task_repo, content_repo = _setup()
+    _mk(task_repo, content_repo, "t1", "idea", "awaiting_confirm")
+    task_repo.cancel_pipeline("p1", {TaskStatus.AWAITING_CONFIRM})
+    with pytest.raises(TaskStateConflict):
+        svc.confirm("t1", selected=0)
+    with pytest.raises(TaskStateConflict):
+        svc.retry("t1", feedback="再来一次")
+    assert task_repo.get("t1").status == TaskStatus.CANCELLED
+    assert content_repo.load("t1").feedback is None
 
 
 def test_cancel_pipeline():

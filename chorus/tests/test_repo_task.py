@@ -1,6 +1,8 @@
 """TaskRepository smoke test：状态翻转 / 哑查询 / cancel_pipeline / 心跳。"""
 from __future__ import annotations
 
+from uuid import UUID
+
 from chorus.domain.task import CANCELLABLE_STATUSES, Task, TaskStatus
 from chorus.repo.task import TaskRepository
 from chorus.tests._helpers import fresh_engine, seed_session
@@ -33,10 +35,10 @@ def test_insert_and_get():
 def test_transition_updates_status():
     repo, _ = _repo()
     repo.insert(_mk("t1", status="pending"))
-    assert repo.transition("t1", "running") is True
+    assert repo.transition("t1", "running", expected_status=TaskStatus.PENDING) is True
     assert repo.get("t1").status == "running"
     # 不存在的任务返回 False
-    assert repo.transition("nope", "running") is False
+    assert repo.transition("nope", "running", expected_status=TaskStatus.PENDING) is False
 
 
 def test_claim_writes_owner_id():
@@ -45,13 +47,14 @@ def test_claim_writes_owner_id():
     repo.insert(_mk("t1", status="pending"))
     assert repo.claim("t1", 100.0) is True
     t = repo.get("t1")
-    assert t.status == "running" and t.owner_id == 100.0
-    # 再次占槽覆盖租约归属
-    assert repo.claim("t1", 200.0) is True
-    assert repo.get("t1").owner_id == 200.0
+    assert t.status == "running"
+    UUID(t.owner_id)
+    # 已被领取的任务不能再次占槽或覆盖归属
+    assert repo.claim("t1", 200.0) is False
+    assert repo.get("t1").owner_id == t.owner_id
     # running -> awaiting_confirm -> finished，updated_at 自动刷新
-    assert repo.transition("t1", "awaiting_confirm") is True
-    assert repo.transition("t1", "finished") is True
+    assert repo.transition("t1", "awaiting_confirm", expected_status=TaskStatus.RUNNING) is True
+    assert repo.transition("t1", "finished", expected_status=TaskStatus.AWAITING_CONFIRM) is True
     assert repo.get("t1").status == "finished"
 
 
@@ -109,16 +112,16 @@ def test_cancel_pipeline():
 
 def test_touch_updated_at():
     repo, _ = _repo()
-    repo.insert(_mk("a", status="running", updated_at=10.0, owner_id=100.0))
-    assert repo.touch_updated_at("a", 100.0) is True
+    repo.insert(_mk("a", status="running", updated_at=10.0, owner_id="owner-a"))
+    assert repo.touch_updated_at("a", "owner-a") is True
     got = repo.get("a")
     assert got.updated_at > 10.0  # 已更新为当前时间
     # 归属漂移或任务不再运行时不续心跳
-    assert repo.touch_updated_at("a", 999.0) is False
-    repo.transition("a", "cancelled")
-    assert repo.touch_updated_at("a", 100.0) is False
+    assert repo.touch_updated_at("a", "owner-b") is False
+    repo.transition("a", "cancelled", expected_status=TaskStatus.RUNNING)
+    assert repo.touch_updated_at("a", "owner-a") is False
     # 不存在的 task 静默无操作（不抛）
-    assert repo.touch_updated_at("nope", 100.0) is False
+    assert repo.touch_updated_at("nope", "owner-unknown") is False
 
 
 def main():

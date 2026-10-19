@@ -106,7 +106,7 @@ class TaskRecord(Base):
     dependencies: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
     updated_at: Mapped[float] = mapped_column(Float, nullable=False)
-    owner_id: Mapped[Optional[float]] = mapped_column(Float)
+    owner_id: Mapped[Optional[str]] = mapped_column(String)
 
 
 class TaskContentRecord(Base):

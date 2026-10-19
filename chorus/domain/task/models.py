@@ -40,7 +40,7 @@ class Task:
     # 触发建图的助手消息；由此计划产生的审核卡都以它为锚点。
     message_id: Optional[str] = None
     dependencies: list[str] = Field(default_factory=list)
-    owner_id: Optional[float] = None
+    owner_id: Optional[str] = None
 
     def can_schedule(self, deps: Iterable["Task"]) -> bool:
         """可调度：待执行且所有依赖均已完成。失败的上游会阻塞后继。"""

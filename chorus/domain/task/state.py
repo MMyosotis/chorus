@@ -45,6 +45,11 @@ def is_legal_transition(from_status: TaskStatus, to_status: TaskStatus) -> bool:
     return (from_status, to_status) in LEGAL_TRANSITIONS
 
 
+def legal_sources(to_status: TaskStatus) -> frozenset[TaskStatus]:
+    """能一步转入目标状态的全部旧状态，由转移表逆向派生。"""
+    return frozenset(src for src, dst in LEGAL_TRANSITIONS if dst == to_status)
+
+
 def select_pipeline_id(active: list[Task], terminal: list[Task]) -> Optional[str]:
     """选择会话当前流水线：优先活跃任务，否则取最近更新的终态任务。"""
     if active:

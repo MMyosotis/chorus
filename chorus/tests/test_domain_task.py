@@ -30,6 +30,7 @@ from chorus.domain.task import (
     format_product_list,
     invoke_text,
     is_legal_transition,
+    legal_sources,
     build_delivered_products,
     render_delivery_receipt,
     select_delivered_tasks,
@@ -103,6 +104,15 @@ def test_legal_transitions_table():
     # 非法
     assert not is_legal_transition("finished", "running")
     assert not is_legal_transition("finished", "pending")
+
+
+def test_legal_sources_derives_from_transitions():
+    # 重跑入口的来源恰为待确认与失败
+    assert legal_sources(TaskStatus.PENDING) == {TaskStatus.AWAITING_CONFIRM, TaskStatus.FAILED}
+    # 每条合法转移的来源都能从目标反查出来，逆向映射与正向表一致
+    for src, dst in LEGAL_TRANSITIONS:
+        assert src in legal_sources(dst)
+    assert legal_sources(TaskStatus.RUNNING) == {TaskStatus.PENDING}
     assert not is_legal_transition("cancelled", "running")
 
 

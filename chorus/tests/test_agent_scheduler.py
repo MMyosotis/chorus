@@ -71,6 +71,42 @@ def test_zombie_reclaim():
     assert content_repo.load("t1").error == "运行超时未响应"
 
 
+def test_reclaim_skips_task_refreshed_after_scan():
+    _, task_repo, content_repo, progress_repo = _setup()
+    _mk(task_repo, "t1", status="running", updated_at=0.0)
+    sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
+                          content_repo, progress_repo, interval=0.01, zombie_timeout=1, log_dir=_LOG_DIR)
+    find = task_repo.find_running_before
+
+    def refreshed_after_scan(cutoff):
+        stale = find(cutoff)
+        task_repo.touch_updated_at("t1", None)
+        return stale
+
+    task_repo.find_running_before = refreshed_after_scan
+    sched._reclaim_zombies()
+    assert task_repo.get("t1").status == TaskStatus.RUNNING
+    assert content_repo.load("t1") is None
+
+
+def test_reclaim_skips_cancelled_task_after_scan():
+    _, task_repo, content_repo, progress_repo = _setup()
+    _mk(task_repo, "t1", status="running", updated_at=0.0)
+    sched = TaskScheduler(task_repo, lambda tid: None, _fake_session(),
+                          content_repo, progress_repo, interval=0.01, zombie_timeout=1, log_dir=_LOG_DIR)
+    find = task_repo.find_running_before
+
+    def cancelled_after_scan(cutoff):
+        stale = find(cutoff)
+        task_repo.cancel_pipeline("p1", {TaskStatus.RUNNING})
+        return stale
+
+    task_repo.find_running_before = cancelled_after_scan
+    sched._reclaim_zombies()
+    assert task_repo.get("t1").status == TaskStatus.CANCELLED
+    assert content_repo.load("t1") is None
+
+
 def test_tick_guarded_swallows_single_tick_exception():
     """单轮 _tick 抛异常时 _tick_guarded 吞掉，不外抛（防打死调度线程）。"""
     _, task_repo, content_repo, progress_repo = _setup()

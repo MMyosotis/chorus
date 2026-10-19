@@ -1,6 +1,6 @@
 """任务服务：人工确认编排与任务图视图。
 
-状态合法性由领域保证，仓储直接翻转；任务图优先进行中流水线，无则取最近已完成。
+状态翻转以数据库中仍符合预期为准；任务图优先进行中流水线，无则取最近已完成。
 """
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from chorus.domain.task import (
     build_delivered_products,
     build_edited_artifacts,
     build_task_graph,
+    legal_sources,
     select_delivered_tasks,
     select_display_pipeline,
     select_pipeline_id,
@@ -34,6 +35,10 @@ from chorus.services.memory import MemoryService
 from chorus.services.session import SessionService
 
 _logger = get_logger("service.task")
+
+
+class TaskStateConflict(Exception):
+    """人工操作时任务已被其他执行者改为别的状态。"""
 
 
 class TaskService:
@@ -56,7 +61,12 @@ class TaskService:
     def confirm(self, task_id: str, selected: Optional[int]) -> dict:
         """确认推进：翻转待确认→完成，候选角色写回选中项（在翻转之后）。"""
         task = self._task_repo.get(task_id)
-        self._task_repo.transition(task_id, TaskStatus.FINISHED)
+        # 人工确认门只认待确认态，且不得越出状态机允许的来源
+        if not self._task_repo.transition(
+            task_id, TaskStatus.FINISHED,
+            expected_status=TaskStatus.AWAITING_CONFIRM,
+        ):
+            raise TaskStateConflict("任务状态已变化，请刷新后重试")
         if task.agent_type == AgentType.IDEA:
             self._set_selected(task_id, task.agent_type, selected)
             self._memory.record_selection(task_id, task.agent_type)
@@ -77,7 +87,11 @@ class TaskService:
     def retry(self, task_id: str, feedback: str) -> dict:
         """带反馈重跑本步：翻回待执行并写回反馈。"""
         task = self._task_repo.get(task_id)
-        self._task_repo.transition(task_id, TaskStatus.PENDING)
+        if not self._task_repo.transition_from_statuses(
+            task_id, TaskStatus.PENDING,
+            expected_statuses=legal_sources(TaskStatus.PENDING),
+        ):
+            raise TaskStateConflict("任务状态已变化，请刷新后重试")
         self._content_repo.set_feedback(task_id, feedback)
         self._memory.record_correction(task_id, task.agent_type, feedback)
         _logger.info("hil retry", extra={"task_id": task_id})

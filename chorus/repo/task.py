@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import time
 from typing import Iterable, Optional
+from uuid import uuid4
 
 from sqlalchemy import func, select, update
 
@@ -55,10 +56,51 @@ class TaskRepository(BaseRepository):
         return _to_domain(r) if r else None
 
     @write
-    def transition(self, db, task_id: str, to_status: TaskStatus) -> bool:
-        """状态翻转：直接设目标状态，更新时间自动刷新。返回是否命中行。"""
+    def transition(
+        self, db, task_id: str, to_status: TaskStatus, *,
+        expected_status: TaskStatus,
+    ) -> bool:
+        """仅当任务仍处于指定旧状态时翻转。"""
+        return self._transition(db, task_id, to_status, TaskRecord.status == expected_status)
+
+    @write
+    def transition_from_statuses(
+        self, db, task_id: str, to_status: TaskStatus, *,
+        expected_statuses: Iterable[TaskStatus],
+    ) -> bool:
+        """仅当任务仍处于给定旧状态之一时翻转。"""
+        return self._transition(
+            db, task_id, to_status,
+            TaskRecord.status.in_(tuple(expected_statuses)),
+        )
+
+    @write
+    def transition_owned(
+        self, db, task_id: str, to_status: TaskStatus, *,
+        expected_status: TaskStatus, owner_id: str,
+    ) -> bool:
+        """仅当任务状态和执行者归属都匹配时翻转。"""
+        return self._transition(
+            db, task_id, to_status,
+            TaskRecord.status == expected_status,
+            TaskRecord.owner_id == owner_id,
+        )
+
+    @write
+    def transition_if_stale(
+        self, db, task_id: str, to_status: TaskStatus, *,
+        expected_status: TaskStatus, updated_before: float,
+    ) -> bool:
+        """仅当任务仍处于指定状态且更新时间早于截止时间时翻转。"""
+        return self._transition(
+            db, task_id, to_status,
+            TaskRecord.status == expected_status,
+            TaskRecord.updated_at < updated_before,
+        )
+
+    def _transition(self, db, task_id: str, to_status: TaskStatus, *conditions) -> bool:
         result = db.execute(
-            update(TaskRecord).where(TaskRecord.id == task_id)
+            update(TaskRecord).where(TaskRecord.id == task_id, *conditions)
             .values(status=to_status, updated_at=time.time())
         )
         hit = result.rowcount > 0
@@ -69,15 +111,18 @@ class TaskRepository(BaseRepository):
     def claim(self, db, task_id: str, now: float) -> bool:
         """scheduler 派发占槽：设为运行中并写归属与更新时间。"""
         result = db.execute(
-            update(TaskRecord).where(TaskRecord.id == task_id)
-            .values(status=TaskStatus.RUNNING, owner_id=now, updated_at=now)
+            update(TaskRecord).where(
+                TaskRecord.id == task_id,
+                TaskRecord.status == TaskStatus.PENDING,
+            )
+            .values(status=TaskStatus.RUNNING, owner_id=str(uuid4()), updated_at=now)
         )
         hit = result.rowcount > 0
         _logger.info("claim", extra={"task_id": task_id, "hit": hit})
         return hit
 
     @write
-    def touch_updated_at(self, db, task_id: str, owner_id: Optional[float]) -> bool:
+    def touch_updated_at(self, db, task_id: str, owner_id: Optional[str]) -> bool:
         """心跳：只有当前执行者仍持有运行中任务时才更新时间。"""
         result = db.execute(
             update(TaskRecord)

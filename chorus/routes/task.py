@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from chorus.domain.task import ArtifactEdit, IdeaCandidate, ValidationError
 from chorus.routes.providers import provide_session_service, provide_task_service
 from chorus.services.session import SessionService
-from chorus.services.task import TaskService
+from chorus.services.task import TaskService, TaskStateConflict
 
 router = APIRouter(prefix="/api")
 
@@ -40,7 +40,10 @@ def confirm_task(
     req: ConfirmRequest,
     task: TaskService = Depends(provide_task_service),
 ):
-    return task.confirm(task_id, req.selected)
+    try:
+        return task.confirm(task_id, req.selected)
+    except TaskStateConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.post("/tasks/{task_id}/retry")
@@ -49,7 +52,10 @@ def retry_task(
     req: RetryRequest,
     task: TaskService = Depends(provide_task_service),
 ):
-    return task.retry(task_id, req.feedback)
+    try:
+        return task.retry(task_id, req.feedback)
+    except TaskStateConflict as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
 
 
 @router.post("/tasks/{task_id}/edit")
