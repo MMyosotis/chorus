@@ -19,6 +19,11 @@ from chorus.domain.message import (
 from chorus.repo.base import BaseRepository, read, write
 from chorus.repo.models import MessageRecord
 
+_REASONING_KEY = "reasoning"
+_TOOL_CALLS_KEY = "tool_calls"
+_TOOL_CALL_ID_KEY = "tool_call_id"
+_NAME_KEY = "name"
+
 
 def _parse_tool_calls(raw) -> list[ToolCallSpec]:
     """解析工具调用列表，脏数据退化为空。"""
@@ -36,7 +41,18 @@ def _dump_tool_calls(tool_calls: Optional[list[ToolCallSpec]]):
     return [call.model_dump() for call in tool_calls]
 
 
+def _assistant_payload(msg: AssistantMessage) -> Optional[dict]:
+    """思考与工具调用按需入负载，缺省不落键。"""
+    payload = {}
+    if msg.reasoning:
+        payload[_REASONING_KEY] = msg.reasoning
+    if msg.tool_calls:
+        payload[_TOOL_CALLS_KEY] = _dump_tool_calls(msg.tool_calls)
+    return payload or None
+
+
 def to_domain(r) -> Message:
+    role_data = r.role_data or {}
     if r.role == "user":
         return UserMessage(
             id=r.id, session_id=r.session_id, created_at=r.created_at,
@@ -45,13 +61,14 @@ def to_domain(r) -> Message:
     if r.role == "assistant":
         return AssistantMessage(
             id=r.id, session_id=r.session_id, created_at=r.created_at,
-            content=r.content, reasoning=r.reasoning,
-            tool_calls=_parse_tool_calls(r.tool_calls_json),
+            content=r.content, reasoning=role_data.get(_REASONING_KEY),
+            tool_calls=_parse_tool_calls(role_data.get(_TOOL_CALLS_KEY)),
         )
     if r.role == "tool":
         return ToolMessage(
             id=r.id, session_id=r.session_id, created_at=r.created_at,
-            tool_call_id=r.tool_call_id or "", name=r.tool_name or "",
+            tool_call_id=role_data.get(_TOOL_CALL_ID_KEY) or "",
+            name=role_data.get(_NAME_KEY) or "",
             content=r.content or "",
         )
     raise ValueError(f"unknown role: {r.role}")
@@ -66,14 +83,13 @@ def from_domain(msg: Message, record_cls=MessageRecord):
     if msg.role == "assistant":
         return record_cls(
             id=msg.id, session_id=msg.session_id, role="assistant",
-            content=msg.content, reasoning=msg.reasoning,
-            tool_calls_json=_dump_tool_calls(msg.tool_calls),
+            content=msg.content, role_data=_assistant_payload(msg),
             created_at=msg.created_at,
         )
     if msg.role == "tool":
         return record_cls(
             id=msg.id, session_id=msg.session_id, role="tool",
-            tool_call_id=msg.tool_call_id, tool_name=msg.name,
+            role_data={_TOOL_CALL_ID_KEY: msg.tool_call_id, _NAME_KEY: msg.name},
             content=msg.content, created_at=msg.created_at,
         )
     raise TypeError(f"unsupported message role: {msg.role}")
@@ -116,7 +132,7 @@ class MessageRepository(BaseRepository):
             .where(
                 MessageRecord.session_id == session_id,
                 MessageRecord.role == "tool",
-                MessageRecord.tool_name == name,
+                MessageRecord.role_data[_NAME_KEY].as_string() == name,
             )
             .order_by(MessageRecord.id.desc())
             .limit(1)

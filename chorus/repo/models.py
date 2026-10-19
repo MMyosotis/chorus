@@ -44,10 +44,7 @@ class MessageRecord(Base):
     )
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text)
-    reasoning: Mapped[Optional[str]] = mapped_column(Text)
-    tool_calls_json: Mapped[Optional[list]] = mapped_column(JSON)
-    tool_call_id: Mapped[Optional[str]] = mapped_column(Text)
-    tool_name: Mapped[Optional[str]] = mapped_column(Text)
+    role_data: Mapped[Optional[dict]] = mapped_column(JSON)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
 
 
@@ -61,10 +58,7 @@ class ProviderMessageRecord(Base):
     )
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text)
-    reasoning: Mapped[Optional[str]] = mapped_column(Text)
-    tool_calls_json: Mapped[Optional[list]] = mapped_column(JSON)
-    tool_call_id: Mapped[Optional[str]] = mapped_column(Text)
-    tool_name: Mapped[Optional[str]] = mapped_column(Text)
+    role_data: Mapped[Optional[dict]] = mapped_column(JSON)
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
 
 
