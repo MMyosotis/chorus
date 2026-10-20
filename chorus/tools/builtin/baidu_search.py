@@ -18,7 +18,7 @@ def _format_references(refs: list[SearchRef]) -> str:
         url = (ref.url or "").strip()
         date = (ref.date or "").strip()
         anchor = (ref.web_anchor or "").strip()
-        content = (ref.get("content") or "").strip().replace("\n", " ")
+        content = (ref.content or "").strip().replace("\n", " ")
         if len(content) > 400:
             content = content[:400] + "…"
         meta_parts = [part for part in (anchor, date) if part]
