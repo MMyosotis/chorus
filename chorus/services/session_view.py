@@ -29,6 +29,5 @@ class SessionViewService:
             self._task.get_graph(session_id),
             self._task.list_products(session_id),
             self._intent_state.get(session_id),
-            self._intent_state.list_confirmations(session_id),
             self._option.list_by_session(session_id),
         )

@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from chorus.domain.intent import IntentConfirmation, IntentConfirmationAnswer, IntentState
+from chorus.domain.intent import IntentState
 from chorus.domain.message import MessageView
 from chorus.domain.option import OptionItem, OptionPrompt, OptionQuestion
 from chorus.domain.task.graph import TaskGraph, build_task_graph
@@ -34,14 +34,6 @@ def _state() -> IntentState:
     return IntentState(session_id="s1", image_count=0)
 
 
-def _confirmation(cid: str, mid: str | None, status: str = "answered") -> IntentConfirmation:
-    return IntentConfirmation(
-        confirmation_id=cid, session_id="s1", message_id=mid, status=status,
-        topic="城市夜骑", platform="小红书", format="图文笔记", style="轻松", image_count=3,
-        answer=IntentConfirmationAnswer(signal="confirm", label="确认创作") if status == "answered" else None,
-    )
-
-
 def _prompt(pid: str, mid: str | None, status: str = "answered") -> OptionPrompt:
     return OptionPrompt(
         prompt_id=pid, session_id="s1", message_id=mid, status=status,
@@ -64,15 +56,15 @@ def _empty_graph():
     return build_task_graph(None, [], {}, {}, {}, False)
 
 
-def _view(messages, graph=None, products=None, confirmations=None, prompts=None):
+def _view(messages, graph=None, products=None, intent_state=None, prompts=None):
     return build_session_view(
         messages, graph if graph is not None else _empty_graph(),
-        products or [], _state(), confirmations or [], prompts or [],
+        products or [], intent_state or _state(), prompts or [],
     )
 
 
-def _bubbles(messages, confirmations=None, prompts=None):
-    return _view(messages, confirmations=confirmations, prompts=prompts)["bubbles"]
+def _bubbles(messages, prompts=None):
+    return _view(messages, prompts=prompts)["bubbles"]
 
 
 def test_empty_messages_produce_no_bubbles():
@@ -217,15 +209,14 @@ def test_plan_boundary_splits_closing_turn():
     assert "plan-turn" not in out[2]["message_ids"]
 
 
-def test_intent_confirm_anchor_keeps_merge():
-    """意图确认锚点挂起后的续写仍合并同气泡。"""
+def test_intent_confirm_turn_keeps_merge():
+    """意图确认轮后的续写仍合并同气泡。"""
     out = _bubbles(
         [
             _user("m0", "写一篇"),
             _assistant("confirm-turn", "请确认创作方向。", [_tool("update_intent_state")]),
             _assistant("m2", "已确认，开始创作。"),
         ],
-        confirmations=[_confirmation("c1", "confirm-turn")],
     )
     assert len(out) == 2
     assert out[1]["content"] == "请确认创作方向。\n\n已确认，开始创作。"
@@ -311,8 +302,8 @@ def test_product_cards_carry_delivered_content():
     }
 
 
-def test_answered_recaps_fold_into_anchor_bubble():
-    """已作答留档折进锚点气泡，待作答的不折。"""
+def test_answered_option_recaps_fold_into_anchor_bubble():
+    """已作答选项折进锚点气泡。"""
     messages = [
         _user("m0", "写一篇"),
         _assistant("m-confirm", "请确认创作方向。"),
@@ -321,31 +312,23 @@ def test_answered_recaps_fold_into_anchor_bubble():
     ]
     out = _bubbles(
         messages,
-        confirmations=[
-            _confirmation("c-open", "m-confirm", status="open"),
-            _confirmation("c-done", "m-confirm", status="answered"),
-        ],
         prompts=[_prompt("p-done", "m-option", status="answered")],
     )
-    assert [recap["id"] for recap in out[1]["recaps"]] == ["intent-confirm:c-done"]
-    recap = out[1]["recaps"][0]["intent_state"]
-    assert recap["confirmation_id"] == "c-done"
-    assert recap["answer"]["signal"] == "confirm"
+    assert out[1]["recaps"] == []
     assert [recap["id"] for recap in out[3]["recaps"]] == ["option:p-done"]
     assert out[3]["recaps"][0]["option_prompt"]["prompt_id"] == "p-done"
 
 
 def test_view_envelope_fields():
-    """信箱字段：意图状态、打开的门禁单、任务图与阶段。"""
+    """信箱字段：意图状态、打开的选项单、任务图与阶段。"""
     messages = [_assistant("m1", "请确认。")]
     graph = build_task_graph("p1", [_task("t-idea", "idea", "running", "m1")], {}, {}, {}, True)
     out = _view(
         messages, graph=graph,
-        confirmations=[_confirmation("c-open", "m1", status="open")],
+        intent_state=IntentState(session_id="s1", image_count=0, intent_status="ready_to_confirm"),
         prompts=[_prompt("p-open", "m1", status="open")],
     )
     assert out["intent_state"]["session_id"] == "s1"
-    assert out["open_confirmation"]["confirmation_id"] == "c-open"
     assert out["open_option_prompt"]["prompt_id"] == "p-open"
     assert out["graph"]["pipeline_id"] == "p1"
     assert out["graph"]["active"] is True
@@ -358,11 +341,13 @@ def test_stage_gate_overrides_tasks():
     graph = build_task_graph("p1", [_task("t1", "idea", "running", "m1")], {}, {}, {}, True)
     both = _view(
         messages, graph=graph,
-        confirmations=[_confirmation("c-open", "m1", status="open")],
+        intent_state=IntentState(session_id="s1", image_count=0, intent_status="ready_to_confirm"),
         prompts=[_prompt("p-open", "m1", status="open")],
     )
     assert both["stage"] == "等待选择"
-    confirm_only = _view(messages, graph=graph, confirmations=[_confirmation("c-open", "m1", status="open")])
+    confirm_only = _view(messages, graph=graph, intent_state=IntentState(
+        session_id="s1", image_count=0, intent_status="ready_to_confirm",
+    ))
     assert confirm_only["stage"] == "等待确认"
     assert _view(messages, graph=graph)["stage"] == "选题官 · 执行中"
 

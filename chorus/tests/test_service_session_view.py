@@ -1,12 +1,11 @@
 """SessionViewService 装配 smoke：真 repo 链取数喂领域装配，产出一屏渲染结构。"""
 from __future__ import annotations
 
-from chorus.domain.intent import IntentSnapshot
+from chorus.domain.intent import IntentStateUpdate
 from chorus.domain.message import AssistantMessage
 from chorus.domain.option import OptionAnswer, OptionItem, OptionQuestion
 from chorus.domain.task import Task, TaskContent
 from chorus.repo.engine import build_engine
-from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.message import MessageRepository
 from chorus.repo.option import OptionPromptRepository
@@ -35,9 +34,7 @@ def _service(session_id: str = "s1"):
         MessageRepository(engine), ProviderMessageRepository(engine),
         TraceService(TraceRepository(engine)), build_compact_service(engine),
     )
-    intent_svc = IntentStateService(
-        IntentStateRepository(engine), IntentConfirmationRepository(engine), session_svc,
-    )
+    intent_svc = IntentStateService(IntentStateRepository(engine), session_svc)
     option_svc = OptionPromptService(OptionPromptRepository(engine), session_svc)
     task_repo = TaskRepository(engine)
     task_svc = TaskService(
@@ -56,7 +53,6 @@ def test_empty_session_view():
     assert view["stage"] == "自由对话"
     assert view["graph"]["tasks"] == []
     assert view["intent_state"]["session_id"] == "s1"
-    assert view["open_confirmation"] is None
     assert view["open_option_prompt"] is None
 
 
@@ -74,13 +70,14 @@ def test_consecutive_assistant_messages_merge():
 
 
 def test_open_gate_records_and_awaiting_task():
-    """打开的意图确认与选项单进信箱字段，待确认任务投影成审核卡且不折回看。"""
+    """待确认意图由当前状态恢复，选项单进信箱，任务投影成审核卡。"""
     svc, message, intent, option, task_repo = _service()
     message.append_user_message("s1", "写一篇")
     message.append_assistant_message(AssistantMessage(id="m2", session_id="s1", created_at=0.0, content="请确认方向。"))
-    intent.open_confirmation("s1", IntentSnapshot(
+    intent.update_from_tool("s1", IntentStateUpdate(
         topic="夜骑", platform="小红书", format="图文笔记", style="轻松", image_count=3,
-    ), message_id="m2")
+        intent_status="ready_to_confirm",
+    ))
     option.create("s1", [OptionQuestion(question="选平台", options=[
         OptionItem(signal="1", label="小红书", description="图文种草"),
         OptionItem(signal="2", label="公众号", description="长文阅读"),
@@ -92,7 +89,9 @@ def test_open_gate_records_and_awaiting_task():
         message_id="m2",
     ))
     view = svc.collect("s1")
-    assert view["open_confirmation"]["message_id"] == "m2"
+    assert view["intent_state"]["intent_status"] == "ready_to_confirm"
+    assert view["intent_state"]["topic"] == "夜骑"
+    assert view["stage"] == "等待选择"
     assert view["open_option_prompt"]["message_id"] == "m2"
     bubbles = view["bubbles"]
     assert bubbles[1]["kind"] == "assistant"

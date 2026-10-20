@@ -94,7 +94,7 @@ class SupervisorLoopStrategy(LoopStrategy):
 
         self._session.touch(self.session_id)
         events = self._intent_state.events_for_turn(
-            self.session_id, ctx.turn.message_id, (call.name for call, _ in pairs),
+            self.session_id, (call.name for call, _ in pairs),
         )
         events.extend(event for _, dispatch in pairs for event in dispatch.events)
 

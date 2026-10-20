@@ -6,7 +6,7 @@ from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chorus.domain.intent import IntentConfirmationView, IntentStateView
+from chorus.domain.intent import IntentState
 from chorus.domain.option import OptionPromptView
 
 
@@ -79,9 +79,7 @@ class BusyEvent(_EventBase):
 
 class IntentStateEvent(_EventBase):
     type: Literal["intent_state"] = "intent_state"
-    state: IntentStateView
-    # 待确认门开启时随事件下发的确认留档成品，与会话视图同构
-    confirmation: Optional[IntentConfirmationView] = None
+    state: IntentState
 
 
 class OptionPromptEvent(_EventBase):

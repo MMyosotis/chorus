@@ -10,7 +10,6 @@ from pydantic import BaseModel
 from chorus.agents.supervisor import SupervisorService
 from chorus.domain.bypass import BypassScope
 from chorus.domain.events import IntentStateEvent
-from chorus.domain.intent import IntentStateView
 from chorus.domain.suggestion import SuggestionGenerationService
 from chorus.routes.providers import (
     provide_intent_state_service,
@@ -110,7 +109,7 @@ def _resume_with_tool(
 ) -> Iterator[str]:
     """外部信号解开挂起的工具：让工具翻状态拿回执文案，再续跑 loop。"""
     result_text = tools.get_tool(tool_name).resolve_external(session_id, signal)
-    yield sse(IntentStateEvent(state=IntentStateView.from_state(intent.get(session_id))))
+    yield sse(IntentStateEvent(state=intent.get(session_id)))
     for event in supervisor.resume(session_id, tool_name, result_text):
         yield sse(event)
 

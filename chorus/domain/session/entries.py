@@ -6,7 +6,6 @@ from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from chorus.domain.intent import IntentConfirmationView
 from chorus.domain.option import OptionPromptView
 from chorus.domain.task.graph import TaskNodeResponse
 from chorus.domain.task.products import DeliveredProduct
@@ -25,21 +24,11 @@ class UserEntry(_ViewEntry):
     content: str
 
 
-class IntentRecap(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    id: str
-    intent_state: IntentConfirmationView
-
-
 class OptionRecap(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: str
     option_prompt: OptionPromptView
-
-
-Recap = Union[IntentRecap, OptionRecap]
 
 
 class AssistantBubble(_ViewEntry):
@@ -48,7 +37,7 @@ class AssistantBubble(_ViewEntry):
     content: str
     tools: list[ToolInvocation]
     message_ids: list[str]
-    recaps: list[Recap]
+    recaps: list[OptionRecap]
     suspended: bool
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from chorus.domain.intent import IntentConfirmation
+from chorus.domain.intent import IntentState
 from chorus.domain.option import OptionPrompt
 from chorus.domain.task.graph import TaskNodeView
 from chorus.domain.task.models import AgentType, TaskStatus
@@ -19,12 +19,12 @@ _TASK_STATE_LABELS: dict[TaskStatus, str] = {
 
 def derive_stage(
     tasks: list[TaskNodeView],
-    open_confirmation: Optional[IntentConfirmation],
+    intent_state: IntentState,
     open_prompt: Optional[OptionPrompt],
 ) -> str:
     """从任务图快照与开放门禁派生会话阶段文案，门禁优先。"""
     return (
-        _open_gate_stage(open_confirmation, open_prompt)
+        _open_gate_stage(intent_state, open_prompt)
         or _active_task_stage(tasks)
         or ("已完成" if _has_finished_product(tasks) else None)
         or "自由对话"
@@ -32,12 +32,12 @@ def derive_stage(
 
 
 def _open_gate_stage(
-    open_confirmation: Optional[IntentConfirmation],
+    intent_state: IntentState,
     open_prompt: Optional[OptionPrompt],
 ) -> Optional[str]:
     if open_prompt is not None:
         return "等待选择"
-    if open_confirmation is not None:
+    if intent_state.intent_status == "ready_to_confirm":
         return "等待确认"
     return None
 

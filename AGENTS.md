@@ -53,7 +53,7 @@ npm --prefix web run preview                       # 预览前端构建产物
 - `TOOL_WHITELISTS`：按 supervisor、idea、script、image、finalize 角色控制可见工具。
 - 日志环境变量：`LOG_LEVEL`、`LOG_MAX_BYTES`、`LOG_BACKUP_COUNT`、`LOG_RETENTION_DAYS`、`LOG_CLEANUP_INTERVAL`；日志目录为 `data/logs/`。
 - 调度间隔与僵死超时 `_SCHEDULER_INTERVAL` / `_ZOMBIE_TIMEOUT` 位于 `agents/scheduler.py`；模型超时与输出预算留在使用模块，不集中到配置文件。
-- `DATA_DIR` 为仓库根下 `data/`。单一 `data/chorus.db` 存会话、原始消息、模型现场、trace、任务/内容/产物/进度、意图/确认、选项、记忆和设置；表定义以 `repo/models.py` 为准。
+- `DATA_DIR` 为仓库根下 `data/`。单一 `data/chorus.db` 存会话、原始消息、模型现场、trace、任务/内容/产物/进度、意图状态、选项、记忆和设置；待确认卡从意图状态恢复；表定义以 `repo/models.py` 为准。
 
 `uv run python scripts/reset_db.py` 会清空并重建产品库，仅在明确需要重置时执行，不作为日常测试步骤。
 

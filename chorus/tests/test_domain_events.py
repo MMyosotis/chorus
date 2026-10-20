@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from chorus.domain.intent import IntentConfirmationView, IntentStateView
+from chorus.domain.intent import IntentState
 from chorus.domain.option import OptionQuestion, OptionPromptView
 from chorus.domain.events import (
     BusyEvent,
@@ -38,7 +38,7 @@ _FIXTURES = [
     (DoneEvent, {}, "done"),
     (ErrorEvent, {"content": "炸了"}, "error"),
     (BusyEvent, {"content": "创作中"}, "busy"),
-    (IntentStateEvent, {"state": IntentStateView(session_id="s1", image_count=0)}, "intent_state"),
+    (IntentStateEvent, {"state": IntentState(session_id="s1", image_count=0)}, "intent_state"),
     (OptionPromptEvent, {"prompt": OptionPromptView(prompt_id="p1", questions=[OptionQuestion(question="选哪个", options=[])])}, "option_prompt"),
 ]
 
@@ -102,16 +102,9 @@ def test_message_start_resume_boundary_defaults_off():
     assert MessageStartEvent(id="m1", resume_boundary=True).resume_boundary is True
 
 
-def test_intent_state_optional_confirmation():
-    state = IntentStateView(session_id="s1", image_count=0)
-    assert IntentStateEvent(state=state).confirmation is None
-    attached = IntentStateEvent(
-        state=state,
-        confirmation=IntentConfirmationView(confirmation_id="c1", image_count=0, created_at=1.0),
-    )
-    assert attached.confirmation == IntentConfirmationView(
-        confirmation_id="c1", image_count=0, created_at=1.0,
-    )
+def test_intent_state_event_carries_current_state():
+    state = IntentState(session_id="s1", image_count=0, intent_status="ready_to_confirm")
+    assert IntentStateEvent(state=state).state == state
 
 
 def main():

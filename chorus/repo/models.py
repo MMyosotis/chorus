@@ -179,20 +179,6 @@ class OptionPromptRecord(Base):
     created_at: Mapped[float] = mapped_column(Float, nullable=False)
 
 
-class IntentConfirmationRecord(Base):
-    __tablename__ = "intent_confirmations"
-    __table_args__ = (Index("idx_intent_confirmations_session", "session_id"),)
-
-    confirmation_id: Mapped[str] = mapped_column(String, primary_key=True)
-    session_id: Mapped[str] = mapped_column(
-        String, ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False
-    )
-    message_id: Mapped[Optional[str]] = mapped_column(String)
-    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False)
-    status: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[float] = mapped_column(Float, nullable=False)
-
-
 class CreatorMemoryRecord(Base):
     __tablename__ = "creator_memories"
 

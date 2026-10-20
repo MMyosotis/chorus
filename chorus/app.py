@@ -37,7 +37,6 @@ from chorus.repo.creator_memory import CreatorMemoryRepository
 from chorus.repo.engine import build_engine
 from chorus.repo.message import MessageRepository
 from chorus.repo.provider_message import ProviderMessageRepository
-from chorus.repo.intent_confirmation import IntentConfirmationRepository
 from chorus.repo.intent_state import IntentStateRepository
 from chorus.repo.option import OptionPromptRepository
 from chorus.repo.session import SessionRepository
@@ -79,7 +78,6 @@ def create_app() -> FastAPI:
     msg_repo = MessageRepository(engine)
     provider_msg_repo = ProviderMessageRepository(engine)
     intent_repo = IntentStateRepository(engine)
-    intent_confirmation_repo = IntentConfirmationRepository(engine)
     trace_repo = TraceRepository(engine)
     task_repo = TaskRepository(engine)
     task_artifacts_repo = TaskArtifactsRepository(engine)
@@ -102,7 +100,7 @@ def create_app() -> FastAPI:
         SummaryGenerationService(bypass_caller),
     )
     message_service = MessageService(msg_repo, provider_msg_repo, trace_service, compact_service)
-    intent_state_service = IntentStateService(intent_repo, intent_confirmation_repo, session_service)
+    intent_state_service = IntentStateService(intent_repo, session_service)
     option_repo = OptionPromptRepository(engine)
     option_service = OptionPromptService(option_repo, session_service)
 

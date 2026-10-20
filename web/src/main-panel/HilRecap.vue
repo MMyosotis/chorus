@@ -2,11 +2,9 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  intentState: { type: Object, default: null },
   optionPrompt: { type: Object, default: null },
 })
 
-const isOption = computed(() => !!props.optionPrompt)
 const optionAnswers = computed(() => {
   const prompt = props.optionPrompt
   return prompt?.answers || []
@@ -15,14 +13,13 @@ const optionLabel = computed(() => {
   const labels = optionAnswers.value.map((answer) => answer.custom_text || answer.label).filter(Boolean)
   return labels.length ? labels.join('、') : '已补充选择'
 })
-const intentTitle = computed(() => props.intentState?.topic || '已确认创作意图')
 </script>
 
 <template>
   <span class="hil-recap">
     <span class="recap-check" aria-hidden="true">✓</span>
-    <span class="recap-label">{{ isOption ? '已选择' : '已确认' }}</span>
-    <span class="recap-value">{{ isOption ? optionLabel : intentTitle }}</span>
+    <span class="recap-label">已选择</span>
+    <span class="recap-value">{{ optionLabel }}</span>
   </span>
 </template>
 

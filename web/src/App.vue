@@ -35,7 +35,6 @@ const sessions = ref([])
 const messagesBySession = reactive({})
 const streamingBySession = reactive({})
 const intentStateBySession = reactive({})
-const intentConfirmationsBySession = reactive({})
 const optionPromptsBySession = reactive({})
 const stageBySession = reactive({})
 const activeId = ref(null)
@@ -147,8 +146,9 @@ const streaming = computed(() => !!streamingBySession[activeId.value])
 const activeGraph = computed(() => taskPolling.getGraph(activeId.value))
 const hasActiveTask = computed(() => !!activeGraph.value?.active)
 const activeIntentState = computed(() => intentStateBySession[activeId.value] || null)
-const activeConfirmations = computed(() => intentConfirmationsBySession[activeId.value] || [])
-const activeConfirmation = computed(() => activeConfirmations.value.find((confirmation) => confirmation.status === 'open') || null)
+const activeConfirmation = computed(() =>
+  activeIntentState.value?.intent_status === 'ready_to_confirm' ? activeIntentState.value : null
+)
 const activeOptionPrompt = computed(() =>
   (optionPromptsBySession[activeId.value] || []).find((prompt) => prompt.status === 'open') || null
 )
@@ -180,7 +180,6 @@ function makeEmptyAssistant(id) {
 function applyView(id, view) {
   messagesBySession[id] = view.bubbles
   intentStateBySession[id] = view.intent_state
-  intentConfirmationsBySession[id] = view.open_confirmation ? [view.open_confirmation] : []
   optionPromptsBySession[id] = view.open_option_prompt ? [view.open_option_prompt] : []
   stageBySession[id] = view.stage
 }
@@ -286,7 +285,6 @@ async function onCreate() {
     sessions.value.unshift(meta)
     messagesBySession[meta.id] = []
     intentStateBySession[meta.id] = null
-    intentConfirmationsBySession[meta.id] = []
     optionPromptsBySession[meta.id] = []
     stageBySession[meta.id] = '自由对话'
     activeId.value = meta.id
@@ -309,7 +307,6 @@ async function onDelete(id) {
   delete messagesBySession[id]
   delete streamingBySession[id]
   delete intentStateBySession[id]
-  delete intentConfirmationsBySession[id]
   delete optionPromptsBySession[id]
   delete stageBySession[id]
   if (wasActive) {
@@ -413,13 +410,6 @@ function createStreamHandler(sessionId) {
   const onEvent = (payload) => {
     if (payload.type === 'intent_state') {
       intentStateBySession[sessionId] = payload.state
-      // 确认门开启时后端随事件下发确认留档成品，与会话视图同构
-      if (payload.confirmation) {
-        const confirmations = intentConfirmationsBySession[sessionId] || (intentConfirmationsBySession[sessionId] = [])
-        const openIdx = confirmations.findIndex((confirmation) => confirmation.status === 'open')
-        if (openIdx >= 0) confirmations.splice(openIdx, 1, payload.confirmation)
-        else confirmations.push(payload.confirmation)
-      }
       return
     }
     if (payload.type === 'option_prompt') {
@@ -581,22 +571,14 @@ async function onSend(text) {
 async function onIntentConfirm() {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
-  const confirmation = activeConfirmation.value
-  if (confirmation) {
-    confirmation.status = 'answered'
-    confirmation.answer = { signal: 'confirm', label: '确认并开始创作' }
-  }
+  if (activeConfirmation.value) intentStateBySession[sessionId].intent_status = 'confirmed'
   await runAssistantStream(sessionId, (onEvent) => confirmIntent(sessionId, onEvent))
 }
 
 async function onIntentRevise() {
   const sessionId = activeId.value
   if (!sessionId || streamingBySession[sessionId] || hasActiveTask.value) return
-  const confirmation = activeConfirmation.value
-  if (confirmation) {
-    confirmation.status = 'answered'
-    confirmation.answer = { signal: 'reopen', label: '继续调整' }
-  }
+  if (activeConfirmation.value) intentStateBySession[sessionId].intent_status = 'needs_clarification'
   await runAssistantStream(sessionId, (onEvent) => reopenIntent(sessionId, onEvent))
 }
 

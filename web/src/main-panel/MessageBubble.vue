@@ -199,7 +199,6 @@ function closePreview() {
       <HilRecap
         v-for="recap in recaps"
         :key="recap.id"
-        :intent-state="recap.intent_state"
         :option-prompt="recap.option_prompt"
       />
     </div>

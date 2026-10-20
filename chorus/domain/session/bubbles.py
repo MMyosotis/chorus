@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional
 
-from chorus.domain.intent import IntentConfirmation
 from chorus.domain.message import MessageView
 from chorus.domain.option import OptionPrompt
 from chorus.domain.session.entries import AssistantBubble, BubbleEntry, UserEntry
@@ -147,7 +146,7 @@ def _is_plan_boundary(state: Optional[_BubbleState]) -> bool:
     return state is not None and state.bubble.suspended and state.plan_created
 
 
-def anchor_ids(items: Iterable[Union[IntentConfirmation, OptionPrompt]]) -> set[str]:
+def anchor_ids(items: Iterable[OptionPrompt]) -> set[str]:
     """留档记录锚定的助手消息标识集合，缺锚点的忽略。"""
     return {item.message_id for item in items if item.message_id is not None}
 
